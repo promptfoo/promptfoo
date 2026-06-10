@@ -1,17 +1,32 @@
+import input from '@inquirer/input';
 import search from '@inquirer/search';
+import select from '@inquirer/select';
 import { Command } from 'commander';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import opener from 'opener';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
-import { fetchWithProxy } from '../../src/util/fetch/index';
-import { openAuthBrowser } from '../../src/util/server';
+import { fetchWithProxy, fetchWithTimeout } from '../../src/util/fetch/index';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
 
+vi.mock('@inquirer/input');
 vi.mock('@inquirer/search');
+vi.mock('@inquirer/select');
+vi.mock('opener');
+vi.mock('ora', () => ({
+  default: vi.fn(() => {
+    const spinner = {
+      start: vi.fn(() => spinner),
+      succeed: vi.fn(() => spinner),
+      fail: vi.fn(() => spinner),
+    };
+    return spinner;
+  }),
+}));
 
 const mockCloudUser = {
   id: '1',
@@ -36,13 +51,15 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-vi.mock('../../src/envars');
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
+  isNonInteractive: vi.fn(),
+}));
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud');
 vi.mock('../../src/logger');
 vi.mock('../../src/util/cloud');
 vi.mock('../../src/util/fetch/index.ts');
-vi.mock('../../src/util/server');
 
 const mockFetch = vi.fn();
 const restoreFetch = mockGlobal('fetch', mockFetch);
@@ -51,12 +68,19 @@ afterAll(() => {
   restoreFetch();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
 describe('auth command', () => {
   let program: Command;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     program = new Command();
     process.exitCode = undefined;
     authCommand(program);
@@ -68,6 +92,9 @@ describe('auth command', () => {
       app: mockApp,
       hasActiveLicense: false,
     });
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+    vi.mocked(getUserTeams).mockResolvedValue([]);
   });
 
   describe('login', () => {
@@ -85,10 +112,13 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        'https://api.promptfoo.app',
+      );
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
-        undefined,
+        'https://api.promptfoo.app',
         mockCloudUser,
         mockApp,
         false,
@@ -96,20 +126,310 @@ describe('auth command', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
-    it('should prompt for browser opening when no API key is provided in interactive environment', async () => {
-      // Mock interactive environment
-      vi.mocked(isNonInteractive).mockReturnValue(false);
-      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+    it('should complete device-code login when no API key is provided in interactive environment', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              verification_uri_complete: 'https://www.promptfoo.app/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test']);
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
 
-      expect(openAuthBrowser).toHaveBeenCalledWith(
-        'https://www.promptfoo.app/',
-        'https://www.promptfoo.app/welcome',
-        0, // BrowserBehavior.ASK
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await loginPromise;
+
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://api.promptfoo.app/api/v1/auth/device/code',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+          skipCloudAuth: true,
+        }),
+        expect.any(Number),
+      );
+      expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body))).toEqual({
+        client_id: 'promptfoo-cli',
+      });
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        2,
+        'https://api.promptfoo.app/api/v1/auth/device/token',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+          skipCloudAuth: true,
+        }),
+        55_000,
+      );
+      expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body))).toEqual({
+        device_code: 'device-code',
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: 'promptfoo-cli',
+      });
+      expect(opener).toHaveBeenCalledWith('https://www.promptfoo.app/device?code=ABCD-EFGH');
+      expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('ABCD-EFGH'));
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('ABCD-EFGH'));
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://api.promptfoo.app',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://api.promptfoo.app',
+        mockCloudUser,
+        mockApp,
+        false,
+      );
+      expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
+    });
+
+    it('should fall back to the verification URI when verification_uri_complete is omitted', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(opener).toHaveBeenCalledWith('https://www.promptfoo.app/device');
+      const stdout = vi
+        .mocked(process.stdout.write)
+        .mock.calls.map((call) => stripAnsi(String(call[0])))
+        .join('\n');
+      expect(stdout).toContain('https://www.promptfoo.app/device');
+      expect(stdout).toContain('ABCD-EFGH');
+      expect(stdout).not.toContain('undefined');
+    });
+
+    it('should reject non-HTTP verification URLs before opening them', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            device_code: 'device-code',
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'custom-app://authorize',
+            expires_in: 60,
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      expect(opener).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to request device code: invalid response from server'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should reject device codes with terminal control characters before displaying them', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            device_code: 'device-code',
+            user_code: 'ABCD\u001B[2JEFGH',
+            verification_uri: 'https://www.promptfoo.app/device',
+            expires_in: 60,
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      expect(opener).not.toHaveBeenCalled();
+      expect(process.stdout.write).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to request device code: invalid response from server'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should not include a failed device-code response body in the user-facing error', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+          body: {
+            device_code: 'secret-device-code',
+            error_description: 'secret-user-code',
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd!.parseAsync(['node', 'test']);
+
+      const errorLogs = JSON.stringify(vi.mocked(logger.error).mock.calls);
+      expect(errorLogs).toContain('Failed to request device code: 400 Bad Request');
+      expect(errorLogs).not.toContain('secret-device-code');
+      expect(errorLogs).not.toContain('secret-user-code');
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should use configured cloud API host for the cloud device-code option', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.stubEnv('PROMPTFOO_CLOUD_API_URL', 'https://proxy.promptfoo.example/root/');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://proxy.promptfoo.example/device',
+              verification_uri_complete: 'https://proxy.promptfoo.example/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://proxy.promptfoo.example/root/api/v1/auth/device/code',
+        expect.objectContaining({ skipCloudAuth: true }),
+        expect.any(Number),
+      );
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://proxy.promptfoo.example/root',
+      );
+    });
+
+    it('should ignore a saved enterprise host for the cloud device-code option', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://enterprise.example.com/root');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              verification_uri_complete: 'https://www.promptfoo.app/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://api.promptfoo.app/api/v1/auth/device/code',
+        expect.objectContaining({ skipCloudAuth: true }),
+        expect.any(Number),
+      );
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://api.promptfoo.app',
       );
     });
 
@@ -124,55 +444,258 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test']);
 
       expect(logger.error).toHaveBeenCalledWith(
-        'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+        'Authentication required. Please set PROMPTFOO_API_KEY environment variable or use --api-key flag.',
       );
-      // Check that both info calls were made
       const infoCalls = vi.mocked(logger.info).mock.calls;
       const infoMessages = infoCalls.map((call) => stripAnsi(String(call[0])));
-      expect(infoCalls.length).toBeGreaterThanOrEqual(2);
 
       expect(
         infoMessages.some((message) =>
-          message.includes('Manual login URL: https://www.promptfoo.app/'),
-        ),
-      ).toBe(true);
-      expect(
-        infoMessages.some((message) =>
-          message.includes('After login, get your API token at: https://www.promptfoo.app/welcome'),
+          message.includes('Example: promptfoo auth login --api-key <your-api-key>'),
         ),
       ).toBe(true);
       expect(process.exitCode).toBe(1);
-      expect(openAuthBrowser).not.toHaveBeenCalled();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(opener).not.toHaveBeenCalled();
     });
 
-    it('should use custom host for browser opening when provided in interactive environment', async () => {
-      // Mock interactive environment
-      vi.mocked(isNonInteractive).mockReturnValue(false);
-      const customHost = 'https://custom.promptfoo.com';
+    it('should use custom host for device-code login when provided in interactive environment', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockImplementation(function () {
+        return false;
+      });
+      const customHost = 'https://custom.promptfoo.com/path/';
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://custom.promptfoo.com/device',
+              verification_uri_complete: 'https://custom.promptfoo.com/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--host', customHost]);
+      const loginPromise = loginCmd!.parseAsync(['node', 'test', '--host', customHost]);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
 
-      expect(openAuthBrowser).toHaveBeenCalledWith(
-        'https://custom.promptfoo.com/',
-        'https://custom.promptfoo.com/welcome',
-        0, // BrowserBehavior.ASK
+      expect(select).not.toHaveBeenCalled();
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://custom.promptfoo.com/path/api/v1/auth/device/code',
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+      );
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://custom.promptfoo.com/path',
       );
     });
 
+    it('should prompt for enterprise host during device-code login', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(select).mockResolvedValueOnce('enterprise');
+      vi.mocked(input).mockResolvedValueOnce('https://enterprise.example.com/app');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://enterprise.example.com/device',
+              verification_uri_complete: 'https://enterprise.example.com/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(input).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Enter your Promptfoo instance URL:',
+          validate: expect.any(Function),
+        }),
+      );
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://enterprise.example.com/app/api/v1/auth/device/code',
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+      );
+    });
+
+    it('should stop before polling when a device code expires before the minimum interval', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          body: {
+            device_code: 'device-code',
+            user_code: 'ABCD-EFGH',
+            verification_uri: 'https://www.promptfoo.app/device',
+            verification_uri_complete: 'https://www.promptfoo.app/device?code=ABCD-EFGH',
+            expires_in: 1,
+            interval: 0,
+          },
+        }),
+      );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(1000);
+      await loginPromise;
+
+      expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Authentication failed: Device code expired. Please try again.'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should report a malformed device-token response without leaking parser errors', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              verification_uri_complete: 'https://www.promptfoo.app/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 5,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: false,
+            status: 502,
+            statusText: 'Bad Gateway',
+            json: () => Promise.reject(new SyntaxError('unexpected html token')),
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Authentication failed: Device authorization failed: invalid JSON response from server (502 Bad Gateway)',
+        ),
+      );
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('unexpected html token'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should not include a device-token error description in the user-facing error', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              expires_in: 60,
+              interval: 5,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            body: {
+              error: 'invalid_request',
+              error_description: 'secret-device-code',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      const errorLogs = JSON.stringify(vi.mocked(logger.error).mock.calls);
+      expect(errorLogs).toContain(
+        'Authentication failed: Device authorization failed (invalid_request): 400 Bad Request',
+      );
+      expect(errorLogs).not.toContain('secret-device-code');
+      expect(process.exitCode).toBe(1);
+    });
+
     it('should use custom host when provided', async () => {
-      const customHost = 'https://custom-api.example.com';
+      const customHost = 'https://custom-api.example.com/base/';
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
 
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        'https://custom-api.example.com/base',
+      );
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
-        customHost,
+        'https://custom-api.example.com/base',
         mockCloudUser,
         mockApp,
         false,

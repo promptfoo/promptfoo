@@ -104,6 +104,27 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it('should skip the Authorization header for cloud API requests when requested', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    const url = CLOUD_API_HOST + '/api/v1/auth/device/code';
+    await monkeyPatchFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      skipCloudAuth: true,
+    });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  });
+
   it('should add Authorization header for configured on-prem cloud API requests', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
@@ -361,6 +382,28 @@ describe('monkeyPatchFetch', () => {
         'Content-Type': 'application/json',
         'X-Custom-Header': 'custom-value',
         Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  });
+
+  it('should preserve explicit Authorization for cloud API requests', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cached-api-key');
+
+    const url = CLOUD_API_HOST + '/api/test';
+    await monkeyPatchFetch(url, {
+      headers: {
+        authorization: 'Bearer device-token',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        authorization: 'Bearer device-token',
+        'Content-Type': 'application/json',
       },
     });
   });

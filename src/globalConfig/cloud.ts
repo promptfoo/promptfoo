@@ -217,6 +217,7 @@ export class CloudConfig {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        skipCloudAuth: true,
       });
 
       if (!response.ok) {

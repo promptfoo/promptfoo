@@ -12,4 +12,9 @@ export interface FetchOptions extends RequestInit {
    * Used by fetchWithRetries to prevent double-retrying.
    */
   disableTransientRetries?: boolean;
+
+  /**
+   * Whether to skip automatically adding the saved Promptfoo Cloud API key.
+   */
+  skipCloudAuth?: boolean;
 }

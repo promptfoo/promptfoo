@@ -1,9 +1,13 @@
+import input from '@inquirer/input';
 import search from '@inquirer/search';
+import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { isNonInteractive } from '../envars';
+import opener from 'opener';
+import ora from 'ora';
+import { getEnvInt, getEnvString, isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
   canCreateTargets,
@@ -11,8 +15,7 @@ import {
   resolveTeamFromIdentifier,
   resolveTeamId,
 } from '../util/cloud';
-import { fetchWithProxy } from '../util/fetch/index';
-import { BrowserBehavior, openAuthBrowser } from '../util/server';
+import { fetchWithProxy, fetchWithTimeout } from '../util/fetch/index';
 import type { Command } from 'commander';
 
 type LoginCommandOptions = {
@@ -23,6 +26,59 @@ type LoginCommandOptions = {
 };
 
 type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
+
+type DeviceCodeResponse = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval?: number;
+};
+
+type DeviceTokenSuccessResponse = {
+  access_token: string;
+  token_type?: string;
+};
+
+type DeviceTokenErrorResponse = {
+  error: 'authorization_pending' | 'slow_down' | 'expired_token' | 'access_denied' | string;
+  error_description?: string;
+};
+
+type DeviceTokenResponse = DeviceTokenSuccessResponse | DeviceTokenErrorResponse;
+
+const DEVICE_CLIENT_ID = 'promptfoo-cli';
+const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
+const DEVICE_POLL_SLOW_DOWN_SECONDS = 5;
+const DEVICE_AUTH_SILENT_HEADER = { 'x-promptfoo-silent': 'true' } as const;
+
+function hasControlCharacters(value: string): boolean {
+  return /[\u0000-\u001F\u007F-\u009F]/u.test(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isSafeCredentialString(value: unknown): value is string {
+  return isNonEmptyString(value) && !hasControlCharacters(value);
+}
+
+function isSafeVerificationUrl(value: unknown): value is string {
+  if (!isNonEmptyString(value) || hasControlCharacters(value)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
 
 function getOrganizationTeams(
   teams: UserTeam[],
@@ -205,9 +261,13 @@ async function setupTeamContext(
   }
 }
 
-async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
+async function completeCloudLogin(
+  cmdObj: LoginCommandOptions,
+  token: string,
+  apiHost: string,
+): Promise<void> {
   const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
-    cmdObj.apiKey!,
+    token,
     apiHost,
   );
 
@@ -216,7 +276,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   let organizationTeams: UserTeam[] | undefined;
 
   if (cmdObj.org || cmdObj.team) {
-    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!);
+    const allTeams = await getUserTeams(apiHost, token);
     const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
     organizationId = resolvedOrganizationTeams.organizationId;
     organizationTeams = resolvedOrganizationTeams.teams;
@@ -232,7 +292,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     }
   }
 
-  cloudConfig.saveValidatedApiToken(cmdObj.apiKey!, apiHost, user, app, hasActiveLicense);
+  cloudConfig.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
       chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
@@ -251,22 +311,289 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 }
 
-async function loginWithBrowser(cmdObj: LoginCommandOptions): Promise<void> {
-  const appUrl = cmdObj.host || cloudConfig.getAppUrl();
-  const authUrl = new URL(appUrl);
-  const welcomeUrl = new URL('/welcome', appUrl);
+async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
+  await completeCloudLogin(cmdObj, cmdObj.apiKey!, apiHost);
+}
 
+async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
+  const response = await fetchWithTimeout(
+    `${apiHost}/api/v1/auth/device/code`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...DEVICE_AUTH_SILENT_HEADER },
+      body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
+      skipCloudAuth: true,
+    },
+    DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to request device code: ${response.status} ${response.statusText}`.trim(),
+    );
+  }
+
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Failed to request device code: invalid JSON response from server');
+  }
+
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !isSafeCredentialString((data as DeviceCodeResponse).device_code) ||
+    !isSafeCredentialString((data as DeviceCodeResponse).user_code) ||
+    !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri) ||
+    ((data as DeviceCodeResponse).verification_uri_complete !== undefined &&
+      !isSafeVerificationUrl((data as DeviceCodeResponse).verification_uri_complete)) ||
+    !Number.isFinite((data as DeviceCodeResponse).expires_in) ||
+    (data as DeviceCodeResponse).expires_in <= 0 ||
+    ((data as DeviceCodeResponse).interval !== undefined &&
+      !Number.isFinite((data as DeviceCodeResponse).interval))
+  ) {
+    throw new Error('Failed to request device code: invalid response from server');
+  }
+
+  return data as DeviceCodeResponse;
+}
+
+async function pollForDeviceToken(
+  apiHost: string,
+  deviceCode: string,
+  intervalSeconds: number | undefined,
+  expiresInSeconds: number,
+): Promise<DeviceTokenSuccessResponse> {
+  const expiresAtMs = Date.now() + expiresInSeconds * 1000;
+  let pollIntervalMs =
+    Math.max(
+      intervalSeconds ?? DEFAULT_DEVICE_POLL_INTERVAL_SECONDS,
+      DEFAULT_DEVICE_POLL_INTERVAL_SECONDS,
+    ) * 1000;
+
+  while (Date.now() < expiresAtMs) {
+    const remainingMs = expiresAtMs - Date.now();
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+
+    if (Date.now() >= expiresAtMs) {
+      break;
+    }
+
+    const requestTimeoutMs = Math.min(
+      DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+      Math.max(1, expiresAtMs - Date.now()),
+    );
+
+    const response = await fetchWithTimeout(
+      `${apiHost}/api/v1/auth/device/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...DEVICE_AUTH_SILENT_HEADER },
+        body: JSON.stringify({
+          device_code: deviceCode,
+          grant_type: DEVICE_GRANT_TYPE,
+          client_id: DEVICE_CLIENT_ID,
+        }),
+        skipCloudAuth: true,
+      },
+      requestTimeoutMs,
+    );
+
+    let rawData: unknown;
+    try {
+      rawData = await response.json();
+    } catch {
+      throw new Error(
+        `Device authorization failed: invalid JSON response from server (${response.status} ${response.statusText})`,
+      );
+    }
+
+    if (!rawData || typeof rawData !== 'object') {
+      throw new Error(
+        `Device authorization failed: invalid response from server (${response.status} ${response.statusText})`,
+      );
+    }
+
+    const data = rawData as DeviceTokenResponse;
+
+    if (response.ok && 'access_token' in data && isSafeCredentialString(data.access_token)) {
+      return data;
+    }
+
+    if ('error' in data && data.error === 'authorization_pending') {
+      continue;
+    }
+
+    if ('error' in data && data.error === 'slow_down') {
+      pollIntervalMs += DEVICE_POLL_SLOW_DOWN_SECONDS * 1000;
+      continue;
+    }
+
+    if ('error' in data && data.error === 'expired_token') {
+      throw new Error('Device code expired. Please try again.');
+    }
+
+    if ('error' in data && data.error === 'access_denied') {
+      throw new Error('Authorization was denied.');
+    }
+
+    const errorCode =
+      'error' in data && typeof data.error === 'string' && /^[A-Za-z0-9._-]+$/u.test(data.error)
+        ? ` (${data.error})`
+        : '';
+    throw new Error(
+      `Device authorization failed${errorCode}: ${response.status} ${response.statusText}`.trim(),
+    );
+  }
+
+  throw new Error('Device code expired. Please try again.');
+}
+
+async function openDeviceVerificationUrl(url: string): Promise<void> {
+  try {
+    logger.info('Opening device authorization page in your browser...');
+    await opener(url);
+  } catch (error) {
+    logger.debug(`Failed to open browser automatically: ${String(error)}`);
+  }
+}
+
+function getDeviceVerificationUrl(deviceCode: DeviceCodeResponse): string {
+  return deviceCode.verification_uri_complete || deviceCode.verification_uri;
+}
+
+function displayDeviceVerificationDetails(deviceCode: DeviceCodeResponse): void {
+  // Device codes are short-lived credentials: display them to the user without persisting them in run logs.
+  const verificationUrl = getDeviceVerificationUrl(deviceCode);
+  const verificationInstructions = deviceCode.verification_uri_complete
+    ? [
+        chalk.bold('To complete login, visit:'),
+        chalk.cyan.bold(`  ${verificationUrl}`),
+        '',
+        `Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`,
+      ]
+    : [
+        chalk.bold('To complete login, visit:'),
+        chalk.cyan.bold(`  ${verificationUrl}`),
+        '',
+        'Then enter code:',
+      ];
+
+  process.stdout.write(
+    ['', ...verificationInstructions, chalk.yellow.bold(`  ${deviceCode.user_code}`), ''].join(
+      '\n',
+    ) + '\n',
+  );
+}
+
+function normalizeApiHost(value: string): string {
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Host must be an HTTP or HTTPS URL');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error('Host URL must not include credentials, query parameters, or a fragment');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
+function validateHttpUrl(value: string): true | string {
+  try {
+    normalizeApiHost(value);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'Invalid URL') {
+      return error.message;
+    }
+    return 'Please enter a valid URL (e.g., https://promptfoo.yourcompany.com)';
+  }
+}
+
+function getPromptfooCloudApiHost(): string {
+  return normalizeApiHost(
+    getEnvString('PROMPTFOO_CLOUD_API_URL') || getEnvString('API_HOST', CLOUD_API_HOST),
+  );
+}
+
+async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<string> {
+  if (cmdObj.host) {
+    return normalizeApiHost(cmdObj.host);
+  }
+
+  const instanceType = await select({
+    message: 'Where would you like to log in?',
+    choices: [
+      {
+        name: 'Promptfoo Cloud',
+        value: 'cloud',
+        description: 'promptfoo.app',
+      },
+      {
+        name: 'Enterprise / Self-hosted',
+        value: 'enterprise',
+        description: "Your organization's Promptfoo instance",
+      },
+    ],
+  });
+
+  if (instanceType === 'cloud') {
+    return getPromptfooCloudApiHost();
+  }
+
+  const enterpriseUrl = await input({
+    message: 'Enter your Promptfoo instance URL:',
+    validate: validateHttpUrl,
+  });
+
+  return normalizeApiHost(enterpriseUrl);
+}
+
+async function loginWithDeviceCode(cmdObj: LoginCommandOptions): Promise<void> {
   if (isNonInteractive()) {
     logger.error(
-      'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+      'Authentication required. Please set PROMPTFOO_API_KEY environment variable or use --api-key flag.',
     );
-    logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
-    logger.info(`After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`);
+    logger.info(chalk.dim('Example: promptfoo auth login --api-key <your-api-key>'));
     process.exitCode = 1;
     return;
   }
 
-  await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
+  const apiHost = await resolveDeviceAuthApiHost(cmdObj);
+
+  logger.info('');
+  const requestingSpinner = ora({ text: 'Requesting device code...', spinner: 'dots' }).start();
+
+  let deviceCode: DeviceCodeResponse;
+  try {
+    deviceCode = await requestDeviceCode(apiHost);
+    requestingSpinner.succeed('Device code received');
+  } catch (error) {
+    requestingSpinner.fail('Failed to request device code');
+    throw error;
+  }
+
+  displayDeviceVerificationDetails(deviceCode);
+
+  await openDeviceVerificationUrl(getDeviceVerificationUrl(deviceCode));
+
+  const pollingSpinner = ora({ text: 'Waiting for authorization...', spinner: 'dots' }).start();
+
+  let tokenResponse: DeviceTokenSuccessResponse;
+  try {
+    tokenResponse = await pollForDeviceToken(
+      apiHost,
+      deviceCode.device_code,
+      deviceCode.interval,
+      deviceCode.expires_in,
+    );
+    pollingSpinner.succeed('Authorization complete');
+  } catch (error) {
+    pollingSpinner.fail('Authorization failed');
+    throw error;
+  }
+
+  await completeCloudLogin(cmdObj, tokenResponse.access_token, apiHost);
 }
 
 export function authCommand(program: Command) {
@@ -274,7 +601,7 @@ export function authCommand(program: Command) {
 
   authCommand
     .command('login')
-    .description('Login')
+    .description('Login to Promptfoo Cloud or Enterprise')
     .option('-o, --org <orgId>', 'The organization id to login to.')
     .option(
       '-h, --host <host>',
@@ -286,17 +613,14 @@ export function authCommand(program: Command) {
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
-      // Strip a trailing slash from the --host flag so the login-time validate /
-      // team-fetch requests don't hit `//api/v1/...` (which some on-prem ingresses 404).
-      const apiHost = (cmdObj.host || cloudConfig.getApiHost())?.replace(/\/+$/, '');
-
       try {
         if (cmdObj.apiKey) {
+          const apiHost = cmdObj.host ? normalizeApiHost(cmdObj.host) : cloudConfig.getApiHost();
           await loginWithApiKey(cmdObj, apiHost);
           return;
         }
 
-        await loginWithBrowser(cmdObj);
+        await loginWithDeviceCode(cmdObj);
         return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

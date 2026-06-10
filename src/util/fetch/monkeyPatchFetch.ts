@@ -127,13 +127,14 @@ export async function monkeyPatchFetch(
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
+  const { skipCloudAuth, ...requestOptions } = options ?? {};
   const urlString = getRequestUrlString(url);
-  const callerHeaders = getEffectiveHeaders(url, options?.headers);
+  const callerHeaders = getEffectiveHeaders(url, requestOptions.headers);
   const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const opts: RequestInit = {
-    ...options,
+    ...requestOptions,
   };
 
   const originalBody = opts.body;
@@ -154,7 +155,7 @@ export async function monkeyPatchFetch(
   // validation/rotation sends the token being validated, not the saved one.
   const cloudAuth = getCloudBearerToken(url);
   const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-  if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
+  if (!skipCloudAuth && cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
     opts.headers = setHeader(effectiveHeaders, 'Authorization', cloudAuth);
   }
   try {
