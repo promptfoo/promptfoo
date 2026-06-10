@@ -21,6 +21,7 @@ import {
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import { cloudConfig } from '../src/globalConfig/cloud';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -32,6 +33,8 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+    getCurrentOrganizationId: vi.fn().mockReturnValue('org-1'),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -289,6 +292,8 @@ describe('fetchWithCache', () => {
   beforeEach(async () => {
     vi.resetModules();
     mockFetchWithRetries.mockReset();
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReset().mockReturnValue(undefined);
     await clearCache();
     enableCache();
   });
@@ -986,6 +991,35 @@ describe('fetchWithCache', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('should isolate Cloud task responses by the current CLI team', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team one data' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team two data' }));
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-one');
+
+      const requestOptions = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'extract-intent' }),
+      };
+      const teamOneResult = await fetchWithCache(
+        'https://api.promptfoo.app/api/v1/task',
+        requestOptions,
+        1000,
+      );
+
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
+      const teamTwoResult = await fetchWithCache(
+        'https://api.promptfoo.app/api/v1/task',
+        requestOptions,
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(teamOneResult.data).toEqual({ data: 'team one data' });
+      expect(teamTwoResult.data).toEqual({ data: 'team two data' });
     });
 
     it('should not let the cloud token override a caller-supplied Authorization in the cache key', async () => {
