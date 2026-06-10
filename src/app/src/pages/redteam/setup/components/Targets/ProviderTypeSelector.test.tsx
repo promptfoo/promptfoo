@@ -86,6 +86,20 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
+  it('labels provider search and clear controls', async () => {
+    const user = userEvent.setup();
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
+    );
+
+    const searchInput = screen.getByRole('searchbox', { name: 'Search providers' });
+    await user.type(searchInput, 'openai');
+
+    expect(screen.getByRole('button', { name: 'Clear provider search' })).toBeInTheDocument();
+  });
+
   it('stacks filters above search before the layout has room for a shared row', () => {
     const mockSetProvider = vi.fn();
 
@@ -1096,6 +1110,34 @@ describe('ProviderTypeSelector', () => {
       expect(callArgs.label).toBe('Python Integration');
       expect(callArgs.config.enabled).toBe(true);
       expect(callArgs.config.verbose).toBe(false);
+    });
+
+    it('should use minimal defaults when switching to A2A provider', async () => {
+      const user = userEvent.setup();
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'python',
+        label: 'Python Integration',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="python"
+        />,
+      );
+
+      const a2aProviderCard = screen.getByText('A2A Agent').closest('[role="button"]');
+      if (a2aProviderCard) {
+        await user.click(a2aProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('Python Integration');
+      expect(callArgs.id).toBe('a2a');
+      expect(callArgs.config).toEqual({ url: '' });
     });
   });
 });

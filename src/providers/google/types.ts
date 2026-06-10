@@ -109,10 +109,10 @@ export interface Tool {
   // google_search?: object;
 }
 
-export interface ClaudeThinkingConfig {
-  type: 'enabled' | 'disabled';
-  budget_tokens?: number;
-}
+export type ClaudeThinkingConfig =
+  | { type: 'enabled'; budget_tokens?: number; display?: 'summarized' | 'omitted' }
+  | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
+  | { type: 'disabled' };
 
 export interface CompletionOptions {
   apiKey?: string;

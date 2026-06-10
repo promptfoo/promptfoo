@@ -20,10 +20,19 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/assertions/`   | Assertion handlers              | `src/assertions/AGENTS.md`   |
 | `src/codeScan/`     | Code scan scanner               | `src/codeScan/AGENTS.md`     |
 | `src/commands/`     | CLI commands                    | `src/commands/AGENTS.md`     |
+| `src/contracts/`    | Public package contracts        | `src/contracts/AGENTS.md`    |
+| `src/database/`     | SQLite/libSQL persistence       | `src/database/AGENTS.md`     |
 | `src/matchers/`     | Assertion matcher helpers       | `src/matchers/AGENTS.md`     |
+| `src/models/`       | Eval/result persistence models  | `src/models/AGENTS.md`       |
+| `src/prompts/`      | Prompt loading & processors     | `src/prompts/AGENTS.md`      |
 | `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
 | `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
+| `src/scheduler/`    | Concurrency & rate limits       | `src/scheduler/AGENTS.md`    |
 | `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
+| `src/tracing/`      | OpenTelemetry trace storage     | `src/tracing/AGENTS.md`      |
+| `src/types/`        | Config/API types & Zod schemas  | `src/types/AGENTS.md`        |
+| `src/util/`         | Shared utilities                | `src/util/AGENTS.md`         |
+| `src/validators/`   | Config validation schemas       | `src/validators/AGENTS.md`   |
 | `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
 | `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
 | `examples/`         | Example configs                 | `examples/AGENTS.md`         |
@@ -145,6 +154,15 @@ When asked to fix, improve, or land a PR, own the full loop: check out the branc
 
 **Standing commit/push authorization on feature branches.** When the user has asked you to fix, improve, or land work on a non-`main` branch, you have durable authorization to `git commit` and `git push` to that branch's tracking remote without per-step confirmation. Do not pause to ask "want me to commit?" — committing and pushing is part of the requested work. The safety constraints in _Git Workflow (CRITICAL)_ below (no commits to `main`, no `--force` without approval, no `--no-verify`, etc.) still apply.
 
+**After landing a PR, watch `main` until its CI is green.** Merging is not the end of the loop. The squash commit kicks off a fresh CI run on `main` that can fail for reasons the PR's own checks never surfaced — a base that advanced, a flaky job, or a real regression from the merge. After you merge, follow that `main` run to completion and do not leave `main` red:
+
+- **Classify before reacting.** Read the failing job's logs and decide whether it is a flake or a real failure. A failure is a _flake_ when the tests themselves pass and the job dies on infrastructure noise — e.g. a vitest `Worker exited unexpectedly` / `Timeout terminating forks worker` printed _after_ `Test Files N passed`, a cache-cleanup step (`Post Use Node …`), or a transient `Install Dependencies` error. The signature of a flake is non-determinism: different jobs/files fail across consecutive commits. A _real_ failure is deterministic and attributable to the change — the same test, build, or type error fails on re-run.
+- **Flake → re-run.** Re-run only the failed jobs (`gh run rerun <run-id> --failed`) and confirm the run goes green. Do not blame the just-merged change for a flake it cannot have caused (e.g. a config-only diff breaking a test worker).
+- **Real regression → fix it.** Open a follow-up PR (never commit to `main` directly). If the regression is yours and `main` is broken for everyone, prefer reverting the merge to get `main` green quickly, then re-land with the fix.
+- **Recurring class of flake → fix the flake itself.** If the same failure mode keeps reddening `main` across unrelated PRs, treat the flake as the bug: open a separate PR that fixes it at the source (a leaked handle keeping a test worker alive, an over-tight timeout, a fragile setup step) instead of re-running indefinitely.
+
+Confirm the final `main` state is green, or that the only remaining failure is a pre-existing, clearly-unrelated issue you have explicitly flagged.
+
 For behavior changes, do not stop at unit tests. Run the actual CLI or example with the local build. For eval and redteam work, prefer:
 
 ```bash
@@ -170,14 +188,6 @@ npm install -g npm@11
 ```
 
 If Node-based tools fail with `ERR_MODULE_NOT_FOUND` or similar missing-package errors in a fresh worktree, run `npm ci` before treating the environment as blocked.
-
-If database-backed tests fail with a `better-sqlite3` ABI or `NODE_MODULE_VERSION` mismatch after switching Node versions, rebuild the native module for the active Node version before treating the test run as blocked:
-
-```bash
-npm rebuild better-sqlite3
-```
-
-This is an environment repair step, not a product bug. Agents should try `nvm use` first and `npm rebuild better-sqlite3` second before concluding that review-time tests are blocked by the local setup.
 
 **Verbose logging:**
 
@@ -328,7 +338,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. If native modules still mismatch before tests or review checks, run `npm rebuild better-sqlite3`. `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
