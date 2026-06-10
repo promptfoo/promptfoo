@@ -809,9 +809,48 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
 **Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`) and converts configured manual thinking to adaptive thinking for Opus 4.7 and 4.8.
+
+#### Claude Fable and Mythos models
+
+[Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
+supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
+inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
+returns a `ValidationException`, and the `us.`/`eu.` geo profiles listed on the
+model card may not be provisioned in every region yet. Fable 5 also supports
+Bedrock's Anthropic-compatible Messages endpoint through the explicit
+`bedrock:messages:anthropic.claude-fable-5` provider ID in `us-east-1` and
+`eu-north-1` (this route may additionally require account enablement from AWS).
+
+[Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
+is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
+Promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
+Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`:
+
+```yaml
+providers:
+  - id: bedrock:anthropic.claude-mythos-5
+    config:
+      region: us-east-1
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+```
+
+AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5 — without
+it every request fails with `data retention mode 'default' is not available for this
+model`. There is no console UI at launch; opt in per region via the Data Retention
+API:
+
+```bash
+aws bedrock put-account-data-retention --mode provider_data_share --region us-east-1
+```
+
+Both models use always-on adaptive thinking, so promptfoo omits sampling controls,
+converts manual thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`)
+to adaptive thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo
+endpoints cost 10% more than the global endpoint; Promptfoo applies that premium when
+calculating costs.
 
 ```yaml
 config:
