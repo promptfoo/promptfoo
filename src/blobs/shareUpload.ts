@@ -1,9 +1,5 @@
 import logger from '../logger';
-import {
-  BLOB_SCAN_MAX_DEPTH,
-  BLOB_SCAN_MAX_STRING_LENGTH,
-  collectBlobHashes,
-} from './blobRefs';
+import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
 import { uploadBlobRemote } from './remoteUpload';
 
