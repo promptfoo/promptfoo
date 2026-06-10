@@ -26,7 +26,9 @@ import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/re
 import {
   ConfigPermissionError,
   checkCloudPermissions,
+  getCloudDatabaseId,
   getConfigFromCloud,
+  isCloudProvider,
   resolveTeamId,
 } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
@@ -4054,6 +4056,46 @@ describe('target ID extraction for retry strategy', () => {
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
         targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+      }),
+    );
+  });
+
+  it('should preserve a linked Cloud target separately from the local provider ID', async () => {
+    vi.mocked(isCloudProvider).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.mocked(getCloudDatabaseId).mockReturnValueOnce('cloud-target-123');
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: [
+          {
+            id: 'file://local-provider.ts',
+            config: { linkedTargetId: 'promptfoo://provider/cloud-target-123' },
+          },
+        ],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    });
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloudTargetDatabaseId: 'cloud-target-123',
+        targetIds: ['file://local-provider.ts'],
       }),
     );
   });

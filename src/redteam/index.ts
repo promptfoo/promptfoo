@@ -956,6 +956,7 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  */
 export async function synthesize({
   abortSignal,
+  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,
   entities: entitiesOverride,
   injectVar,
@@ -997,7 +998,8 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
 
-  const cloudTargetDatabaseId = getCloudTargetDatabaseId(targetIds);
+  const cloudTargetDatabaseId =
+    explicitCloudTargetDatabaseId ?? getCloudTargetDatabaseId(targetIds);
 
   if (maxConcurrency > MAX_MAX_CONCURRENCY) {
     maxConcurrency = MAX_MAX_CONCURRENCY;
@@ -1369,6 +1371,7 @@ export async function synthesize({
           injectVar,
           n: plugin.numTests,
           delayMs: delay || 0,
+          targetId: cloudTargetDatabaseId,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),

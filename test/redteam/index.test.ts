@@ -3082,6 +3082,38 @@ describe('Language configuration', () => {
       expect(call[4]).toBe('target-123'); // targetId
     });
 
+    it('should pass an explicit linked Cloud target to extractGoalFromPrompt', async () => {
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
+      mockExtractGoal.mockClear();
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: 'Test prompt' },
+          metadata: { pluginId: 'promptfoo:redteam:policy' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'policy',
+        action: mockPluginAction,
+      } as any);
+
+      await synthesize({
+        cloudTargetDatabaseId: 'linked-target-123',
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['file://local-provider.ts'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: 'linked-target-123' }),
+      );
+      expect(mockExtractGoal.mock.calls[0][4]).toBe('linked-target-123');
+    });
+
     it('should not pass policy when metadata does not contain policy', async () => {
       const mockExtractGoal = vi.mocked(
         (await import('../../src/redteam/util')).extractGoalFromPrompt,

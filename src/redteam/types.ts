@@ -224,6 +224,8 @@ export interface PluginActionParams {
   n: number;
   delayMs: number;
   config?: PluginConfig;
+  /** Cloud target database ID used by remote task handlers to resolve target context. */
+  targetId?: string;
 }
 
 // Context for testing multiple security contexts/states
@@ -286,6 +288,8 @@ export interface RedteamFileConfig extends CommonOptions {
 
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
+  /** Cloud target database ID used to preserve target-owned task context during generation. */
+  cloudTargetDatabaseId?: string;
   entities?: string[];
   // Multi-variable inputs for test case generation (from target)
   inputs?: Inputs;

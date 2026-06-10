@@ -113,6 +113,41 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
   );
 }
 
+function getCloudTargetDatabaseIdFromProviders(
+  providers: Partial<UnifiedConfig>['providers'],
+): string | undefined {
+  if (!Array.isArray(providers)) {
+    return undefined;
+  }
+
+  for (const provider of providers) {
+    if (typeof provider === 'string') {
+      if (isCloudProvider(provider)) {
+        return getCloudDatabaseId(provider);
+      }
+      continue;
+    }
+
+    if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) {
+      continue;
+    }
+
+    const providerConfig = provider as {
+      id?: unknown;
+      config?: { linkedTargetId?: unknown };
+    };
+    const linkedTargetId = providerConfig.config?.linkedTargetId;
+    if (typeof linkedTargetId === 'string' && isCloudProvider(linkedTargetId)) {
+      return getCloudDatabaseId(linkedTargetId);
+    }
+    if (typeof providerConfig.id === 'string' && isCloudProvider(providerConfig.id)) {
+      return getCloudDatabaseId(providerConfig.id);
+    }
+  }
+
+  return undefined;
+}
+
 function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
   return typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.vars
     ? testSuite.defaultTest.vars
@@ -596,6 +631,7 @@ async function doGenerateRedteamInternal(
           })
           .filter((id): id is string => typeof id === 'string')
       : []) ?? [];
+  const cloudTargetDatabaseId = getCloudTargetDatabaseIdFromProviders(resolvedConfig?.providers);
 
   logger.debug(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
@@ -671,6 +707,7 @@ async function doGenerateRedteamInternal(
             maxConcurrency: config.maxConcurrency,
             delay: config.delay,
             abortSignal: options.abortSignal,
+            cloudTargetDatabaseId,
             targetIds,
             showProgressBar: options.progressBar !== false,
             testGenerationInstructions: augmentedTestGenerationInstructions,
@@ -735,6 +772,7 @@ async function doGenerateRedteamInternal(
         maxConcurrency: config.maxConcurrency,
         delay: config.delay,
         abortSignal: options.abortSignal,
+        cloudTargetDatabaseId,
         targetIds,
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: augmentedTestGenerationInstructions,
