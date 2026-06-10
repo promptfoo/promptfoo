@@ -11,6 +11,7 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
+import logger from '../src/logger';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -791,6 +792,166 @@ describe('evaluatorHelpers', () => {
 
           expect(out.suite.prompts[0].raw).toBe('rewritten source');
           expect(out.suite.prompts[0].function).toBeUndefined();
+        });
+
+        it('should not restore either function when two originals share a label, and should warn', async () => {
+          const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+          const fnA = vi.fn();
+          const fnB = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'source A', label: 'shared-label', function: fnA },
+                { raw: 'source B', label: 'shared-label', function: fnB },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [
+                { raw: 'source A', label: 'shared-label' },
+                { raw: 'source B', label: 'shared-label' },
+              ],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts[0].function).toBeUndefined();
+          expect(out.suite.prompts[1].function).toBeUndefined();
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('shared-label'));
+          warnSpy.mockRestore();
+        });
+
+        it('should keep a function the hook itself attached instead of overwriting it', async () => {
+          const originalFn = vi.fn();
+          const hookFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'prompt.py:fn', function: originalFn },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          // An in-process JS hook can return live objects; a function it attached
+          // deliberately must win over restoration.
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'prompt.py:fn', function: hookFn },
+              ],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts[0].function).toBe(hookFn);
+        });
+
+        it('should restore the function across multiple chained extensions', async () => {
+          const promptFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'prompt.py:fn', function: promptFn },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          // Both extensions round-trip the suite through JSON, dropping the function
+          // each time. Restoration after the first hook feeds the second hook's
+          // originals, so the function must survive the whole chain.
+          const serializedSuite = {
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [{ raw: 'def create_prompt(): ...', label: 'prompt.py:fn' }],
+              tests: fnContext.suite.tests,
+            },
+          };
+          vi.mocked(transform)
+            .mockResolvedValueOnce(serializedSuite)
+            .mockResolvedValueOnce(serializedSuite);
+
+          const out = await runExtensionHook(['ext1', 'ext2'], hookName, fnContext);
+
+          expect(transform).toHaveBeenCalledTimes(2);
+          expect(out.suite.prompts[0].function).toBe(promptFn);
+        });
+
+        it('should warn when the hook returns a function prompt under a different label', async () => {
+          const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+          const promptFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'old-label', function: promptFn },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [{ raw: 'def create_prompt(): ...', label: 'new-label' }],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts[0].function).toBeUndefined();
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('old-label'));
+          warnSpy.mockRestore();
+        });
+
+        it('should pass through malformed prompt entries without throwing', async () => {
+          const promptFn = vi.fn();
+          const fnContext = {
+            suite: {
+              providers: [mockApiProvider],
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'prompt.py:fn', function: promptFn },
+              ],
+              tests: [{ vars: {} }],
+            } as TestSuite,
+          };
+
+          // Hooks return arbitrary deserialized JSON; malformed entries must pass
+          // through untouched while valid matches are still restored.
+          vi.mocked(transform).mockResolvedValue({
+            suite: {
+              providers: fnContext.suite.providers,
+              prompts: [
+                { raw: 'def create_prompt(): ...', label: 'prompt.py:fn' },
+                null,
+                'just a string',
+                { raw: 'no label here' },
+              ],
+              tests: fnContext.suite.tests,
+            },
+          });
+
+          const out = await runExtensionHook(['ext1'], hookName, fnContext);
+
+          expect(out.suite.prompts).toHaveLength(4);
+          expect(out.suite.prompts[0].function).toBe(promptFn);
+          expect(out.suite.prompts[1]).toBeNull();
+          expect(out.suite.prompts[2]).toBe('just a string');
+          expect(out.suite.prompts[3]).toEqual({ raw: 'no label here' });
         });
       });
     });
