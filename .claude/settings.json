@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx block-no-verify@1.1.2"
+            "command": "${CLAUDE_PROJECT_DIR}/node_modules/.bin/block-no-verify"
           }
         ]
       }

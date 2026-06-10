@@ -34,6 +34,10 @@ describe('calculateAzureCost', () => {
     expect(typeof cost).toBe('number');
   });
 
+  it('calculates cost for Claude Fable 5', () => {
+    expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
