@@ -11,6 +11,7 @@ import type {
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
+export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
 export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -63,14 +64,16 @@ export class OpenAiGenericProvider implements ApiProvider {
     // the spread and be sent as two header values (e.g. "test-org, custom").
     const customHeaderKeys = Object.keys(customHeaders ?? {}).map((key) => key.toLowerCase());
     const hasOriginatorOverride = customHeaderKeys.includes(OPENAI_ORIGINATOR_HEADER.toLowerCase());
-    const hasOrganizationOverride = customHeaderKeys.includes('openai-organization');
+    const hasOrganizationOverride = customHeaderKeys.includes(
+      OPENAI_ORGANIZATION_HEADER.toLowerCase(),
+    );
 
     return {
       ...(!hasOriginatorOverride && sendsToOpenAiApi
         ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR }
         : {}),
       ...(!hasOrganizationOverride && this.getOrganization()
-        ? { 'OpenAI-Organization': this.getOrganization() }
+        ? { [OPENAI_ORGANIZATION_HEADER]: this.getOrganization() }
         : {}),
       ...customHeaders,
     };
