@@ -776,12 +776,15 @@ describe('evalCommand', () => {
     loadDefaultConfigSpy.mockRestore();
   });
 
-  it('should warn when a directory config argument has no default config file', async () => {
-    const cmdObj = { config: ['/empty-suite'], write: false };
+  it('should drop a config-less directory and continue with the remaining config files', async () => {
+    const cmdObj = { config: ['/empty-suite', '/base.yaml'], write: false };
     const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
-      isDirectory: () => true,
-    } as any);
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockImplementation(
+      async (target) =>
+        ({
+          isDirectory: () => target === '/empty-suite',
+        }) as any,
+    );
     const loadDefaultConfigSpy = vi
       .spyOn(defaultConfigModule, 'loadDefaultConfig')
       .mockResolvedValueOnce({
@@ -794,7 +797,45 @@ describe('evalCommand', () => {
     expect(loggerWarnSpy).toHaveBeenCalledWith(
       expect.stringContaining('No configuration file found in directory: /empty-suite.'),
     );
-    expect(cmdObj.config).toEqual(['/empty-suite']);
+    // The config-less directory is dropped: leaving it in the list would surface
+    // later as a confusing "Unsupported configuration file format" readConfig error.
+    expect(cmdObj.config).toEqual(['/base.yaml']);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: ['/base.yaml'] }),
+      expect.anything(),
+    );
+
+    loggerWarnSpy.mockClear();
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
+  it('should fail early when no config files remain after dropping config-less directories', async () => {
+    const cmdObj = { config: ['/empty-suite'], write: false };
+    const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValueOnce({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+
+    await expect(doEval(cmdObj, defaultConfig, undefined, {})).rejects.toEqual(
+      expect.objectContaining({
+        name: 'EvalRunError',
+        exitCode: 1,
+        message: expect.stringContaining('No configuration file found in /empty-suite.'),
+      }),
+    );
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No configuration file found in directory: /empty-suite.'),
+    );
+    expect(resolveConfigs).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
 
     loggerWarnSpy.mockClear();
     statSpy.mockRestore();

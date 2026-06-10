@@ -255,35 +255,42 @@ export async function doEval(
 
     if (cmdObj.config !== undefined) {
       // Normalize to an array up front (Commander's variadic --config already yields one) so
-      // the in-place directory resolution below — and the array operations on cmdObj.config
-      // later in this function — stay safe regardless of the caller's input shape.
+      // the directory resolution below — and the array operations on cmdObj.config later in
+      // this function — stay safe regardless of the caller's input shape.
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
-      cmdObj.config = configPaths;
+      // Rebuild the list in iteration order: combineConfigs() applies configs in array order
+      // (later entries override earlier ones), so a directory entry must resolve in place
+      // rather than be appended (e.g. `--config base.yaml dir/ override.yaml`).
+      const resolvedConfigPaths: string[] = [];
+      const configlessDirs: string[] = [];
       for (const configPath of configPaths) {
         const configStats = await fs.stat(configPath).catch(() => undefined);
-        if (configStats?.isDirectory()) {
-          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadDefaultConfig(configPath);
-          if (newConfigPath) {
-            // Replace the directory entry in place so the original --config ordering is
-            // preserved. combineConfigs() applies configs in array order (later entries
-            // override earlier ones), so removing the directory and appending the resolved
-            // path to the end would change precedence when a directory is passed alongside
-            // other --config files (e.g. `--config base.yaml dir/ override.yaml`).
-            const configIndex = cmdObj.config.indexOf(configPath);
-            if (configIndex === -1) {
-              cmdObj.config.push(newConfigPath);
-            } else {
-              cmdObj.config[configIndex] = newConfigPath;
-            }
-            defaultConfig = { ...defaultConfig, ...dirConfig };
-          } else {
-            logger.warn(
-              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
-            );
-          }
+        if (!configStats?.isDirectory()) {
+          resolvedConfigPaths.push(configPath);
+          continue;
+        }
+        const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+          await loadDefaultConfig(configPath);
+        if (newConfigPath) {
+          resolvedConfigPaths.push(newConfigPath);
+          defaultConfig = { ...defaultConfig, ...dirConfig };
+        } else {
+          // Drop the directory from the list: leaving it in would surface later as a
+          // confusing "Unsupported configuration file format" error from readConfig().
+          configlessDirs.push(configPath);
+          logger.warn(
+            `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+          );
         }
       }
+
+      if (configlessDirs.length > 0 && resolvedConfigPaths.length === 0) {
+        return failEvalRun(
+          `No configuration file found in ${configlessDirs.join(', ')}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+          isCliInvocation,
+        );
+      }
+      cmdObj.config = resolvedConfigPaths;
     }
 
     // Check for conflicting options
