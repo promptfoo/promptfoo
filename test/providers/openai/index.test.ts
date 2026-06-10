@@ -73,6 +73,17 @@ describe('OpenAI Provider', () => {
       });
     });
 
+    it('should treat organization header overrides case-insensitively', () => {
+      expect(
+        provider.getOpenAiRequestHeaders({
+          'openai-organization': 'custom-org',
+        }),
+      ).toEqual({
+        'X-OpenAI-Originator': 'promptfoo',
+        'openai-organization': 'custom-org',
+      });
+    });
+
     it('should not attribute compatible endpoints unless explicitly configured', () => {
       const customProvider = new OpenAiGenericProvider('test-model', {
         config: { apiBaseUrl: 'https://custom.api.com/openai' },
