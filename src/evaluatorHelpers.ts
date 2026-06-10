@@ -651,6 +651,98 @@ export function getExtensionHookName(extension: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Re-attaches the non-serializable `function` callable to prompts returned from a
+ * `beforeAll` extension hook.
+ *
+ * Python extension hooks run in a subprocess, so the context is serialized with
+ * `JSON.stringify` on the way in and parsed on the way out. (JavaScript hooks run
+ * in-process and keep live references, so they are unaffected unless they clone the
+ * suite themselves.) JSON cannot represent the `function` property that
+ * `file://...:fn` prompts carry, so it is dropped on the round-trip. Without
+ * restoring it, the evaluator falls back to sending the prompt's raw source as text
+ * instead of executing the function
+ * (https://github.com/promptfoo/promptfoo/issues/9653).
+ *
+ * A returned prompt is matched to an original by `label` (the stable identifier for
+ * file-based prompts) and the function is only restored when the original carried one
+ * and the `raw` source is unchanged — so a hook that intentionally rewrites a prompt
+ * keeps its new behavior. Labels shared by more than one function-carrying original
+ * are treated as ambiguous and skipped to avoid restoring the wrong function.
+ */
+function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prompt[]): Prompt[] {
+  if (!Array.isArray(returnedPrompts) || !Array.isArray(originalPrompts)) {
+    return returnedPrompts;
+  }
+
+  const originalsByLabel = new Map<string, Prompt | null>();
+  for (const original of originalPrompts) {
+    if (!original || typeof original.function !== 'function' || original.label == null) {
+      continue;
+    }
+    // A null entry marks an ambiguous (duplicated) label that must not be restored.
+    originalsByLabel.set(original.label, originalsByLabel.has(original.label) ? null : original);
+  }
+  if (originalsByLabel.size === 0) {
+    return returnedPrompts;
+  }
+
+  const restored = returnedPrompts.map((returned) => {
+    if (!returned || typeof returned.function === 'function' || returned.label == null) {
+      return returned;
+    }
+    const original = originalsByLabel.get(returned.label);
+    if (original && original.raw === returned.raw) {
+      return { ...returned, function: original.function };
+    }
+    return returned;
+  });
+
+  // A prompt function that was neither restored nor returned by the hook means the
+  // prompt will render its raw source as text — the original #9653 symptom. Surface
+  // why, so users get a breadcrumb instead of a silent behavior change.
+  const labelsWithFunction = new Set<string>();
+  const returnedLabels = new Set<string>();
+  for (const prompt of restored) {
+    if (prompt?.label != null) {
+      returnedLabels.add(prompt.label);
+      if (typeof prompt.function === 'function') {
+        labelsWithFunction.add(prompt.label);
+      }
+    }
+  }
+  for (const [label, original] of originalsByLabel) {
+    if (labelsWithFunction.has(label)) {
+      continue;
+    }
+    if (original === null) {
+      if (returnedLabels.has(label)) {
+        logger.warn(
+          `beforeAll extension hook: multiple prompts share the label "${label}", so their prompt functions cannot be safely restored after the hook's serialized round-trip. These prompts will render their raw source as text. Give each prompt a unique label to fix this.`,
+        );
+      }
+    } else if (returnedLabels.has(label)) {
+      logger.debug(
+        `beforeAll extension hook rewrote prompt "${label}"; its original prompt function was not re-attached.`,
+      );
+    } else if (
+      restored.some(
+        (prompt) => prompt && typeof prompt.function !== 'function' && prompt.raw === original.raw,
+      )
+    ) {
+      logger.warn(
+        `beforeAll extension hook: prompt "${label}" carried a prompt function, but the hook returned its content under a different label. The function cannot be restored, so the prompt will render its raw source as text. Keep prompt labels unchanged to preserve prompt functions.`,
+      );
+    } else {
+      logger.debug(
+        `beforeAll extension hook removed prompt "${label}"; its prompt function no longer applies.`,
+      );
+    }
+  }
+
+  return restored;
+}
+
 export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
@@ -732,7 +824,10 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
             suite: {
               ...(updatedContext as BeforeAllExtensionHookContext).suite,
               // Mutable properties:
-              prompts: extensionReturnValue.suite.prompts,
+              prompts: restorePromptFunctions(
+                extensionReturnValue.suite.prompts,
+                (updatedContext as BeforeAllExtensionHookContext).suite.prompts,
+              ),
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,
               tests: extensionReturnValue.suite.tests,
               scenarios: extensionReturnValue.suite.scenarios,
