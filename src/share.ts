@@ -412,20 +412,10 @@ function createShareBlobCaches(): {
 
   return {
     inlineCache: inlineBlobs ? createBlobInlineCache() : null,
-    remoteBlobUploadCache:
-      cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null,
+    // Trace blobs are never inlined into the unchunked initial request. Keep a
+    // Cloud upload cache available even when result blobs explicitly use inlining.
+    remoteBlobUploadCache: cloudConfig.isEnabled() ? createRemoteBlobUploadCache() : null,
   };
-}
-
-async function prepareTracesForShare(
-  evalRecord: Eval,
-  inlineCache: BlobInlineCache | null,
-): Promise<{ traces: EvalTraces; tracesToSend: EvalTraces }> {
-  const traces = await evalRecord.getTraces();
-  const tracesToSend = inlineCache
-    ? await inlineBlobRefsForShare(traces, inlineCache, evalRecord.id)
-    : traces;
-  return { traces, tracesToSend };
 }
 
 async function uploadTraceBlobRefsForShare(
@@ -530,10 +520,10 @@ async function sendChunkedResults(
 
   let evalId: string | undefined;
   try {
-    const { traces, tracesToSend } = await prepareTracesForShare(evalRecord, inlineCache);
+    const traces = await evalRecord.getTraces();
 
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, tracesToSend);
+    evalId = await sendEvalRecord(evalRecord, url, headers, traces);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -565,7 +555,7 @@ async function sendChunkedResults(
             evalRecord.id,
             evalId,
             inlineCache,
-            remoteBlobUploadCache,
+            inlineCache ? null : remoteBlobUploadCache,
           );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
@@ -584,7 +574,7 @@ async function sendChunkedResults(
         evalRecord.id,
         evalId,
         inlineCache,
-        remoteBlobUploadCache,
+        inlineCache ? null : remoteBlobUploadCache,
       );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);

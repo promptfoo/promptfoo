@@ -738,7 +738,7 @@ describe('createShareableUrl', () => {
       expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
     });
 
-    it('inlines authorized trace blobs but not copied cross-eval result blobs', async () => {
+    it('does not inline trace blobs into the initial self-hosted share payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
         Boolean(defaultValue),
@@ -864,15 +864,15 @@ describe('createShareableUrl', () => {
         expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
         const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
         const chunkBody = JSON.parse(mockFetch.mock.calls[1][1].body);
-        expect(initialBody.traces[0].metadata.image).toBe(
-          `data:image/png;base64,${authorizedBytes.toString('base64')}`,
-        );
+        expect(initialBody.traces[0].metadata.image).toBe(authorizedUri);
         expect(chunkBody[0].response.output).toBe(copiedUri);
+        expect(mockFetch.mock.calls.map(([, options]) => options.body).join('\n')).not.toContain(
+          authorizedBytes.toString('base64'),
+        );
         expect(mockFetch.mock.calls.map(([, options]) => options.body).join('\n')).not.toContain(
           copiedBytes.toString('base64'),
         );
-        expect(getByHash).toHaveBeenCalledOnce();
-        expect(getByHash).toHaveBeenCalledWith(authorizedHash);
+        expect(getByHash).not.toHaveBeenCalled();
         expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
       } finally {
         resetBlobStorageProvider();
@@ -1044,6 +1044,52 @@ describe('createShareableUrl', () => {
         remoteEvalId: 'mock-eval-id',
       });
     });
+
+    it('uploads Cloud trace blobs when result blobs use the inline override', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      vi.mocked(envars.getEnvBool).mockImplementation((key, defaultValue) =>
+        key === 'PROMPTFOO_SHARE_INLINE_BLOBS' ? true : Boolean(defaultValue),
+      );
+
+      const hash = '4'.repeat(64);
+      const blobUri = `promptfoo://blob/${hash}`;
+      const mockEvalWithTraces = buildMockEval();
+      const traces = [
+        {
+          traceId: 'trace-inline-override',
+          evaluationId: mockEvalWithTraces.id as string,
+          metadata: { media: blobUri },
+          spans: [],
+        },
+      ];
+      mockEvalWithTraces.getTraces = vi.fn().mockResolvedValue(traces);
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'mock-eval-id' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+
+      await createShareableUrl(mockEvalWithTraces as Eval, { silent: true });
+
+      const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(initialBody.traces[0].metadata.media).toBe(blobUri);
+      expect(inlineBlobRefsForShare).toHaveBeenCalled();
+      expect(uploadBlobRefsForShare).toHaveBeenCalledOnce();
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(traces, expect.any(Map), {
+        localEvalId: mockEvalWithTraces.id,
+        remoteEvalId: 'mock-eval-id',
+      });
+    });
+
     it('sends eval with empty traces array when no traces are available', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
