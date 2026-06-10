@@ -293,6 +293,53 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
+    it('should load file references nested in var objects', async () => {
+      const prompt = toPrompt('Analyze this report: {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2022-12-31',
+            report: 'file://data/mixed_report_tables.txt',
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('<h1>Sample Report</h1>');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('mixed_report_tables.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Analyze this report: <h1>Sample Report</h1>');
+    });
+
+    it('should resolve nested var references after loading top-level file vars', async () => {
+      const prompt = toPrompt('Analyze this report: {{ reporting_period.previous.report }}');
+      const vars = {
+        file_content: 'file://data/mixed_report_tables.txt',
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2022-12-31',
+            report: '{{ file_content }}',
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('<h1>Sample Report</h1>');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('mixed_report_tables.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Analyze this report: <h1>Sample Report</h1>');
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {
