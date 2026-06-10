@@ -31,6 +31,7 @@ import type {
 import type {
   ApiProvider,
   CallApiContextParams,
+  DefaultProviderSelectionInfo,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
@@ -484,6 +485,8 @@ export interface EvaluateSummaryV3 {
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  /** Automatic default-provider selection captured when this evaluation ran. */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 }
 
 export interface EvaluateSummaryV2 {
@@ -492,6 +495,8 @@ export interface EvaluateSummaryV2 {
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+  /** Automatic default-provider selection captured when this evaluation ran. */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 }
 
 export type EvalTableDTO = {
@@ -504,6 +509,8 @@ export type EvalTableDTO = {
   version: number;
   id: string;
   stats?: EvaluateStats;
+  /** Automatic default-provider selection captured when this evaluation ran, when applicable. */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
 };
 
 export interface ResultSuggestion {

@@ -275,6 +275,50 @@ describe('importCommand', () => {
       expect(importedEval!.evaluationDurationMs).toBe(4198);
     });
 
+    it('should preserve valid default provider metadata from an export', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      const defaultProviderInfo = {
+        selectedProvider: 'Anthropic',
+        reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
+        detectedCredentials: ['ANTHROPIC_API_KEY'],
+        skippedProviders: [],
+        providerSlots: {
+          grading: { id: 'anthropic:messages:claude-sonnet-4' },
+        },
+      };
+      sampleData.results.defaultProviderInfo = defaultProviderInfo;
+
+      const filePath = path.join(__dirname, `temp-default-provider-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval?.defaultProviderInfo).toEqual(defaultProviderInfo);
+    });
+
+    it('should omit invalid default provider metadata from an export', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.results.defaultProviderInfo = { selectedProvider: 42 };
+
+      const filePath = path.join(__dirname, `temp-invalid-default-provider-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval?.defaultProviderInfo).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Imported eval has invalid results.defaultProviderInfo; omitting it.',
+      );
+    });
+
     it('should import traces and attach them to the imported eval', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

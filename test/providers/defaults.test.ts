@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
+  getDefaultProviderSelectionInfo,
   getDefaultProviders,
+  getDefaultProvidersWithInfo,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
+import * as googleAiStudioDefaults from '../../src/providers/google/ai.studio';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
-import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import * as googleVertexDefaults from '../../src/providers/google/vertex';
+import { DEFAULT_VERTEX_MODEL, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -15,6 +19,7 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
+import * as codexDefaults from '../../src/providers/openai/codexDefaults';
 import {
   clearCodexDefaultProvidersForTesting,
   hasCodexDefaultCredentials,
@@ -452,5 +457,296 @@ describe('Provider override tests', () => {
       expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
       expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
     });
+  });
+});
+
+describe('getDefaultProvidersWithInfo', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    setDefaultCompletionProviders(undefined as any);
+    setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    clearCodexDefaultProvidersForTesting();
+    mockProcessEnv({
+      ANTHROPIC_API_KEY: undefined,
+      AZURE_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_API_KEY: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
+      GEMINI_API_KEY: undefined,
+      GITHUB_TOKEN: undefined,
+      GOOGLE_API_KEY: undefined,
+      MISTRAL_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+      XAI_API_KEY: undefined,
+    });
+  });
+
+  afterEach(async () => {
+    mockProcessEnv(originalEnv, { clear: true });
+    clearCodexDefaultProvidersForTesting();
+    await providerRegistry.shutdownAll();
+    vi.resetAllMocks();
+  });
+
+  it('should return selection info with Anthropic when ANTHROPIC_API_KEY is set', async () => {
+    mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Anthropic');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+    expect(result.selectionInfo.reason).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should return selection info with OpenAI when OPENAI_API_KEY is set', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('OpenAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('OPENAI_API_KEY');
+    expect(result.selectionInfo.reason).toContain('OPENAI_API_KEY');
+  });
+
+  it('should prefer OpenAI over Anthropic when both are set', async () => {
+    mockProcessEnv({
+      ANTHROPIC_API_KEY: 'test-key',
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('OpenAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('OPENAI_API_KEY');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should include skipped providers in selection info', async () => {
+    // Set both OpenAI and Anthropic credentials - OpenAI should be selected, Anthropic should be skipped
+    mockProcessEnv({
+      ANTHROPIC_API_KEY: 'test-key',
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    // Anthropic should be in skipped providers since OpenAI was selected
+    const skippedAnthropic = result.selectionInfo.skippedProviders.find(
+      (p) => p.name === 'Anthropic',
+    );
+    expect(skippedAnthropic).toBeDefined();
+    expect(skippedAnthropic?.reason).toContain('higher priority');
+  });
+
+  it('should populate provider slots', async () => {
+    mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.providerSlots.grading).toBeDefined();
+    expect(result.selectionInfo.providerSlots.grading?.id).toContain('anthropic');
+  });
+
+  it('should return GitHub Models as fallback when no other credentials', async () => {
+    mockProcessEnv({ GITHUB_TOKEN: 'test-token' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('GitHub Models');
+    expect(result.selectionInfo.detectedCredentials).toContain('GITHUB_TOKEN');
+  });
+
+  it('should return Google AI Studio when GEMINI_API_KEY is set', async () => {
+    mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Google AI Studio');
+    expect(result.selectionInfo.detectedCredentials).toContain('GEMINI_API_KEY');
+  });
+
+  it('should return Mistral when MISTRAL_API_KEY is set', async () => {
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('Mistral');
+    expect(result.selectionInfo.detectedCredentials).toContain('MISTRAL_API_KEY');
+  });
+
+  it('should return xAI when XAI_API_KEY is set', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('xAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('XAI_API_KEY');
+    expect(result.selectionInfo.providerSlots.grading?.id).toBe('xai:grok-4.3');
+  });
+
+  it('should work with env overrides', async () => {
+    const envOverrides = {
+      ANTHROPIC_API_KEY: 'override-key',
+    };
+
+    const result = await getDefaultProvidersWithInfo(envOverrides as any);
+
+    expect(result.selectionInfo.selectedProvider).toBe('Anthropic');
+    expect(result.selectionInfo.detectedCredentials).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('should return both providers and selectionInfo', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.providers).toBeDefined();
+    expect(result.selectionInfo).toBeDefined();
+    expect(result.providers.gradingProvider).toBeDefined();
+    expect(result.providers.embeddingProvider).toBeDefined();
+  });
+});
+
+describe('getDefaultProviderSelectionInfo', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    setDefaultCompletionProviders(undefined as any);
+    setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    clearCodexDefaultProvidersForTesting();
+    mockProcessEnv({
+      ANTHROPIC_API_KEY: undefined,
+      AZURE_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_API_KEY: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
+      GEMINI_API_KEY: undefined,
+      GITHUB_TOKEN: undefined,
+      GOOGLE_API_KEY: undefined,
+      MISTRAL_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+      XAI_API_KEY: undefined,
+    });
+  });
+
+  afterEach(async () => {
+    mockProcessEnv(originalEnv, { clear: true });
+    clearCodexDefaultProvidersForTesting();
+    await providerRegistry.shutdownAll();
+    vi.resetAllMocks();
+  });
+
+  it('should report the actual Azure API key variable that was detected', async () => {
+    mockProcessEnv({
+      AZURE_API_KEY: 'legacy-key',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Azure OpenAI');
+    expect(result.detectedCredentials).toContain('AZURE_API_KEY');
+    expect(result.detectedCredentials).not.toContain('AZURE_OPENAI_API_KEY');
+  });
+
+  it('should use legacy Azure deployment names when present', async () => {
+    mockProcessEnv({
+      AZURE_OPENAI_API_KEY: 'test-key',
+      AZURE_DEPLOYMENT_NAME: 'legacy-chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Azure OpenAI');
+    expect(result.providerSlots.grading?.id).toBe('azure:legacy-chat');
+  });
+
+  it('should report eligible Azure defaults as skipped when OpenAI has priority', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'openai-key',
+      AZURE_OPENAI_API_KEY: 'azure-key',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('OpenAI');
+    expect(result.skippedProviders).toContainEqual({
+      name: 'Azure OpenAI',
+      reason: 'OpenAI has higher priority',
+    });
+  });
+
+  it('should report Azure Content Safety using the provider id used at runtime', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'openai-key',
+      AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.providerSlots.moderation?.id).toBe('azure:text-content-safety');
+  });
+
+  it('should avoid instantiating Codex providers when only selection info is requested', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+    const getCodexDefaultProvidersSpy = vi.spyOn(codexDefaults, 'getCodexDefaultProviders');
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Codex SDK');
+    expect(result.providerSlots.grading?.id).toBe('openai:codex-sdk');
+    expect(getCodexDefaultProvidersSpy).not.toHaveBeenCalled();
+    getCodexDefaultProvidersSpy.mockRestore();
+  });
+
+  it('should avoid instantiating Google AI Studio providers when only selection info is requested', async () => {
+    mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+    const getGoogleAiStudioProvidersSpy = vi.spyOn(
+      googleAiStudioDefaults,
+      'getGoogleAiStudioProviders',
+    );
+    const getGoogleVertexEmbeddingProviderSpy = vi.spyOn(
+      googleVertexDefaults,
+      'getGoogleVertexEmbeddingProvider',
+    );
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Google AI Studio');
+    expect(result.providerSlots.grading?.id).toBe('google:gemini-2.5-pro');
+    expect(result.providerSlots.embedding?.id).toBe('vertex:gemini-embedding-001');
+    expect(getGoogleAiStudioProvidersSpy).not.toHaveBeenCalled();
+    expect(getGoogleVertexEmbeddingProviderSpy).not.toHaveBeenCalled();
+    getGoogleAiStudioProvidersSpy.mockRestore();
+    getGoogleVertexEmbeddingProviderSpy.mockRestore();
+  });
+
+  it('should avoid instantiating Google Vertex providers when only selection info is requested', async () => {
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(true);
+    const getGoogleVertexProvidersSpy = vi.spyOn(googleVertexDefaults, 'getGoogleVertexProviders');
+    const getGoogleVertexEmbeddingProviderSpy = vi.spyOn(
+      googleVertexDefaults,
+      'getGoogleVertexEmbeddingProvider',
+    );
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Google Vertex');
+    expect(result.providerSlots.grading?.id).toBe(`vertex:${DEFAULT_VERTEX_MODEL}`);
+    expect(result.providerSlots.embedding?.id).toBe('vertex:gemini-embedding-001');
+    expect(getGoogleVertexProvidersSpy).not.toHaveBeenCalled();
+    expect(getGoogleVertexEmbeddingProviderSpy).not.toHaveBeenCalled();
+    getGoogleVertexProvidersSpy.mockRestore();
+    getGoogleVertexEmbeddingProviderSpy.mockRestore();
   });
 });

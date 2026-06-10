@@ -34,6 +34,10 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
+import {
+  type DefaultProviderSelectionInfo,
+  DefaultProviderSelectionInfoSchema,
+} from '../types/providers';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
@@ -315,6 +319,7 @@ export default class Eval {
   vars: string[];
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
@@ -387,6 +392,9 @@ export default class Eval {
     const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
     const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
     const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+    const storedDefaultProviderInfo = DefaultProviderSelectionInfoSchema.safeParse(
+      resultsObj?.['defaultProviderInfo'],
+    );
     // Recompute total if only split fields exist (defensive against partial writes)
     const durationMs =
       rawDurationMs ??
@@ -404,6 +412,9 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      defaultProviderInfo: storedDefaultProviderInfo.success
+        ? storedDefaultProviderInfo.data
+        : undefined,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -465,6 +476,7 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      defaultProviderInfo?: DefaultProviderSelectionInfo;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -484,6 +496,9 @@ export default class Eval {
       }),
       ...(opts?.evaluationDurationMs !== undefined && {
         evaluationDurationMs: opts.evaluationDurationMs,
+      }),
+      ...(opts?.defaultProviderInfo !== undefined && {
+        defaultProviderInfo: opts.defaultProviderInfo,
       }),
     };
 
@@ -603,6 +618,7 @@ export default class Eval {
       durationMs: opts?.durationMs,
       generationDurationMs: opts?.generationDurationMs,
       evaluationDurationMs: opts?.evaluationDurationMs,
+      defaultProviderInfo: opts?.defaultProviderInfo,
     });
   }
 
@@ -621,6 +637,7 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      defaultProviderInfo?: DefaultProviderSelectionInfo;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -638,6 +655,7 @@ export default class Eval {
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
+    this.defaultProviderInfo = opts?.defaultProviderInfo;
   }
 
   version() {
@@ -677,7 +695,8 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.defaultProviderInfo !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -691,6 +710,9 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.defaultProviderInfo !== undefined) {
+        expr = sql`json_set(${expr}, '$.defaultProviderInfo', json(${JSON.stringify(this.defaultProviderInfo)}))`;
       }
       updateObj.results = expr;
     }
@@ -723,6 +745,10 @@ export default class Eval {
     }
     this.generationDurationMs = durationMs;
     this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
+  }
+
+  setDefaultProviderInfo(defaultProviderInfo?: DefaultProviderSelectionInfo) {
+    this.defaultProviderInfo = defaultProviderInfo;
   }
 
   getPrompts() {
@@ -1422,6 +1448,7 @@ export default class Eval {
         results: this.oldResults.results,
         table: this.oldResults.table,
         stats: this.oldResults.stats,
+        ...(this.defaultProviderInfo && { defaultProviderInfo: this.defaultProviderInfo }),
       };
     }
     if (this.results.length === 0) {
@@ -1444,6 +1471,7 @@ export default class Eval {
       prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
+      ...(this.defaultProviderInfo && { defaultProviderInfo: this.defaultProviderInfo }),
     };
   }
 
@@ -1566,7 +1594,9 @@ export default class Eval {
           author,
           description: copyDescription,
           config: newConfig,
-          results: {},
+          results: this.defaultProviderInfo
+            ? { defaultProviderInfo: this.defaultProviderInfo }
+            : {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

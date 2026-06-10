@@ -10,6 +10,17 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
+import type { DefaultProviderSelectionInfo } from '../../src/types/providers';
+
+const defaultProviderInfo: DefaultProviderSelectionInfo = {
+  selectedProvider: 'Anthropic',
+  reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
+  detectedCredentials: ['ANTHROPIC_API_KEY'],
+  skippedProviders: [],
+  providerSlots: {
+    grading: { id: 'anthropic:messages:claude-sonnet-4' },
+  },
+};
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
   return {
@@ -397,6 +408,28 @@ describe('eval routes', () => {
   });
 
   describe('GET /:id/table - large payload handling', () => {
+    it('returns captured default-provider information for the stored evaluation', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.setDefaultProviderInfo(defaultProviderInfo);
+      await eval_.save();
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.defaultProviderInfo).toEqual(defaultProviderInfo);
+    });
+
+    it('does not infer default-provider information for historical evals without stored metadata', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty('defaultProviderInfo');
+    });
+
     it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

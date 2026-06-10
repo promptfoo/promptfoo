@@ -12,6 +12,7 @@ import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/eva
 import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
+import { DefaultProviderSelectionInfoSchema } from '../types/providers';
 import { sha256 } from '../util/createHash';
 import type { Command } from 'commander';
 
@@ -93,6 +94,21 @@ function extractDurations(evalData: any) {
     generationDurationMs: extractDuration(stats?.generationDurationMs),
     evaluationDurationMs: extractDuration(stats?.evaluationDurationMs),
   };
+}
+
+function extractDefaultProviderInfo(evalData: any) {
+  const rawDefaultProviderInfo = evalData.results?.defaultProviderInfo;
+  if (rawDefaultProviderInfo === undefined) {
+    return undefined;
+  }
+
+  const parsed = DefaultProviderSelectionInfoSchema.safeParse(rawDefaultProviderInfo);
+  if (!parsed.success) {
+    logger.warn('Imported eval has invalid results.defaultProviderInfo; omitting it.');
+    return undefined;
+  }
+
+  return parsed.data;
 }
 
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
@@ -408,6 +424,7 @@ async function createImportedV3Eval(
     vars: extractVars(evalData),
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
+    defaultProviderInfo: extractDefaultProviderInfo(evalData),
   });
   const importedTraceIds = await importTraces(traces, evalRecord.id, context.newId);
   const importedResults = remapImportedResultTraceLinkage(

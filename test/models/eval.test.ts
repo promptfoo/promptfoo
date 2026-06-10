@@ -25,6 +25,18 @@ import {
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
+import type { DefaultProviderSelectionInfo } from '../../src/types/providers';
+
+const defaultProviderInfo: DefaultProviderSelectionInfo = {
+  selectedProvider: 'Anthropic',
+  reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
+  detectedCredentials: ['ANTHROPIC_API_KEY'],
+  skippedProviders: [],
+  providerSlots: {
+    grading: { id: 'anthropic:messages:claude-sonnet-4' },
+  },
+};
+
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
   return {
@@ -802,6 +814,27 @@ describe('evaluator', () => {
       expect(stats?.durationMs).toBe(12345);
     });
 
+    it('should load validated default-provider selection metadata from database', async () => {
+      const eval1 = await Eval.create({}, [], { defaultProviderInfo });
+
+      const persistedEval = await Eval.findById(eval1.id);
+
+      expect(persistedEval?.defaultProviderInfo).toEqual(defaultProviderInfo);
+    });
+
+    it('should ignore malformed default-provider selection metadata from database', async () => {
+      const eval1 = await Eval.create({}, []);
+
+      const db = await getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ defaultProviderInfo: { selectedProvider: 42 } })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+
+      expect(persistedEval?.defaultProviderInfo).toBeUndefined();
+    });
+
     it('should extract generationDurationMs and evaluationDurationMs from database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
@@ -935,6 +968,16 @@ describe('evaluator', () => {
       expect(persistedEval?.durationMs).toBe(5000);
       expect(persistedEval?.evaluationDurationMs).toBe(5000);
       expect(persistedEval?.generationDurationMs).toBeUndefined();
+    });
+
+    it('should persist default-provider selection set after an eval record is created', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      eval1.setDefaultProviderInfo(defaultProviderInfo);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.defaultProviderInfo).toEqual(defaultProviderInfo);
     });
   });
 
@@ -1215,6 +1258,14 @@ describe('evaluator', () => {
       const results = await eval1.toResultsFile();
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+
+    it('should include captured default-provider selection in exported result summaries', async () => {
+      const eval1 = new Eval({}, { defaultProviderInfo });
+
+      const result = await eval1.toResultsFile();
+
+      expect(result.results.defaultProviderInfo).toEqual(defaultProviderInfo);
     });
   });
 

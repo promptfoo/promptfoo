@@ -86,7 +86,7 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
-function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+export function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
   if (typeof provider === 'string') {
     return provider === 'promptfoo:simulated-user';
   }
@@ -107,6 +107,33 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
     isSimulatedUserProviderConfig(providerTypeConfig),
   );
+}
+
+function getTextGradingProvider(
+  provider: GradingConfig['provider'] | undefined,
+): GradingConfig['provider'] | undefined {
+  if (!provider || typeof provider === 'string' || Array.isArray(provider)) {
+    return provider;
+  }
+
+  if (
+    typeof (provider as ApiProvider).id === 'function' ||
+    typeof (provider as ProviderOptions).id === 'string'
+  ) {
+    return provider;
+  }
+
+  return (provider as ProviderTypeMap).text;
+}
+
+export function hasExplicitDefaultGradingProvider(defaultTest: TestCase | string | undefined) {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+
+  return [defaultTest.provider, defaultTest.options?.provider]
+    .map(getTextGradingProvider)
+    .some((provider) => Boolean(provider) && !isSimulatedUserProviderConfig(provider));
 }
 
 export async function getGradingProvider(

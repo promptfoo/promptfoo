@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
+import type { DefaultProviderSelectionInfo } from '../../types/providers';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -41,6 +42,8 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
+  /** Information about which default provider was selected (if using defaults) */
+  defaultProviderInfo?: DefaultProviderSelectionInfo;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
 }
@@ -284,19 +287,33 @@ function getResultsLines({
   errors,
   duration,
   maxConcurrency,
-}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+  defaultProviderInfo,
+}: Pick<
+  EvalSummaryParams,
+  'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency' | 'defaultProviderInfo'
+>) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
 
-  return [
+  const lines = [
     '',
     chalk.bold('Results:'),
     formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
-    '',
   ];
+
+  if (defaultProviderInfo) {
+    lines.push(
+      chalk.gray(
+        `Default provider config: ${defaultProviderInfo.selectedProvider} (auto-detected)`,
+      ),
+    );
+  }
+
+  lines.push('');
+  return lines;
 }
 
 /**

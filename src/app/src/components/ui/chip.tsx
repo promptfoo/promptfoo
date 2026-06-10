@@ -31,14 +31,10 @@ export type ChipProps = ChipBaseProps &
     | ({ href?: never } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, keyof ChipBaseProps>)
   );
 
-function Chip({
-  className,
-  label,
-  children,
-  trailingIcon,
-  interactive = true,
-  ...props
-}: ChipProps) {
+const Chip = React.forwardRef<HTMLAnchorElement | HTMLButtonElement, ChipProps>(function Chip(
+  { className, label, children, trailingIcon, interactive = true, ...props },
+  ref,
+) {
   const isLink = 'href' in props && props.href != null;
   const disabled =
     !isLink && 'disabled' in props ? (props as { disabled?: boolean }).disabled : false;
@@ -70,7 +66,12 @@ function Chip({
       interactive?: boolean;
     } & React.AnchorHTMLAttributes<HTMLAnchorElement>;
     return (
-      <a href={href} className={sharedClassName} {...anchorProps}>
+      <a
+        ref={ref as React.Ref<HTMLAnchorElement>}
+        href={href}
+        className={sharedClassName}
+        {...anchorProps}
+      >
         {inner}
       </a>
     );
@@ -80,10 +81,16 @@ function Chip({
     interactive?: boolean;
   } & React.ButtonHTMLAttributes<HTMLButtonElement>;
   return (
-    <button type="button" disabled={disabled} className={sharedClassName} {...buttonProps}>
+    <button
+      ref={ref as React.Ref<HTMLButtonElement>}
+      type="button"
+      disabled={disabled}
+      className={sharedClassName}
+      {...buttonProps}
+    >
       {inner}
     </button>
   );
-}
+});
 
 export { Chip, chipVariants };

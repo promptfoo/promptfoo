@@ -23,10 +23,18 @@ describe('Eval API schemas', () => {
       version: 4,
       id: 'eval-1',
       stats: {},
+      defaultProviderInfo: {
+        selectedProvider: 'OpenAI',
+        reason: 'OPENAI_API_KEY found',
+        detectedCredentials: ['OPENAI_API_KEY'],
+        skippedProviders: [],
+        providerSlots: { grading: { id: 'openai:gpt-5-mini' } },
+      },
     });
 
     expect(parsed.table.head).toBe(head);
     expect(parsed.table.body).toBe(body);
+    expect(parsed.defaultProviderInfo?.selectedProvider).toBe('OpenAI');
   });
 
   it('rejects table responses where version is not a number', () => {
@@ -56,6 +64,28 @@ describe('Eval API schemas', () => {
       id: 'eval-1',
       stats: {},
     });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects malformed default-provider response metadata', () => {
+    const result = EvalSchemas.Table.Response.safeParse({
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      totalCount: 0,
+      filteredCount: 0,
+      filteredMetrics: null,
+      config: {},
+      author: null,
+      version: 4,
+      id: 'eval-1',
+      stats: {},
+      defaultProviderInfo: {
+        selectedProvider: 'OpenAI',
+        detectedCredentials: ['OPENAI_API_KEY'],
+        skippedProviders: [],
+        providerSlots: {},
+      },
+    });
+
     expect(result.success).toBe(false);
   });
 

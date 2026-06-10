@@ -4,7 +4,7 @@ import { XAIResponsesProvider } from './responses';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders } from '../../types/index';
 
-const DEFAULT_XAI_MODEL = 'grok-4.3';
+export const DEFAULT_XAI_MODEL = 'grok-4.3';
 
 export function getXAIProviders(
   env?: EnvOverrides,

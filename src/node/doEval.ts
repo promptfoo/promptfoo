@@ -19,8 +19,10 @@ import {
 } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
+import { hasExplicitDefaultGradingProvider } from '../matchers/providers';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { getDefaultProviderSelectionInfo } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -61,6 +63,7 @@ import type { Command } from 'commander';
 
 import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { DefaultProviderSelectionInfo } from '../types/providers';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -77,6 +80,31 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function displayDefaultProviderInfo(selectionInfo: DefaultProviderSelectionInfo): void {
+  const { selectedProvider, reason, detectedCredentials, skippedProviders } = selectionInfo;
+
+  logger.info('');
+  logger.info(chalk.bold('Default Providers: ') + chalk.cyan(selectedProvider));
+  logger.info(chalk.gray(`  Reason: ${reason}`));
+
+  if (getLogLevel() === 'debug') {
+    if (detectedCredentials.length > 0) {
+      logger.debug(`  Detected credentials: ${detectedCredentials.join(', ')}`);
+    }
+    if (skippedProviders.length > 0) {
+      logger.debug('  Skipped providers:');
+      for (const skipped of skippedProviders) {
+        logger.debug(`    - ${skipped.name}: ${skipped.reason}`);
+      }
+    }
+  }
+
+  logger.info(
+    chalk.gray(`  Override: Set ${chalk.white('defaultTest.options.provider')} in your config`),
+  );
+  logger.info('');
+}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -713,6 +741,18 @@ export async function doEval(
         ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
         : new Eval(config, { author, runtimeOptions: options });
 
+    const hasExplicitGradingProvider = hasExplicitDefaultGradingProvider(testSuite.defaultTest);
+    let defaultProviderSelectionInfo: DefaultProviderSelectionInfo | undefined;
+    if (!hasExplicitGradingProvider && !resumeEval) {
+      try {
+        defaultProviderSelectionInfo = await getDefaultProviderSelectionInfo(config.env);
+        evalRecord.setDefaultProviderInfo(defaultProviderSelectionInfo);
+        displayDefaultProviderInfo(defaultProviderSelectionInfo);
+      } catch (error) {
+        logger.debug('[eval] Failed to get default provider info', { error });
+      }
+    }
+
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
@@ -932,6 +972,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      defaultProviderInfo: defaultProviderSelectionInfo,
       targetErrorStatus,
     });
 

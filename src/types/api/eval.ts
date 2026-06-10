@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import { DefaultProviderSelectionInfoSchema } from '../providers';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -129,6 +130,7 @@ export const EvalTableResponseSchema = z
     version: z.number(),
     id: z.string(),
     stats: z.unknown(),
+    defaultProviderInfo: DefaultProviderSelectionInfoSchema.optional(),
   })
   .passthrough();
 

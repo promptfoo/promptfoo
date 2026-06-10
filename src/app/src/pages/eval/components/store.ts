@@ -25,6 +25,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
+import type { DefaultProviderSelectionInfo } from '@promptfoo/types/providers';
 import type { VisibilityState } from '@tanstack/table-core';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
@@ -306,6 +307,12 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
+  /**
+   * Information about the current automatic default-provider selection.
+   * Only populated when no explicit grading provider was configured.
+   */
+  defaultProviderInfo: DefaultProviderSelectionInfo | null;
+
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -563,6 +570,8 @@ export const useTableStore = create<TableState>()(
     },
 
     setTableFromResultsFile: async (resultsFile: ResultsFile) => {
+      const defaultProviderInfo = resultsFile.results.defaultProviderInfo ?? null;
+
       if (resultsFile.version && resultsFile.version >= 4) {
         const table = convertResultsToTable(resultsFile);
 
@@ -575,6 +584,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table,
           version: resultsFile.version,
+          defaultProviderInfo,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
           filters: {
@@ -599,6 +609,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
+          defaultProviderInfo,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {
@@ -626,6 +637,7 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    defaultProviderInfo: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -732,6 +744,8 @@ export const useTableStore = create<TableState>()(
             filteredMetrics: data.filteredMetrics || null,
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
+            // Store current automatic default selection (null with an explicit grading provider).
+            defaultProviderInfo: data.defaultProviderInfo || null,
             filters: {
               ...prevState.filters,
               options: {

@@ -475,6 +475,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
+    defaultProviderInfo: eval_.defaultProviderInfo,
   } as EvalTableDTO;
 
   sendEvalTableResponse(res, id, responsePayload);
