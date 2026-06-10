@@ -17,9 +17,12 @@ Start with a narrow scan that can be generated and inspected, then expand.
 
 Read `references/redteam-setup-patterns.md` when you need concrete YAML
 patterns.
-For OpenAPI specs, you can run
+For OpenAPI specs, you can run the bundled
 `scripts/openapi-operation-to-redteam-config.mjs` to draft a one-operation
-redteam setup config, then inspect the inferred inputs, policy, and plugins.
+redteam setup config, then inspect the inferred inputs, policy, and plugins. The
+script ships in this skill's `scripts/` directory; when the skill is installed as
+a plugin it lives in the plugin cache, not your project, so run it by its absolute
+path (or copy it in) rather than a bare `scripts/...` path.
 With `--token-env`, it infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth; use
 `--auth-header`/`--auth-prefix` to override.
 For live connectivity QA, add `--smoke-test true` to include one deterministic
@@ -126,6 +129,13 @@ From the promptfoo repo:
 npm run local -- validate config -c path/to/promptfooconfig.yaml
 npm run local -- validate target -c path/to/promptfooconfig.yaml
 npm run local -- redteam generate -c path/to/promptfooconfig.yaml -o /tmp/redteam.yaml --no-cache --force --no-progress-bar --strict
+```
+
+Outside the repo (installed plugin or your own project), use the published CLI:
+
+```bash
+npx promptfoo@latest validate config -c path/to/promptfooconfig.yaml
+npx promptfoo@latest redteam generate -c path/to/promptfooconfig.yaml -o /tmp/redteam.yaml --no-cache --force --no-progress-bar --strict
 ```
 
 Use a non-precreated output path or keep `--force`; `redteam generate` reads an

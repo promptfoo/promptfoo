@@ -6,6 +6,20 @@
     "@promptfoo": "src"
   },
   "ignoredRoots": ["src/__mocks__"],
+  "tierOrder": [
+    "contracts",
+    "legacy-contracts",
+    "legacy-runtime",
+    "node",
+    "providers",
+    "redteam",
+    "core",
+    "view-server",
+    "cli",
+    "app",
+    "facade"
+  ],
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
@@ -83,15 +97,7 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
@@ -112,15 +118,7 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "providers",
-        "redteam",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",
