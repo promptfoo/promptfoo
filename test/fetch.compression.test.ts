@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { HttpProvider } from '../src/providers/http';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
@@ -143,6 +144,69 @@ describe('fetchWithProxy compressed responses', () => {
     expect(response.headers.get('content-encoding')).toBeNull();
   });
 
+  it('preserves Content-Length on uncompressed responses', async () => {
+    // Regression: the strip interceptor must only remove headers when the
+    // decompress interceptor actually decoded the body. A plain response keeps
+    // its Content-Length so callers (HEAD probes, response transforms) see it.
+    const body = Buffer.from(JSON.stringify(payload));
+    const url = await startServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'content-length': String(body.length),
+      });
+      res.end(body);
+    });
+
+    const response = await fetchWithProxy(url);
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(text)).toEqual(payload);
+    expect(response.headers.get('content-length')).toBe(String(body.length));
+  });
+
+  it('preserves Content-Length on uncompressed HEAD responses', async () => {
+    // Note: HEAD responses that carry Content-Encoding take the decompress
+    // interceptor's decode path (it does not consult the request method) and
+    // fail upstream on the zero-byte body — a pre-existing undici composition
+    // limitation independent of the header strip. Only the uncompressed case
+    // is covered here.
+    const url = await startServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-length': '1048576',
+      });
+      res.end();
+    });
+
+    const response = await fetchWithProxy(url, { method: 'HEAD' });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-length')).toBe('1048576');
+  });
+
+  it('passes through unsupported content-encodings with the header intact', async () => {
+    // The decompress interceptor cannot decode this encoding, so the body
+    // arrives still encoded. The Content-Encoding header must survive so the
+    // caller can tell the bytes are not plaintext.
+    const encoded = gzipSync(Buffer.from(JSON.stringify(payload)));
+    const url = await startServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'content-encoding': 'x-snappy',
+        'content-length': String(encoded.length),
+      });
+      res.end(encoded);
+    });
+
+    const response = await fetchWithProxy(url);
+    const buf = Buffer.from(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-encoding')).toBe('x-snappy');
+    expect(buf.equals(encoded)).toBe(true);
+  });
+
   it('decodes responses when the caller passes a native Request', async () => {
     const url = await startCompressedServer('gzip', 200);
     const response = await fetchWithProxy(new Request(url));
@@ -192,5 +256,17 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
+  });
+
+  it('decodes HttpProvider responses when TLS config supplies the dispatcher', async () => {
+    const url = await startCompressedServer('gzip', 200);
+    const provider = new HttpProvider(url, {
+      config: {
+        method: 'GET',
+        tls: { rejectUnauthorized: false },
+      },
+    });
+
+    await expect(provider.callApi('unused')).resolves.toMatchObject({ output: payload });
   });
 });

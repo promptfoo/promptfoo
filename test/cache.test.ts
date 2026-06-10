@@ -29,8 +29,8 @@ vi.mock('../src/util/config/manage', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.app',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
   },
 }));
@@ -896,6 +896,48 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it('produces a stable secret-bearing cache key across module loads (cacheable across processes)', async () => {
+      const secretRequest = [
+        'https://api.example.com/data',
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer secret-header-token' },
+          body: JSON.stringify({ apiKey: 'secret-body-token' }),
+        },
+        1000,
+      ] as const;
+
+      // Cache key produced by the currently-loaded cache module.
+      const cache = getCache();
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'x' }));
+      await fetchWithCache(...secretRequest);
+      const firstKey = vi
+        .mocked(cache.set)
+        .mock.calls.map(([cacheKey]) => String(cacheKey))
+        .at(-1);
+      expect(firstKey).toBeDefined();
+
+      // Re-import the module to emulate a fresh process. The secret fingerprint
+      // salt must be a fixed constant (not per-process random) for the same
+      // secret-bearing request to map to the same key — otherwise the on-disk
+      // cache never hits across runs.
+      vi.resetModules();
+      const freshFetchModule = await import('../src/util/fetch/index');
+      vi.mocked(freshFetchModule.fetchWithRetries).mockResolvedValue(
+        mockFetchWithRetriesResponse(true, { data: 'x' }),
+      );
+      const freshCacheModule = await import('../src/cache');
+      freshCacheModule.enableCache();
+      const freshCache = freshCacheModule.getCache();
+      await freshCacheModule.fetchWithCache(...secretRequest);
+      const secondKey = vi
+        .mocked(freshCache.set)
+        .mock.calls.map(([cacheKey]) => String(cacheKey))
+        .at(-1);
+
+      expect(secondKey).toBe(firstKey);
+    });
+
     it('should isolate cloud requests by injected API key without storing the key', async () => {
       const cache = getCache();
       const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-one' });
@@ -940,6 +982,43 @@ describe('fetchWithCache', () => {
         for (const cacheKey of cacheKeys) {
           expect(cacheKey).not.toContain('secret-cloud-token-one');
           expect(cacheKey).not.toContain('secret-cloud-token-two');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not let the cloud token override a caller-supplied Authorization in the cache key', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token-one' });
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer caller-token' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Rotate the SAVED cloud token. The caller-supplied Authorization is unchanged,
+        // so the request actually sent is identical and must hit the same cache key —
+        // mirrors monkeyPatchFetch not overriding a caller-supplied Authorization.
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token-two' });
+
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Single network call: the second request was served from cache because the
+        // cloud token never entered the key (the caller's Authorization took precedence).
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+        // The single fetch above is the discriminating signal for override precedence; the
+        // token is fingerprinted (not stored raw) is covered by the sibling test, so here we
+        // only sanity-check the caller-supplied value is not leaked verbatim into the key.
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('caller-token');
         }
       } finally {
         restoreEnv();
@@ -1105,6 +1184,23 @@ describe('fetchWithCache', () => {
         headers: { 'content-type': 'application/json', 'x-session-id': '45' },
       });
       expect(secondResult.deleteFromCache).toBeInstanceOf(Function);
+    });
+
+    it('should include response context when JSON parsing fails', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: () => Promise.resolve('error code: 1006'),
+        headers: new Headers({ 'content-type': 'text/plain' }),
+      } as Response);
+
+      const error = await fetchWithCache(url, {}, 1000, 'json').catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(`Error parsing response from ${url}:`);
+      expect((error as Error).message).toContain('HTTP 403 Forbidden');
+      expect((error as Error).message).toContain('Received text: error code: 1006');
     });
 
     it('should retry on transient body-read error then succeed', async () => {

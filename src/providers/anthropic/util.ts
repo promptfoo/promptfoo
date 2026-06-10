@@ -14,12 +14,31 @@ import type {
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
+  // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  ...['claude-fable-5', 'claude-mythos-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6, // $10 / MTok
+      output: 50 / 1e6, // $50 / MTok
+    },
+  })),
   // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
   ...['claude-mythos-preview'].map((model) => ({
     id: model,
     cost: {
       input: 25 / 1e6, // $25 / MTok
       output: 125 / 1e6, // $125 / MTok
+    },
+  })),
+  // Claude 4.8 models
+  // NOTE: Anthropic publishes a single dateless ID for Opus 4.8 — the documented
+  // Claude API alias is the canonical ID itself (`claude-opus-4-8`), so there is no
+  // separate `-latest` pointer to register.
+  ...['claude-opus-4-8'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
     },
   })),
   // Claude 4.7 models
@@ -151,6 +170,97 @@ export function isClaudeOpus47Model(modelId: string): boolean {
   return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
 }
 
+/**
+ * Matches Claude Opus 4.8 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. The trailing `(?![0-9])` guard keeps a hypothetical
+ * higher-numbered `claude-opus-4-80` from matching "4.8" while still matching
+ * dated snapshots like `claude-opus-4-8-20260528`.
+ */
+export function isClaudeOpus48Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i.test(modelId);
+}
+
+/**
+ * Matches the Claude 5 Fable and Mythos model IDs across Anthropic and partner
+ * provider naming schemes while excluding hypothetical numeric suffixes.
+ */
+export function isClaudeFableOrMythos5Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i.test(modelId);
+}
+
+export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
+  return isClaudeFableOrMythos5Model(modelId);
+}
+
+export function normalizeAnthropicModelName(modelName: string): string {
+  return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
+}
+
+/**
+ * Claude Opus 4.7+ and Claude 5 Fable/Mythos deprecate manual sampling controls
+ * at the model level
+ * — `temperature`, `top_p`, and `top_k` are adaptive, and a request that pins
+ * any of them returns 400 `invalid_request_error` (including promptfoo's
+ * built-in `temperature` default of 0). Centralizes the "omit sampling params"
+ * decision shared by the Anthropic, Bedrock, Vertex, and Azure providers so
+ * support for future models lands in one place.
+ */
+export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
+  return (
+    isClaudeOpus47Model(modelId) ||
+    isClaudeOpus48Model(modelId) ||
+    isClaudeFableOrMythos5Model(modelId)
+  );
+}
+
+/**
+ * Normalize a Claude thinking config for models that deprecate manual
+ * budget-based thinking: an `enabled` budget converts to adaptive thinking
+ * (preserving `display`), and `disabled` is omitted on always-on adaptive
+ * thinking models (Fable 5 / Mythos 5), which reject it. The Anthropic,
+ * Bedrock InvokeModel/Converse, and Vertex paths all share this transform;
+ * user-facing warnings stay at the call sites that surface them.
+ */
+export function normalizeClaudeThinkingConfig<
+  T extends { type: string; display?: 'summarized' | 'omitted' | null },
+>(
+  modelId: string,
+  thinking: T | undefined,
+): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
+  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+    return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
+  }
+  if (thinking?.type === 'disabled' && isAlwaysOnAdaptiveThinkingClaudeModel(modelId)) {
+    return undefined;
+  }
+  return thinking;
+}
+
+// Bedrock and Vertex bill Claude 5 regional/geo endpoints at this premium over
+// the global endpoint.
+export const CLAUDE_5_REGIONAL_PREMIUM = 1.1;
+
+/**
+ * Fill premium-multiplied Claude 5 list rates into a cost config, unless the
+ * user supplied a `cost` override. Callers decide whether the request is
+ * regional; this helper owns the rates so they stay derived from
+ * ANTHROPIC_MODELS.
+ */
+export function applyClaude5RegionalPremium(modelName: string, config: any): any {
+  const modelInfo = ANTHROPIC_MODELS.find(
+    (model) => model.id === normalizeAnthropicModelName(modelName),
+  );
+  if (!isClaudeFableOrMythos5Model(modelName) || !modelInfo || config.cost != null) {
+    return config;
+  }
+  return {
+    ...config,
+    inputCost: config.inputCost ?? modelInfo.cost.input * CLAUDE_5_REGIONAL_PREMIUM,
+    outputCost: config.outputCost ?? modelInfo.cost.output * CLAUDE_5_REGIONAL_PREMIUM,
+  };
+}
+
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
@@ -162,7 +272,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
+        } else if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
           return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
         } else if (block.type === 'redacted_thinking' && showThinking) {
           return `Redacted Thinking: ${block.data}`;
@@ -295,7 +405,7 @@ export function parseMessages(messages: string): {
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
  * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
  */
-function calculateCacheInputCost(
+export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
@@ -316,8 +426,29 @@ export function calculateAnthropicCost(
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
 ): number | undefined {
-  if (config.cost != null && config.inputCost == null && config.outputCost == null) {
-    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  const pricingModelName = normalizeAnthropicModelName(modelName);
+  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
+  // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
+  // only the `global.` endpoint bills at base rate.
+  const usesRegionalBedrockPricing =
+    pricingModelName !== modelName && !modelName.startsWith('global.');
+  const effectiveConfig = usesRegionalBedrockPricing
+    ? applyClaude5RegionalPremium(modelName, config)
+    : config;
+
+  if (
+    effectiveConfig.cost != null &&
+    effectiveConfig.inputCost == null &&
+    effectiveConfig.outputCost == null
+  ) {
+    return calculateCostBase(
+      pricingModelName,
+      effectiveConfig,
+      promptTokens,
+      completionTokens,
+      ANTHROPIC_MODELS,
+    );
   }
 
   if (
@@ -326,7 +457,13 @@ export function calculateAnthropicCost(
     typeof promptTokens === 'undefined' ||
     typeof completionTokens === 'undefined'
   ) {
-    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+    return calculateCostBase(
+      pricingModelName,
+      effectiveConfig,
+      promptTokens,
+      completionTokens,
+      ANTHROPIC_MODELS,
+    );
   }
 
   const cacheRead = cacheReadTokens ?? 0;
@@ -342,12 +479,14 @@ export function calculateAnthropicCost(
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',
     'claude-sonnet-4-6-latest',
-  ].includes(modelName);
+  ].includes(pricingModelName);
 
   if (hasTieredPricing) {
     const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate = config.inputCost ?? config.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
-    const outputRate = config.outputCost ?? config.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
+    const baseInputRate =
+      effectiveConfig.inputCost ?? effectiveConfig.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
+    const outputRate =
+      effectiveConfig.outputCost ?? effectiveConfig.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
 
     return (
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
@@ -357,10 +496,10 @@ export function calculateAnthropicCost(
 
   // For non-tiered models, apply cache pricing only when cache tokens are present
   if (cacheRead || cacheCreation) {
-    const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
     if (modelInfo) {
-      const inputCost = config.inputCost ?? config.cost ?? modelInfo.cost.input;
-      const outputCost = config.outputCost ?? config.cost ?? modelInfo.cost.output;
+      const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
+      const outputCost =
+        effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
       return (
         calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
         completionTokens * outputCost
@@ -368,7 +507,13 @@ export function calculateAnthropicCost(
     }
   }
 
-  return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  return calculateCostBase(
+    pricingModelName,
+    effectiveConfig,
+    promptTokens,
+    completionTokens,
+    ANTHROPIC_MODELS,
+  );
 }
 
 /**
@@ -407,14 +552,20 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         completion: data.usage.output_tokens ?? 0,
       };
 
-      // Track Anthropic prompt caching details (stored in completionDetails since there is no dedicated inputDetails field)
-      if (
+      const thinkingTokens = data.usage.output_tokens_details?.thinking_tokens;
+      const hasCacheDetails =
         data.usage.cache_read_input_tokens != null ||
-        data.usage.cache_creation_input_tokens != null
-      ) {
+        data.usage.cache_creation_input_tokens != null;
+
+      if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          cacheReadInputTokens: cacheRead,
-          cacheCreationInputTokens: cacheCreation,
+          ...(thinkingTokens != null && { reasoning: thinkingTokens }),
+          // Cache *input* token counts go under completionDetails because Promptfoo's
+          // TokenUsage contract has no input-details field.
+          ...(hasCacheDetails && {
+            cacheReadInputTokens: cacheRead,
+            cacheCreationInputTokens: cacheCreation,
+          }),
         };
       }
 

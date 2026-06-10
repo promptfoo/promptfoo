@@ -72,6 +72,111 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
+// undici's parseHeaders lowercases header names, but scan case-insensitively in
+// case a differently-cased record arrives from another interceptor.
+function hasContentEncoding(headers: Record<string, string | string[]>): boolean {
+  if ('content-encoding' in headers) {
+    return true;
+  }
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'content-encoding');
+}
+
+// When promptfoo's undici 7 agent is used with Node 26's built-in undici 8 fetch,
+// the decompress interceptor decompresses the body but leaves Content-Encoding in
+// controller.rawHeaders. undici 7.27.1+ preserves rawHeaders through the v7→v8
+// bridge, so Node 26's fetch sees Content-Encoding and tries to decompress again
+// (double-decompression → TypeError: terminated). This interceptor must be composed
+// AFTER decompress so it strips rawHeaders once the body is already decoded.
+//
+// The strip is gated on evidence that decompression actually happened: the
+// decompress interceptor removes content-encoding/content-length from the parsed
+// headers object only on its actual-decompression path (skip paths forward the
+// original headers untouched). So "rawHeaders has content-encoding but the parsed
+// headers do not" precisely identifies an already-decoded body. Without the gate,
+// every response would lose content-length (breaking HEAD probes and the
+// documented context.response.headers surface), and responses with encodings the
+// interceptor cannot decode would reach callers still compressed but with the
+// content-encoding evidence destroyed. undici 8's own decompress interceptor
+// applies the same conditional rawHeaders filtering upstream.
+//
+// Uses a class (not object spread) so all handler methods share the original
+// handler's `this` — spreading a class instance copies only own-property values
+// at that instant, which breaks any state set later by onResponseStart.
+class StripEncodingHandler implements Dispatcher.DispatchHandler {
+  readonly #handler: Dispatcher.DispatchHandler;
+
+  constructor(handler: Dispatcher.DispatchHandler) {
+    this.#handler = handler;
+  }
+
+  onRequestStart(controller: Dispatcher.DispatchController, context: object) {
+    return this.#handler.onRequestStart?.(controller, context);
+  }
+
+  onRequestUpgrade(
+    controller: Dispatcher.DispatchController,
+    statusCode: number,
+    headers: Record<string, string | string[]>,
+    socket: import('stream').Duplex,
+  ) {
+    return this.#handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
+  }
+
+  onResponseStart(
+    controller: Dispatcher.DispatchController,
+    statusCode: number,
+    headers: Record<string, string | string[]>,
+    statusMessage?: string,
+  ): void {
+    const ctrl = controller as Dispatcher.DispatchController & {
+      rawHeaders?: Buffer[] | null;
+    };
+    if (Array.isArray(ctrl.rawHeaders) && !hasContentEncoding(headers)) {
+      const filtered: Buffer[] = [];
+      let rawHadContentEncoding = false;
+      const pairCount = ctrl.rawHeaders.length - (ctrl.rawHeaders.length % 2);
+      for (let i = 0; i < pairCount; i += 2) {
+        const name = ctrl.rawHeaders[i].toString().toLowerCase();
+        if (name === 'content-encoding') {
+          rawHadContentEncoding = true;
+        } else if (name !== 'content-length') {
+          filtered.push(ctrl.rawHeaders[i], ctrl.rawHeaders[i + 1]);
+        }
+      }
+      if (rawHadContentEncoding) {
+        if (ctrl.rawHeaders.length % 2 === 1) {
+          filtered.push(ctrl.rawHeaders[ctrl.rawHeaders.length - 1]);
+        }
+        ctrl.rawHeaders = filtered;
+      }
+    }
+    return this.#handler.onResponseStart?.(controller, statusCode, headers, statusMessage);
+  }
+
+  onResponseStarted() {
+    return this.#handler.onResponseStarted?.();
+  }
+
+  onResponseData(controller: Dispatcher.DispatchController, chunk: Buffer) {
+    return this.#handler.onResponseData?.(controller, chunk);
+  }
+
+  onResponseEnd(
+    controller: Dispatcher.DispatchController,
+    trailers: Record<string, string | string[]>,
+  ) {
+    return this.#handler.onResponseEnd?.(controller, trailers);
+  }
+
+  onResponseError(controller: Dispatcher.DispatchController, err: Error) {
+    return this.#handler.onResponseError?.(controller, err);
+  }
+}
+
+export function stripDecompressionHeaders(): Dispatcher.DispatchInterceptor {
+  return (dispatch) => (opts, handler) => dispatch(opts, new StripEncodingHandler(handler));
+}
+
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const existing = cachedAgents.get(concurrency);
@@ -84,7 +189,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +215,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -544,6 +653,18 @@ export type { FetchOptions } from './types';
  * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
  * {@link handleRateLimit} and returns so the caller can `continue` the loop.
  */
+/**
+ * Returns a string form of a {@link RequestInfo} suitable for log output.
+ * Strips basic-auth credentials and known sensitive query parameters (api_key,
+ * token, password, signature, …) via {@link sanitizeUrl} so providers that
+ * embed credentials in the URL (e.g. n8n webhooks, HTTP providers with
+ * `?api_key=…`) do not leak them into retry diagnostics.
+ */
+function urlForLog(url: RequestInfo): string {
+  const raw = typeof url === 'string' ? url : url.url;
+  return sanitizeUrl(raw);
+}
+
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
@@ -559,13 +680,14 @@ async function handleRateLimitedResponse(
   const { body, code } = isHardRateLimit
     ? await peekRateLimitBody(response)
     : { body: undefined, code: undefined };
+  const safeUrl = urlForLog(url);
 
   // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
     logger.debug(
-      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -575,7 +697,7 @@ async function handleRateLimitedResponse(
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
-        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
@@ -585,7 +707,7 @@ async function handleRateLimitedResponse(
   }
 
   logger.debug(
-    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
   await handleRateLimit(response);
 }
@@ -652,7 +774,9 @@ export async function fetchWithRetries(
 
       const errorMessage = formatFetchErrorMessage(error);
 
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      logger.debug(
+        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+      );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);

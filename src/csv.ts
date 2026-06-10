@@ -310,6 +310,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
   const columnNames = Object.keys(vars[0]).join(',');
+  // This generated test-case dataset is intentionally not formula-escaped because
+  // prefixing a cell would corrupt vars on round-trip. Formula escaping is applied
+  // only by the eval result export path.
   const rows = vars
     .map(
       (result) =>
