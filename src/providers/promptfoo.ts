@@ -31,6 +31,51 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
 }
 
+function getHarmfulGenerationLogMetadata(body: {
+  config?: PluginConfig;
+  email?: string | null;
+  harmCategory: string;
+  n: number;
+  purpose: string;
+  version: string;
+}) {
+  const remoteGenerationUrl = getRemoteGenerationUrlForUnaligned();
+
+  return {
+    ...getRemoteGenerationUrlLogMetadata(remoteGenerationUrl),
+    harmCategory: body.harmCategory,
+    n: body.n,
+    purposeLength: body.purpose.length,
+    hasEmail: Boolean(body.email),
+    version: body.version,
+    hasConfig: Boolean(body.config),
+    configKeyCount: body.config ? Object.keys(body.config).length : 0,
+  };
+}
+
+function getRemoteGenerationUrlLogMetadata(remoteGenerationUrl: string) {
+  try {
+    const url = new URL(remoteGenerationUrl);
+    return {
+      remoteGenerationProtocol: url.protocol.replace(':', ''),
+      remoteGenerationHost: url.host,
+      remoteGenerationPathLength: url.pathname.length,
+      hasRemoteGenerationQuery: Boolean(url.search),
+    };
+  } catch {
+    return {
+      remoteGenerationUrlConfigured: Boolean(remoteGenerationUrl),
+      remoteGenerationUrlParseError: true,
+    };
+  }
+}
+
+function getErrorMetadata(err: unknown) {
+  return {
+    errorType: err instanceof Error ? err.constructor.name : typeof err,
+  };
+}
+
 /**
  * Provider for generating harmful/adversarial content using Promptfoo's unaligned models.
  * Used by red team plugins to generate test cases for harmful content categories.
@@ -87,7 +132,8 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
     try {
       logger.debug(
-        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+        '[HarmfulCompletionProvider] Calling generate harmful API',
+        getHarmfulGenerationLogMetadata(body),
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
@@ -103,7 +149,15 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        const responseBody = await response.text();
+        logger.info('[HarmfulCompletionProvider] Generate harmful API failed', {
+          status: response.status,
+          statusTextLength: response.statusText.length,
+          responseBodyLength: responseBody.length,
+        });
+        return {
+          error: `[HarmfulCompletionProvider] API call failed with status ${response.status}`,
+        };
       }
 
       const data = await response.json();
@@ -123,9 +177,12 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
       }
-      logger.info(`[HarmfulCompletionProvider] ${err}`);
+      logger.info(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        getErrorMetadata(err),
+      );
       return {
-        error: `[HarmfulCompletionProvider] ${err}`,
+        error: '[HarmfulCompletionProvider] Error generating harmful content',
       };
     }
   }

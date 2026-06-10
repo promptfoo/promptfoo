@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
+import logger from '../../src/logger';
 import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
@@ -79,6 +80,55 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('should not log harmful generation request content', async () => {
+    vi.mocked(getEnvString).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT'
+        ? 'https://user:secret-endpoint-password@example.com/secret-path-sentinel?token=secret-query-sentinel'
+        : '';
+    });
+    provider = new PromptfooHarmfulCompletionProvider({
+      ...options,
+      purpose: 'secret-purpose-sentinel',
+      config: {
+        'secret-config-key-sentinel': 'secret-config-sentinel',
+      } as any,
+    });
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    try {
+      await provider.callApi('test prompt');
+
+      const debugCall = debugSpy.mock.calls.find(
+        ([message]) => message === '[HarmfulCompletionProvider] Calling generate harmful API',
+      );
+      expect(debugCall?.[1]).toEqual(
+        expect.objectContaining({
+          purposeLength: 'secret-purpose-sentinel'.length,
+          configKeyCount: 1,
+          remoteGenerationProtocol: 'https',
+          remoteGenerationHost: 'example.com',
+          hasRemoteGenerationQuery: true,
+        }),
+      );
+
+      const loggedContext = JSON.stringify(debugCall?.[1]);
+      expect(loggedContext).not.toContain('secret-purpose-sentinel');
+      expect(loggedContext).not.toContain('secret-config-key-sentinel');
+      expect(loggedContext).not.toContain('secret-config-sentinel');
+      expect(loggedContext).not.toContain('secret-endpoint-password');
+      expect(loggedContext).not.toContain('secret-path-sentinel');
+      expect(loggedContext).not.toContain('secret-query-sentinel');
+      expect(loggedContext).not.toContain('test@example.com');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('should filter out null and undefined values from output array', async () => {
     const mockResponse = new Response(
       JSON.stringify({ output: ['value1', null, 'value2', undefined] }),
@@ -107,15 +157,85 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle API error', async () => {
-    const mockResponse = new Response('API Error', {
+    const responseBody = 'secret-harmful-api-error-body';
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const mockResponse = new Response(responseBody, {
       status: 400,
-      statusText: 'Bad Request',
+      statusText: 'secret-status-text-sentinel',
     });
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
-    const result = await provider.callApi('test prompt');
+    try {
+      const result = await provider.callApi('test prompt');
 
-    expect(result.error).toContain('[HarmfulCompletionProvider]');
+      expect(result.error).toBe('[HarmfulCompletionProvider] API call failed with status 400');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Generate harmful API failed',
+        expect.objectContaining({
+          status: 400,
+          statusTextLength: 'secret-status-text-sentinel'.length,
+          responseBodyLength: responseBody.length,
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(responseBody);
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-status-text-sentinel',
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('should redact harmful generation fetch errors', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const err = new Error('secret-harmful-fetch-error-message');
+    err.name = 'secret-harmful-fetch-error-name';
+    vi.mocked(fetchWithRetries).mockRejectedValue(err);
+
+    try {
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('[HarmfulCompletionProvider] Error generating harmful content');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        expect.objectContaining({
+          errorType: 'Error',
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-harmful-fetch-error-message',
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(
+        'secret-harmful-fetch-error-name',
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('should redact malformed harmful generation responses', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const responseBody = 'secret-malformed-json-response';
+    const mockResponse = new Response(responseBody, {
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    try {
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('[HarmfulCompletionProvider] Error generating harmful content');
+      expect(infoSpy).toHaveBeenCalledWith(
+        '[HarmfulCompletionProvider] Error generating harmful content',
+        expect.objectContaining({
+          errorType: 'SyntaxError',
+        }),
+      );
+      expect(JSON.stringify([result, infoSpy.mock.calls])).not.toContain(responseBody);
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
