@@ -58,7 +58,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContext';
+import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 

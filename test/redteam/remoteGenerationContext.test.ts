@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getRedteamGenerationContextFromProviders,
   remoteGenerationContextPayload,
   resolveRedteamGenerationContext,
 } from '../../src/redteam/remoteGenerationContext';
+import { getRedteamGenerationContextFromProviders } from '../../src/redteam/remoteGenerationContextFromProviders';
 
 describe('remoteGenerationContext', () => {
   it('builds a task payload from a cloud target id', () => {
