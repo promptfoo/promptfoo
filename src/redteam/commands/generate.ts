@@ -328,6 +328,7 @@ async function doGenerateRedteamInternal(
   const outputPath = options.output || 'redteam.yaml';
   let commandLineOptions: Record<string, any> | undefined;
   let resolvedConfig: Partial<UnifiedConfig> | undefined;
+  let selectedProviderConfigs: Partial<UnifiedConfig>['providers'];
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -370,6 +371,8 @@ async function doGenerateRedteamInternal(
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        filterProviders: options.filterProviders,
+        filterTargets: options.filterTargets,
       },
       options.defaultConfig || {},
     );
@@ -377,8 +380,12 @@ async function doGenerateRedteamInternal(
     redteamConfig = resolved.config.redteam;
     commandLineOptions = resolved.commandLineOptions;
     resolvedConfig = resolved.config;
+    selectedProviderConfigs = resolved.selectedProviderConfigs ?? resolved.config.providers;
 
-    await checkCloudPermissions(resolved.config);
+    await checkCloudPermissions({
+      ...resolved.config,
+      providers: selectedProviderConfigs,
+    });
 
     // Warn if both tests section and redteam config are present
     if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
@@ -402,7 +409,7 @@ async function doGenerateRedteamInternal(
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
-      const providerId = getProviderIds(resolved.config.providers!)[0];
+      const providerId = getProviderIds(selectedProviderConfigs!)[0];
       if (isCloudProvider(providerId)) {
         const cloudId = getCloudDatabaseId(providerId);
         const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
@@ -633,8 +640,8 @@ async function doGenerateRedteamInternal(
 
   // Extract target IDs from the config providers (targets get rewritten to providers)
   // IDs are used for retry strategy to match failed tests by target ID
-  const targetIds = getTargetIdsFromProviders(resolvedConfig?.providers);
-  const cloudTargetDatabaseId = getCloudTargetDatabaseIdFromProviders(resolvedConfig?.providers);
+  const targetIds = getTargetIdsFromProviders(selectedProviderConfigs);
+  const cloudTargetDatabaseId = getCloudTargetDatabaseIdFromProviders(selectedProviderConfigs);
 
   logger.debug(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
