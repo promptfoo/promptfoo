@@ -13,9 +13,17 @@ vi.mock('fs', async (importOriginal) => ({
   createWriteStream: mocks.createWriteStream,
 }));
 
-function createMockWriteStream() {
+function createMockWriteStream({ destroyed = false }: { destroyed?: boolean } = {}) {
   const stream = Object.assign(new EventEmitter(), {
+    closed: false,
+    destroyed,
     end: vi.fn(),
+    // Mirror Node semantics: destroy() marks the stream destroyed and emits 'close'.
+    destroy: vi.fn(() => {
+      stream.destroyed = true;
+      stream.emit('close');
+      return stream;
+    }),
     write: vi.fn((_data: string, callback?: (error?: Error | null) => void) => {
       callback?.();
       return true;
@@ -54,10 +62,7 @@ describe('JsonlFileWriter', () => {
 
   it('waits for the underlying file descriptor to close', async () => {
     const stream = createMockWriteStream();
-    stream.end.mockImplementation((callback?: () => void) => {
-      callback?.();
-      return stream;
-    });
+    stream.end.mockImplementation(() => stream);
 
     const writer = new JsonlFileWriter('/tmp/results.jsonl');
     await writer.write({ a: 1 });
@@ -72,15 +77,13 @@ describe('JsonlFileWriter', () => {
 
     stream.emit('close');
     await expect(closePromise).resolves.toBeUndefined();
+    // Only the persistent recorder remains; close()'s temporary error listener was removed.
     expect(stream.listenerCount('error')).toBe(1);
   });
 
   it('rejects errors emitted while the file descriptor is closing', async () => {
     const stream = createMockWriteStream();
-    stream.end.mockImplementation((callback?: () => void) => {
-      callback?.();
-      return stream;
-    });
+    stream.end.mockImplementation(() => stream);
 
     const writer = new JsonlFileWriter('/tmp/results.jsonl');
     await writer.write({ a: 1 });
@@ -92,6 +95,68 @@ describe('JsonlFileWriter', () => {
     await expect(closePromise).rejects.toThrow(
       'Failed to close JSONL output /tmp/results.jsonl: late close error',
     );
+  });
+
+  it('resolves immediately when the stream already closed cleanly', async () => {
+    const stream = createMockWriteStream();
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await writer.write({ a: 1 });
+
+    stream.closed = true;
+    await expect(writer.close()).resolves.toBeUndefined();
+    expect(stream.end).not.toHaveBeenCalled();
+  });
+
+  it('rejects with a previously recorded error when the stream already closed', async () => {
+    const stream = createMockWriteStream();
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await writer.write({ a: 1 });
+
+    // A real stream that fails mid-run auto-destroys: 'error' and 'close' fire
+    // before close() is ever called. The recorded error must still reject close()
+    // rather than be swallowed (the output file is truncated/incomplete).
+    stream.emit('error', new Error('EBADF: bad file descriptor'));
+    stream.closed = true;
+
+    await expect(writer.close()).rejects.toThrow(
+      'Failed to close JSONL output /tmp/results.jsonl: EBADF: bad file descriptor',
+    );
+    expect(stream.end).not.toHaveBeenCalled();
+  });
+
+  it('waits for a destroyed stream to close without calling end()', async () => {
+    const stream = createMockWriteStream();
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await writer.write({ a: 1 });
+
+    stream.destroyed = true;
+    const closePromise = writer.close();
+    let settled = false;
+    closePromise.finally(() => {
+      settled = true;
+    });
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+    expect(stream.end).not.toHaveBeenCalled();
+
+    stream.emit('close');
+    await expect(closePromise).resolves.toBeUndefined();
+  });
+
+  it('destroys the stream and rejects when end() throws synchronously', async () => {
+    const stream = createMockWriteStream();
+    stream.end.mockImplementation(() => {
+      throw new Error('end failed');
+    });
+
+    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    await writer.write({ a: 1 });
+
+    await expect(writer.close()).rejects.toThrow(
+      'Failed to close JSONL output /tmp/results.jsonl: end failed',
+    );
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects final flush errors with the output path', async () => {

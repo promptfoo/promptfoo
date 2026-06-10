@@ -23,7 +23,8 @@ export class JsonlFileWriter {
       const stream = createWriteStream(this.filePath, { flags: this.flags });
       // Keep a persistent listener for the stream's lifetime so an error emitted while no
       // write is in flight is recorded rather than thrown. write()/close() surface it as a
-      // rejected promise with the output path.
+      // rejected promise with the output path. The listener also stays attached after
+      // close() settles so a stray late error is absorbed instead of crashing the process.
       stream.on('error', (error: Error) => {
         if (!this.streamError) {
           this.streamError = error;
@@ -67,18 +68,23 @@ export class JsonlFileWriter {
       // Nothing was ever written, so no stream was opened and the destination is untouched.
       return;
     }
+    // Settle on 'close' (the fd is actually released), not on end()'s flush callback, so
+    // callers can immediately rename/reopen/delete the file — on Windows the handle is
+    // still held between 'finish' and 'close'. Relies on createWriteStream's default
+    // emitClose: true, so 'close' always fires once the stream ends, errors, or is
+    // destroyed. closeError is seeded from any error recorded before close() was called.
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let closeError = this.streamError;
-      const finish = (error?: Error) => {
+      const settle = () => {
         if (settled) {
           return;
         }
         settled = true;
         stream.off('error', onError);
-        stream.off('close', onClose);
-        if (error) {
-          reject(this.wrapStreamError('close', error));
+        stream.off('close', settle);
+        if (closeError) {
+          reject(this.wrapStreamError('close', closeError));
         } else {
           resolve();
         }
@@ -86,12 +92,11 @@ export class JsonlFileWriter {
       const onError = (error: Error) => {
         closeError ??= error;
       };
-      const onClose = () => finish(closeError);
       stream.once('error', onError);
-      stream.once('close', onClose);
+      stream.once('close', settle);
 
       if (stream.closed) {
-        onClose();
+        settle();
       } else if (!stream.destroyed) {
         try {
           stream.end();
