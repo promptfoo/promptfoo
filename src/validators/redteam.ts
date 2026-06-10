@@ -4,6 +4,7 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
+  CODEX_AGENT_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
@@ -12,6 +13,7 @@ import {
   FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
@@ -26,18 +28,19 @@ import {
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import {
+  type PluginConfig,
+  type RedteamContext,
+  type RedteamFileConfig,
+  type RedteamPluginObject,
+  type RedteamStrategy,
+  RedteamTargetManifestSchema,
+  type TracingConfig,
+} from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
-import type {
-  PluginConfig,
-  RedteamContext,
-  RedteamFileConfig,
-  RedteamPluginObject,
-  RedteamStrategy,
-  TracingConfig,
-} from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
@@ -247,6 +250,9 @@ export const RedteamGenerateOptionsSchema = z.object({
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
+  targetManifest: RedteamTargetManifestSchema.optional().describe(
+    'Files, commands, tools, paths, and data boundaries available to the target',
+  ),
   write: z.boolean().describe('Whether to write the output'),
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
@@ -332,6 +338,9 @@ export const RedteamConfigSchema = z
       .describe('Whether to exclude target output from the agentific attack generation process'),
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
+    ),
+    targetManifest: RedteamTargetManifestSchema.optional().describe(
+      'Files, commands, tools, paths, and data boundaries available to the target',
     ),
     graderExamples: z
       .array(
@@ -450,6 +459,10 @@ export const RedteamConfigSchema = z
         expandCollection([...CODING_AGENT_CORE_PLUGINS], config, numTests, severity);
       } else if (id === 'coding-agent:all') {
         expandCollection([...CODING_AGENT_PLUGINS], config, numTests, severity);
+      } else if (id === 'coding-agent:codex') {
+        expandCollection([...CODEX_AGENT_PLUGINS], config, numTests, severity);
+      } else if (id === 'harness:preflight') {
+        expandCollection([...HARNESS_PREFLIGHT_PLUGINS], config, numTests, severity);
       }
     };
 
@@ -587,6 +600,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.targetManifest ? { targetManifest: data.targetManifest } : {}),
       ...(data.graderExamples ? { graderExamples: data.graderExamples } : {}),
     };
   });

@@ -3,6 +3,7 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as indirectWebPwn from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
   afterEach(() => {
@@ -420,5 +421,193 @@ describe('handleRedteam', () => {
       },
     );
     expect(grade.pass).toBe(false);
+  });
+
+  it('returns the storedGraderResult when assertion type matches the plugin id', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+        traceId: 'trace-123',
+      },
+    };
+    const storedGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'matched stored failure',
+      assertion: { type: 'promptfoo:redteam:harmful:hate', value: 'cached rubric' },
+      metadata: { reasoning: 'planted' },
+    };
+    const providerResponse = {
+      output: 'cached output',
+      metadata: {
+        storedGraderResult,
+        redteamHistory: [
+          { prompt: 'a', output: 'a-out' },
+          { prompt: 'b', output: 'b-out', graderError: 'partial failure' },
+        ],
+      },
+    };
+
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'cached prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'cached output',
+      outputString: 'cached output',
+      prompt: 'cached prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).not.toHaveBeenCalled();
+    expect(grade).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'matched stored failure',
+      assertion: { type: 'promptfoo:redteam:harmful:hate', value: 'cached rubric' },
+    });
+    expect(grade.metadata).toMatchObject({
+      pluginId: 'harmful:hate',
+      reasoning: 'planted',
+      gradingIncomplete: true,
+    });
+  });
+
+  it('augments grading context with exfil tracking when webPageUuid is present', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+        webPageUrl: '/dynamic-pages/eval-9876/page-uuid-1',
+      },
+    };
+    const providerResponse = {
+      output: 'leaked output',
+      metadata: {
+        webPageUuid: 'page-uuid-1',
+      },
+    };
+
+    const trackingSpy = vi.spyOn(indirectWebPwn, 'checkExfilTracking').mockResolvedValue({
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [],
+    });
+
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'exfil observed' },
+      rubric: 'rubric',
+    });
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'webpage prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'leaked output',
+      outputString: 'leaked output',
+      prompt: 'webpage prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(trackingSpy).toHaveBeenCalledWith('page-uuid-1', 'eval-9876');
+    expect(getResultSpy).toHaveBeenCalledTimes(1);
+    const passedContext = getResultSpy.mock.calls[0][7];
+    expect(passedContext).toMatchObject({
+      providerResponse,
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [],
+    });
+    expect(grade.pass).toBe(false);
+  });
+
+  it('skips exfil tracking when webPageUuid is absent', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+      },
+    };
+    const providerResponse = { output: 'plain output', metadata: {} };
+
+    const trackingSpy = vi.spyOn(indirectWebPwn, 'checkExfilTracking');
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'safe' },
+      rubric: 'rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'plain prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'plain output',
+      outputString: 'plain output',
+      prompt: 'plain prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(trackingSpy).not.toHaveBeenCalled();
   });
 });

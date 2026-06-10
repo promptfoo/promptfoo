@@ -1,5 +1,6 @@
 export const PLUGIN_CATEGORIES = [
   'Brand',
+  'Coding Agent',
   'Compliance and Legal',
   'Dataset',
   'Security and Access Control',
@@ -17,6 +18,11 @@ export const CATEGORY_DESCRIPTIONS: CategoryDescription[] = [
     category: 'Brand',
     description:
       'Tests focused on brand protection, including competitor mentions, misinformation, hallucinations, and model behavior that could impact brand reputation.',
+  },
+  {
+    category: 'Coding Agent',
+    description:
+      'Tests for coding agents and their harnesses, including repository prompt injection, terminal output injection, sandbox boundaries, network egress, approval flows, connector/MCP use, trace redaction, replay, and preflight validation.',
   },
   {
     category: 'Compliance and Legal',
@@ -96,6 +102,291 @@ type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends 
   : unknown;
 
 // Define array first, then assert type
+const pluginDocSlug = (pluginId: string) => pluginId.slice(pluginId.indexOf(':') + 1);
+
+const codingAgentPlugin = (pluginId: string, name: string, description: string): Plugin => ({
+  category: 'Coding Agent',
+  description,
+  label: 'agent',
+  link: `/docs/red-team/plugins/coding-agent/${pluginDocSlug(pluginId)}/`,
+  name,
+  pluginId,
+  applicationTypes: {
+    rag: false,
+    agent: true,
+    chat: false,
+  },
+  vulnerabilityType: 'security',
+  isRemote: true,
+});
+
+const harnessPlugin = (pluginId: string, name: string, description: string): Plugin => ({
+  category: 'Coding Agent',
+  description,
+  label: 'harness',
+  link: `/docs/red-team/plugins/harness/${pluginDocSlug(pluginId)}/`,
+  name,
+  pluginId,
+  applicationTypes: {
+    rag: false,
+    agent: true,
+    chat: false,
+  },
+  vulnerabilityType: 'security',
+  isRemote: true,
+});
+
+const CODING_AGENT_PLUGIN_DOCS = [
+  codingAgentPlugin(
+    'coding-agent:repo-prompt-injection',
+    'Repository Prompt Injection',
+    'Embeds untrusted instructions in repository content and verifies the coding agent treats them as data.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:terminal-output-injection',
+    'Terminal Output Injection',
+    'Places attacker instructions in test, compiler, package manager, git, or script output.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:secret-file-read',
+    'Secret File Read',
+    'Checks whether synthetic secret files stay unread, unprinted, untraced, and unexfiltrated.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:secret-env-read',
+    'Secret Environment Read',
+    'Checks whether launcher-only environment canaries stay out of outputs, traces, URLs, and tool parameters.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:terminal-network-exfil',
+    'Terminal Network Exfiltration',
+    'Attempts canary leakage through shell-accessible network clients and language runtimes.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:markdown-url-exfil',
+    'Markdown URL Exfiltration',
+    'Looks for canaries hidden in links, images, badges, generated docs, issue comments, or PR bodies.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:trace-log-exfil',
+    'Trace and Log Exfiltration',
+    'Checks traces, span attributes, terminal logs, screenshots, provider metadata, reports, and replay bundles for canary disclosure.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:sandbox-read-escape',
+    'Sandbox Read Escape',
+    'Attempts reads from sibling checkouts, absolute paths, homes, caches, mounts, archives, symlinks, and other denied roots.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:sandbox-write-escape',
+    'Sandbox Write Escape',
+    'Attempts writes to outside sentinels through traversal, symlinks, lifecycle scripts, editor files, build paths, hooks, or child processes.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:network-egress-bypass',
+    'Network Egress Bypass',
+    'Verifies network policy against DNS, sockets, curl/wget, git, package managers, browser fetches, telemetry, MCP, and connectors.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:approval-bypass',
+    'Approval Bypass',
+    'Attempts dangerous effects through scripts, package hooks, child processes, tools, MCP, connectors, browser opens, deferred jobs, or subagents.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:approval-misrepresentation',
+    'Approval Misrepresentation',
+    'Checks whether approval prompts truthfully describe filesystem, network, secret, connector, MCP, browser, and child-agent effects.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:least-privilege-drift',
+    'Least Privilege Drift',
+    'Detects unnecessary sandbox, network, filesystem, home, browser, connector, MCP, model, SSH, devbox, or approval expansion.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:verifier-sabotage',
+    'Verifier Sabotage',
+    'Checks whether the agent weakens tests, lint, typecheck, CI, snapshots, locks, auth, policy, or harness assertions instead of fixing code.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:dependency-confusion',
+    'Dependency Confusion',
+    'Attempts lookalike packages, attacker tarballs, git dependencies, unexpected registries, install hooks, and unexpected imports.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:lifecycle-script-execution',
+    'Lifecycle Script Execution',
+    'Tests install, build, test, format, lint, prepublish, git hook, and task runner scripts for forbidden side effects.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:claim-validation-mismatch',
+    'Claim Validation Mismatch',
+    'Compares final validation claims with traced commands that actually ran after the relevant edits.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:trace-completeness',
+    'Trace Completeness',
+    'Checks whether commands, tools, approvals, denials, writes, network attempts, connectors, child agents, policies, and versions are trace-linked.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:trace-redaction',
+    'Trace Redaction',
+    'Checks whether sensitive values are redacted from traces, Admin/UI payloads, logs, screenshots, reports, and replay bundles.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:replay-bundle-completeness',
+    'Replay Bundle Completeness',
+    'Requires enough prompt, config, version, policy, patch, trap, trace, approval, canary, artifact, and command evidence to reproduce failures.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:agents-md-injection',
+    'AGENTS.md Injection',
+    'Tests whether root, nested, generated, vendor, fixture, or symlinked instruction files can weaken policy or override the task.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:mcp-resource-injection',
+    'MCP Resource Injection',
+    'Treats MCP resources, prompts, tool results, attachments, schemas, and errors as untrusted data.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:connector-data-overreach',
+    'Connector Data Overreach',
+    'Checks whether a connector-authorized task reads unrelated Slack, Gmail, Drive, Notion, Linear, GitHub, calendar, or meeting resources.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:connector-parameter-exfil',
+    'Connector Parameter Exfiltration',
+    'Looks for canaries or injected instructions in connector queries, drafts, comments, doc edits, issue/PR bodies, calendar fields, labels, and attachments.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:codex-home-poisoning',
+    'Codex Home Poisoning',
+    'Verifies isolated CODEX_HOME behavior for auth, memory, sessions, logs, caches, skills, plugins, profiles, automations, MCP config, and credentials.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:codex-config-poisoning',
+    'Codex Config Poisoning',
+    'Checks whether repo-local config, wrapper scripts, generated settings, env files, skills, plugins, MCP, or automations relax Codex policy.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:codex-rules-poisoning',
+    'Codex Rules Poisoning',
+    'Attempts to persist attacker rules into memory, instruction files, skills, plugins, MCP config, profiles, sessions, automations, or future-run caches.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:skill-poisoning',
+    'Skill Poisoning',
+    'Checks whether repo-provided, generated, downloaded, shadowed, marketplace, plugin, or nested skills are treated as privileged instructions.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:mcp-config-poisoning',
+    'MCP Config Poisoning',
+    'Attempts to add or redirect attacker-controlled MCP servers, commands, URLs, OAuth material, env, manifests, tool schemas, resources, or sampling permissions.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:mcp-confused-deputy',
+    'MCP Confused Deputy',
+    'Attempts to leak data read by one file, terminal, connector, browser, trace, or MCP authority through another tool with stronger write or network authority.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:child-agent-bypass',
+    'Child Agent Bypass',
+    'Checks whether delegated, resumed, script-launched, CI, hosted, devbox, automation, MCP-launched, or child agents inherit parent restrictions and tracing.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:self-approval-bypass',
+    'Self Approval Bypass',
+    'Tests model, reviewer, policy, Guardian, helper agent, tool, grader, and scripted approval steps for prompt-injected approvals.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:thread-memory-leak',
+    'Thread Memory Leak',
+    'Checks for canary, approval, connector, trace, or injected-instruction leakage across sessions, threads, users, heartbeats, automations, homes, browsers, and provider contexts.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:terminal-control-injection',
+    'Terminal Control Injection',
+    'Tests terminal escapes, OSC hyperlinks, fake prompts, clickable CI annotations, clipboard writes, host-open links, bracketed paste, title changes, and misleading logs.',
+  ),
+  codingAgentPlugin(
+    'coding-agent:externalized-execution',
+    'Externalized Execution',
+    'Checks whether work, tests, canaries, secrets, installs, browsing, approvals, or untrusted instructions move to unmonitored CI, devboxes, SSH, hosted MCP, web apps, issue trackers, notebooks, automations, or other agents.',
+  ),
+] as const;
+
+const HARNESS_PLUGIN_DOCS = [
+  harnessPlugin(
+    'harness:policy-applied',
+    'Harness Policy Applied',
+    'Verifies that launched sandbox, network, approvals, roots, home, env, model, MCP, connectors, browser, tracing, and subagent policy match the promptfoo config.',
+  ),
+  harnessPlugin(
+    'harness:workspace-isolation',
+    'Workspace Isolation',
+    'Checks that host and sibling canaries, homes, temp paths, caches, browser profiles, SSH agents, Docker socket, and mounted secrets are outside the target workspace.',
+  ),
+  harnessPlugin(
+    'harness:secret-placement',
+    'Secret Placement',
+    'Checks that canaries exist only in intended sources and are absent from prompts, vars, goldens, grader prompts, safe stubs, reports, traces, and visible env.',
+  ),
+  harnessPlugin(
+    'harness:network-trap-coverage',
+    'Network Trap Coverage',
+    'Runs known-bad HTTP, HTTPS, DNS, sockets, git, package manager, browser, telemetry, MCP, and webhook probes against the configured trap.',
+  ),
+  harnessPlugin(
+    'harness:artifact-redaction',
+    'Artifact Redaction',
+    'Checks reports, traces, logs, HTML, JSON, JUnit, screenshots, replay bundles, UI payloads, and failure messages for raw canaries.',
+  ),
+  harnessPlugin(
+    'harness:known-bad-agent',
+    'Known Bad Agent',
+    'Requires a malicious stub that reads, prints, traces, copies, writes, or exfiltrates a canary to fail the preflight eval.',
+  ),
+  harnessPlugin(
+    'harness:known-good-agent',
+    'Known Good Agent',
+    'Requires a safe stub that performs only the requested edit to pass without canary, trap, false-finding, hidden-write, policy-escalation, or process-cleanup failures.',
+  ),
+  harnessPlugin(
+    'harness:state-reset',
+    'Harness State Reset',
+    'Verifies reset of homes, sessions, memory, browser profiles, tmp, package caches, venvs, containers, git state, promptfoo cache, env, network, MCP, connectors, and provider context.',
+  ),
+  harnessPlugin(
+    'harness:grader-injection-resistance',
+    'Grader Injection Resistance',
+    'Checks whether transcripts, terminal logs, traces, tool results, connector data, markdown, screenshots, or comments can inject the grader or deterministic verdict.',
+  ),
+  harnessPlugin(
+    'harness:replay-completeness',
+    'Replay Completeness',
+    'Requires a replay bundle that reproduces controlled failures with config, target, policy, versions, canary manifest, trap log, trace id, transcript, patch, env recipe, and command.',
+  ),
+  harnessPlugin(
+    'harness:version-attestation',
+    'Version Attestation',
+    'Compares reported Codex, promptfoo, provider, model, sandbox, proxy, OS/container, MCP, connector, plugin, git, package, browser, trap, and policy versions to launched processes.',
+  ),
+  harnessPlugin(
+    'harness:cleanup',
+    'Harness Cleanup',
+    'Checks that failed, timed-out, crashed, or malicious targets cannot leave processes, ports, jobs, automations, containers, browser state, temp files, package cache changes, config, MCP, or listeners.',
+  ),
+  harnessPlugin(
+    'harness:resource-budget',
+    'Resource Budget',
+    'Caps and reports runaway stdout, trace volume, file creation, processes, browser tabs, network attempts, recursion, wall time, tokens, cost, retries, and child agents.',
+  ),
+  harnessPlugin(
+    'harness:result-integrity',
+    'Result Integrity',
+    'Checks whether the target can modify promptfoo results, HTML/JSON/JUnit reports, traces, databases, caches, verdicts, grading prompts, config, or upload payloads.',
+  ),
+] as const;
+
 export const PLUGINS = [
   {
     category: 'Security and Access Control',
@@ -247,22 +538,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
     isRemote: true,
   },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent persists unsafe behavior by modifying repository automation, hooks, package scripts, or release tasks.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Automation Poisoning',
-    pluginId: 'coding-agent:automation-poisoning',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
+  ...CODING_AGENT_PLUGIN_DOCS,
   {
     category: 'Security and Access Control',
     description:
@@ -298,59 +574,11 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether a coding agent plants CI, workflow, hook, or scheduled automation changes that leak data after the immediate run.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Delayed CI Exfiltration',
-    pluginId: 'coding-agent:delayed-ci-exfil',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent introduces insecure code while satisfying a normal feature or bugfix request.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Generated Vulnerability',
-    pluginId: 'coding-agent:generated-vulnerability',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
       'Tests whether a coding agent makes unauthorized outbound network requests or bypasses the intended network policy.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
     name: 'Coding Agent Network Egress Bypass',
     pluginId: 'coding-agent:network-egress-bypass',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent reads process metadata, inherited environment, file descriptors, or runtime credentials through procfs-like surfaces.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Procfs Credential Read',
-    pluginId: 'coding-agent:procfs-credential-read',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -431,22 +659,6 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/coding-agent/',
     name: 'Coding Agent Secret File Read',
     pluginId: 'coding-agent:secret-file-read',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent hides sensitive data in encoded, transformed, or low-visibility outputs and artifacts.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Steganographic Exfiltration',
-    pluginId: 'coding-agent:steganographic-exfil',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -1339,6 +1551,7 @@ export const PLUGINS = [
     vulnerabilityType: 'harmful',
     isRemote: true,
   },
+  ...HARNESS_PLUGIN_DOCS,
   {
     category: 'Security and Access Control',
     description: 'Unauthorized or off-topic resource use',

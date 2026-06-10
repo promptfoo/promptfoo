@@ -52,8 +52,61 @@ export interface TracingConfig {
   strategies?: Record<string, TracingConfig>;
 }
 
+export interface RedteamTargetManifest {
+  name?: string;
+  kind?: 'agentic' | 'coding-agent' | 'mcp' | 'connector' | string;
+  files?: string[];
+  commands?: string[];
+  tools?: string[];
+  frameworks?: string[];
+  allowedPaths?: string[];
+  sensitivePaths?: string[];
+  dataSources?: string[];
+  dataSinks?: string[];
+  notes?: string[];
+}
+
+export const RedteamTargetManifestSchema = z.object({
+  name: z.string().optional(),
+  kind: z.string().optional(),
+  files: z.array(z.string()).optional(),
+  commands: z.array(z.string()).optional(),
+  tools: z.array(z.string()).optional(),
+  frameworks: z.array(z.string()).optional(),
+  allowedPaths: z.array(z.string()).optional(),
+  sensitivePaths: z.array(z.string()).optional(),
+  dataSources: z.array(z.string()).optional(),
+  dataSinks: z.array(z.string()).optional(),
+  notes: z.array(z.string()).optional(),
+});
+
+const AgenticAttackProfileSchema = z
+  .object({
+    runtimeKind: z.string(),
+    conversationMode: z.enum(['single-turn-task', 'multi-turn-chat', 'stateful-chat']).optional(),
+    preserveConcreteTask: z.boolean().optional(),
+    requiresTraceEvidence: z.boolean().optional(),
+    targetManifest: RedteamTargetManifestSchema.optional(),
+    strategyHints: z
+      .object({
+        avoidGoalRewriting: z.boolean().optional(),
+        avoidInventedContext: z.boolean().optional(),
+        preserveSourceSinkBoundary: z.boolean().optional(),
+        hydra: z
+          .object({
+            sendCurrentTurnOnly: z.boolean().optional(),
+          })
+          .optional(),
+      })
+      .catchall(z.unknown())
+      .optional(),
+  })
+  .catchall(z.unknown());
+
 export const PluginConfigSchema = z.object({
   examples: z.array(z.string()).optional(),
+  targetManifest: RedteamTargetManifestSchema.optional(),
+  agenticAttackProfile: AgenticAttackProfileSchema.optional(),
   graderExamples: z
     .array(
       z.object({
@@ -252,6 +305,7 @@ type CommonOptions = {
   maxCharsPerMessage?: number;
   maxConcurrency?: number;
   tracing?: TracingConfig;
+  targetManifest?: RedteamTargetManifest;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema

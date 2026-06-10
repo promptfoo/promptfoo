@@ -12,14 +12,17 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { buildAgenticStrategyGoal } from './agenticProfile';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
+  CODEX_AGENT_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
   MEDICAL_PLUGINS,
@@ -34,7 +37,7 @@ import {
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
-import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
+import { CODING_AGENT_CORE_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
@@ -383,7 +386,9 @@ const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
-  'coding-agent:all': CODING_AGENT_PLUGINS,
+  'coding-agent:all': CODEX_AGENT_PLUGINS,
+  'coding-agent:codex': CODEX_AGENT_PLUGINS,
+  'harness:preflight': HARNESS_PREFLIGHT_PLUGINS,
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
@@ -963,6 +968,7 @@ export async function synthesize({
   targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  targetManifest,
   testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
@@ -1353,6 +1359,10 @@ export async function synthesize({
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
       const languagePromises = languages.map(async (lang) => {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
         const pluginTests = await action({
           provider: redteamProvider,
           purpose,
@@ -1360,7 +1370,8 @@ export async function synthesize({
           n: plugin.numTests,
           delayMs: delay || 0,
           config: {
-            ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...resolvedPluginConfig,
+            ...(targetManifest && !resolvedPluginConfig.targetManifest ? { targetManifest } : {}),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1453,7 +1464,12 @@ export async function synthesize({
             const policy = getPolicyText(testCase.metadata);
             const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 
@@ -1585,7 +1601,12 @@ export async function synthesize({
             const policy = getPolicyText(testCase.metadata);
             const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 

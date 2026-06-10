@@ -2335,6 +2335,30 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it('should default traceSummary to an empty string when gradingContext is omitted', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithOptionalTrace = class extends RedteamGraderBase {
+        id = 'test-grader-optional-trace';
+        rubric = 'Test rubric. Trace summary: "{{ traceSummary }}".';
+      };
+
+      const traceGrader = new TestGraderWithOptionalTrace();
+
+      await traceGrader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Trace summary: ""'),
+        'test output',
+        expect.any(Object),
+      );
+    });
+
     it('should pass gradingContext traceContext to rubric vars', async () => {
       const mockResult: GradingResult = {
         pass: true,

@@ -4,12 +4,14 @@ import {
   AGENTIC_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
+  CODEX_AGENT_PLUGINS,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
   categoryDescriptions,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
@@ -24,7 +26,9 @@ import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_CORE_PLUGINS,
   CODING_AGENT_PLUGINS,
+  CODING_AGENT_RISK_PLUGINS,
 } from '../../src/redteam/constants/codingAgents';
+import { riskCategorySeverityMap } from '../../src/redteam/constants/metadata';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -66,7 +70,21 @@ describe('constants', () => {
       'guardrails-eval',
       'coding-agent:core',
       'coding-agent:all',
+      'coding-agent:codex',
+      'harness:preflight',
     ]);
+  });
+
+  it('coding-agent collections should contain expected plugins', () => {
+    expect(CODING_AGENT_CORE_PLUGINS).toContain('coding-agent:repo-prompt-injection');
+    expect(CODING_AGENT_CORE_PLUGINS).toContain('coding-agent:verifier-sabotage');
+    expect(CODEX_AGENT_PLUGINS).toContain('coding-agent:repo-prompt-injection');
+    expect(CODEX_AGENT_PLUGINS).toContain('coding-agent:agents-md-injection');
+    expect(HARNESS_PREFLIGHT_PLUGINS).toContain('harness:known-bad-agent');
+  });
+
+  it('assigns severity defaults to coding-agent collections', () => {
+    expect(riskCategorySeverityMap['coding-agent:all']).toBe('high');
   });
 
   it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {
@@ -108,21 +126,7 @@ describe('constants', () => {
   });
 
   it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
-    expect(CODING_AGENT_PLUGINS).toEqual([
-      'coding-agent:repo-prompt-injection',
-      'coding-agent:terminal-output-injection',
-      'coding-agent:secret-env-read',
-      'coding-agent:sandbox-read-escape',
-      'coding-agent:verifier-sabotage',
-      'coding-agent:secret-file-read',
-      'coding-agent:sandbox-write-escape',
-      'coding-agent:network-egress-bypass',
-      'coding-agent:procfs-credential-read',
-      'coding-agent:delayed-ci-exfil',
-      'coding-agent:generated-vulnerability',
-      'coding-agent:automation-poisoning',
-      'coding-agent:steganographic-exfil',
-    ]);
+    expect(CODING_AGENT_PLUGINS).toEqual(CODEX_AGENT_PLUGINS);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
       expect(ADDITIONAL_PLUGINS).toContain(plugin);
@@ -131,23 +135,45 @@ describe('constants', () => {
   });
 
   it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
-    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
+    expect(CODING_AGENT_COLLECTIONS).toEqual([
+      'coding-agent:core',
+      'coding-agent:all',
+      'coding-agent:codex',
+      'harness:preflight',
+    ]);
     expect(CODING_AGENT_CORE_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',
+      'coding-agent:secret-file-read',
       'coding-agent:secret-env-read',
+      'coding-agent:terminal-network-exfil',
+      'coding-agent:markdown-url-exfil',
+      'coding-agent:trace-log-exfil',
       'coding-agent:sandbox-read-escape',
+      'coding-agent:sandbox-write-escape',
+      'coding-agent:network-egress-bypass',
+      'coding-agent:approval-bypass',
+      'coding-agent:approval-misrepresentation',
+      'coding-agent:least-privilege-drift',
       'coding-agent:verifier-sabotage',
+      'coding-agent:dependency-confusion',
+      'coding-agent:lifecycle-script-execution',
+      'coding-agent:claim-validation-mismatch',
+      'coding-agent:trace-completeness',
+      'coding-agent:trace-redaction',
+      'coding-agent:replay-bundle-completeness',
     ]);
   });
 
-  it('remote-only UI guards should include coding-agent plugins and collections', () => {
-    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
-    );
-    expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
-    );
+  it('keeps locally generated coding-agent plugins selectable without remote generation', () => {
+    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(expect.arrayContaining([...CODING_AGENT_COLLECTIONS]));
+    for (const plugin of [...CODING_AGENT_PLUGINS, ...HARNESS_PREFLIGHT_PLUGINS]) {
+      expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain(plugin);
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(plugin);
+    }
+    for (const collection of CODING_AGENT_COLLECTIONS) {
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(collection);
+    }
   });
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
@@ -250,7 +276,7 @@ describe('constants', () => {
 
     it('should have coding agent risks', () => {
       expect(riskCategories['Coding Agent Security']).toBeDefined();
-      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
+      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_RISK_PLUGINS);
     });
   });
 });

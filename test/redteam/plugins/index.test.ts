@@ -543,6 +543,8 @@ describe('Plugins', () => {
     it.each([
       'coding-agent:core',
       'coding-agent:all',
+      'harness:preflight',
+      'harness:policy-applied',
     ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

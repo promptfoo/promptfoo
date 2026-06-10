@@ -109,6 +109,7 @@ interface HydraConfig {
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
+  sendCurrentTurnOnly?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   /**
    * Per-turn layer transforms to apply to each turn's prompt before sending to target.
@@ -152,6 +153,7 @@ export class HydraProvider implements ApiProvider {
   private readonly maxTurns: number;
   private readonly maxBacktracks: number;
   private readonly stateful: boolean;
+  private readonly sendCurrentTurnOnly: boolean;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private conversationHistory: Message[] = [];
@@ -166,6 +168,7 @@ export class HydraProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
 
     this.stateful = config.stateful ?? false;
+    this.sendCurrentTurnOnly = config.sendCurrentTurnOnly ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -195,6 +198,7 @@ export class HydraProvider implements ApiProvider {
       maxTurns: this.maxTurns,
       maxBacktracks: this.maxBacktracks,
       stateful: this.stateful,
+      sendCurrentTurnOnly: this.sendCurrentTurnOnly,
       injectVar: this.injectVar,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
@@ -472,8 +476,10 @@ export class HydraProvider implements ApiProvider {
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
 
-      if (this.stateful) {
-        // Stateful: send only the new message with sessionId
+      if (this.stateful || this.sendCurrentTurnOnly) {
+        // Stateful targets receive the new message plus sessionId. Some target classes
+        // such as coding agents also need the current turn as plain text even when
+        // the target itself is stateless.
         const escapedMessage = processedMessage
           .replace(/\{\{/g, '{ {')
           .replace(/\}\}/g, '} }')
@@ -484,7 +490,7 @@ export class HydraProvider implements ApiProvider {
         const updatedVars: Record<string, VarValue> = {
           ...vars,
           [this.injectVar]: escapedMessage,
-          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          ...(this.stateful && this.sessionId ? { sessionId: this.sessionId } : {}),
           // Add extracted input vars if available
           ...(currentRenderInputVars || {}),
         };

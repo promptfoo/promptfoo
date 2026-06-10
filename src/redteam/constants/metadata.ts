@@ -1,13 +1,12 @@
 import { z } from 'zod';
 import {
-  CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
-  CODING_AGENT_PLUGINS,
+  CODING_AGENT_RISK_PLUGINS,
 } from './codingAgents';
 
-import type { CodingAgentCollection, CodingAgentPlugin } from './codingAgents';
+import type { CodingAgentCollection, CodingAgentRiskPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
@@ -488,14 +487,15 @@ export const severityRiskScores: Record<Severity, number> = {
 };
 
 const codingAgentRiskCategorySeverityMap: Record<
-  CodingAgentCollection | CodingAgentPlugin,
+  CodingAgentCollection | CodingAgentRiskPlugin,
   Severity
 > = {
-  ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
-  ...Object.fromEntries(
-    CODING_AGENT_COLLECTIONS.map((collectionId) => [collectionId, Severity.High]),
-  ),
-} as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
+  ...Object.fromEntries(CODING_AGENT_RISK_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
+  'coding-agent:core': Severity.High,
+  'coding-agent:all': Severity.High,
+  'coding-agent:codex': Severity.High,
+  'harness:preflight': Severity.Medium,
+} as Record<CodingAgentCollection | CodingAgentRiskPlugin, Severity>;
 
 /*
  * Default severity values for each plugin.
@@ -763,7 +763,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'unverifiable-claims',
   ],
 
-  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
+  'Coding Agent Security': [...CODING_AGENT_RISK_PLUGINS],
 
   'Domain-Specific Risks': [
     'ecommerce:pci-dss',
@@ -837,7 +837,7 @@ export const categoryDescriptions = {
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
   'Coding Agent Security':
-    'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
+    'Repository, terminal, sandbox, network, approval, connector, trace, replay, and harness risks for coding agents.',
   'Domain-Specific Risks': 'Specialized risks and failure modes.',
   Datasets: 'Pre-defined test cases from research datasets.',
 };

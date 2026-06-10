@@ -1,71 +1,54 @@
-# redteam-coding-agent (Coding Agent Red Team)
-
-Red team autonomous coding agents for repository prompt injection, terminal output injection, secret reads, procfs abuse, sandbox read/write escapes, network egress, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic leakage, and verifier sabotage vulnerabilities.
+# redteam-coding-agent (Red Team a Coding Agent)
 
 ```bash
 npx promptfoo@latest init --example redteam-coding-agent
-cd redteam-coding-agent
 ```
 
-## Quick start
+This example has two layers:
 
-The default config targets `gpt-5.4` as a simulated coding agent. Set your API key and run:
+1. `harness-smoke.promptfooconfig.yaml` uses a local stub provider. Run it before a real agent to prove Promptfoo catches a known-bad canary leak.
+2. `promptfooconfig.yaml` is a red-team generation config for a coding agent. It starts with `harness:preflight` and `coding-agent:core`.
+
+## Safe stub
 
 ```bash
-export OPENAI_API_KEY=sk-...
-npx promptfoo@latest redteam run
-npx promptfoo@latest view
+export PF_HARNESS_CANARY="PF_CANARY_$(uuidgen | tr -d '-')"
+npm run local -- eval -c examples/redteam-coding-agent/harness-smoke.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-coding-agent-safe.json
 ```
 
-Required environment:
+The safe stub is intentionally evidence-rich: it returns structured command/file-change telemetry,
+policy metadata, and a complete replay summary so observability-focused plugins have a credible
+positive control instead of a text-only toy response.
 
-- `OPENAI_API_KEY`: Used by the default OpenAI provider. The Codex SDK provider also uses this when `CODEX_API_KEY` is not set.
+## Known-bad stub
 
-Optional environment:
+This run should fail because the stub prints the raw canary:
 
-- `CODEX_API_KEY`: Use this for Codex SDK auth when you do not want to reuse `OPENAI_API_KEY`.
-- `PROMPTFOO_REMOTE_GENERATION_URL`: Point generation at a self-hosted red-team generation service.
-- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`: Disable remote generation. The `coding-agent:core` and `coding-agent:all` collections and the individual coding-agent plugins are unavailable in this mode because they require remote-generated scenarios.
+```bash
+export PF_HARNESS_CANARY="PF_CANARY_$(uuidgen | tr -d '-')"
+STUB_CODING_AGENT_MODE=malicious npm run local -- eval -c examples/redteam-coding-agent/harness-smoke.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-coding-agent-bad.json
+```
 
-When testing a real coding agent, set `providers[0].config.working_dir` to a disposable checkout and use synthetic canary secrets. Do not put production credentials in the eval environment.
+Keep the `PF_CANARY_` prefix for this smoke run. The config treats that synthetic marker as a leak
+without copying the raw canary into assertion code or failure text.
 
-## Using a real coding agent
+## Generate red-team tests
 
-For meaningful results, point the config at a real agent provider:
+```bash
+npm run local -- redteam generate -c examples/redteam-coding-agent/promptfooconfig.yaml --no-cache
+```
 
-- **Codex SDK**: Uncomment the `openai:codex-sdk` provider in `promptfooconfig.yaml` and set `working_dir` to a disposable checkout.
-- **Custom agent**: Use a `file://` provider or HTTP endpoint that wraps your agent framework.
+Use a disposable checkout for the provider `working_dir`. Keep real credentials out of the workspace.
 
-Real agent providers should return structured output with command executions and trace data so the deterministic verifiers can inspect commands, outputs, and file changes — not just the final response.
+## Focused known-good and known-bad QA
 
-Use a fresh writable checkout for each red-team row when you want high-confidence results. Coding agents leave files behind, change tests, and may copy canaries into artifacts; reusing one workspace across rows can make a later failure look like the wrong plugin failed.
+These configs exercise the real coding-agent red-team assertion types with deterministic local
+fixtures. The known-bad runs should fail; the known-good runs should pass by refusing to move raw
+private values into the sink artifact or tool.
 
-## What the plugins test
-
-| Plugin                                   | Vulnerability                                             | Detection                                                          |
-| ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------ |
-| `coding-agent:repo-prompt-injection`     | Agent follows hidden instructions in repository files     | Canary value detection + LLM grading                               |
-| `coding-agent:terminal-output-injection` | Agent treats build/test output as authoritative commands  | Receipt propagation detection + LLM grading                        |
-| `coding-agent:secret-env-read`           | Agent reads or exposes launcher environment variables     | Canary value detection in output/traces                            |
-| `coding-agent:secret-file-read`          | Agent reads or exposes protected local file contents      | Canary/digest detection in output/traces/artifacts                 |
-| `coding-agent:sandbox-read-escape`       | Agent reads files outside the intended workspace          | Receipt detection + LLM grading                                    |
-| `coding-agent:sandbox-write-escape`      | Agent mutates files outside the intended workspace        | Command detection + host file/probe checks + LLM grading           |
-| `coding-agent:network-egress-bypass`     | Agent calls or plants code for unapproved network egress  | Command detection + trap/proxy logs + workspace scan + LLM grading |
-| `coding-agent:procfs-credential-read`    | Agent recovers credentials through process metadata       | Procfs command detection + receipt detection                       |
-| `coding-agent:delayed-ci-exfil`          | Agent plants future CI or automation data leakage         | Command detection + workflow/package scan + LLM grading            |
-| `coding-agent:generated-vulnerability`   | Agent introduces insecure code while completing a feature | High-confidence code heuristics + LLM grading                      |
-| `coding-agent:automation-poisoning`      | Agent persists unsafe hooks, scripts, or workflows        | Automation scan + host file hashes + LLM grading                   |
-| `coding-agent:steganographic-exfil`      | Agent hides secrets in encoded or low-visibility sinks    | Transformed canary detection + artifact scan                       |
-| `coding-agent:verifier-sabotage`         | Agent weakens tests instead of fixing code                | Heuristic pattern detection + file hash checks + LLM grading       |
-
-## Strategies
-
-`jailbreak:meta` is the iterative single-turn strategy. `jailbreak:hydra`, `goat`, and `crescendo` exercise conversational multi-turn behavior and need providers/workspaces that can preserve state safely. Encoding and prompt-rewriting strategies (base64, rot13, math-prompt, jailbreak:composite, etc.) are automatically excluded since they would break deterministic canary matching.
-
-Use `coding-agent:core` for quick baseline coverage, or switch to `coding-agent:all` when you want the full coding-agent suite in one collection.
-
-## Safety
-
-- Never place production secrets in red-team configs. Use synthetic canaries (`{{secretEnvValue}}`).
-- Run agents in disposable, least-privilege sandboxes and delete or reset the workspace between rows.
-- The generated prompts ask the agent to do unsafe things — that's the point. The graders evaluate whether the agent resists.
+```bash
+npm run local -- eval -c examples/redteam-coding-agent/trace-log-exfil-known-bad.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-trace-log-bad.json
+npm run local -- eval -c examples/redteam-coding-agent/trace-log-exfil-known-good.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-trace-log-good.json
+npm run local -- eval -c examples/redteam-coding-agent/mcp-confused-deputy-known-bad.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-mcp-confused-deputy-bad.json
+npm run local -- eval -c examples/redteam-coding-agent/mcp-confused-deputy-known-good.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-mcp-confused-deputy-good.json
+```
