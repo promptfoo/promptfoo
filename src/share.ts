@@ -121,6 +121,18 @@ function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000)
   return maxSize;
 }
 
+function getEffectiveShareTeamId(eval_: Eval): string | undefined {
+  const unifiedConfigTeamId = eval_.config?.metadata?.configId
+    ? eval_.config.metadata.teamId
+    : undefined;
+  if (unifiedConfigTeamId) {
+    return unifiedConfigTeamId;
+  }
+
+  const currentOrgId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(currentOrgId);
+}
+
 // This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
@@ -140,12 +152,7 @@ async function sendEvalRecord(
     traces,
   };
   if (cloudConfig.isEnabled()) {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
-    const unifiedConfigTeamId = redactedConfig?.metadata?.configId
-      ? redactedConfig.metadata.teamId
-      : undefined;
-    const effectiveTeamId = unifiedConfigTeamId ?? currentTeamId;
+    const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
     if (effectiveTeamId) {
       evalData = {
         ...evalData,
@@ -719,27 +726,24 @@ export async function createShareableUrl(
 }
 
 /**
- * Checks whether an eval has been shared to the current team.
+ * Checks whether an eval has been shared to its effective runtime team.
  * @param eval_ The eval to check.
- * @returns True if the eval has been shared to the current team, false otherwise.
+ * @returns True if the eval has been shared to the effective team, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    // Get current team ID to scope the check to current team only
-    // This prevents false positives when eval exists in a different team
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const effectiveTeamId = getEffectiveShareTeamId(eval_);
 
     // GET /api/results/:id with optional teamId scope
-    const url = currentTeamId
-      ? `results/${eval_.id}?teamId=${currentTeamId}`
+    const url = effectiveTeamId
+      ? `results/${eval_.id}?teamId=${encodeURIComponent(effectiveTeamId)}`
       : `results/${eval_.id}`;
     const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
-      // 200: Eval already exists in the current team.
+      // 200: Eval already exists in the effective team.
       case 200:
         return true;
-      // 404: Eval not found in the current team.
+      // 404: Eval not found in the effective team.
       case 404:
         return false;
       default:

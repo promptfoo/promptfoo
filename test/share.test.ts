@@ -1271,6 +1271,48 @@ describe('hasEvalBeenShared', () => {
     expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
   });
 
+  it('checks the runtime team for a server-issued unified config', async () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        metadata: {
+          configId: 'org-scoped-template',
+          teamId: 'runtime-team',
+        },
+      },
+      id: randomUUID(),
+    };
+
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-team'), 'GET');
+    expect(makeRequest).not.toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+  });
+
+  it('ignores unverified metadata team context', async () => {
+    const mockEval: Partial<Eval> = {
+      config: {
+        metadata: {
+          teamId: 'unverified-team',
+        },
+      },
+      id: randomUUID(),
+    };
+
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+
+    const result = await hasEvalBeenShared(mockEval as Eval);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=team-456'), 'GET');
+    expect(makeRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining('teamId=unverified-team'),
+      'GET',
+    );
+  });
+
   it('returns false if the server returns 404', async () => {
     const mockEval: Partial<Eval> = {
       config: {},
