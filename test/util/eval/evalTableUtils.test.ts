@@ -1156,7 +1156,9 @@ describe('evalTableUtils', () => {
   });
 
   /**
-   * Creates a prompt that mimics legacy persistence without `metrics.namedScoresCount`.
+   * Creates a prompt that mimics legacy/imported persistence without
+   * `metrics.namedScoresCount`, forcing the streaming CSV path to fall back to
+   * a row-scan discovery pass.
    *
    * `overrides.namedScores` contains aggregate prompt metrics; per-row scores
    * remain on the individual results.
