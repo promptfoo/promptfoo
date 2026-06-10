@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -134,7 +135,7 @@ async function generateCompositePrompts(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in composite generation: ${error}`);
+    logger.error(`Error in composite generation: ${describeFetchError(error)}`);
     return [];
   }
 }

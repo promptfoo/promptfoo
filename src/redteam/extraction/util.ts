@@ -6,6 +6,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 
@@ -62,7 +63,7 @@ export async function fetchRemoteGeneration(
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
     return parsedResponse.result;
   } catch (error) {
-    logger.warn(`Error using remote generation for task '${task}': ${error}`);
+    logger.warn(`Error using remote generation for task '${task}': ${describeFetchError(error)}`);
     throw error;
   }
 }

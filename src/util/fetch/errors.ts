@@ -303,3 +303,84 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
     message.includes('socket hang up')
   );
 }
+
+/**
+ * Network-level error codes meaning the connection was refused, reset, or
+ * dropped — as opposed to a clean HTTP error response. Proxies, firewalls, and
+ * WAFs (e.g. Cloudflare blocking a POST with a 403) typically surface this way:
+ * Node/undici reports `TypeError: fetch failed` or `TypeError: terminated` and
+ * tucks the real reason into `error.cause`.
+ */
+const CONNECTION_BLOCK_CODES = new Set([
+  'UND_ERR_SOCKET',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'EAI_AGAIN',
+]);
+
+/**
+ * Hint appended when a request fails at the connection layer, pointing at the
+ * most common real-world cause instead of leaving users with a bare
+ * `terminated`.
+ */
+export const CONNECTION_BLOCK_HINT =
+  'The connection was closed before a response was received. This often means a network ' +
+  'proxy, firewall, or Cloudflare rule is blocking the request (for example a 403 on POST). ' +
+  'Check your network or proxy settings, or try a different network.';
+
+/**
+ * Detects fetch failures that happened at the connection layer (refused, reset,
+ * or dropped) rather than as a parseable HTTP response. Inspects both the outer
+ * error and its `cause`, since undici hides the real `code`/`message` in
+ * `cause` (the outer error is just `terminated` / `fetch failed`).
+ */
+export function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const err = error as SystemError;
+  const cause = err.cause as SystemError | undefined;
+  const codes = [err.code, cause?.code].filter((c): c is string => typeof c === 'string');
+  if (codes.some((code) => CONNECTION_BLOCK_CODES.has(code))) {
+    return true;
+  }
+  const haystack = `${err.message ?? ''} ${cause?.message ?? ''}`.toLowerCase();
+  return (
+    haystack.includes('terminated') ||
+    haystack.includes('fetch failed') ||
+    haystack.includes('other side closed') ||
+    haystack.includes('socket hang up')
+  );
+}
+
+/**
+ * Formats a fetch/network error's name, message, and the otherwise-hidden
+ * `cause` and `code` into a single log-friendly string. Raw interpolation of an
+ * `Error` only yields `name: message`, dropping the diagnostic detail.
+ */
+export function formatFetchError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const err = error as SystemError;
+  let message = `${err.name}: ${err.message}`;
+  if (err.cause) {
+    message += ` (Cause: ${err.cause})`;
+  }
+  if (err.code) {
+    message += ` (Code: ${err.code})`;
+  }
+  return message;
+}
+
+/**
+ * Like {@link formatFetchError}, but also appends {@link CONNECTION_BLOCK_HINT}
+ * when the failure looks like a connection-layer block. Use in catch blocks
+ * around outbound requests so users get an actionable message instead of a bare
+ * `terminated`.
+ */
+export function describeFetchError(error: unknown): string {
+  const base = formatFetchError(error);
+  return isConnectionError(error) ? `${base}\n${CONNECTION_BLOCK_HINT}` : base;
+}

@@ -5,6 +5,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -97,7 +98,7 @@ export async function textToAudio(
 
     return { base64: base64Audio };
   } catch (error) {
-    logger.error(`Error generating audio from text: ${error}`);
+    logger.error(`Error generating audio from text: ${describeFetchError(error)}`);
     throw new Error(
       `Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`,
     );

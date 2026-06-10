@@ -2,6 +2,7 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
+import { describeFetchError } from '../util/fetch/errors';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { pluginDescriptions } from './constants';
@@ -407,7 +408,7 @@ export async function extractGoalFromPrompt(
 
     return data.intent;
   } catch (error) {
-    logger.warn(`Error extracting goal: ${error}`);
+    logger.warn(`Error extracting goal: ${describeFetchError(error)}`);
     return null;
   }
 }

@@ -1,15 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONNECTION_BLOCK_HINT,
+  describeFetchError,
   extractRateLimitErrorCode,
   findTargetErrorStatus,
+  formatFetchError,
   formatRateLimitDetail,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
+  isConnectionError,
   isHardQuotaCode,
   isHttpRateLimitError,
   isNonTransientHttpStatus,
   isTransientConnectionError,
 } from '../../../src/util/fetch/errors';
+
+/**
+ * Builds an error matching the shape undici produces when a connection is cut:
+ * an outer `TypeError` whose real reason lives in `cause`. Mirrors the values
+ * captured reproducing promptfoo#9679 (Cloudflare 403 block on POST).
+ */
+function makeTerminatedError(
+  message = 'terminated',
+  causeMessage = 'other side closed',
+  causeCode = 'UND_ERR_SOCKET',
+): Error {
+  const cause = Object.assign(new Error(causeMessage), { code: causeCode });
+  return Object.assign(new TypeError(message), { cause });
+}
 
 describe('isNonTransientHttpStatus', () => {
   it('returns true for 401 Unauthorized', () => {
@@ -419,5 +437,78 @@ describe('formatRateLimitErrorMessage', () => {
     const out = formatRateLimitErrorMessage(err);
     expect(out.match(/Rate limit exceeded/g)?.length).toBe(1);
     expect(out.match(/HTTP 429/g)?.length).toBe(1);
+  });
+});
+
+describe('isConnectionError', () => {
+  it('detects undici `terminated` from a cut connection (cause code UND_ERR_SOCKET)', () => {
+    expect(isConnectionError(makeTerminatedError())).toBe(true);
+  });
+
+  it('detects `fetch failed` when the socket dies before any response', () => {
+    expect(isConnectionError(makeTerminatedError('fetch failed'))).toBe(true);
+  });
+
+  it('detects a forcibly reset connection via ECONNRESET on the cause', () => {
+    expect(
+      isConnectionError(makeTerminatedError('terminated', 'read ECONNRESET', 'ECONNRESET')),
+    ).toBe(true);
+  });
+
+  it('detects ECONNREFUSED on the outer error', () => {
+    const err = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    expect(isConnectionError(err)).toBe(true);
+  });
+
+  it('matches on message text even when no code is present', () => {
+    expect(isConnectionError(new Error('socket hang up'))).toBe(true);
+  });
+
+  it('returns false for a clean HTTP/application error (not a connection failure)', () => {
+    expect(isConnectionError(new Error('Bad Request: 400'))).toBe(false);
+  });
+
+  it('returns false for non-Error values', () => {
+    expect(isConnectionError('terminated')).toBe(false);
+    expect(isConnectionError(undefined)).toBe(false);
+    expect(isConnectionError(null)).toBe(false);
+  });
+});
+
+describe('formatFetchError', () => {
+  it('surfaces the otherwise-hidden cause and code', () => {
+    const out = formatFetchError(makeTerminatedError());
+    expect(out).toContain('TypeError: terminated');
+    expect(out).toContain('Cause: Error: other side closed');
+  });
+
+  it('includes the top-level code when present', () => {
+    const err = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    expect(formatFetchError(err)).toContain('(Code: ECONNREFUSED)');
+  });
+
+  it('stringifies non-Error values', () => {
+    expect(formatFetchError('boom')).toBe('boom');
+  });
+
+  it('does NOT append the connection-block hint (formatting only)', () => {
+    expect(formatFetchError(makeTerminatedError())).not.toContain(CONNECTION_BLOCK_HINT);
+  });
+});
+
+describe('describeFetchError', () => {
+  it('appends the network-block hint for a `terminated` connection error', () => {
+    const out = describeFetchError(makeTerminatedError());
+    // Still shows the raw diagnostics (the hidden cause, not just `terminated`)...
+    expect(out).toContain('TypeError: terminated');
+    expect(out).toContain('other side closed');
+    // ...plus the actionable hint that was missing in promptfoo#9679.
+    expect(out).toContain(CONNECTION_BLOCK_HINT);
+  });
+
+  it('does not append the hint for a non-connection error', () => {
+    const out = describeFetchError(new Error('Bad Request: 400'));
+    expect(out).toContain('Bad Request: 400');
+    expect(out).not.toContain(CONNECTION_BLOCK_HINT);
   });
 });

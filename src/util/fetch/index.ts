@@ -15,9 +15,9 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
+  formatFetchError,
   HttpRateLimitError,
   isHardQuotaCode,
-  type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
@@ -712,21 +712,6 @@ async function handleRateLimitedResponse(
   await handleRateLimit(response);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return String(error);
-  }
-  const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
-  if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
-  }
-  if (typedError.code) {
-    message += ` (Code: ${typedError.code})`;
-  }
-  return message;
-}
-
 export async function fetchWithRetries(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -772,7 +757,7 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchError(error);
 
       logger.debug(
         `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,

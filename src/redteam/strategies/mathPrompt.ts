@@ -5,6 +5,7 @@ import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { redteamProviderManager } from '../providers/shared';
@@ -96,7 +97,7 @@ export async function generateMathPrompt(
 
     return allResults;
   } catch (error) {
-    logger.error(`Error in remote MathPrompt generation: ${error}`);
+    logger.error(`Error in remote MathPrompt generation: ${describeFetchError(error)}`);
     return [];
   }
 }

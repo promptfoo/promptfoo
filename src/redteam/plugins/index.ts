@@ -6,6 +6,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
+import { describeFetchError } from '../../util/fetch/errors';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
 import {
@@ -402,7 +403,7 @@ async function fetchRemoteTestCases(
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
-    logger.error(`Error generating test cases for ${key}: ${err}`);
+    logger.error(`Error generating test cases for ${key}: ${describeFetchError(err)}`);
     return [];
   }
 }
