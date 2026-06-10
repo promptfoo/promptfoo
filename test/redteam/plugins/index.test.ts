@@ -326,6 +326,39 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('should attach remote generation messages to returned test metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'test content' } }],
+          message: 'Some requested prompts were skipped by remote generation.',
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result?.[0].metadata?.generationMessage).toBe(
+        'Some requested prompts were skipped by remote generation.',
+      );
+    });
+
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

@@ -611,6 +611,39 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
     });
 
+    it('should show remote generation notes in the report when plugin metadata includes them', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: 'test' },
+          metadata: {
+            generationMessage: 'Remote generation skipped prompts.',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+      vi.spyOn(Strategies, 'find').mockReturnValue(undefined);
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      const cleanReport = stripAnsi(reportMessage || '');
+      expect(cleanReport).toContain('Notes');
+      expect(cleanReport).toContain('Remote generation skipped prompts.');
+    });
+
     it('should use default fan-out values when strategy config omits n', async () => {
       const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       const pluginFindSpy = vi

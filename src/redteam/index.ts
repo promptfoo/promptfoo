@@ -268,6 +268,12 @@ function getStatus(requested: number, generated: number): string {
   return chalk.green('Success');
 }
 
+type PluginGenerationReportResult = {
+  requested: number;
+  generated: number;
+  message?: string;
+};
+
 /**
  * Generates a report of plugin and strategy results.
  * @param pluginResults - Results from plugin executions (key is the display ID).
@@ -275,42 +281,56 @@ function getStatus(requested: number, generated: number): string {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
+  pluginResults: Record<string, PluginGenerationReportResult>,
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
+  const hasMessages = Object.values(pluginResults).some((result) => result.message);
+  const headers = ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'];
+  const colWidths = [5, 10, 40, 12, 12, 14];
+  if (hasMessages) {
+    headers.push('Notes');
+    colWidths.push(50);
+  }
+
   const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [5, 10, 40, 12, 12, 14],
+    head: headers.map((h) => chalk.dim(chalk.white(h))),
+    colWidths,
   });
 
   let rowIndex = 1;
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([displayId, { requested, generated }]) => {
-      table.push([
+    .forEach(([displayId, { requested, generated, message }]) => {
+      const row = [
         rowIndex++,
         'Plugin',
         displayId,
         requested,
         generated,
         getStatus(requested, generated),
-      ]);
+      ];
+      if (hasMessages) {
+        row.push(message || '');
+      }
+      table.push(row);
     });
 
   Object.entries(strategyResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .forEach(([id, { requested, generated }]) => {
-      table.push([
+      const row = [
         rowIndex++,
         'Strategy',
         id,
         requested,
         generated,
         getStatus(requested, generated),
-      ]);
+      ];
+      if (hasMessages) {
+        row.push('');
+      }
+      table.push(row);
     });
 
   return `\nTest Generation Report:\n${table.toString()}`;
@@ -1320,7 +1340,7 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: Record<string, PluginGenerationReportResult> = {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1350,7 +1370,7 @@ export async function synthesize({
 
       // Generate tests for each language in parallel using Promise.allSettled
       const allPluginTests: TestCase[] = [];
-      const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
+      const resultsPerLanguage: Record<string, PluginGenerationReportResult> = {};
 
       const languagePromises = languages.map(async (lang) => {
         const pluginTests = await action({
@@ -1391,12 +1411,16 @@ export async function synthesize({
               `Plugin ${plugin.id}`,
               maxCharsPerMessage,
             );
+            const generationMessage = constrainedTests
+              .map((test) => test.metadata?.generationMessage)
+              .find((message): message is string => typeof message === 'string' && message !== '');
 
             return {
               lang: langKey,
               tests: constrainedTests,
               requested: plugin.numTests,
               generated: constrainedTests.length,
+              ...(generationMessage ? { message: generationMessage } : {}),
             };
           }
 
@@ -1417,10 +1441,14 @@ export async function synthesize({
 
       for (const [index, result] of languageResults.entries()) {
         if (result.status === 'fulfilled') {
-          const { lang, tests, requested, generated } = result.value;
+          const { lang, tests, requested, generated, message } = result.value;
 
           allPluginTests.push(...tests);
-          resultsPerLanguage[lang || 'default'] = { requested, generated };
+          resultsPerLanguage[lang || 'default'] = {
+            requested,
+            generated,
+            ...(message ? { message } : {}),
+          };
         } else {
           const lang = languages[index];
           // Handle rejected promise
@@ -1478,6 +1506,13 @@ export async function synthesize({
 
       // Get the display ID for this plugin (also serves as the unique key)
       const baseDisplayId = getPluginDisplayId(plugin);
+      const generationMessage = [
+        ...new Set(
+          allPluginTests
+            .map((test) => test.metadata?.generationMessage)
+            .filter((message): message is string => typeof message === 'string' && message !== ''),
+        ),
+      ].join('; ');
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
@@ -1487,7 +1522,11 @@ export async function synthesize({
           const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults[displayId] = {
+            requested,
+            generated: result.generated,
+            ...(result.message ? { message: result.message } : {}),
+          };
         }
       } else {
         // Single language or no language - use aggregated result
@@ -1496,7 +1535,11 @@ export async function synthesize({
             ? allPluginTests.length
             : getExpectedPluginTestCount(plugin, language);
         const generated = allPluginTests.length;
-        pluginResults[baseDisplayId] = { requested, generated };
+        pluginResults[baseDisplayId] = {
+          requested,
+          generated,
+          ...(generationMessage ? { message: generationMessage } : {}),
+        };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {

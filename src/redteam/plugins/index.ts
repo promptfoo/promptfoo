@@ -339,7 +339,7 @@ async function fetchRemoteTestCases(
   injectVar: string,
   n: number,
   config: PluginConfig,
-): Promise<TestCase[]> {
+): Promise<{ testCases: TestCase[]; message?: string }> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
@@ -352,7 +352,7 @@ async function fetchRemoteTestCases(
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+    return { testCases: [] };
   }
 
   // Strip graderExamples before sending - they're not used during generation,
@@ -379,6 +379,7 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    message?: string;
   }
 
   try {
@@ -393,17 +394,17 @@ async function fetchRemoteTestCases(
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
+      return { testCases: [] };
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    return { testCases: ret, message: data.message };
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
-    return [];
+    return { testCases: [] };
   }
 }
 
@@ -426,13 +427,14 @@ function createPluginFactory<T extends PluginConfig>(
         );
       }
       const pluginId = getShortPluginId(key);
-      const testCases = await fetchRemoteTestCases(
+      const remoteGeneration = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
         configWithDefaults ?? {},
       );
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({
@@ -445,6 +447,7 @@ function createPluginFactory<T extends PluginConfig>(
             ...configWithDefaults,
             modifiers: computedModifiers,
           },
+          ...(remoteGeneration.message ? { generationMessage: remoteGeneration.message } : {}),
         },
       }));
     },
@@ -551,13 +554,14 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
-      const testCases = await fetchRemoteTestCases(
+      const remoteGeneration = await fetchRemoteTestCases(
         category,
         params.purpose,
         params.injectVar,
         params.n,
         params.config ?? {},
       );
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
@@ -568,6 +572,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
             ...params.config,
             modifiers: computedModifiers,
           },
+          ...(remoteGeneration.message ? { generationMessage: remoteGeneration.message } : {}),
         },
       }));
     }
@@ -592,13 +597,14 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
     }
 
     const pluginId = getShortPluginId(category);
-    const testCases = await fetchRemoteTestCases(
+    const remoteGeneration = await fetchRemoteTestCases(
       category,
       params.purpose,
       params.injectVar,
       params.n,
       params.config ?? {},
     );
+    const testCases = remoteGeneration.testCases;
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
@@ -609,6 +615,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
           ...params.config,
           modifiers: computedModifiers,
         },
+        ...(remoteGeneration.message ? { generationMessage: remoteGeneration.message } : {}),
       },
     }));
   },
@@ -629,13 +636,14 @@ function createRemotePlugin<T extends PluginConfig>(
         return [];
       }
       const pluginId = getShortPluginId(key);
-      const testCases: TestCase[] = await fetchRemoteTestCases(
+      const remoteGeneration = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
         configWithDefaults ?? {},
       );
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
@@ -646,6 +654,7 @@ function createRemotePlugin<T extends PluginConfig>(
             ...configWithDefaults,
             modifiers: computedModifiers,
           },
+          ...(remoteGeneration.message ? { generationMessage: remoteGeneration.message } : {}),
         },
       }));
 
