@@ -9,7 +9,6 @@ import path from 'node:path';
 
 import { afterAll, afterEach, vi } from 'vitest';
 import { closeTestDatabaseClients } from './src/database/testing';
-import { clearAgentCache } from './src/util/fetch/index';
 import { mockProcessEnv } from './test/util/utils';
 
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
@@ -52,12 +51,6 @@ afterEach(() => {
  */
 afterAll(async () => {
   await closeTestDatabaseClients();
-
-  // Close cached keep-alive undici Agents so a worker that made a real fetch is
-  // not held open by an idle keep-alive socket during teardown. The CLI closes
-  // these via shutdownGracefully(), but vitest never runs that path. Releasing
-  // the handle helps the fork worker exit cleanly instead of being force-killed.
-  clearAgentCache();
 
   // Reset all modules to clear any cached state
   vi.resetModules();
