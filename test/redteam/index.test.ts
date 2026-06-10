@@ -3069,7 +3069,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'goat' }],
-        targetIds: ['test-provider'],
+        targetIds: ['promptfoo://provider/target-123'],
       });
 
       // Verify extractGoalFromPrompt was called with the policy
@@ -3079,6 +3079,7 @@ describe('Language configuration', () => {
       expect(call[1]).toBe('Test purpose'); // purpose
       expect(call[2]).toBe('policy'); // pluginId
       expect(call[3]).toBe(policyText); // policy
+      expect(call[4]).toBe('target-123'); // targetId
     });
 
     it('should not pass policy when metadata does not contain policy', async () => {

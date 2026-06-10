@@ -67,6 +67,7 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+const CLOUD_TARGET_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -82,6 +83,13 @@ function getMaterializedMultiInputPromptMetadata(
   return typeof prompt === 'string'
     ? { [MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY]: prompt }
     : undefined;
+}
+
+function getCloudTargetDatabaseId(targetIds: string[]): string | undefined {
+  const cloudTargetId = targetIds.find((targetId) =>
+    targetId.startsWith(CLOUD_TARGET_PROVIDER_PREFIX),
+  );
+  return cloudTargetId?.slice(CLOUD_TARGET_PROVIDER_PREFIX.length);
 }
 
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
@@ -989,6 +997,8 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
 
+  const cloudTargetDatabaseId = getCloudTargetDatabaseId(targetIds);
+
   if (maxConcurrency > MAX_MAX_CONCURRENCY) {
     maxConcurrency = MAX_MAX_CONCURRENCY;
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
@@ -1451,7 +1461,13 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const extractedGoal = await extractGoalFromPrompt(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+              cloudTargetDatabaseId,
+            );
 
             (testCase.metadata as any).goal = extractedGoal;
           }
@@ -1583,7 +1599,13 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const extractedGoal = await extractGoalFromPrompt(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+              cloudTargetDatabaseId,
+            );
 
             (testCase.metadata as any).goal = extractedGoal;
           }
