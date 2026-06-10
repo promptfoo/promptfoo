@@ -243,6 +243,28 @@ describe('PromptfooChatCompletionProvider', () => {
     });
   });
 
+  it('should include target context in remote task requests', async () => {
+    provider = new PromptfooChatCompletionProvider({
+      ...options,
+      targetId: 'cloud-target-123',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ result: 'test result' }), { status: 200 }),
+    );
+
+    await provider.callApi('test prompt');
+
+    const request = vi.mocked(fetchWithRetries).mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    if (!request) {
+      throw new Error('Expected remote task request');
+    }
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'crescendo',
+    });
+  });
+
   it('should pass remote materialization context through to the remote task server', async () => {
     const mockResponse = new Response(
       JSON.stringify({

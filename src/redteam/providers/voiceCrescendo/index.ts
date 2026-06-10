@@ -147,6 +147,7 @@ interface VoiceCrescendoResponse extends ProviderResponse {
  */
 export interface VoiceCrescendoConfig {
   injectVar: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   redteamProvider?: string;
@@ -266,6 +267,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -285,6 +287,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo-eval',
           jsonOnly: true,
           preferSmallModel: false,
+          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first

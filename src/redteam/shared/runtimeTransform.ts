@@ -48,6 +48,8 @@ export interface TransformResult {
  * This allows multi-turn providers to pass evaluation context to layer strategies.
  */
 export interface RuntimeTransformContext {
+  /** Cloud target database ID used to resolve target-owned task context. */
+  targetId?: string;
   /** The evaluation ID (for server-side tracking) */
   evaluationId?: string;
   /** The test case ID */
@@ -144,7 +146,10 @@ export async function applyRuntimeTransforms(
     try {
       // Call existing strategy action - this REUSES all existing implementation
       // The strategy expects an array of test cases and returns transformed test cases
-      const result = await strategy.action([testCase], injectVar, layerConfig);
+      const result = await strategy.action([testCase], injectVar, {
+        ...layerConfig,
+        ...(context?.targetId ? { targetId: context.targetId } : {}),
+      });
       const transformed = result[0];
 
       if (transformed) {

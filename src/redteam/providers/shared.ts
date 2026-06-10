@@ -622,11 +622,13 @@ export async function tryUnblocking({
   lastResponse,
   goal,
   purpose,
+  targetId,
 }: {
   messages: Message[];
   lastResponse: string;
   goal: string | undefined;
   purpose?: string;
+  targetId?: string;
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
@@ -664,6 +666,7 @@ export async function tryUnblocking({
       task: 'blocking-question-analysis',
       jsonOnly: true,
       preferSmallModel: false,
+      ...(targetId ? { targetId } : {}),
     });
 
     const unblockingRequest = {

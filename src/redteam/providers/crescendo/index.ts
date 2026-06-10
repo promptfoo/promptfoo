@@ -222,6 +222,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
           // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
         });
@@ -243,6 +244,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
+          ...(typeof this.config.targetId === 'string' ? { targetId: this.config.targetId } : {}),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
@@ -496,6 +498,7 @@ export class CrescendoProvider implements ApiProvider {
           lastResponse: lastResponse.output,
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -1097,6 +1100,7 @@ export class CrescendoProvider implements ApiProvider {
         this.perTurnLayers,
         Strategies,
         {
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
           evaluationId: context?.evaluationId,
           testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
           purpose: context?.test?.metadata?.purpose as string | undefined,

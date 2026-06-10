@@ -100,6 +100,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  targetId?: string;
   maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
@@ -151,6 +152,7 @@ export default class GoatProvider implements ApiProvider {
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
       inputs?: Inputs;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -173,6 +175,7 @@ export default class GoatProvider implements ApiProvider {
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
       inputs: options.inputs,
+      targetId: options.targetId,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -276,6 +279,7 @@ export default class GoatProvider implements ApiProvider {
             lastResponse: previousTargetOutput,
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             purpose: context?.test?.metadata?.purpose,
+            targetId: this.config.targetId,
           });
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -298,6 +302,7 @@ export default class GoatProvider implements ApiProvider {
                 this.perTurnLayers,
                 Strategies,
                 {
+                  targetId: this.config.targetId,
                   evaluationId: context?.evaluationId,
                   testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
                   purpose: context?.test?.metadata?.purpose as string | undefined,
@@ -352,6 +357,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
             modifiers: context?.test?.metadata?.modifiers,
             traceSummary: previousTraceSummary,
           });
@@ -383,6 +389,7 @@ export default class GoatProvider implements ApiProvider {
             : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
+          ...(this.config.targetId ? { targetId: this.config.targetId } : {}),
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
@@ -503,6 +510,7 @@ export default class GoatProvider implements ApiProvider {
             this.perTurnLayers,
             Strategies,
             {
+              targetId: this.config.targetId,
               evaluationId: context?.evaluationId,
               testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
               purpose: context?.test?.metadata?.purpose as string | undefined,

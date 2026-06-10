@@ -128,6 +128,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -143,6 +144,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -350,6 +352,7 @@ export async function runRedteamConversation({
         perTurnLayers,
         Strategies,
         {
+          targetId,
           evaluationId: context?.evaluationId,
           testCaseId: test?.metadata?.testCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
@@ -855,11 +858,13 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        ...(typeof config.targetId === 'string' ? { targetId: config.targetId } : {}),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -915,6 +920,7 @@ class RedteamIterativeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
 }

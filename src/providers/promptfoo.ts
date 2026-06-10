@@ -140,6 +140,8 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
+  /** Cloud target database ID used to resolve the owning team for remote tasks. */
+  targetId?: string;
   task:
     | 'crescendo'
     | 'goat'
@@ -205,6 +207,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      ...(this.options.targetId ? { targetId: this.options.targetId } : {}),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
       ...(materializationContext ? { materializationContext } : {}),

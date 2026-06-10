@@ -171,6 +171,18 @@ describe('runtimeTransform', () => {
       );
     });
 
+    it('should pass target context to per-turn layer strategies', async () => {
+      await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+        targetId: 'cloud-target-123',
+      });
+
+      expect(mockBase64Strategy.action).toHaveBeenCalledWith(
+        expect.any(Array),
+        'input',
+        expect.objectContaining({ targetId: 'cloud-target-123' }),
+      );
+    });
+
     it('should skip unknown strategies with warning', async () => {
       const result = await applyRuntimeTransforms(
         'hello',

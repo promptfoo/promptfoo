@@ -102,6 +102,7 @@ export async function addLayerTestCases(
               injectVar,
               scanId,
               ...stepObj.config,
+              ...(typeof config?.targetId === 'string' ? { targetId: config.targetId } : {}),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
