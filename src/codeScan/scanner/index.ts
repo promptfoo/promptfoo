@@ -361,10 +361,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
-    } else if (
-      (outputFormat !== null && outputFormat !== CodeScanOutputFormat.TEXT) ||
-      structuredOutputRequested
-    ) {
+    } else if (structuredOutputRequested) {
+      // Structured modes reserve stdout for the payload, so errors go to stderr. This
+      // covers both resolved formats (JSON/SARIF) and requests that failed before the
+      // format resolved (e.g. an invalid --json + --format sarif combination).
       console.error(msg);
     } else {
       logger.error(msg);
