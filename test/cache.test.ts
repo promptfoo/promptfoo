@@ -1022,6 +1022,38 @@ describe('fetchWithCache', () => {
       expect(teamTwoResult.data).toEqual({ data: 'team two data' });
     });
 
+    it('should prefer an explicit team header when computing the cache key', async () => {
+      mockFetchWithRetries.mockResolvedValue(
+        mockFetchWithRetriesResponse(true, { data: 'explicit team data' }),
+      );
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-one');
+
+      const requestOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-promptfoo-team-id': 'team-explicit',
+        },
+        body: JSON.stringify({ task: 'extract-intent' }),
+      };
+      const firstResult = await fetchWithCache(
+        'https://api.promptfoo.app/api/v1/task',
+        requestOptions,
+        1000,
+      );
+
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
+      const secondResult = await fetchWithCache(
+        'https://api.promptfoo.app/api/v1/task',
+        requestOptions,
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(firstResult.data).toEqual({ data: 'explicit team data' });
+      expect(secondResult.data).toEqual({ data: 'explicit team data' });
+    });
+
     it('should not let the cloud token override a caller-supplied Authorization in the cache key', async () => {
       const cache = getCache();
       const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token-one' });

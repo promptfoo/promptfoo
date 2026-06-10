@@ -108,13 +108,15 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
-  it('should add Authorization header for configured on-prem cloud API requests', async () => {
+  it('should add authorization and current team for configured on-prem cloud task requests', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
     const apiKey = 'test-api-key-123';
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/api');
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
 
     const url = 'https://onprem.example.com/api/v1/task';
     await monkeyPatchFetch(url);
@@ -122,6 +124,7 @@ describe('monkeyPatchFetch', () => {
     expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
+        'x-promptfoo-team-id': 'team-current',
       },
     });
   });
