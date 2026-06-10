@@ -559,14 +559,13 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 
       if (thinkingTokens != null || hasCacheDetails) {
         usage.completionDetails = {
-          ...(thinkingTokens == null ? {} : { reasoning: thinkingTokens }),
-          // Anthropic has no dedicated input-details field in Promptfoo's usage contract.
-          ...(hasCacheDetails
-            ? {
-                cacheReadInputTokens: cacheRead,
-                cacheCreationInputTokens: cacheCreation,
-              }
-            : {}),
+          ...(thinkingTokens != null && { reasoning: thinkingTokens }),
+          // Cache *input* token counts go under completionDetails because Promptfoo's
+          // TokenUsage contract has no input-details field.
+          ...(hasCacheDetails && {
+            cacheReadInputTokens: cacheRead,
+            cacheCreationInputTokens: cacheCreation,
+          }),
         };
       }
 

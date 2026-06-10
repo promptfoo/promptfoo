@@ -1558,6 +1558,71 @@ describe('Anthropic utilities', () => {
       });
     });
 
+    it('should merge thinking tokens with cache details into one completionDetails object', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+          cache_read_input_tokens: 80,
+          cache_creation_input_tokens: 0,
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 230,
+        prompt: 180,
+        completion: 50,
+        completionDetails: {
+          reasoning: 20,
+          cacheReadInputTokens: 80,
+          cacheCreationInputTokens: 0,
+        },
+      });
+    });
+
+    it('should preserve a zero thinking token count', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 0 },
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 150,
+        prompt: 100,
+        completion: 50,
+        completionDetails: { reasoning: 0 },
+      });
+    });
+
+    it('should omit completionDetails when output_tokens_details is null', () => {
+      // The live API returns output_tokens_details: null for non-thinking responses
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: null,
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({ total: 150, prompt: 100, completion: 50 });
+    });
+
+    it('should not report thinking tokens for cached responses', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+        },
+      };
+      const result = getTokenUsage(data, true);
+      expect(result).toEqual({ cached: 150, total: 150 });
+    });
+
     it('should return cached token usage', () => {
       const data = { usage: { input_tokens: 100, output_tokens: 50 } };
       const result = getTokenUsage(data, true);
