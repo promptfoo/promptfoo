@@ -263,6 +263,7 @@ export async function doEval(
       // rather than be appended (e.g. `--config base.yaml dir/ override.yaml`).
       const resolvedConfigPaths: string[] = [];
       const configlessDirs: string[] = [];
+      const noConfigHint = `Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`;
       for (const configPath of configPaths) {
         const configStats = await fs.stat(configPath).catch(() => undefined);
         if (!configStats?.isDirectory()) {
@@ -278,15 +279,13 @@ export async function doEval(
           // Drop the directory from the list: leaving it in would surface later as a
           // confusing "Unsupported configuration file format" error from readConfig().
           configlessDirs.push(configPath);
-          logger.warn(
-            `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
-          );
+          logger.warn(`No configuration file found in directory: ${configPath}. ${noConfigHint}`);
         }
       }
 
       if (configlessDirs.length > 0 && resolvedConfigPaths.length === 0) {
         return failEvalRun(
-          `No configuration file found in ${configlessDirs.join(', ')}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+          `No configuration file found in ${configlessDirs.join(', ')}. ${noConfigHint}`,
           isCliInvocation,
         );
       }
