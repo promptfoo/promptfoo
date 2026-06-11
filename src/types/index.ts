@@ -941,7 +941,7 @@ export const TestCasesWithMetadataSchema = z.object({
 
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
-export const ScenarioConfigValuesSchema = z
+const ScenarioConfigValuesSchema = z
   .union([z.object({ $values: z.string() }).strict(), z.object({ $expand: z.string() }).strict()])
   .transform((value) => value as Partial<TestCase>)
   .meta({
