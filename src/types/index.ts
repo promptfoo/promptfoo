@@ -941,6 +941,9 @@ export const TestCasesWithMetadataSchema = z.object({
 
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
+export type ScenarioConfigValuesRef = { $values?: string; $expand?: string };
+export type ScenarioConfig = Partial<TestCase> | ScenarioConfigValuesRef;
+
 const ScenarioConfigValuesFileRefSchema = z.string().regex(/^file:\/\//, {
   error: 'Scenario config expansion refs must start with file://',
 });
@@ -957,7 +960,7 @@ const ScenarioConfigValuesSchema = z
 const ScenarioConfigSchema = z.union([
   ScenarioConfigValuesSchema,
   TestCaseSchema.partial().strict(),
-]) as z.ZodType<Partial<TestCase>>;
+]) as z.ZodType<ScenarioConfig>;
 
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing

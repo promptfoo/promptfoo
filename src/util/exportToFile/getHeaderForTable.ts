@@ -1,4 +1,5 @@
 import type Eval from '../../models/eval';
+import type { TestCase } from '../../types';
 
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
@@ -48,7 +49,7 @@ export function getHeaderForTable(eval_: Eval) {
       continue;
     }
     for (const config of scenario.config || []) {
-      for (const varName of Object.keys(config.vars || {})) {
+      for (const varName of Object.keys((config as Partial<TestCase>).vars || {})) {
         varsForHeader.add(varName);
       }
     }

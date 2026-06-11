@@ -104,7 +104,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input) && input[0] === 'file://scenarios/*.yaml') {
+      if (typeof input === 'string' && input.endsWith('/scenarios/*.yaml')) {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
       }
@@ -117,7 +117,9 @@ describe('Scenario loading with glob patterns', () => {
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     // Check if maybeLoadFromExternalFile was called with the expected argument
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/*.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^file:\/\/.*\/scenarios\/\*\.yaml$/),
+    );
 
     // Verify scenarios are flattened correctly
     expect(testSuite.scenarios).toHaveLength(2);
@@ -161,12 +163,11 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // Simulate two glob patterns each returning different scenarios
-        return [
-          [scenarios[0], scenarios[1]], // group1/*.yaml
-          [scenarios[2]], // group2/*.yaml
-        ];
+      if (typeof input === 'string' && input.endsWith('/group1/*.yaml')) {
+        return [scenarios[0], scenarios[1]];
+      }
+      if (typeof input === 'string' && input.endsWith('/group2/*.yaml')) {
+        return [scenarios[2]];
       }
       return input;
     });
@@ -218,9 +219,8 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input)) {
-        // First element is direct scenario, second is glob pattern
-        return [directScenario, globScenarios];
+      if (typeof input === 'string' && input.endsWith('/scenarios/*.yaml')) {
+        return globScenarios;
       }
       return input;
     });

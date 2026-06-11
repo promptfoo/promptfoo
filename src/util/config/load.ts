@@ -27,8 +27,10 @@ import {
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
+  type ScenarioConfigValuesRef,
   type TestCase,
   type TestSuite,
+  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -49,11 +51,6 @@ import { validateTestProviderReferences } from '../validateTestProviderReference
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
-
-type ScenarioConfigValuesRef = {
-  $values?: string;
-  $expand?: string;
-};
 
 interface ConfigResolutionErrorOptions {
   cliMessage?: string;
@@ -97,19 +94,31 @@ function getScenarioConfigValuesPath(value: Scenario['config'][number]): string 
   return value.$values ?? value.$expand;
 }
 
-function resolveConfigFileRef(configPath: string, fileRef: string): string {
+function resolveFileRefFromBase(basePath: string, fileRef: string): string {
   if (!fileRef.startsWith('file://')) {
     return fileRef;
   }
 
   const filePath = fileRef.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(path.dirname(configPath), filePath);
+  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   return `file://${resolvedPath}`;
 }
 
-function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario): Scenario {
+function resolveConfigFileRef(configPath: string, fileRef: string): string {
+  return resolveFileRefFromBase(path.dirname(configPath), fileRef);
+}
+
+function getFileRefBasePath(basePath: string, fileRef: string): string {
+  if (!fileRef.startsWith('file://')) {
+    return basePath;
+  }
+
+  const filePath = fileRef.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
+  return path.dirname(resolvedPath);
+}
+
+function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Scenario): Scenario {
   if (!Array.isArray(scenario.config)) {
     return scenario;
   }
@@ -122,14 +131,62 @@ function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario)
       }
 
       if (entry.$values) {
-        return { ...entry, $values: resolveConfigFileRef(configPath, entry.$values) };
+        return { ...entry, $values: resolveFileRefFromBase(basePath, entry.$values) };
       }
-      return { ...entry, $expand: resolveConfigFileRef(configPath, entry.$expand!) };
+      return { ...entry, $expand: resolveFileRefFromBase(basePath, entry.$expand!) };
     }),
   };
 }
 
-async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
+function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario): Scenario {
+  return resolveScenarioConfigValuesRefsFromBase(path.dirname(configPath), scenario);
+}
+
+async function withCliBasePath<T>(basePath: string, fn: () => Promise<T> | T): Promise<T> {
+  const originalBasePath = cliState.basePath;
+  cliState.basePath = basePath;
+  try {
+    return await fn();
+  } finally {
+    cliState.basePath = originalBasePath;
+  }
+}
+
+export async function loadScenarioConfigs(
+  scenarios: TestSuiteConfig['scenarios'] | TestSuite['scenarios'] | undefined,
+  basePath = cliState.basePath || '',
+): Promise<Scenario[] | undefined> {
+  if (!scenarios) {
+    return undefined;
+  }
+
+  const scenarioInputs = Array.isArray(scenarios) ? scenarios : [scenarios];
+  const loadedScenarios: Scenario[] = [];
+  for (const scenario of scenarioInputs) {
+    if (typeof scenario !== 'string') {
+      loadedScenarios.push(resolveScenarioConfigValuesRefsFromBase(basePath, scenario));
+      continue;
+    }
+
+    const resolvedScenarioRef = resolveFileRefFromBase(basePath, scenario);
+    const scenarioBasePath = getFileRefBasePath(basePath, resolvedScenarioRef);
+    const loaded = await withCliBasePath(scenarioBasePath, () =>
+      maybeLoadFromExternalFile(resolvedScenarioRef),
+    );
+    const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
+    loadedScenarios.push(
+      ...(scenarioEntries as Scenario[]).map((entry) =>
+        resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
+      ),
+    );
+  }
+
+  return loadedScenarios;
+}
+
+export async function expandScenarioConfigValues(
+  config: Scenario['config'],
+): Promise<Scenario['config']> {
   const expandedConfig: Scenario['config'] = [];
 
   for (const entry of config) {
@@ -567,6 +624,7 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
+  const configSourcePaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -580,8 +638,12 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       );
     }
     for (const globPath of globPaths) {
+      const configSourcePath = path.isAbsolute(globPath)
+        ? globPath
+        : path.resolve(path.dirname(resolvedPath), globPath);
       const config = await readConfig(globPath);
       configs.push(config);
+      configSourcePaths.push(configSourcePath);
     }
   }
 
@@ -612,7 +674,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
-    const configPath = configPaths[i];
+    const configPath = configSourcePaths[i];
     if (typeof config.tests === 'string') {
       const newTests = await readTests(config.tests, path.dirname(configPath));
       tests.push(...newTests);
@@ -707,7 +769,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(configSourcePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -718,7 +780,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configSourcePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -744,10 +806,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
             return scenarios ? [scenarios] : [];
           }
           return scenarios.map((scenario) => {
+            if (typeof scenario === 'string') {
+              return resolveConfigFileRef(configSourcePaths[idx], scenario);
+            }
             if (!scenario || typeof scenario !== 'object') {
               return scenario;
             }
-            return resolveScenarioConfigValuesRefs(configPaths[idx], scenario);
+            return resolveScenarioConfigValuesRefs(configSourcePaths[idx], scenario);
           });
         })
       : undefined,
@@ -1014,9 +1079,7 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
-    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
-    // Flatten the scenarios array in case glob patterns were used
-    config.scenarios = config.scenarios.flat().map((scenario) =>
+    config.scenarios = (await loadScenarioConfigs(config.scenarios, basePath))?.map((scenario) =>
       typeof scenario === 'object'
         ? {
             ...scenario,

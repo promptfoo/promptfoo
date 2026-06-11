@@ -924,6 +924,25 @@ describe('TestSuiteConfigSchema', () => {
       });
     });
 
+    it('allows scenario config expansion refs in exported config types', () => {
+      const config: TestSuiteConfig = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      };
+
+      expect(
+        typeof config.scenarios?.[0] === 'object' ? config.scenarios[0].config[0] : undefined,
+      ).toEqual({
+        $values: 'file://matrix.yaml',
+      });
+    });
+
     it('rejects scenario config expansion refs without file://', () => {
       const result = TestSuiteConfigSchema.safeParse({
         providers: ['provider1'],

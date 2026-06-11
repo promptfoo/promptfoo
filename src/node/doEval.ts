@@ -35,6 +35,7 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
+  expandScenarioConfigValues,
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
@@ -690,6 +691,9 @@ export async function doEval(
     for (const scenario of testSuite.scenarios || []) {
       if (scenario.tests) {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+      }
+      if (Array.isArray(scenario.config)) {
+        scenario.config = await expandScenarioConfigValues(scenario.config);
       }
     }
 

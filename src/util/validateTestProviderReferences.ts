@@ -44,6 +44,18 @@ function validateTestProviders(
   }
 }
 
+function isScenarioConfigValuesRef(
+  value: unknown,
+): value is { $values?: string; $expand?: string } {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      (typeof (value as { $values?: unknown }).$values === 'string' ||
+        typeof (value as { $expand?: unknown }).$expand === 'string'),
+  );
+}
+
 /**
  * Validate that test case provider references match available providers.
  *
@@ -77,6 +89,9 @@ export function validateTestProviderReferences(
       // Validate scenario config items (partial test cases)
       if (scenario.config) {
         scenario.config.forEach((configItem, j) => {
+          if (isScenarioConfigValuesRef(configItem)) {
+            return;
+          }
           validateTestProviders(
             configItem,
             providers,

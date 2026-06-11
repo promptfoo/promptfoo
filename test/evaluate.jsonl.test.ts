@@ -108,6 +108,35 @@ describe('programmatic JSONL output', () => {
     );
   });
 
+  it('expands scenario config file refs for programmatic evals', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-scenario-matrix-'));
+    const matrixPath = path.join(tmpDir, 'matrix.json');
+    fs.writeFileSync(matrixPath, JSON.stringify([{ vars: { topic: 'billing' } }]));
+    outputPaths.push(matrixPath);
+
+    const provider: ApiProvider = {
+      id: () => 'scenario-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'billing answer',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      scenarios: [
+        {
+          config: [{ $values: `file://${matrixPath}` }],
+          tests: [{}],
+        },
+      ],
+    });
+
+    expect(vi.mocked(provider.callApi).mock.calls[0][0]).toContain('billing');
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('finalizes failed streamed rows together with later timeout rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);

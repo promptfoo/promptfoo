@@ -655,7 +655,10 @@ describe('prompt optimizer', () => {
         ? candidateSuite.defaultTest.prompts
         : undefined,
     ).toEqual(['Seed', 'Seed [optimized 1]']);
-    expect(candidateSuite.scenarios?.[0].config[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect((candidateSuite.scenarios?.[0].config[0] as { prompts?: string[] }).prompts).toEqual([
+      'Seed',
+      'Seed [optimized 1]',
+    ]);
     expect(candidateSuite.scenarios?.[0].tests[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
   });
 

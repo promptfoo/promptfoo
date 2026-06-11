@@ -65,6 +65,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
+  type TestCase,
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
@@ -2155,27 +2156,28 @@ function mergeScenarioTest(
   scenarioIndex: number,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
+  const scenarioData = data as Partial<TestCase>;
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
-    ...data.metadata,
+    ...scenarioData.metadata,
     ...test.metadata,
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
   return {
     ...(defaultTest || {}),
-    ...data,
+    ...scenarioData,
     ...test,
     vars: {
       ...(defaultTest?.vars || {}),
-      ...data.vars,
+      ...scenarioData.vars,
       ...test.vars,
     },
     options: {
       ...(defaultTest?.options || {}),
       ...test.options,
     },
-    assert: [...(data.assert || []), ...(test.assert || [])],
+    assert: [...(scenarioData.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
 }

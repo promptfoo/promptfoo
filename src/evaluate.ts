@@ -11,6 +11,7 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/load';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -25,7 +26,6 @@ import type {
   EnvOverrides,
   EvaluateTestSuite,
   GradingConfig,
-  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
@@ -225,10 +225,18 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
+  const loadedScenarios = await loadScenarioConfigs(testSuiteConfig.scenarios);
+  const scenarios = await Promise.all(
+    (loadedScenarios || []).map(async (scenario) => ({
+      ...scenario,
+      config: await expandScenarioConfigValues(scenario.config),
+    })),
+  );
+
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: testSuiteConfig.scenarios as Scenario[],
+    scenarios,
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
