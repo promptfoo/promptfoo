@@ -15,6 +15,8 @@ import {
   type GenAISpanResult,
   getTraceparent,
   openTurnSpan,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -48,8 +50,8 @@ function appendPromptfooResourceAttrs(
   traceId: string,
   parentSpanId: string,
 ): string {
-  const traceKey = 'promptfoo.trace_id';
-  const parentSpanKey = 'promptfoo.parent_span_id';
+  const traceKey = PROMPTFOO_RESOURCE_ATTR_TRACE_ID;
+  const parentSpanKey = PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID;
   const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
   if (!existing) {
     return incoming;
