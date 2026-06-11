@@ -272,7 +272,7 @@
     "@openai/codex-sdk": "^0.130.0",
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.60.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.61.0",
     "@slack/web-api": "^7.15.2",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.18",
