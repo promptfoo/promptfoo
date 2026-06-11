@@ -202,6 +202,37 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
+  it('should include Cloud target context in discovery requests', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+          },
+          state: {
+            currentQuestionIndex: 0,
+            answers: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ id: 'test', response: { output: 'unused' } });
+
+    await doTargetPurposeDiscovery(target, undefined, false, 'cloud-target-123');
+
+    const request = mockedFetchWithProxy.mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      task: 'target-purpose-discovery',
+      targetId: 'cloud-target-123',
+    });
+  });
+
   it('should stop when the maximum turn count is reached', async () => {
     mockedFetchWithProxy.mockImplementation(() =>
       Promise.resolve(

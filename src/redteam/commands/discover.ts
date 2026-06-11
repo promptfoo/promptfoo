@@ -22,6 +22,8 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getCloudTargetIdFromProviders } from '../remoteGenerationContextFromProviders';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
@@ -37,6 +39,7 @@ const TargetPurposeDiscoveryStateSchema = z.object({
 export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
+  targetId: z.string().optional(),
   version: z.string(),
   email: z.string().optional().nullable(),
 });
@@ -186,12 +189,14 @@ async function buildRemoteErrorFromResponse(response: Response): Promise<Error> 
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
+ * @param targetId - Cloud target database ID used to resolve target-owned task context.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
   showProgress: boolean = true,
+  targetId?: string,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
@@ -238,6 +243,7 @@ export async function doTargetPurposeDiscovery(
                 answers: state.answers,
               },
               task: 'target-purpose-discovery',
+              ...remoteGenerationContextPayload(targetId),
               version: VERSION,
               email: getUserEmail(),
             }),
@@ -376,6 +382,7 @@ export function discoverCommand(
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
+      let cloudTargetId: string | undefined;
       // Fallback to the default config path:
 
       // If user provides a config, read the target from it:
@@ -405,12 +412,14 @@ export function discoverCommand(
         const providers = await loadApiProviders(config.providers);
 
         target = providers[0];
+        cloudTargetId = getCloudTargetIdFromProviders(config.providers);
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+        cloudTargetId = args.target;
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
@@ -420,6 +429,7 @@ export function discoverCommand(
 
         const providers = await loadApiProviders(defaultConfig.providers);
         target = providers[0];
+        cloudTargetId = getCloudTargetIdFromProviders(defaultConfig.providers);
 
         // Alert the user that we're using a config from the current working directory:
         logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
@@ -432,7 +442,12 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(
+          target,
+          undefined,
+          true,
+          cloudTargetId,
+        );
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {

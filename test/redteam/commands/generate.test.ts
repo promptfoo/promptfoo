@@ -60,6 +60,8 @@ const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 function resetCommonMocks() {
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
+  vi.mocked(getCloudDatabaseId).mockReset();
+  vi.mocked(isCloudProvider).mockReset().mockReturnValue(false);
   vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
   vi.mocked(promptForEmailUnverified).mockReset().mockResolvedValue({
     emailNeedsValidation: false,
@@ -4124,8 +4126,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should preserve a linked Cloud target separately from the local provider ID', async () => {
-    vi.mocked(isCloudProvider).mockReturnValueOnce(false).mockReturnValueOnce(true);
-    vi.mocked(getCloudDatabaseId).mockReturnValueOnce('cloud-target-123');
+    vi.mocked(isCloudProvider).mockReturnValue(false);
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {

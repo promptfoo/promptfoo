@@ -10,6 +10,8 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import { remoteGenerationContextPayload } from '../redteam/remoteGenerationContext';
+import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
@@ -203,6 +205,9 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...remoteGenerationContextPayload(
+            getCloudTargetIdFromProviders(cliState.config?.providers),
+          ),
         })),
         assertion,
       };
