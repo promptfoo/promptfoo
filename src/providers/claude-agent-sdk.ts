@@ -16,7 +16,10 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
-import { appendPromptfooResourceAttrs } from '../tracing/resourceAttributes';
+import {
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
+} from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -88,6 +91,34 @@ export interface AssistantErrorEntry {
 
 /** Hard cap for attribute body length on synthesized tool spans. */
 const TOOL_SPAN_BODY_LIMIT = 4096;
+
+/**
+ * Append promptfoo-specific resource-attribute kvs to a W3C-style
+ * `OTEL_RESOURCE_ATTRIBUTES` string, removing trailing whitespace/commas from
+ * the existing value and stripping any previous occurrence of our keys so the
+ * producer can't double-up. Returns the new string. Exported for tests.
+ */
+export function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const incoming = `${PROMPTFOO_RESOURCE_ATTR_TRACE_ID}=${traceId},${PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${PROMPTFOO_RESOURCE_ATTR_TRACE_ID}=`) &&
+        !pair.startsWith(`${PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
 
 function stringifyForSpan(value: unknown): string | undefined {
   if (value === undefined || value === null) {

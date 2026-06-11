@@ -17,7 +17,6 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { appendPromptfooResourceAttrs } from '../../tracing/resourceAttributes';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
@@ -43,6 +42,30 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+
+function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const traceKey = 'promptfoo.trace_id';
+  const parentSpanKey = 'promptfoo.parent_span_id';
+  const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${traceKey}=`) &&
+        !pair.startsWith(`${parentSpanKey}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
 
 /**
  * OpenAI Codex SDK Provider
