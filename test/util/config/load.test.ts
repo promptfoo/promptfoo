@@ -1767,6 +1767,7 @@ describe('resolveConfigs', () => {
 
     vi.mocked(globSync).mockReturnValue(['config.json']);
     vi.mocked(readPrompts).mockResolvedValue([{ raw: prompt, label: prompt, config: {} }]);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) => input);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
       'Scenario config expansion values must use file:// references',
