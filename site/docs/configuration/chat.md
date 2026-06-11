@@ -332,6 +332,12 @@ tests:
 
 This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers questions.
 
+:::note
+
+Provider output is untrusted, so any `file://` or `package:` reference inside a stored value is neutralized rather than loaded when the variable is reused. This prevents a model from being steered into emitting a path like `file:///etc/passwd` that a later test would read. Stored text that is not a file/package reference is preserved unchanged.
+
+:::
+
 ### Manipulating outputs with `transform`
 
 Outputs can be modified before storage using the `transform` property:
