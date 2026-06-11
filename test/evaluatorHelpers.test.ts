@@ -516,10 +516,157 @@ describe('evaluatorHelpers', () => {
         ['payload'],
       );
 
-      expect(vars.context.message).toBe('Payload: {{ env.PROMPTFOO_SKIP_SENTINEL }}');
-      expect(renderedPrompt).toBe('Payload: {{ env.PROMPTFOO_SKIP_SENTINEL }}');
+      // A template referencing a skipped var via a filter must be left entirely raw,
+      // not rendered (the skipped value must never be inlined, at any nesting depth).
+      expect(vars.context.message).toBe('Payload: {{ payload | safe }}');
+      expect(renderedPrompt).toBe('Payload: {{ payload | safe }}');
       expect(renderedPrompt).not.toContain('must-not-render');
       mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: undefined });
+    });
+
+    it('should not inline literal skipped payloads referenced by nested file content (issue #1613)', async () => {
+      // Regression for the skip-boundary bypass: a *literal* (non-template) skipped
+      // payload must not be inlined through nested file content via bare or filter
+      // syntax. The narrow `{{ x }}` regex used to miss filter/attribute/index forms.
+      const cases = [
+        { template: 'Payload: {{ payload }}', payload: 'LITERAL-ATTACK', needle: 'LITERAL-ATTACK' },
+        {
+          template: 'Payload: {{ payload | safe }}',
+          payload: '<script>alert(1)</script>',
+          needle: '<script>',
+        },
+      ];
+      for (const { template, payload, needle } of cases) {
+        const vars: Record<string, any> = {
+          payload,
+          context: { message: 'file:///path/to/message.txt' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
+
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{{ context.message }}'),
+          vars,
+          {},
+          undefined,
+          ['payload'],
+        );
+
+        expect(vars.context.message).toBe(template);
+        expect(renderedPrompt).toBe(template);
+        expect(renderedPrompt).not.toContain(needle);
+        vi.restoreAllMocks();
+      }
+    });
+
+    it('should not inline skipped object payloads via attribute syntax in nested file content (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        payload: { evil: 'INJECTED-OBJECT-PAYLOAD' },
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Payload: {{ payload.evil }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.message }}'),
+        vars,
+        {},
+        undefined,
+        ['payload'],
+      );
+
+      expect(vars.context.message).toBe('Payload: {{ payload.evil }}');
+      expect(renderedPrompt).not.toContain('INJECTED-OBJECT-PAYLOAD');
+    });
+
+    it('should not evaluate skipped-var control tags loaded through nested files (issue #1613)', async () => {
+      // Block-tag (for-loop) injection: a skipped var referenced from a {% for %} tag
+      // inside nested file content must not be rendered.
+      const vars: Record<string, any> = {
+        attack: ['SECRET-A', 'SECRET-B'],
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(
+        '{% for item in attack %}{{ item }}{% endfor %}',
+      );
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.message }}'),
+        vars,
+        {},
+        undefined,
+        ['attack'],
+      );
+
+      expect(renderedPrompt).not.toContain('SECRET-A');
+      expect(renderedPrompt).not.toContain('SECRET-B');
+    });
+
+    it('should not leak skipped payloads referenced by exotic Nunjucks syntax (issue #1613)', async () => {
+      // The skip boundary must catch every way a template can reference a var, not
+      // just the common `{{ x }}` / `{{ x | f }}` / `{{ x.y }}` forms. These syntaxes
+      // are missed by a regex extractor but caught by the AST-based check. Exercises
+      // both the file:// nested path and the form-2 literal nested-string path.
+      const SECRET = 'EXOTIC-LEAK';
+      const exoticTemplates = [
+        'A: {{- payload -}}',
+        'B: {{ (payload) }}',
+        'C: {{ payload if true }}',
+        'D: {{ payload if payload is defined }}',
+        'E: {{ "" ~ payload }}',
+        'F: {{ "x" | default(payload) }}',
+        'G: {{ items[payload] }}',
+        'H: {% set z = payload %}{{ z }}',
+      ];
+
+      for (const template of exoticTemplates) {
+        // file:// nested path: the loaded file content is the exotic template.
+        const fileVars: Record<string, any> = {
+          payload: SECRET,
+          items: { [SECRET]: 'hit' },
+          context: { message: 'file:///path/to/message.txt' },
+        };
+        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
+        const fileRendered = await renderPrompt(
+          toPrompt('{{ context.message }}'),
+          fileVars,
+          {},
+          undefined,
+          ['payload'],
+        );
+        expect(fileRendered, `file path leaked for: ${template}`).not.toContain(SECRET);
+        expect(fileVars.context.message).toBe(template);
+        vi.restoreAllMocks();
+
+        // form-2 path: the exotic template is a plain nested string.
+        const inlineVars: Record<string, any> = {
+          payload: SECRET,
+          items: { [SECRET]: 'hit' },
+          context: { message: template },
+        };
+        const inlineRendered = await renderPrompt(
+          toPrompt('{{ context.message }}'),
+          inlineVars,
+          {},
+          undefined,
+          ['payload'],
+        );
+        expect(inlineRendered, `form-2 path leaked for: ${template}`).not.toContain(SECRET);
+        expect(inlineVars.context.message).toBe(template);
+      }
+    });
+
+    it('should leave nested strings that contain {{ but are not valid templates raw (issue #1613)', async () => {
+      // The form-2 enqueue keys off a substring "{{", so a nested string that merely
+      // contains "{{" (code samples, JSON, prose) must not crash the render.
+      const vars: Record<string, any> = {
+        a: 'AA',
+        snippet: { code: '{{ a b c }}', mixed: 'prefix {{ y z }} suffix' },
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ snippet.code }}'), vars, {});
+
+      expect(vars.snippet.code).toBe('{{ a b c }}');
+      expect(vars.snippet.mixed).toBe('prefix {{ y z }} suffix');
+      expect(renderedPrompt).toBe('{{ a b c }}');
     });
 
     it('should stabilize dependent nested file templates regardless of traversal order (issue #1613)', async () => {
@@ -580,7 +727,9 @@ describe('evaluatorHelpers', () => {
       expect(vars.context.role).toBe('admin');
     });
 
-    it('should not render templates in ordinary nested strings (issue #1613)', async () => {
+    it('should render templates in ordinary nested strings (issue #1613 form 2)', async () => {
+      // Nested strings that reference other (defined, non-skipped) vars render just like
+      // top-level string vars do.
       const vars: Record<string, any> = {
         name: 'Alice',
         context: { message: 'Hello {{ name | upper }}' },
@@ -588,8 +737,42 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
 
-      expect(vars.context.message).toBe('Hello {{ name | upper }}');
-      expect(renderedPrompt).toBe('Hello {{ name | upper }}');
+      expect(vars.context.message).toBe('Hello ALICE');
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
+    it('should resolve a nested {{ var }} mapping to a top-level file-backed var (issue #1613 form 2)', async () => {
+      // The second repro from issue #1613: a top-level var is loaded from a file and
+      // referenced via {{ }} inside a nested object var.
+      const vars: Record<string, any> = {
+        file_content: 'file:///path/to/report.txt',
+        reporting_period: {
+          previous: { period: '2022-12-31', report: '{{ file_content }}' },
+          current: { period: '2023-12-31' },
+        },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('<h1>Sample Report</h1>');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Analyze this report: {{ reporting_period.previous.report }}'),
+        vars,
+        {},
+      );
+
+      expect(vars.reporting_period.previous.report).toBe('<h1>Sample Report</h1>');
+      expect(renderedPrompt).toBe('Analyze this report: <h1>Sample Report</h1>');
+    });
+
+    it('should leave nested templates that reference undefined vars untouched (issue #1613 form 2)', async () => {
+      const vars: Record<string, any> = {
+        context: { message: 'Hello {{ missing }}' },
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(vars.context.message).toBe('Hello {{ missing }}');
+      expect(renderedPrompt).toBe('Hello {{ missing }}');
     });
 
     it('should wrap missing-file errors with the var name and path (issue #1613)', async () => {
@@ -608,6 +791,48 @@ describe('evaluatorHelpers', () => {
       await expect(renderPrompt(toPrompt('{{ data.report }}'), vars, {})).rejects.toThrow(
         /Failed to load nested file reference for var "data".*file\.txt.*ENOENT/,
       );
+    });
+
+    it('should wrap missing-file errors for array-nested refs with the var name (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        docs: ['plain', 'file:///missing/file.txt'],
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockRejectedValueOnce(
+        Object.assign(new Error("ENOENT: no such file or directory, open '/missing/file.txt'"), {
+          code: 'ENOENT',
+        }),
+      );
+
+      await expect(renderPrompt(toPrompt('{{ docs }}'), vars, {})).rejects.toThrow(
+        /Failed to load nested file reference for var "docs".*file\.txt.*ENOENT/,
+      );
+    });
+
+    it('should preserve colons in nested text file paths (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        history: { report: 'file://reports/report:2026.txt' },
+      };
+
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('report body');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ history.report }}'), vars, {});
+
+      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('report:2026.txt'), 'utf8');
+      expect(renderedPrompt).toBe('report body');
+    });
+
+    it('should leave file refs on frozen / non-writable nested objects untouched (issue #1613)', async () => {
+      const frozen = Object.freeze({ report: 'file:///path/to/report.txt' });
+      const vars: Record<string, any> = { context: frozen };
+
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.report }}'), vars, {});
+
+      expect(readFile).not.toHaveBeenCalled();
+      expect(vars.context.report).toBe('file:///path/to/report.txt');
+      expect(renderedPrompt).toBe('file:///path/to/report.txt');
     });
 
     it('should resolve file references consistently through cyclic var values (issue #1613)', async () => {

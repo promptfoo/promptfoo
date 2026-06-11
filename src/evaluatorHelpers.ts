@@ -27,7 +27,11 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  templateReferencesVariable,
+} from './util/templates';
 import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
@@ -114,6 +118,68 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
 }
 
 /**
+ * True if `template` references any variable that is skipped from rendering
+ * (`skipRenderVars`) or was itself resolved from a skipped variable.
+ *
+ * This is the skip boundary for red team injection vars, so it must catch *every*
+ * way a Nunjucks template can reference a symbol — filter (`{{ x | safe }}`),
+ * attribute (`{{ x.y }}`), index (`{{ a[x] }}`), whitespace-control (`{{- x -}}`),
+ * inline conditional (`{{ x if y }}`), operator (`{{ a ~ x }}`), filter argument
+ * (`{{ a | default(x) }}`), block tags, etc. A regex extractor misses several of
+ * these, so we use the AST-backed {@link templateReferencesVariable}, which also
+ * conservatively reports a reference when the template fails to parse.
+ */
+function referencesSkippedVariables(
+  template: string,
+  skipRenderVars: string[] | undefined,
+  varsResolvedFromSkipped: Set<string>,
+): boolean {
+  if (!skipRenderVars?.length && varsResolvedFromSkipped.size === 0) {
+    return false;
+  }
+  const skippedNames = new Set<string>(varsResolvedFromSkipped);
+  for (const name of skipRenderVars ?? []) {
+    skippedNames.add(name);
+  }
+  for (const name of skippedNames) {
+    if (templateReferencesVariable(template, name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Reads the string value of a writable own data property, or undefined if the
+ * property is missing, an accessor (getter/setter), non-writable, or not a string.
+ * Reading via the descriptor avoids invoking getters while walking nested vars.
+ */
+function getWritableStringProp(container: object, key: string): string | undefined {
+  const descriptor = Object.getOwnPropertyDescriptor(container, key);
+  if (
+    descriptor &&
+    'value' in descriptor &&
+    descriptor.writable === true &&
+    typeof descriptor.value === 'string'
+  ) {
+    return descriptor.value;
+  }
+  return undefined;
+}
+
+/**
+ * Writes a string value to a writable own data property, preserving the existing
+ * descriptor flags (enumerable/configurable) and never touching the prototype
+ * chain (e.g. an own `__proto__` data property on a null-prototype object).
+ */
+function setNestedStringValue(container: object, key: string, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(container, key);
+  if (descriptor && 'value' in descriptor && descriptor.writable === true) {
+    Object.defineProperty(container, key, { ...descriptor, value });
+  }
+}
+
+/**
  * Collects metadata about file variables in the vars object.
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
@@ -172,10 +238,15 @@ function isSupportedNestedFileRef(filePath: string): boolean {
   );
 }
 
-type ResolvedNestedFileRef = {
+/**
+ * A nested string slot (`container[key]`) that may contain a Nunjucks template to
+ * render once top-level vars are loaded: either text loaded from a nested
+ * `file://` reference, or a nested string that references other vars such as
+ * `report: "{{ file_content }}"` (issue #1613 form 2).
+ */
+type NestedRenderTarget = {
   container: object;
   key: string;
-  resolvedFromSkipped: boolean;
 };
 
 type NestedFileRefLoadResult =
@@ -254,24 +325,50 @@ function collectNestedContainers(value: object, containers: WeakSet<object>): vo
 }
 
 /**
- * Resolves textual file:// values inside nested plain objects and arrays in place.
- * In-place mutation preserves cyclic graphs, aliases, and container prototypes while
- * matching renderPrompt's existing mutation of top-level file-backed vars.
+ * Loads a nested `file://` leaf in place. Returns true when the slot now holds a
+ * loaded string (a render target), false when the ref was unsupported, the slot
+ * was not writable, or the loaded value was not a string.
+ */
+async function loadNestedFileLeaf(
+  container: object,
+  key: string,
+  descriptor: PropertyDescriptor,
+  basePath: string,
+  varName: string,
+): Promise<boolean> {
+  if (descriptor.writable !== true) {
+    return false;
+  }
+  const result = await loadNestedFileRef(descriptor.value as string, basePath, varName);
+  if (!result.loaded) {
+    return false;
+  }
+  Object.defineProperty(container, key, { ...descriptor, value: result.value });
+  // Loaded text may itself contain templates (e.g. "Hello {{ name }}").
+  return typeof result.value === 'string';
+}
+
+/**
+ * Walks nested plain objects and arrays, resolving textual `file://` values in
+ * place and collecting every nested string slot that may need template rendering.
+ * In-place mutation preserves cyclic graphs, aliases, and container prototypes
+ * while matching renderPrompt's existing mutation of top-level file-backed vars.
  *
  * @param value The root container to walk.
  * @param basePath Base directory used to resolve relative file paths.
  * @param varName Name of the top-level var being resolved (used in error messages).
- * @returns The nested properties populated from textual files.
+ * @param protectedContainers Object graphs (skipRenderVars/_conversation) to skip.
+ * @returns Nested string slots to render after top-level vars are resolved.
  */
 async function resolveNestedFileRefs(
   value: object,
   basePath: string,
   varName: string,
   protectedContainers: WeakSet<object>,
-): Promise<ResolvedNestedFileRef[]> {
+): Promise<NestedRenderTarget[]> {
   const pending: object[] = [value];
   const visited = new WeakSet<object>();
-  const resolvedFileRefs: ResolvedNestedFileRef[] = [];
+  const renderTargets: NestedRenderTarget[] = [];
 
   while (pending.length > 0) {
     const container = pending.pop()!;
@@ -287,110 +384,75 @@ async function resolveNestedFileRefs(
       }
 
       const nestedValue = descriptor.value;
-      if (typeof nestedValue === 'string' && nestedValue.startsWith('file://')) {
-        if (descriptor.writable !== true) {
-          continue;
+      const isString = typeof nestedValue === 'string';
+      if (isString && nestedValue.startsWith('file://')) {
+        if (await loadNestedFileLeaf(container, key, descriptor, basePath, varName)) {
+          renderTargets.push({ container, key });
         }
-
-        const result = await loadNestedFileRef(nestedValue, basePath, varName);
-        if (!result.loaded) {
-          continue;
-        }
-        Object.defineProperty(container, key, {
-          ...descriptor,
-          value: result.value,
-        });
-        if (typeof result.value === 'string') {
-          resolvedFileRefs.push({ container, key, resolvedFromSkipped: false });
-        }
+      } else if (isString && descriptor.writable === true && nestedValue.includes('{{')) {
+        // A nested string that references other vars, e.g. report: "{{ file_content }}"
+        // (issue #1613 form 2). Rendered after vars resolve, with the same skipped-var
+        // protection as file-loaded content.
+        renderTargets.push({ container, key });
       } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
         pending.push(nestedValue);
       }
     }
   }
 
-  return resolvedFileRefs;
-}
-
-function preserveSkippedNestedFileRefVariables(
-  resolvedFileRefs: ResolvedNestedFileRef[],
-  vars: Record<string, VarValue>,
-  skipRenderVars: string[] | undefined,
-  varsResolvedFromSkipped: Set<string>,
-): void {
-  let nestedFileRefKey = '__promptfoo_nested_file_ref__';
-  while (Object.prototype.hasOwnProperty.call(vars, nestedFileRefKey)) {
-    nestedFileRefKey = `_${nestedFileRefKey}`;
-  }
-
-  for (const target of resolvedFileRefs) {
-    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
-    if (
-      !descriptor ||
-      !('value' in descriptor) ||
-      descriptor.writable !== true ||
-      typeof descriptor.value !== 'string'
-    ) {
-      continue;
-    }
-
-    const nestedVars = { ...vars, [nestedFileRefKey]: descriptor.value };
-    const nestedResolvedFromSkipped = new Set(varsResolvedFromSkipped);
-    resolveVariables(nestedVars, skipRenderVars, nestedResolvedFromSkipped);
-    target.resolvedFromSkipped = nestedResolvedFromSkipped.has(nestedFileRefKey);
-    if (target.resolvedFromSkipped) {
-      Object.defineProperty(target.container, target.key, {
-        ...descriptor,
-        value: nestedVars[nestedFileRefKey],
-      });
-    }
-  }
+  return renderTargets;
 }
 
 function renderNestedFileRefTemplates(
-  resolvedFileRefs: ResolvedNestedFileRef[],
+  renderTargets: NestedRenderTarget[],
   vars: Record<string, VarValue>,
   nunjucks: ReturnType<typeof getNunjucksEngine>,
+  skipRenderVars: string[] | undefined,
+  varsResolvedFromSkipped: Set<string>,
 ): void {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return;
   }
 
-  const templates = resolvedFileRefs.flatMap((target) => {
-    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
-    return descriptor &&
-      'value' in descriptor &&
-      descriptor.writable === true &&
-      typeof descriptor.value === 'string'
-      ? [{ target, template: descriptor.value }]
-      : [];
+  const templates = renderTargets.flatMap((target) => {
+    const template = getWritableStringProp(target.container, target.key);
+    return template === undefined ? [] : [{ target, template }];
   });
 
-  // Render each pass from the loaded template, never from prior rendered output.
-  // This lets dependency chains settle without evaluating inserted skipRenderVars payload text.
+  // Render each pass from the original template, never from prior rendered output.
+  // This lets dependency chains settle without re-evaluating already-inserted content.
   for (let iteration = 0; iteration <= templates.length; iteration++) {
     let changed = false;
     for (const { target, template } of templates) {
-      const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
+      const current = getWritableStringProp(target.container, target.key);
       if (
-        !descriptor ||
-        !('value' in descriptor) ||
-        descriptor.writable !== true ||
-        typeof descriptor.value !== 'string' ||
-        target.resolvedFromSkipped ||
-        referencesUndefinedVariables(template, vars)
+        current === undefined ||
+        referencesUndefinedVariables(template, vars) ||
+        // Never render a template that pulls in a skipped (red team injection) var,
+        // at any nesting depth or through any Nunjucks reference syntax.
+        referencesSkippedVariables(template, skipRenderVars, varsResolvedFromSkipped)
       ) {
         continue;
       }
 
-      const rendered = nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), vars);
-      if (rendered === descriptor.value) {
+      // A nested string can contain "{{" without being a valid template (code
+      // samples, JSON, prose). Leave such values raw rather than failing the whole
+      // render, matching how unrendered objects stringify elsewhere.
+      let rendered: string;
+      try {
+        rendered = nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), vars);
+      } catch (error) {
+        logger.debug(
+          `Leaving nested var "${target.key}" raw; it contains "{{" but is not a valid template: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
         continue;
       }
-      Object.defineProperty(target.container, target.key, {
-        ...descriptor,
-        value: rendered,
-      });
+      if (rendered === current) {
+        continue;
+      }
+      setNestedStringValue(target.container, target.key, rendered);
       changed = true;
     }
     if (!changed) {
@@ -494,7 +556,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
-  const resolvedNestedFileRefs: ResolvedNestedFileRef[] = [];
+  const nestedRenderTargets: NestedRenderTarget[] = [];
   const protectedNestedContainers = new WeakSet<object>();
 
   let basePrompt = prompt.raw;
@@ -643,7 +705,7 @@ export async function renderPrompt(
       vars[varName] = javascriptOutput.output;
     } else if (Array.isArray(value) || isPlainObject(value)) {
       const basePath = cliState.basePath || '';
-      resolvedNestedFileRefs.push(
+      nestedRenderTargets.push(
         ...(await resolveNestedFileRefs(value, basePath, varName, protectedNestedContainers)),
       );
     }
@@ -685,13 +747,13 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
-  preserveSkippedNestedFileRefVariables(
-    resolvedNestedFileRefs,
+  renderNestedFileRefTemplates(
+    nestedRenderTargets,
     vars,
+    nunjucks,
     skipRenderVars,
     varsResolvedFromSkipped,
   );
-  renderNestedFileRefTemplates(resolvedNestedFileRefs, vars, nunjucks);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);

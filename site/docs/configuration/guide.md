@@ -188,6 +188,23 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+`file://` references also work inside nested objects and arrays, and nested strings can reference other variables with `{{ }}` (quote them so YAML treats them as strings):
+
+```yaml
+tests:
+  - vars:
+      file_content: file://path/to/report.txt
+      reporting_period:
+        previous:
+          period: '2022-12-31'
+          report: file://path/to/report.txt
+        current:
+          period: '2023-12-31'
+          report: '{{ file_content }}'
+```
+
+Text files are loaded as trimmed strings and YAML files as JSON strings. JavaScript, Python, PDF, and media files are only executed or loaded when referenced by a top-level variable.
+
 Javascript and Python variable files are supported. For example:
 
 ```yaml
