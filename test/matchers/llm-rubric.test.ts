@@ -21,9 +21,13 @@ vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
-vi.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
-}));
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
+  return {
+    ...actual,
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),

@@ -5,6 +5,9 @@ import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
 import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
 
+export { remoteGenerationContextPayload } from './remoteGenerationContext';
+export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
+
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;

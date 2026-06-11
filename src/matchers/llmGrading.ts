@@ -9,9 +9,11 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
-import { remoteGenerationContextPayload } from '../redteam/remoteGenerationContext';
-import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
+import {
+  getCloudTargetIdFromProviders,
+  remoteGenerationContextPayload,
+  shouldGenerateRemote,
+} from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
