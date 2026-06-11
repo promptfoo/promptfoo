@@ -80,11 +80,7 @@ function failConfigResolution(message: string, options?: ConfigResolutionErrorOp
   throw new ConfigResolutionError(message, options);
 }
 
-function getScenarioConfigValuesPath(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
+function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
   const entry = value as ScenarioConfigValuesRef;
   return entry.$values ?? entry.$expand;
 }

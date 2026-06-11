@@ -1643,6 +1643,7 @@ describe('resolveConfigs', () => {
       config: [
         { $values: 'file://matrix.yaml' },
         { $expand: 'file://more-matrix.yaml' },
+        { $values: 'file://single-matrix.yaml' },
         { vars: { testPrompt: 'Inline prompt' } },
       ],
       tests: [{ vars: { intent: 'ask' } }],
@@ -1652,6 +1653,7 @@ describe('resolveConfigs', () => {
       { vars: { testPrompt: 'How can I confirm an order?' } },
     ];
     const moreMatrixValues = [{ vars: { testPrompt: 'Do you have weekend hours?' } }];
+    const singleMatrixValue = { vars: { testPrompt: 'Can I change my delivery time?' } };
 
     const prompt = '{{testPrompt}}';
     vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -1670,6 +1672,9 @@ describe('resolveConfigs', () => {
       if (input === 'file://more-matrix.yaml') {
         return moreMatrixValues;
       }
+      if (input === 'file://single-matrix.yaml') {
+        return singleMatrixValue;
+      }
       return input;
     });
 
@@ -1680,9 +1685,11 @@ describe('resolveConfigs', () => {
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://matrix.yaml');
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://more-matrix.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://single-matrix.yaml');
     expect(testSuite.scenarios?.[0].config).toEqual([
       ...matrixValues,
       ...moreMatrixValues,
+      singleMatrixValue,
       { vars: { testPrompt: 'Inline prompt' } },
     ]);
   });
