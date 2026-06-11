@@ -67,6 +67,17 @@ function appendPromptfooResourceAttrs(
   return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
 }
 
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
+
 /**
  * OpenAI Codex SDK Provider
  *
@@ -815,12 +826,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
-        const [, traceId, parentSpanId] = traceparent.split('-');
-        if (traceId && parentSpanId) {
+        const [, tpTraceId, tpSpanId] = traceparent.split('-');
+        if (tpTraceId && tpSpanId) {
           sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
             sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
-            traceId,
-            parentSpanId,
+            tpTraceId,
+            tpSpanId,
           );
         }
       }
@@ -2114,7 +2125,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent() ?? context?.traceparent;
+    const activeTraceparent = getTraceparent();
+    const currentTraceparent = isValidTraceparent(activeTraceparent)
+      ? activeTraceparent
+      : context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
