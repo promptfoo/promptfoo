@@ -1323,7 +1323,9 @@ export async function synthesize({
   } else {
     logger.info('Extracting system purpose...');
   }
-  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
+  const purpose =
+    purposeOverride ||
+    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1332,7 +1334,7 @@ export async function synthesize({
   }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts);
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
 
   logger.debug(`System purpose: ${purpose}`);
 

@@ -150,18 +150,31 @@ describe('synthesize', () => {
       expect(extractSystemPurpose).not.toHaveBeenCalled();
     });
 
-    it('should extract purpose and entities if not provided', async () => {
+    it('should pass resolved target context when extracting purpose and entities', async () => {
+      const generationContext = {
+        providerTargetIds: ['file://local-provider.ts'],
+        cloudTargetId: 'cloud-target-123',
+      };
       await synthesize({
+        cloudTargetDatabaseId: 'cloud-target-123',
         language: 'english',
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetIds: ['test-provider'],
+        targetIds: ['file://local-provider.ts'],
       });
 
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
+      expect(extractEntities).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Test prompt'],
+        generationContext,
+      );
+      expect(extractSystemPurpose).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Test prompt'],
+        generationContext,
+      );
     });
 
     it('should handle empty prompts array', async () => {
@@ -187,14 +200,15 @@ describe('synthesize', () => {
         targetIds: ['test-provider'],
       });
 
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
+      expect(extractSystemPurpose).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+        expect.any(Object),
+      );
       expect(extractEntities).toHaveBeenCalledWith(
         expect.objectContaining({ id: expect.any(Function) }),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+        expect.any(Object),
       );
     });
   });
