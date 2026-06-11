@@ -904,6 +904,42 @@ describe('TestSuiteConfigSchema', () => {
     });
   });
 
+  describe('scenario config file expansion refs', () => {
+    it('preserves $values refs when parsing suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const scenario = result.success ? result.data.scenarios?.[0] : undefined;
+      expect(typeof scenario === 'object' ? scenario.config[0] : undefined).toEqual({
+        $values: 'file://matrix.yaml',
+      });
+    });
+
+    it('rejects scenario config expansion refs without file://', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('extensions field', () => {
     const minimalConfig = {
       providers: ['provider1'],

@@ -80,9 +80,53 @@ function failConfigResolution(message: string, options?: ConfigResolutionErrorOp
   throw new ConfigResolutionError(message, options);
 }
 
-function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
+function isScenarioConfigValuesRef(value: unknown): value is ScenarioConfigValuesRef {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
   const entry = value as ScenarioConfigValuesRef;
-  return entry.$values ?? entry.$expand;
+  return typeof entry.$values === 'string' || typeof entry.$expand === 'string';
+}
+
+function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
+  if (!isScenarioConfigValuesRef(value)) {
+    return undefined;
+  }
+
+  return value.$values ?? value.$expand;
+}
+
+function resolveConfigFileRef(configPath: string, fileRef: string): string {
+  if (!fileRef.startsWith('file://')) {
+    return fileRef;
+  }
+
+  const filePath = fileRef.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(path.dirname(configPath), filePath);
+  return `file://${resolvedPath}`;
+}
+
+function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario): Scenario {
+  if (!Array.isArray(scenario.config)) {
+    return scenario;
+  }
+
+  return {
+    ...scenario,
+    config: scenario.config.map((entry) => {
+      if (!isScenarioConfigValuesRef(entry)) {
+        return entry;
+      }
+
+      if (entry.$values) {
+        return { ...entry, $values: resolveConfigFileRef(configPath, entry.$values) };
+      }
+      return { ...entry, $expand: resolveConfigFileRef(configPath, entry.$expand!) };
+    }),
+  };
 }
 
 async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
@@ -93,6 +137,9 @@ async function expandScenarioConfigValues(config: Scenario['config']): Promise<S
     if (!valuesPath) {
       expandedConfig.push(entry);
       continue;
+    }
+    if (!valuesPath.startsWith('file://')) {
+      failConfigResolution('Scenario config expansion values must use file:// references');
     }
 
     const loadedValues = await maybeLoadFromExternalFile(valuesPath);
@@ -691,7 +738,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config) => config.scenarios || [])
+      ? configs.flatMap((config, idx) => {
+          const scenarios = config.scenarios;
+          if (!Array.isArray(scenarios)) {
+            return scenarios ? [scenarios] : [];
+          }
+          return scenarios.map((scenario) => {
+            if (!scenario || typeof scenario !== 'object') {
+              return scenario;
+            }
+            return resolveScenarioConfigValuesRefs(configPaths[idx], scenario);
+          });
+        })
       : undefined,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it

@@ -941,19 +941,30 @@ export const TestCasesWithMetadataSchema = z.object({
 
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
+const ScenarioConfigValuesFileRefSchema = z.string().regex(/^file:\/\//, {
+  error: 'Scenario config expansion refs must start with file://',
+});
+
 const ScenarioConfigValuesSchema = z
-  .union([z.object({ $values: z.string() }).strict(), z.object({ $expand: z.string() }).strict()])
-  .transform((value) => value as Partial<TestCase>)
+  .union([
+    z.object({ $values: ScenarioConfigValuesFileRefSchema }).strict(),
+    z.object({ $expand: ScenarioConfigValuesFileRefSchema }).strict(),
+  ])
   .meta({
     id: 'ScenarioConfigValues',
   });
+
+const ScenarioConfigSchema = z.union([
+  ScenarioConfigValuesSchema,
+  TestCaseSchema.partial().strict(),
+]) as z.ZodType<Partial<TestCase>>;
 
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
 
   // Default test case config
-  config: z.array(z.union([TestCaseSchema.partial(), ScenarioConfigValuesSchema])),
+  config: z.array(ScenarioConfigSchema),
 
   // Optional list of automatic checks to run on the LLM output
   tests: z.array(TestCaseSchema),

@@ -58,6 +58,40 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
+  it('validates scenario config file expansion refs without accepting arbitrary keys', () => {
+    const validate = ajv.compile(schema);
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [
+              { $values: 'file://matrix.yaml' },
+              { $expand: 'file://more-matrix.yaml' },
+              { vars: { topic: 'billing' } },
+            ],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [{ $valuez: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   describe('redteam plugin enums', () => {
     it('should not have duplicate entries in plugin enums', () => {
       const findPluginEnums = (

@@ -578,6 +578,51 @@ describe('combineConfigs', () => {
     expect(prompts[3]).toBe('prompt4');
   });
 
+  it('resolves scenario config values refs relative to each config file', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      (
+        path: fs.PathOrFileDescriptor,
+        _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+      ) => {
+        if (typeof path === 'string' && path.endsWith('config1.json')) {
+          return JSON.stringify({
+            description: 'test1',
+            scenarios: [
+              {
+                config: [{ $values: 'file://matrix1.yaml' }],
+                tests: [{}],
+              },
+            ],
+          });
+        } else if (typeof path === 'string' && path.endsWith('config2.json')) {
+          return JSON.stringify({
+            description: 'test2',
+            scenarios: [
+              {
+                config: [{ $expand: 'file://matrix2.yaml' }],
+                tests: [{}],
+              },
+            ],
+          });
+        }
+        return Buffer.from('');
+      },
+    );
+
+    const result = await combineConfigs(['a/config1.json', 'b/config2.json']);
+    expect(result.scenarios).toEqual([
+      {
+        config: [{ $values: `file://${path.resolve('a', 'matrix1.yaml')}` }],
+        tests: [{}],
+      },
+      {
+        config: [{ $expand: `file://${path.resolve('b', 'matrix2.yaml')}` }],
+        tests: [{}],
+      },
+    ]);
+  });
+
   it('de-duplicates prompts when reading configs', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(
@@ -1666,13 +1711,13 @@ describe('resolveConfigs', () => {
     );
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) => {
-      if (input === 'file://matrix.yaml') {
+      if (input === `file://${path.resolve('/mock/cwd', 'matrix.yaml')}`) {
         return matrixValues;
       }
-      if (input === 'file://more-matrix.yaml') {
+      if (input === `file://${path.resolve('/mock/cwd', 'more-matrix.yaml')}`) {
         return moreMatrixValues;
       }
-      if (input === 'file://single-matrix.yaml') {
+      if (input === `file://${path.resolve('/mock/cwd', 'single-matrix.yaml')}`) {
         return singleMatrixValue;
       }
       return input;
@@ -1683,15 +1728,49 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://matrix.yaml');
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://more-matrix.yaml');
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://single-matrix.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('/mock/cwd', 'matrix.yaml')}`,
+    );
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('/mock/cwd', 'more-matrix.yaml')}`,
+    );
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('/mock/cwd', 'single-matrix.yaml')}`,
+    );
     expect(testSuite.scenarios?.[0].config).toEqual([
       ...matrixValues,
       ...moreMatrixValues,
       singleMatrixValue,
       { vars: { testPrompt: 'Inline prompt' } },
     ]);
+  });
+
+  it('should reject scenario config values without file protocol', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const prompt = '{{testPrompt}}';
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [prompt],
+        providers: ['openai:gpt-4'],
+        scenarios: [
+          {
+            description: 'Scenario',
+            config: [{ $values: 'matrix.yaml' }],
+            tests: [{ vars: { intent: 'ask' } }],
+          },
+        ],
+      }),
+    );
+
+    vi.mocked(globSync).mockReturnValue(['config.json']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: prompt, label: prompt, config: {} }]);
+
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
+      'Scenario config expansion values must use file:// references',
+    );
   });
 
   it('should apply configured seeded sampling independently to default config scenarios', async () => {
