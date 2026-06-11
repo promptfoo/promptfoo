@@ -188,6 +188,49 @@ describe('programmatic JSONL output', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('resolves scenario config refs relative to each programmatic scenario glob match', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-scenario-glob-'));
+    const unitDir = path.join(tmpDir, 'scenarios', 'unit');
+    const integrationDir = path.join(tmpDir, 'scenarios', 'integration');
+    fs.mkdirSync(unitDir, { recursive: true });
+    fs.mkdirSync(integrationDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(unitDir, 'scenario.json'),
+      JSON.stringify([{ config: [{ $values: 'file://matrix.json' }], tests: [{}] }]),
+    );
+    fs.writeFileSync(
+      path.join(integrationDir, 'scenario.json'),
+      JSON.stringify([{ config: [{ $values: 'file://matrix.json' }], tests: [{}] }]),
+    );
+    fs.writeFileSync(
+      path.join(unitDir, 'matrix.json'),
+      JSON.stringify([{ vars: { topic: 'unit' } }]),
+    );
+    fs.writeFileSync(
+      path.join(integrationDir, 'matrix.json'),
+      JSON.stringify([{ vars: { topic: 'integration' } }]),
+    );
+
+    const provider: ApiProvider = {
+      id: () => 'scenario-glob-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'scenario answer',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      scenarios: [`file://${path.join(tmpDir, 'scenarios', '**', 'scenario.json')}`],
+    });
+
+    const prompts = vi.mocked(provider.callApi).mock.calls.map(([prompt]) => prompt);
+    expect(prompts).toContain('Topic: unit');
+    expect(prompts).toContain('Topic: integration');
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('finalizes failed streamed rows together with later timeout rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
