@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { pluginMatchesStrategyTargets } from './util';
 
@@ -102,6 +103,9 @@ export async function addLayerTestCases(
               injectVar,
               scanId,
               ...stepObj.config,
+              ...remoteGenerationContextPayload(
+                typeof config?.targetId === 'string' ? config.targetId : undefined,
+              ),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },

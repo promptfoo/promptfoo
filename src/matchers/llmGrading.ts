@@ -9,7 +9,11 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import {
+  getCloudTargetIdFromProviders,
+  remoteGenerationContextPayload,
+  shouldGenerateRemote,
+} from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
@@ -203,6 +207,9 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...remoteGenerationContextPayload(
+            getCloudTargetIdFromProviders(cliState.config?.providers),
+          ),
         })),
         assertion,
       };

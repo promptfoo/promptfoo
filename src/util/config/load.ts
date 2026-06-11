@@ -29,6 +29,7 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
+  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -740,6 +741,7 @@ export async function resolveConfigs(
   config: Partial<UnifiedConfig>;
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
+  selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -1066,5 +1068,6 @@ export async function resolveConfigs(
     testSuite,
     basePath,
     commandLineOptions,
+    selectedProviderConfigs: filteredProviderConfigs,
   };
 }
