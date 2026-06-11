@@ -4,7 +4,7 @@ import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } fro
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
@@ -307,12 +307,7 @@ export interface SynthesizeOptions extends CommonOptions {
   showProgressBar?: boolean;
 }
 
-export interface RedteamGenerationContext {
-  /** Provider IDs used for filtering, retry, and target identity. */
-  providerTargetIds: string[];
-  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
-  cloudTargetId?: string;
-}
+export type RedteamGenerationContext = RemoteGenerationContext;
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 

@@ -15,10 +15,8 @@ describe('remoteGenerationContext', () => {
   });
 
   it('extracts provider target ids and cloud target id from direct cloud providers', () => {
-    const context = getRedteamGenerationContextFromProviders([
-      'openai:gpt-4o-mini',
-      'promptfoo://provider/cloud-target-123',
-    ]);
+    const providerTargetIds = ['openai:gpt-4o-mini', 'promptfoo://provider/cloud-target-123'];
+    const context = getRedteamGenerationContextFromProviders(providerTargetIds, providerTargetIds);
 
     expect(context).toEqual({
       providerTargetIds: ['openai:gpt-4o-mini', 'promptfoo://provider/cloud-target-123'],
@@ -27,14 +25,17 @@ describe('remoteGenerationContext', () => {
   });
 
   it('extracts cloud target id from linked target provider config', () => {
-    const context = getRedteamGenerationContextFromProviders([
-      {
-        id: 'file://local-provider.ts',
-        config: {
-          linkedTargetId: 'promptfoo://provider/linked-target-123',
+    const context = getRedteamGenerationContextFromProviders(
+      [
+        {
+          id: 'file://local-provider.ts',
+          config: {
+            linkedTargetId: 'promptfoo://provider/linked-target-123',
+          },
         },
-      },
-    ]);
+      ],
+      ['file://local-provider.ts'],
+    );
 
     expect(context).toEqual({
       providerTargetIds: ['file://local-provider.ts'],
@@ -43,15 +44,18 @@ describe('remoteGenerationContext', () => {
   });
 
   it('extracts cloud target id from mapped provider config values', () => {
-    const context = getRedteamGenerationContextFromProviders([
-      {
-        'openai:gpt-4o-mini': {
-          config: {
-            linkedTargetId: 'promptfoo://provider/mapped-linked-target',
+    const context = getRedteamGenerationContextFromProviders(
+      [
+        {
+          'openai:gpt-4o-mini': {
+            config: {
+              linkedTargetId: 'promptfoo://provider/mapped-linked-target',
+            },
           },
         },
-      },
-    ]);
+      ],
+      ['openai:gpt-4o-mini'],
+    );
 
     expect(context).toEqual({
       providerTargetIds: ['openai:gpt-4o-mini'],

@@ -8,11 +8,8 @@ import {
   getRemoteGenerationUrlForUnaligned,
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
+  providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
-import {
-  type RedteamGenerationContext,
-  remoteGenerationContextPayload,
-} from '../redteam/remoteGenerationContext';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
@@ -25,6 +22,7 @@ import type {
   Inputs,
   PluginConfig,
   ProviderResponse,
+  RemoteGenerationContext,
   TokenUsage,
 } from '../types/index';
 
@@ -34,7 +32,7 @@ interface PromptfooHarmfulCompletionOptions {
   purpose: string;
   config?: PluginConfig;
   targetId?: string;
-  redteamGenerationContext?: RedteamGenerationContext;
+  redteamGenerationContext?: RemoteGenerationContext;
 }
 
 /**
@@ -47,7 +45,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   purpose: string;
   config?: PluginConfig;
   targetId?: string;
-  redteamGenerationContext?: RedteamGenerationContext;
+  redteamGenerationContext?: RemoteGenerationContext;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
@@ -95,7 +93,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
-      ...remoteGenerationContextPayload(this.redteamGenerationContext ?? this.targetId),
+      ...providerRemoteGenerationContextPayload(this.redteamGenerationContext ?? this.targetId),
     };
 
     try {
@@ -151,7 +149,7 @@ interface PromptfooChatCompletionOptions {
   preferSmallModel: boolean;
   /** Cloud target database ID used to resolve the owning team for remote tasks. */
   targetId?: string;
-  redteamGenerationContext?: RedteamGenerationContext;
+  redteamGenerationContext?: RemoteGenerationContext;
   task:
     | 'crescendo'
     | 'goat'
@@ -217,7 +215,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
-      ...remoteGenerationContextPayload(
+      ...providerRemoteGenerationContextPayload(
         this.options.redteamGenerationContext ?? this.options.targetId,
       ),
       // Pass inputs schema for multi-input mode
@@ -273,7 +271,7 @@ interface PromptfooAgentOptions {
   instructions?: string;
   /** Cloud target database ID used to resolve the owning team for remote tasks. */
   targetId?: string;
-  redteamGenerationContext?: RedteamGenerationContext;
+  redteamGenerationContext?: RemoteGenerationContext;
 }
 
 // Task ID constants for simulated user provider
@@ -342,7 +340,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       history: messages,
       email: getUserEmail(),
       version: VERSION,
-      ...remoteGenerationContextPayload(
+      ...providerRemoteGenerationContextPayload(
         this.options.redteamGenerationContext ?? this.options.targetId,
       ),
     };

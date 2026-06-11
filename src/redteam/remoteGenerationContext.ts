@@ -1,17 +1,9 @@
-import { getCloudDatabaseId, isCloudProvider } from '../util/cloud';
-
 import type { RedteamGenerationContext } from './types';
 
 export type { RedteamGenerationContext } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getCloudTargetIdFromProviderId(providerId: unknown): string | undefined {
-  return typeof providerId === 'string' && isCloudProvider(providerId)
-    ? getCloudDatabaseId(providerId)
-    : undefined;
 }
 
 export function remoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {
@@ -25,6 +17,13 @@ export function remoteGenerationContextPayload(contextOrCloudTargetId?: unknown)
         : undefined;
 
   return cloudTargetId ? { targetId: cloudTargetId } : {};
+}
+
+function getCloudTargetIdFromProviderId(providerId: unknown): string | undefined {
+  const prefix = 'promptfoo://provider/';
+  return typeof providerId === 'string' && providerId.startsWith(prefix)
+    ? providerId.slice(prefix.length)
+    : undefined;
 }
 
 export function getCloudTargetIdFromTargetIds(targetIds: string[]): string | undefined {

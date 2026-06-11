@@ -114,6 +114,21 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
   );
 }
 
+function getProviderTargetIds(providers: Partial<UnifiedConfig>['providers']): string[] {
+  if (!providers) {
+    return [];
+  }
+
+  const providerList = Array.isArray(providers) ? providers : [providers];
+  return providerList.flatMap((provider) => {
+    try {
+      return getProviderIds([provider]);
+    } catch {
+      return [];
+    }
+  });
+}
+
 function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
   return typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.vars
     ? testSuite.defaultTest.vars
@@ -600,10 +615,13 @@ async function doGenerateRedteamInternal(
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
   }
 
-  // Extract target IDs from the config providers (targets get rewritten to providers)
-  // IDs are used for retry strategy to match failed tests by target ID
-  const redteamGenerationContext =
-    getRedteamGenerationContextFromProviders(selectedProviderConfigs);
+  // Resolve IDs at this orchestration boundary so the context helper stays independent of the
+  // provider registry. IDs are used for retry strategy to match failed tests by target ID.
+  const providerTargetIds = getProviderTargetIds(selectedProviderConfigs);
+  const redteamGenerationContext = getRedteamGenerationContextFromProviders(
+    selectedProviderConfigs,
+    providerTargetIds,
+  );
   const targetIds = redteamGenerationContext.providerTargetIds;
   const cloudTargetDatabaseId = redteamGenerationContext.cloudTargetId;
 

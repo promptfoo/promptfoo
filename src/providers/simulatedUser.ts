@@ -7,13 +7,13 @@ import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
-import type { RedteamGenerationContext } from '../redteam/remoteGenerationContext';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  RemoteGenerationContext,
   TokenUsage,
 } from '../types/index';
 
@@ -36,7 +36,7 @@ type AgentProviderOptions = ProviderOptions & {
     initialMessages?: Message[] | string;
     /** Cloud target database ID used to resolve target-owned redteam task context. */
     targetId?: string;
-    redteamGenerationContext?: RedteamGenerationContext;
+    redteamGenerationContext?: RemoteGenerationContext;
   };
 };
 
@@ -48,7 +48,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
-  private readonly redteamGenerationContext?: RedteamGenerationContext;
+  private readonly redteamGenerationContext?: RemoteGenerationContext;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
 
