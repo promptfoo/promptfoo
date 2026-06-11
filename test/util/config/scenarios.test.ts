@@ -49,6 +49,8 @@ vi.mock('../../../src/assertions/validateAssertions');
 
 describe('Scenario loading with glob patterns', () => {
   const originalBasePath = cliState.basePath;
+  const normalizePath = (input: unknown): string | undefined =>
+    typeof input === 'string' ? input.replace(/\\/g, '/') : undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,7 +106,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (typeof input === 'string' && input.endsWith('/scenarios/*.yaml')) {
+      if (normalizePath(input)?.endsWith('/scenarios/*.yaml')) {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
       }
@@ -118,7 +120,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Check if maybeLoadFromExternalFile was called with the expected argument
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
-      expect.stringMatching(/^file:\/\/.*\/scenarios\/\*\.yaml$/),
+      expect.stringMatching(/^file:\/\/.*[\\/]scenarios[\\/]\*\.yaml$/),
     );
 
     // Verify scenarios are flattened correctly
@@ -163,10 +165,11 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (typeof input === 'string' && input.endsWith('/group1/*.yaml')) {
+      const normalizedInput = normalizePath(input);
+      if (normalizedInput?.endsWith('/group1/*.yaml')) {
         return [scenarios[0], scenarios[1]];
       }
-      if (typeof input === 'string' && input.endsWith('/group2/*.yaml')) {
+      if (normalizedInput?.endsWith('/group2/*.yaml')) {
         return [scenarios[2]];
       }
       return input;
@@ -219,7 +222,7 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (typeof input === 'string' && input.endsWith('/scenarios/*.yaml')) {
+      if (normalizePath(input)?.endsWith('/scenarios/*.yaml')) {
         return globScenarios;
       }
       return input;
