@@ -4,10 +4,12 @@ import type { Dispatcher } from 'undici';
 
 type RawHeaderPairs = [string, string][];
 type ResponseCallbackMode = 'started' | 'start' | 'both';
+type OnResponseStartArgs = Parameters<NonNullable<Dispatcher.DispatchHandler['onResponseStart']>>;
+type ParsedHeaders = OnResponseStartArgs[2];
 type TrackedEvent =
   | {
       method: 'onResponseStart';
-      args: [Dispatcher.DispatchController, number, Record<string, string | string[]>, string];
+      args: OnResponseStartArgs;
     }
   | {
       method: 'onResponseStarted';
@@ -16,7 +18,7 @@ type TrackedEvent =
 
 interface DispatchResponseStartOptions {
   rawHeaders?: Buffer[] | null;
-  parsedHeaders: Record<string, string | string[]>;
+  parsedHeaders: ParsedHeaders;
   statusCode?: number;
   dispatchResult?: boolean;
   callbackMode?: ResponseCallbackMode;
