@@ -2325,6 +2325,35 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should prefer a valid active traceparent over the evaluator trace', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const activeTraceId = '0af7651916cd43dd8448eb211c80319c';
+        const activeSpanId = 'b7ad6b7169203331';
+        mockGetTraceparent.mockReturnValue(`00-${activeTraceId}-${activeSpanId}-01`);
+        const evaluatorTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+        const evaluatorSpanId = '00f067aa0ba902b7';
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${evaluatorTraceId}-${evaluatorSpanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${activeTraceId}-${activeSpanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `promptfoo.trace_id=${activeTraceId},` + `promptfoo.parent_span_id=${activeSpanId}`,
+            }),
+          }),
+        );
+      });
+
       it.each([
         '00-00000000000000000000000000000000-b7ad6b7169203331-01',
         '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
