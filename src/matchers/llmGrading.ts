@@ -208,7 +208,9 @@ export async function matchesLlmRubric(
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
           ...remoteGenerationContextPayload(
-            getCloudTargetIdFromProviders(cliState.config?.providers),
+            getCloudTargetIdFromProviders(
+              cliState.selectedProviderConfigs ?? cliState.config?.providers,
+            ),
           ),
         })),
         assertion,

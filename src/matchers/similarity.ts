@@ -185,7 +185,9 @@ export async function matchesSimilarity(
         threshold,
         inverse,
         ...remoteGenerationContextPayload(
-          getCloudTargetIdFromProviders(cliState.config?.providers),
+          getCloudTargetIdFromProviders(
+            cliState.selectedProviderConfigs ?? cliState.config?.providers,
+          ),
         ),
       });
     } catch (error) {

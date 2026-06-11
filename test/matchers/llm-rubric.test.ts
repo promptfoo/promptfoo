@@ -2291,6 +2291,28 @@ Evaluate the response
     });
   });
 
+  it('should prefer filtered providers when building remote grading context', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/excluded-target'],
+      redteam: {},
+    };
+    (cliState as any).selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'selected-target',
+    });
+  });
+
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
     const rubric = 'Does the image match?';
     const llmOutput = 'Generated image';

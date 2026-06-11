@@ -119,6 +119,31 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  it('should prefer filtered providers when building remote similarity context', async () => {
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/excluded-target'],
+      redteam: {},
+    };
+    (cliState as any).selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+    vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'remote',
+    });
+
+    await matchesSimilarity('Expected output', 'Sample output', 0.5);
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'similar',
+      expected: 'Expected output',
+      output: 'Sample output',
+      threshold: 0.5,
+      inverse: false,
+      targetId: 'selected-target',
+    });
+  });
+
   it('should fail when inverted similarity is above the threshold', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
