@@ -1635,6 +1635,58 @@ describe('resolveConfigs', () => {
     expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
   });
 
+  it('should expand scenario config values from external files', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const scenario = {
+      description: 'Scenario',
+      config: [
+        { $values: 'file://matrix.yaml' },
+        { $expand: 'file://more-matrix.yaml' },
+        { vars: { testPrompt: 'Inline prompt' } },
+      ],
+      tests: [{ vars: { intent: 'ask' } }],
+    };
+    const matrixValues = [
+      { vars: { testPrompt: 'What services do you offer?' } },
+      { vars: { testPrompt: 'How can I confirm an order?' } },
+    ];
+    const moreMatrixValues = [{ vars: { testPrompt: 'Do you have weekend hours?' } }];
+
+    const prompt = '{{testPrompt}}';
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [prompt],
+        providers: ['openai:gpt-4'],
+        scenarios: [scenario],
+      }),
+    );
+
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) => {
+      if (input === 'file://matrix.yaml') {
+        return matrixValues;
+      }
+      if (input === 'file://more-matrix.yaml') {
+        return moreMatrixValues;
+      }
+      return input;
+    });
+
+    vi.mocked(globSync).mockReturnValue(['config.json']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: prompt, label: prompt, config: {} }]);
+
+    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://matrix.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://more-matrix.yaml');
+    expect(testSuite.scenarios?.[0].config).toEqual([
+      ...matrixValues,
+      ...moreMatrixValues,
+      { vars: { testPrompt: 'Inline prompt' } },
+    ]);
+  });
+
   it('should apply configured seeded sampling independently to default config scenarios', async () => {
     const createDefaultConfig = (): Partial<UnifiedConfig> => ({
       prompts: ['Hello {{position}}'],

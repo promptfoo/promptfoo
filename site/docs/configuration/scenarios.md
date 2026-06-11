@@ -104,6 +104,21 @@ scenarios:
 
 The external file should follow the same structure as inline scenarios.
 
+You can also keep large `config` matrices in separate files with `$values` or `$expand`:
+
+```yaml
+scenarios:
+  - config:
+      - $values: file://test-matrix.yaml
+      - vars:
+          language: German
+    tests:
+      - vars:
+          input: 'Hello world'
+```
+
+The referenced file should contain one or more `Partial<TestCase>` objects, and the loaded entries are flattened into the `config` array.
+
 ### Using Glob Patterns
 
 You can use glob patterns to load multiple scenario files at once:

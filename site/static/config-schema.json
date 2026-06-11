@@ -26,46 +26,46 @@
           "$ref": "#/definitions/__schema29"
         },
         "defaultTest": {
-          "$ref": "#/definitions/__schema30"
-        },
-        "outputPath": {
           "$ref": "#/definitions/__schema31"
         },
-        "sharing": {
+        "outputPath": {
           "$ref": "#/definitions/__schema32"
         },
-        "nunjucksFilters": {
+        "sharing": {
           "$ref": "#/definitions/__schema33"
         },
-        "env": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema34"
         },
-        "derivedMetrics": {
+        "env": {
           "$ref": "#/definitions/__schema35"
         },
-        "extensions": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema36"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema37"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema38"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema41"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema42"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema45"
         }
       },
       "required": ["prompts"],
@@ -1268,87 +1268,94 @@
               "config": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "description": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema16"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema16"
+                            }
+                          ]
+                        },
+                        "vars": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema17"
+                            }
+                          ]
+                        },
+                        "provider": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema18"
+                            }
+                          ]
+                        },
+                        "providers": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema19"
+                            }
+                          ]
+                        },
+                        "prompts": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema20"
+                            }
+                          ]
+                        },
+                        "providerOutput": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema21"
+                            }
+                          ]
+                        },
+                        "assert": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema22"
+                            }
+                          ]
+                        },
+                        "assertScoringFunction": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema24"
+                            }
+                          ]
+                        },
+                        "options": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema25"
+                            }
+                          ]
+                        },
+                        "threshold": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema26"
+                            }
+                          ]
+                        },
+                        "metadata": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/__schema27"
+                            }
+                          ]
                         }
-                      ]
+                      },
+                      "additionalProperties": false
                     },
-                    "vars": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema17"
-                        }
-                      ]
-                    },
-                    "provider": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema18"
-                        }
-                      ]
-                    },
-                    "providers": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema19"
-                        }
-                      ]
-                    },
-                    "prompts": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema20"
-                        }
-                      ]
-                    },
-                    "providerOutput": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema21"
-                        }
-                      ]
-                    },
-                    "assert": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema22"
-                        }
-                      ]
-                    },
-                    "assertScoringFunction": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema24"
-                        }
-                      ]
-                    },
-                    "options": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema25"
-                        }
-                      ]
-                    },
-                    "threshold": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema26"
-                        }
-                      ]
-                    },
-                    "metadata": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema27"
-                        }
-                      ]
+                    {
+                      "$ref": "#/definitions/ScenarioConfigValues"
                     }
-                  },
-                  "additionalProperties": false
+                  ]
                 }
               },
               "tests": {
@@ -1364,7 +1371,15 @@
         ]
       }
     },
-    "__schema30": {
+    "ScenarioConfigValues": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema30"
+        }
+      ]
+    },
+    "__schema30": {},
+    "__schema31": {
       "anyOf": [
         {
           "type": "string"
@@ -1407,7 +1422,7 @@
         }
       ]
     },
-    "__schema31": {
+    "__schema32": {
       "anyOf": [
         {
           "type": "string"
@@ -1420,7 +1435,7 @@
         }
       ]
     },
-    "__schema32": {
+    "__schema33": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1439,7 +1454,7 @@
         }
       ]
     },
-    "__schema33": {
+    "__schema34": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1448,7 +1463,7 @@
         "type": "string"
       }
     },
-    "__schema34": {
+    "__schema35": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1474,7 +1489,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema36": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1495,7 +1510,7 @@
         "additionalProperties": false
       }
     },
-    "__schema36": {
+    "__schema37": {
       "anyOf": [
         {
           "type": "array",
@@ -1508,14 +1523,14 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema38": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema38": {
+    "__schema39": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3059,10 +3074,10 @@
         }
       }
     },
-    "__schema39": {
+    "__schema40": {
       "type": "boolean"
     },
-    "__schema40": {
+    "__schema41": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3165,7 +3180,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3208,15 +3223,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema43"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema43": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema44": {
       "type": "object",
       "properties": {
         "description": {
@@ -3344,7 +3359,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema43"
             }
           ]
         },
@@ -3418,7 +3433,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema45": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -50,6 +50,11 @@ import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
+type ScenarioConfigValuesRef = {
+  $values?: string;
+  $expand?: string;
+};
+
 interface ConfigResolutionErrorOptions {
   cliMessage?: string;
   logLevel?: ConfigResolutionLogLevel;
@@ -73,6 +78,33 @@ export function logConfigResolutionError(error: ConfigResolutionError, prefix?: 
 
 function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
   throw new ConfigResolutionError(message, options);
+}
+
+function getScenarioConfigValuesPath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entry = value as ScenarioConfigValuesRef;
+  return entry.$values ?? entry.$expand;
+}
+
+async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
+  const expandedConfig: Scenario['config'] = [];
+
+  for (const entry of config) {
+    const valuesPath = getScenarioConfigValuesPath(entry);
+    if (!valuesPath) {
+      expandedConfig.push(entry);
+      continue;
+    }
+
+    const loadedValues = await maybeLoadFromExternalFile(valuesPath);
+    const loadedConfig = Array.isArray(loadedValues) ? loadedValues : [loadedValues];
+    expandedConfig.push(...(loadedConfig as Scenario['config']));
+  }
+
+  return expandedConfig;
 }
 
 function normalizeConfiguredCommandLineOptions(
@@ -952,6 +984,9 @@ export async function resolveConfigs(
           cmdObj.tests ? undefined : basePath,
         );
         scenario.tests = parsedScenarioTests;
+      }
+      if (typeof scenario === 'object' && Array.isArray(scenario.config)) {
+        scenario.config = await expandScenarioConfigValues(scenario.config);
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
