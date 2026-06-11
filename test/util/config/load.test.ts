@@ -27,6 +27,9 @@ import { readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
+const normalizePathForTest = (input: unknown): string | undefined =>
+  typeof input === 'string' ? input.replace(/\\/g, '/') : undefined;
+
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
 }));
@@ -625,7 +628,7 @@ describe('combineConfigs', () => {
 
   it('resolves scenario config values refs against glob-expanded config paths', async () => {
     vi.mocked(globSync).mockImplementation((pathOrGlob) => {
-      if (typeof pathOrGlob === 'string' && pathOrGlob.includes('configs/**/*.json')) {
+      if (normalizePathForTest(pathOrGlob)?.includes('configs/**/*.json')) {
         return [
           path.resolve('/mock/cwd', 'configs/a/config.json'),
           path.resolve('/mock/cwd', 'configs/b/config.json'),
@@ -638,7 +641,8 @@ describe('combineConfigs', () => {
         path: fs.PathOrFileDescriptor,
         _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
       ) => {
-        if (typeof path === 'string' && path.endsWith('configs/a/config.json')) {
+        const normalizedPath = normalizePathForTest(path);
+        if (normalizedPath?.endsWith('configs/a/config.json')) {
           return JSON.stringify({
             scenarios: [
               {
@@ -648,7 +652,7 @@ describe('combineConfigs', () => {
             ],
           });
         }
-        if (typeof path === 'string' && path.endsWith('configs/b/config.json')) {
+        if (normalizedPath?.endsWith('configs/b/config.json')) {
           return JSON.stringify({
             scenarios: [
               {
@@ -1858,7 +1862,7 @@ describe('resolveConfigs', () => {
       }),
     );
     vi.mocked(globSync).mockImplementation((pathOrGlob) => {
-      if (typeof pathOrGlob === 'string' && pathOrGlob.includes('scenarios/**/*.yaml')) {
+      if (normalizePathForTest(pathOrGlob)?.includes('scenarios/**/*.yaml')) {
         return [
           path.resolve('/mock/cwd', 'scenarios/unit/foo.yaml'),
           path.resolve('/mock/cwd', 'scenarios/integration/bar.yaml'),
