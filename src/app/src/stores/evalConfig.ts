@@ -697,10 +697,17 @@ const PROVIDER_OPTION_KEYS = new Set([
 const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
   scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
+// A provider can be supplied as an options-map keyed by the provider id —
+// `{ '<provider-id>': { ...options } }` — where the id key itself may embed
+// credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
+// scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
+// Detect the shape by the presence of a key outside the known option fields.
+// Do NOT additionally require every value to be a record: a malformed entry that
+// pairs a credential-bearing key with a non-record sibling (e.g. `prompts: [...]`)
+// would otherwise skip key scrubbing entirely and persist the secret verbatim,
+// since walkValue never rewrites object keys.
 const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
-  isRecord(value) &&
-  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
-  Object.values(value).every(isRecord);
+  isRecord(value) && Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key));
 
 const omitConfiguredProviderCredentials = (
   provider: unknown,

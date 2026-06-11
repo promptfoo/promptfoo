@@ -1259,6 +1259,39 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('filter-sas-secret');
     });
 
+    it('redacts provider-map identifiers that share an entry with a non-record sibling', () => {
+      // Regression: a provider-options map that pairs a credential-bearing id key
+      // with a non-record sibling (e.g. `prompts: [...]`) previously failed the
+      // `every(isRecord)` map check, fell through to value-only scrubbing, and
+      // persisted the credential URL verbatim in the key. No shape may bypass
+      // redaction.
+      const urlProvider =
+        'https://mixed-user:mixed-password@api.example.com/v1?token=mixed-token-secret&region=us';
+      const scrubbedUrlProvider =
+        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      const providerMap = {
+        [urlProvider]: { config: { region: 'us' } },
+        prompts: ['Hello {{topic}}'],
+      };
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: [providerMap] },
+        tests: [{ providers: [providerMap] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedEntry = {
+        [scrubbedUrlProvider]: { config: { region: 'us' } },
+        prompts: ['Hello {{topic}}'],
+      };
+      expect(persisted.tests[0].providers[0]).toEqual(expectedEntry);
+      expect(persisted.defaultTest.providers[0]).toEqual(expectedEntry);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('mixed-user');
+      expect(persistedJson).not.toContain('mixed-password');
+      expect(persistedJson).not.toContain('mixed-token-secret');
+    });
+
     it('redacts credentials in object-shaped providers within test filters', () => {
       const provider = {
         id: 'http',
