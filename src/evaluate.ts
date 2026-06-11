@@ -11,7 +11,6 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
-import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/load';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -26,6 +25,7 @@ import type {
   EnvOverrides,
   EvaluateTestSuite,
   GradingConfig,
+  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
@@ -80,6 +80,38 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
     ...record,
     provider: sanitizeProvider(record.provider),
   };
+}
+
+function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entry = value as { $values?: unknown; $expand?: unknown };
+  return typeof entry.$values === 'string'
+    ? entry.$values
+    : typeof entry.$expand === 'string'
+      ? entry.$expand
+      : undefined;
+}
+
+async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
+  const expandedConfig: Scenario['config'] = [];
+  for (const entry of config) {
+    const valuesPath = getScenarioConfigValuesPath(entry);
+    if (!valuesPath) {
+      expandedConfig.push(entry);
+      continue;
+    }
+    if (!valuesPath.startsWith('file://')) {
+      throw new Error('Scenario config expansion values must use file:// references');
+    }
+
+    const loadedValues = await maybeLoadFromExternalFile(valuesPath);
+    const loadedConfig = Array.isArray(loadedValues) ? loadedValues : [loadedValues];
+    expandedConfig.push(...(loadedConfig as Scenario['config']));
+  }
+  return expandedConfig;
 }
 
 /**
@@ -225,7 +257,12 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
-  const loadedScenarios = await loadScenarioConfigs(testSuiteConfig.scenarios);
+  const loadedScenarioInput = testSuiteConfig.scenarios
+    ? await maybeLoadFromExternalFile(testSuiteConfig.scenarios)
+    : undefined;
+  const loadedScenarios = Array.isArray(loadedScenarioInput)
+    ? (loadedScenarioInput.flat() as Scenario[])
+    : [];
   const scenarios = await Promise.all(
     (loadedScenarios || []).map(async (scenario) => ({
       ...scenario,
