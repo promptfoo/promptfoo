@@ -226,6 +226,61 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
+const REMOVED_UNSAFE_REFERENCE = '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]';
+
+function sanitizeFileReferenceValue(value: VarValue, visited: WeakMap<object, VarValue>): VarValue {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') || isPackagePath(value) ? REMOVED_UNSAFE_REFERENCE : value;
+  }
+  if (Array.isArray(value)) {
+    const existing = visited.get(value);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const sanitized: VarValue[] = [];
+    visited.set(value, sanitized as unknown as VarValue);
+    for (const item of value) {
+      sanitized.push(sanitizeFileReferenceValue(item as VarValue, visited));
+    }
+    return sanitized as unknown as VarValue;
+  }
+  if (isPlainObject(value)) {
+    const existing = visited.get(value);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const sanitized: Record<string, VarValue> = {};
+    visited.set(value, sanitized);
+    for (const [key, nestedValue] of Object.entries(value)) {
+      sanitized[key] = sanitizeFileReferenceValue(nestedValue as VarValue, visited);
+    }
+    return sanitized;
+  }
+  return value;
+}
+
+/**
+ * Returns a deep copy of runtime register values (captured via `storeOutputAs`,
+ * i.e. provider output) with every `file://` / `package:` string replaced by an
+ * inert sentinel, at the top level and nested inside objects and arrays.
+ *
+ * Provider output is untrusted, so it must never be dereferenced as a file or
+ * package when reused as a var in a later test — otherwise a model could be
+ * steered to emit `file:///etc/passwd` (or a `package:` path) and have it loaded
+ * or executed. Nested `file://` resolution makes this matter at any depth, not
+ * just the top level. Cycle-safe.
+ */
+export function sanitizeFileReferences(
+  registers: Record<string, VarValue>,
+): Record<string, VarValue> {
+  const visited = new WeakMap<object, VarValue>();
+  const sanitized: Record<string, VarValue> = {};
+  for (const [key, value] of Object.entries(registers)) {
+    sanitized[key] = sanitizeFileReferenceValue(value, visited);
+  }
+  return sanitized;
+}
+
 function isSupportedNestedFileRef(filePath: string): boolean {
   const extension = path.extname(filePath).toLowerCase();
   return !(

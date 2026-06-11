@@ -564,6 +564,40 @@ describe('runEval', () => {
     expect(registers).toHaveProperty('myOutput', 'Test output');
   });
 
+  it('should not dereference file:// or package: references from registers populated at runtime', async () => {
+    // A model output captured via storeOutputAs is untrusted; when reused as a var
+    // it must never be loaded as a file/package, at the top level or nested.
+    const registers = {
+      saved: { nested: 'file:///etc/passwd' },
+      topLevel: 'file:///etc/hostname',
+      pkg: 'package:evil:fn',
+    };
+    const captured: string[] = [];
+    const capturingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        captured.push(prompt);
+        return { output: 'ok' };
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: capturingProvider,
+      prompt: { raw: 'A:{{ saved.nested }} B:{{ topLevel }} C:{{ pkg }}', label: 'reg' },
+      test: {},
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(captured[0]).toBe(
+      'A:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED] B:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED] C:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+    );
+    // The original registers object is not mutated.
+    expect(registers.saved.nested).toBe('file:///etc/passwd');
+  });
+
   it('should handle provider errors', async () => {
     const errorProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('error-provider'),

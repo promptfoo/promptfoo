@@ -18,7 +18,12 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  renderPrompt,
+  runExtensionHook,
+  sanitizeFileReferences,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
@@ -1434,7 +1439,12 @@ async function runEvalInternal({
     test,
     vars: state.vars,
   });
-  Object.assign(state.vars, registers);
+  // Registers hold provider output captured via storeOutputAs. That output is
+  // untrusted, so neutralize any file://-or-package: references (at any depth)
+  // before it can be dereferenced as a var in this test.
+  if (registers) {
+    Object.assign(state.vars, sanitizeFileReferences(registers));
+  }
   Object.assign(
     state.vars,
     getEvalRuntimeVars({

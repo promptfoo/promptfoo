@@ -11,6 +11,7 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
+  sanitizeFileReferences,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { transform } from '../src/util/transform';
@@ -2621,6 +2622,54 @@ describe('evaluatorHelpers', () => {
 
       expect(renderedPrompt).toContain(httpUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sanitizeFileReferences', () => {
+    const SENTINEL = '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]';
+
+    it('neutralizes top-level file:// and package: register values', () => {
+      const result = sanitizeFileReferences({
+        a: 'file:///etc/passwd',
+        b: 'package:evil:fn',
+        c: 'plain text',
+        d: 42,
+      });
+      expect(result).toEqual({ a: SENTINEL, b: SENTINEL, c: 'plain text', d: 42 });
+    });
+
+    it('neutralizes file:// nested inside objects and arrays at any depth', () => {
+      const result = sanitizeFileReferences({
+        stored: {
+          report: 'file:///secret.txt',
+          items: ['ok', 'file:///also-secret.txt', { deep: 'package:x:y' }],
+        },
+      }) as any;
+      expect(result.stored.report).toBe(SENTINEL);
+      expect(result.stored.items[0]).toBe('ok');
+      expect(result.stored.items[1]).toBe(SENTINEL);
+      expect(result.stored.items[2].deep).toBe(SENTINEL);
+    });
+
+    it('returns a deep copy without mutating the input', () => {
+      const input = { stored: { report: 'file:///secret.txt' } };
+      const result = sanitizeFileReferences(input) as any;
+      expect(input.stored.report).toBe('file:///secret.txt');
+      expect(result.stored).not.toBe(input.stored);
+    });
+
+    it('is cycle-safe', () => {
+      const cyclic: any = { report: 'file:///secret.txt' };
+      cyclic.self = cyclic;
+      const result = sanitizeFileReferences({ stored: cyclic }) as any;
+      expect(result.stored.report).toBe(SENTINEL);
+      expect(result.stored.self).toBe(result.stored);
+    });
+
+    it('leaves non-plain objects (Date) untouched', () => {
+      const date = new Date(0);
+      const result = sanitizeFileReferences({ when: date }) as any;
+      expect(result.when).toBe(date);
     });
   });
 });
