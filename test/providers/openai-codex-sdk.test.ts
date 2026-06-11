@@ -2284,6 +2284,39 @@ describe('OpenAICodexSDKProvider', () => {
         }
       });
 
+      it('should propagate promptfoo trace resource attributes for deep tracing', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            deep_tracing: true,
+            cli_env: {
+              OTEL_RESOURCE_ATTRIBUTES:
+                'deployment.environment=test,promptfoo.trace_id=stale,promptfoo.parent_span_id=stale',
+            },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${traceId}-${spanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `deployment.environment=test,promptfoo.trace_id=${traceId},` +
+                `promptfoo.parent_span_id=${spanId}`,
+            }),
+          }),
+        );
+      });
+
       it('should handle codex_path_override', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 

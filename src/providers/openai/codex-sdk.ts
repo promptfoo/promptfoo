@@ -17,6 +17,7 @@ import {
   openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { appendPromptfooResourceAttrs } from '../../tracing/resourceAttributes';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
@@ -791,6 +792,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
+        const [, traceId, parentSpanId] = traceparent.split('-');
+        if (traceId && parentSpanId) {
+          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+            traceId,
+            parentSpanId,
+          );
+        }
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
@@ -2082,7 +2091,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent();
+    const currentTraceparent = getTraceparent() ?? context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
