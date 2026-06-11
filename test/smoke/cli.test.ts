@@ -372,7 +372,7 @@ describe('CLI Smoke Tests', () => {
           });
         },
       ],
-    ])('1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
+    ])('1.8 - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
       const { stdout, stderr, exitCode } = await runEntrypointAsync(
         [
           'code-scans',

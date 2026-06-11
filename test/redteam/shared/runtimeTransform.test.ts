@@ -172,7 +172,7 @@ describe('runtimeTransform', () => {
     });
 
     it('should pass target context to per-turn layer strategies', async () => {
-      await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
         targetId: 'cloud-target-123',
       });
 
@@ -180,6 +180,14 @@ describe('runtimeTransform', () => {
         expect.any(Array),
         'input',
         expect.objectContaining({ targetId: 'cloud-target-123' }),
+      );
+
+      const parsedPrompt = JSON.parse(result.prompt);
+      expect(parsedPrompt).toEqual(
+        expect.objectContaining({
+          prompt: 'aGVsbG8=',
+          targetId: 'cloud-target-123',
+        }),
       );
     });
 

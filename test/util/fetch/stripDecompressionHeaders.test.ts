@@ -4,6 +4,29 @@ import type { Dispatcher } from 'undici';
 
 type RawHeaderPairs = [string, string][];
 type ResponseCallbackMode = 'started' | 'start' | 'both';
+type TrackedEvent =
+  | {
+      method: 'onResponseStart';
+      args: [Dispatcher.DispatchController, number, Record<string, string | string[]>, string];
+    }
+  | {
+      method: 'onResponseStarted';
+      args: [];
+    };
+
+interface DispatchResponseStartOptions {
+  rawHeaders?: Buffer[] | null;
+  parsedHeaders: Record<string, string | string[]>;
+  statusCode?: number;
+  dispatchResult?: boolean;
+  callbackMode?: ResponseCallbackMode;
+}
+
+interface DispatchResponseStartResult {
+  controller: Dispatcher.DispatchController & { rawHeaders?: Buffer[] | null };
+  events: TrackedEvent[];
+  dispatched: boolean;
+}
 
 function makeRawHeaders(pairs: RawHeaderPairs): Buffer[] {
   return pairs.flatMap(([name, value]) => [Buffer.from(name), Buffer.from(value)]);
@@ -30,14 +53,8 @@ function dispatchResponseStart({
   statusCode = 200,
   dispatchResult = true,
   callbackMode = 'both',
-}: {
-  rawHeaders?: Buffer[] | null;
-  parsedHeaders: Record<string, string | string[]>;
-  statusCode?: number;
-  dispatchResult?: boolean;
-  callbackMode?: ResponseCallbackMode;
-}) {
-  const events: { method: string; args: unknown[] }[] = [];
+}: DispatchResponseStartOptions): DispatchResponseStartResult {
+  const events: TrackedEvent[] = [];
   const innerHandler: Dispatcher.DispatchHandler = {
     onResponseStart(controller, status, headers, statusMessage) {
       events.push({
