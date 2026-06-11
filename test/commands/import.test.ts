@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,8 @@ import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
-import { evalsToPromptsTable } from '../../src/database/tables';
+import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
+import { evalsTable, evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -34,6 +36,17 @@ vi.mock('../../src/telemetry', () => ({
   },
 }));
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
+  };
+});
+
+const SHARED_CACHE_MEMORY_URL = 'file::memory:?cache=shared';
+
 describe('importCommand', () => {
   let program: Command;
   let tempFilePath: string;
@@ -47,18 +60,18 @@ describe('importCommand', () => {
     process.exitCode = undefined;
 
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     // Delete related tables first
-    db.run('DELETE FROM blob_references');
-    db.run('DELETE FROM blob_assets');
-    db.run('DELETE FROM spans');
-    db.run('DELETE FROM traces');
-    db.run('DELETE FROM eval_results');
-    db.run('DELETE FROM evals_to_datasets');
-    db.run('DELETE FROM evals_to_prompts');
-    db.run('DELETE FROM evals_to_tags');
+    await db.run('DELETE FROM blob_references');
+    await db.run('DELETE FROM blob_assets');
+    await db.run('DELETE FROM spans');
+    await db.run('DELETE FROM traces');
+    await db.run('DELETE FROM eval_results');
+    await db.run('DELETE FROM evals_to_datasets');
+    await db.run('DELETE FROM evals_to_prompts');
+    await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
-    db.run('DELETE FROM evals');
+    await db.run('DELETE FROM evals');
   });
 
   afterEach(() => {
@@ -202,6 +215,7 @@ describe('importCommand', () => {
       // Also verify that eval results were imported
       const results = await EvalResult.findManyByEvalId(importedEval!.id);
       expect(results.length).toBe(4); // Based on sample file having 4 results
+      expect(updateSignalFile).toHaveBeenCalledWith(importedEval!.id);
     });
 
     it('should preserve createdAt timestamp from metadata', async () => {
@@ -344,6 +358,24 @@ describe('importCommand', () => {
       expect(traces[0].traceId).toBe('trace-valid');
     });
 
+    it('should clear result trace linkage when the exported trace is absent', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.results.results[0].traceId = 'trace-missing-from-export';
+      sampleData.results.results[0].evaluationId = 'eval-from-another-machine';
+
+      const filePath = path.join(__dirname, `temp-unlinked-trace-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult().traceId).toBeUndefined();
+      expect(result.toEvaluateResult().evaluationId).toBeUndefined();
+    });
+
     it('should import embedded blob assets before recording result references', async () => {
       const blobDir = createTempDir('promptfoo-import-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
@@ -374,10 +406,15 @@ describe('importCommand', () => {
         expect(imported.data).toEqual(data);
         expect(imported.metadata.mimeType).toBe('image/png');
 
-        const references = (await getDb().all(
-          sql`SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = ${hash}`,
-        )) as Array<{ blob_hash: string; eval_id: string }>;
-        expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
+        const db = await getDb();
+        const references = (await db.all(
+          sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+        )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
+        expect(references).toContainEqual({
+          blob_hash: hash,
+          eval_id: sampleData.evalId,
+          location: 'import',
+        });
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
@@ -465,7 +502,8 @@ describe('importCommand', () => {
         const imported = await getBlobByHash(hash);
         expect(imported.data).toEqual(data);
 
-        const references = (await getDb().all(
+        const db = await getDb();
+        const references = (await db.all(
           sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
         expect(references).toContainEqual({
@@ -658,7 +696,7 @@ describe('importCommand', () => {
           id: evalId,
           createdAt: '2024-01-02T03:04:05.000Z',
           author: 'legacy-author',
-          config: { description: 'legacy import' },
+          config: { description: 'legacy import', redteam: {} },
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
@@ -676,6 +714,13 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      const db = await getDb();
+      const storedEval = await db
+        .select({ isRedteam: evalsTable.isRedteam })
+        .from(evalsTable)
+        .where(sql`${evalsTable.id} = ${evalId}`)
+        .get();
+      expect(storedEval?.isRedteam).toBe(true);
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
@@ -794,12 +839,10 @@ describe('importCommand', () => {
       expect(results).toHaveLength(2);
       expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
       expect(new Set(results.map((result) => result.promptId)).size).toBe(2);
+      const db = await getDb();
+      const promptLinks = await db.select().from(evalsToPromptsTable).all();
       expect(
-        getDb()
-          .select()
-          .from(evalsToPromptsTable)
-          .all()
-          .filter((promptLink) => promptLink.evalId === importedEvals[0].id),
+        promptLinks.filter((promptLink) => promptLink.evalId === importedEvals[0].id),
       ).toHaveLength(2);
 
       const errorResult = results.find(
@@ -1072,6 +1115,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-duplicate-import', name: 'span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-duplicate-import';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-new-id-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1097,6 +1142,47 @@ describe('importCommand', () => {
       expect(duplicateTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-duplicate-import' }),
       ]);
+
+      const [duplicateResult] = await EvalResult.findManyByEvalId(duplicateEval!.id);
+      expect(duplicateResult.toEvaluateResult()).toMatchObject({
+        traceId: duplicateTraces[0].traceId,
+        evaluationId: duplicateEval!.id,
+      });
+    });
+
+    it('keeps the trace id and rewrites evaluationId on a default import (no --new-id)', async () => {
+      // The most common import path: trace ids are preserved (no collision) and the result's
+      // evaluationId is corrected to the imported eval id even if the export carried a stale one.
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-default-import',
+          evaluationId: 'eval-from-original-machine',
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-default-import', name: 'span', startTime: 10 }],
+        },
+      ];
+      sampleData.results.results[0].traceId = 'trace-default-import';
+      sampleData.results.results[0].evaluationId = 'eval-from-original-machine';
+
+      const filePath = path.join(__dirname, `temp-trace-default-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traceStore = new TraceStore();
+      const traces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].traceId).toBe('trace-default-import');
+
+      const [result] = await EvalResult.findManyByEvalId(sampleData.evalId);
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'trace-default-import',
+        evaluationId: sampleData.evalId,
+      });
     });
 
     it('should remap imported trace IDs that already belong to another eval', async () => {
@@ -1110,6 +1196,8 @@ describe('importCommand', () => {
           spans: [{ spanId: 'span-original', name: 'original span', startTime: 10 }],
         },
       ];
+      sampleData.results.results[0].traceId = 'trace-cross-eval-collision';
+      sampleData.results.results[0].evaluationId = sampleData.evalId;
 
       const filePath = path.join(__dirname, `temp-trace-collision-${Date.now()}.json`);
       fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -1143,6 +1231,12 @@ describe('importCommand', () => {
       expect(importedTraces[0].spans).toEqual([
         expect.objectContaining({ spanId: 'span-imported' }),
       ]);
+
+      const [importedResult] = await EvalResult.findManyByEvalId(collidingData.evalId);
+      expect(importedResult.toEvaluateResult()).toMatchObject({
+        traceId: importedTraces[0].traceId,
+        evaluationId: collidingData.evalId,
+      });
     });
 
     it('should replace existing eval with --force flag', async () => {
@@ -1173,6 +1267,7 @@ describe('importCommand', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringMatching(/has been successfully imported/),
       );
+      expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
 
       // Should still have only 1 eval in database (replaced, not duplicated)
       const allEvals = await Eval.getMany(10);
@@ -1212,9 +1307,21 @@ describe('importCommand', () => {
       vi.clearAllMocks();
       process.exitCode = undefined;
 
-      const program2 = new Command();
-      importCommand(program2);
-      await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      const lockHolder = createClient({ url: SHARED_CACHE_MEMORY_URL });
+      const writeTx = await lockHolder.transaction('write');
+      try {
+        await writeTx.execute({
+          sql: 'UPDATE evals SET description = description WHERE id = ?',
+          args: [sampleData.evalId],
+        });
+
+        const program2 = new Command();
+        importCommand(program2);
+        await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+      } finally {
+        await writeTx.rollback().catch(() => undefined);
+        lockHolder.close();
+      }
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Embedded blob hash mismatch'),
@@ -1305,6 +1412,7 @@ describe('importCommand', () => {
         expect(logger.error).toHaveBeenCalledWith(
           expect.stringContaining('was deleted for a --force replacement'),
         );
+        expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([sampleData.evalId]);
         expect(process.exitCode).toBe(1);
         // The original results are gone — the disclosure tells the user why.
         expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);

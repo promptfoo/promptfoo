@@ -21,6 +21,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
@@ -84,7 +85,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +111,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -544,6 +549,18 @@ export type { FetchOptions } from './types';
  * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
  * {@link handleRateLimit} and returns so the caller can `continue` the loop.
  */
+/**
+ * Returns a string form of a {@link RequestInfo} suitable for log output.
+ * Strips basic-auth credentials and known sensitive query parameters (api_key,
+ * token, password, signature, …) via {@link sanitizeUrl} so providers that
+ * embed credentials in the URL (e.g. n8n webhooks, HTTP providers with
+ * `?api_key=…`) do not leak them into retry diagnostics.
+ */
+function urlForLog(url: RequestInfo): string {
+  const raw = typeof url === 'string' ? url : url.url;
+  return sanitizeUrl(raw);
+}
+
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
@@ -559,13 +576,14 @@ async function handleRateLimitedResponse(
   const { body, code } = isHardRateLimit
     ? await peekRateLimitBody(response)
     : { body: undefined, code: undefined };
+  const safeUrl = urlForLog(url);
 
   // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
     logger.debug(
-      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -575,7 +593,7 @@ async function handleRateLimitedResponse(
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
-        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
@@ -585,7 +603,7 @@ async function handleRateLimitedResponse(
   }
 
   logger.debug(
-    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
   await handleRateLimit(response);
 }
@@ -652,7 +670,9 @@ export async function fetchWithRetries(
 
       const errorMessage = formatFetchErrorMessage(error);
 
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      logger.debug(
+        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+      );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);

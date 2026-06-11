@@ -1,0 +1,76 @@
+name: release-please-sha-drift
+
+# Guards against the failure mode fixed in PR #9517: release-please's
+# `last-release-sha` in release-please-config.json is a STATIC pin that floors
+# release-please's GraphQL "fetch merge commits" walk. Nobody advances it
+# automatically, so the scan window grows every release and eventually the
+# GraphQL query times out ("Something went wrong while executing your query"),
+# failing the release-please job.
+#
+# This check measures how far last-release-sha is behind HEAD and fails loudly
+# while there is still plenty of headroom, turning a silent release-breaking
+# timeout into an early, obvious signal. The fix when it fires is a one-line
+# bump of last-release-sha to the OLDEST current package release commit (never
+# newer than any package's last release, or that package's unreleased commits
+# get dropped).
+
+on:
+  schedule:
+    # Mondays 14:00 UTC — proactive, since drift accrues with no config change.
+    - cron: '0 14 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'release-please-config.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-sha-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # Need full history to measure the distance from last-release-sha to HEAD.
+          fetch-depth: 0
+
+      - name: Check last-release-sha drift
+        env:
+          # Fail before the GraphQL scan gets near the size that timed out (~468
+          # commits in the #9517 incident; 144 still scanned fine). 250 leaves
+          # margin to bump the pin without a fire drill.
+          MAX_DRIFT: '250'
+        run: |
+          set -euo pipefail
+
+          sha="$(jq -r '."last-release-sha" // empty' release-please-config.json)"
+          if [[ -z "$sha" ]]; then
+            echo "::notice::no last-release-sha configured in release-please-config.json; nothing to check"
+            exit 0
+          fi
+
+          if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+            echo "::error file=release-please-config.json::last-release-sha ${sha} is not a reachable commit"
+            exit 1
+          fi
+
+          behind="$(git rev-list --count "${sha}..HEAD")"
+          echo "last-release-sha ${sha} is ${behind} commits behind HEAD (threshold ${MAX_DRIFT})"
+
+          if (( behind > MAX_DRIFT )); then
+            echo "::error file=release-please-config.json::release-please last-release-sha is ${behind} commits behind HEAD (> ${MAX_DRIFT}). The release-please merge-commit scan will eventually time out (see PR #9517). Advance last-release-sha to the OLDEST current package release commit — never newer than any package's last release, or that package loses its unreleased commits."
+            exit 1
+          fi
+
+          echo "::notice::release-please last-release-sha drift OK (${behind} <= ${MAX_DRIFT})"

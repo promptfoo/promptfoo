@@ -128,6 +128,11 @@ jobs:
         run: npx -y npm@11.11.0 ci
 
       - name: Test
+        # Treat a post-run forks-worker crash (all tests already passed, then the
+        # worker dies on teardown -> "Worker exited unexpectedly") as non-fatal in
+        # CI. Real test/assertion failures still fail; see vitest.config.ts.
+        env:
+          PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
 
       - name: Check Backend Coverage Ratchets
@@ -136,14 +141,18 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
           flags: backend
           name: backend-coverage
-          fail_ci_if_error: true
+          # Codecov upload is informational (coverage is gated in-repo, not by
+          # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
+          fail_ci_if_error: false
           use_oidc: true
-          version: v11.2.7
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   build:
     needs: ci-config
@@ -202,6 +211,12 @@ jobs:
             fi
             echo "PostHog key replacement verified successfully"
           fi
+
+      - name: Test Package Artifact
+        if: matrix.node == '20.20' || matrix.node == '26.x'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact
 
   style-check:
     name: Style Check
@@ -284,6 +299,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: Use Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.13'
+
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
         run: npm install -g npm@latest
@@ -291,8 +311,13 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Generate JSON Schema
-        run: npm run jsonSchema:generate
+      - name: Install ModelAudit schema dependencies
+        run: python3 -m pip install --disable-pip-version-check --no-deps -r scripts/modelaudit_schema_requirements.txt
+
+      - name: Generate JSON Schemas
+        run: |
+          npm run jsonSchema:generate
+          npm run modelAuditSchema:generate
 
       - name: Check for changes
         run: |
@@ -428,15 +453,25 @@ jobs:
         working-directory: site
         run: npm run test:coverage
 
+      # Site has no coverage ratchet, so the Codecov upload is the only consumer of
+      # this report. Since that upload is now non-blocking, verify the artifact was
+      # produced here — otherwise a missing/misnamed report would fail silently.
+      - name: Verify site coverage report exists
+        run: test -s ./site/coverage/coverage-final.json
+
       - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./site/coverage/coverage-final.json
           flags: site
           name: site-coverage
-          fail_ci_if_error: true
+          # Codecov upload is informational (coverage is gated in-repo, not by
+          # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
+          fail_ci_if_error: false
           use_oidc: true
-          version: v11.2.7
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   webui:
     name: webui tests
@@ -475,14 +510,18 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
           name: frontend-coverage
-          fail_ci_if_error: true
+          # Codecov upload is informational (coverage is gated in-repo, not by
+          # Codecov); keep it non-blocking so Codecov infra outages can't fail main.
+          fail_ci_if_error: false
           use_oidc: true
-          version: v11.2.7
+          # Pin the CLI version too: the action SHA pins the wrapper, but the CLI
+          # binary it downloads is otherwise unpinned (action default is latest).
+          version: v11.2.8
 
   integration-tests:
     name: Run Integration Tests

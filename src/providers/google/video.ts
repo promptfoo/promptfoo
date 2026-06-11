@@ -680,16 +680,18 @@ export class GoogleVideoProvider implements ApiProvider {
   private async downloadVideoToBlob(
     videoUri: string,
     config: GoogleVideoOptions,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.downloadVertexVideoToBlob(videoUri);
+      return this.downloadVertexVideoToBlob(videoUri, context);
     }
 
-    return this.downloadAiStudioVideoToBlob(videoUri, config);
+    return this.downloadAiStudioVideoToBlob(videoUri, config, context);
   }
 
   private async downloadVertexVideoToBlob(
     videoUri: string,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const client = await this.getClientWithCredentials();
@@ -705,8 +707,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
         kind: 'video',
         location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
 
       logger.debug(`[Google Video] Stored video to blob storage: ${ref.uri}`);
@@ -722,6 +727,7 @@ export class GoogleVideoProvider implements ApiProvider {
   private async downloadAiStudioVideoToBlob(
     videoUri: string,
     config: GoogleVideoOptions,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const headers = await this.getAiStudioHeaders(config);
@@ -742,8 +748,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
       const buffer = Buffer.from(await response.arrayBuffer());
       const { ref } = await storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
         kind: 'video',
         location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
 
       logger.debug(`[Google Video] Stored video to blob storage: ${ref.uri}`);
@@ -761,14 +770,18 @@ export class GoogleVideoProvider implements ApiProvider {
    */
   private async storeBase64VideoToBlob(
     base64Data: string,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       const buffer = Buffer.from(base64Data, 'base64');
 
       // Store to blob storage
       const { ref, deduplicated } = await storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
         kind: 'video',
         location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
 
       logger.debug(
@@ -909,7 +922,7 @@ export class GoogleVideoProvider implements ApiProvider {
     const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
     if (base64Video) {
       logger.debug(`[Google Video] Storing base64 encoded video to blob storage...`);
-      const { blobRef: ref, error } = await this.storeBase64VideoToBlob(base64Video);
+      const { blobRef: ref, error } = await this.storeBase64VideoToBlob(base64Video, context);
       if (error) {
         return { error };
       }
@@ -926,6 +939,7 @@ export class GoogleVideoProvider implements ApiProvider {
       const { blobRef: ref, error: downloadError } = await this.downloadVideoToBlob(
         videoUri,
         effectiveConfig,
+        context,
       );
       if (downloadError) {
         return { error: downloadError };
