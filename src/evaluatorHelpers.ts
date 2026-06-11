@@ -318,6 +318,12 @@ async function loadNestedFileRef(
 ): Promise<NestedFileRefLoadResult> {
   const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
   if (!isSupportedNestedFileRef(filePath)) {
+    // Unlike top-level vars, JavaScript/Python/PDF/media references are intentionally
+    // not loaded or executed when nested (they require execution or binary handling).
+    // Leave the reference as a literal string and tell anyone debugging why.
+    logger.debug(
+      `Leaving nested file reference for var "${varName}" as a literal string: ${value}. Only text and YAML files are resolved when nested; JS/Python/PDF/media must be referenced by a top-level variable.`,
+    );
     return { loaded: false };
   }
 
