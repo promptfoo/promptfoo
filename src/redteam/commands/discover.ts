@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import path from 'path';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -10,7 +11,7 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
-import { loadApiProvider, loadApiProviders } from '../../providers/index';
+import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
@@ -92,6 +93,8 @@ export type TargetPurposeDiscoveryResult = z.infer<typeof TargetPurposeDiscovery
 
 type Args = z.infer<typeof ArgsSchema>;
 
+type DiscoveryProviderConfig = NonNullable<UnifiedConfig['providers']>;
+
 // ========================================================
 // Constants
 // ========================================================
@@ -104,6 +107,27 @@ const COMMAND = 'discover';
 // ========================================================
 // Utils
 // ========================================================
+
+/**
+ * Expands provider file references and derives context from the first provider that discovery uses.
+ */
+export function resolveDiscoveryProviderContext(
+  providers: DiscoveryProviderConfig,
+  basePath?: string,
+): {
+  providers: DiscoveryProviderConfig;
+  cloudTargetId?: string;
+} {
+  const resolvedProviders = resolveProviderConfigs(providers, { basePath });
+  const selectedProvider = Array.isArray(resolvedProviders)
+    ? resolvedProviders[0]
+    : resolvedProviders;
+
+  return {
+    providers: resolvedProviders,
+    cloudTargetId: getCloudTargetIdFromProviders(selectedProvider),
+  };
+}
 
 // Helper function to check if a string value should be considered null
 const isNullLike = (value: string | null | undefined): boolean => {
@@ -409,10 +433,12 @@ export function discoverCommand(
           throw new Error('Config must contain a target');
         }
 
-        const providers = await loadApiProviders(config.providers);
+        const basePath = path.dirname(path.resolve(args.config));
+        const resolved = resolveDiscoveryProviderContext(config.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
 
         target = providers[0];
-        cloudTargetId = getCloudTargetIdFromProviders(config.providers);
+        cloudTargetId = resolved.cloudTargetId;
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
@@ -427,9 +453,13 @@ export function discoverCommand(
           throw new Error('Config must contain a target or provider');
         }
 
-        const providers = await loadApiProviders(defaultConfig.providers);
+        const basePath = defaultConfigPath
+          ? path.dirname(path.resolve(defaultConfigPath))
+          : undefined;
+        const resolved = resolveDiscoveryProviderContext(defaultConfig.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
         target = providers[0];
-        cloudTargetId = getCloudTargetIdFromProviders(defaultConfig.providers);
+        cloudTargetId = resolved.cloudTargetId;
 
         // Alert the user that we're using a config from the current working directory:
         logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);

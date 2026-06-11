@@ -1,8 +1,13 @@
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
+  resolveDiscoveryProviderContext,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
@@ -37,6 +42,53 @@ describe('ArgsSchema', () => {
     const { success, error } = ArgsSchema.safeParse(args);
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
+  });
+});
+
+describe('resolveDiscoveryProviderContext', () => {
+  it('derives target context from a Cloud provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(providerPath, 'id: promptfoo://provider/cloud-target-123\n');
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('cloud-target-123');
+      expect(result.providers).toEqual([{ id: 'promptfoo://provider/cloud-target-123' }]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('derives linked target context from a local provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(
+        providerPath,
+        [
+          'id: openai:gpt-4.1-mini',
+          'config:',
+          '  linkedTargetId: promptfoo://provider/linked-target-123',
+          '',
+        ].join('\n'),
+      );
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('linked-target-123');
+      expect(result.providers).toEqual([
+        {
+          id: 'openai:gpt-4.1-mini',
+          config: { linkedTargetId: 'promptfoo://provider/linked-target-123' },
+        },
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
