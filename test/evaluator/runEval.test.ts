@@ -61,6 +61,43 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  // A value stored via `options.storeOutputAs` is a prior test's model output (runtime data),
+  // so it must be passed through to the next test verbatim, not re-evaluated as a Nunjucks
+  // template. Otherwise model output that happens to contain `{{ ... }}` sequences gets
+  // double-processed (mangled, or thrown under throwOnUndefined) instead of reused as-is.
+  it('passes storeOutputAs register values through as data without re-rendering them', async () => {
+    // If a register value were re-rendered as a template, `{{7*7}}` would collapse to "49".
+    // As data it must pass through literally.
+    const storedOutput = `answer is {{7*7}} and {{ unresolved_ref }}`;
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      // The register var is interpolated into the prompt; its contents must survive verbatim.
+      prompt: {
+        raw: 'Previous answer: {{prior_output}}',
+        label: 'test-label',
+      },
+      test: {},
+      conversations: {},
+      // Simulates a value placed into registers by an earlier test's options.storeOutputAs.
+      registers: { prior_output: storedOutput },
+    });
+
+    expect(results[0].success).toBe(true);
+    // The provider receives the stored output verbatim, not a re-evaluated version.
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      `Previous answer: ${storedOutput}`,
+      expect.anything(),
+      undefined,
+    );
+    const renderedToProvider = vi.mocked(mockProvider.callApi).mock.calls[0]![0] as string;
+    // Literal passthrough: the stored output's template-like syntax is preserved as data.
+    expect(renderedToProvider).toContain('{{7*7}}');
+    expect(renderedToProvider).toContain('{{ unresolved_ref }}');
+    // Not double-processed: the arithmetic did not collapse to "49".
+    expect(renderedToProvider).not.toContain('answer is 49');
+  });
+
   it('should expose eval runtime vars to prompt and provider rendering', async () => {
     await runEval({
       ...defaultOptions,

@@ -782,6 +782,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -790,13 +791,23 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+  const redteamSkipVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+    : [];
+  // Register-sourced vars (from `options.storeOutputAs`) hold a prior test's model output, which is
+  // runtime data, not a template. Re-rendering it through Nunjucks double-processes that output:
+  // any `{{ ... }}`/`{% ... %}`-like sequences a model legitimately emits get mangled, and
+  // `throwOnUndefined` makes such outputs throw instead of being reused verbatim. Treat stored
+  // output as data by skipping template rendering for register keys, merged with (not clobbering)
+  // the redteam inject-var skip behavior.
+  const registerSkipVars = registers ? Object.keys(registers) : [];
+  const combinedSkipVars = [...redteamSkipVars, ...registerSkipVars];
+  const skipRenderVars = combinedSkipVars.length > 0 ? combinedSkipVars : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
@@ -1455,6 +1466,7 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,
