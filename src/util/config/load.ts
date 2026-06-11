@@ -108,14 +108,8 @@ function resolveConfigFileRef(configPath: string, fileRef: string): string {
   return resolveFileRefFromBase(path.dirname(configPath), fileRef);
 }
 
-function getFileRefBasePath(basePath: string, fileRef: string): string {
-  if (!fileRef.startsWith('file://')) {
-    return basePath;
-  }
-
-  const filePath = fileRef.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
-  return path.dirname(resolvedPath);
+function hasGlobPattern(filePath: string): boolean {
+  return /[*?[\]{}]/.test(filePath);
 }
 
 function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Scenario): Scenario {
@@ -136,6 +130,22 @@ function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Sce
       return { ...entry, $expand: resolveFileRefFromBase(basePath, entry.$expand!) };
     }),
   };
+}
+
+function getScenarioFilePaths(basePath: string, fileRef: string): string[] {
+  const resolvedRef = resolveFileRefFromBase(basePath, fileRef);
+  const filePath = resolvedRef.slice('file://'.length);
+  if (!hasGlobPattern(filePath)) {
+    return [filePath];
+  }
+
+  const matchedFiles = globSync(filePath, {
+    windowsPathsNoEscape: true,
+  });
+  if (matchedFiles.length === 0) {
+    throw new Error(`No files found matching pattern: ${filePath}`);
+  }
+  return matchedFiles;
 }
 
 function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario): Scenario {
@@ -168,17 +178,18 @@ export async function loadScenarioConfigs(
       continue;
     }
 
-    const resolvedScenarioRef = resolveFileRefFromBase(basePath, scenario);
-    const scenarioBasePath = getFileRefBasePath(basePath, resolvedScenarioRef);
-    const loaded = await withCliBasePath(scenarioBasePath, () =>
-      maybeLoadFromExternalFile(resolvedScenarioRef),
-    );
-    const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
-    loadedScenarios.push(
-      ...(scenarioEntries as Scenario[]).map((entry) =>
-        resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
-      ),
-    );
+    for (const scenarioFilePath of getScenarioFilePaths(basePath, scenario)) {
+      const scenarioBasePath = path.dirname(scenarioFilePath);
+      const loaded = await withCliBasePath(scenarioBasePath, () =>
+        maybeLoadFromExternalFile(`file://${scenarioFilePath}`),
+      );
+      const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
+      loadedScenarios.push(
+        ...(scenarioEntries as Scenario[]).map((entry) =>
+          resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
+        ),
+      );
+    }
   }
 
   return loadedScenarios;

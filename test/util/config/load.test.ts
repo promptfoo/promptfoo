@@ -1842,6 +1842,63 @@ describe('resolveConfigs', () => {
     expect(testSuite.scenarios?.[0].config).toEqual(matrixValues);
   });
 
+  it('should resolve scenario config values relative to each matched scenario file', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const defaultConfig = {};
+    const prompt = '{{testPrompt}}';
+    const unitMatrixValues = [{ vars: { testPrompt: 'Unit prompt' } }];
+    const integrationMatrixValues = [{ vars: { testPrompt: 'Integration prompt' } }];
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: [prompt],
+        providers: ['openai:gpt-4'],
+        scenarios: ['file://scenarios/**/*.yaml'],
+      }),
+    );
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      if (typeof pathOrGlob === 'string' && pathOrGlob.includes('scenarios/**/*.yaml')) {
+        return [
+          path.resolve('/mock/cwd', 'scenarios/unit/foo.yaml'),
+          path.resolve('/mock/cwd', 'scenarios/integration/bar.yaml'),
+        ];
+      }
+      return ['config.json'];
+    });
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) => {
+      if (input === `file://${path.resolve('/mock/cwd', 'scenarios/unit/foo.yaml')}`) {
+        return [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ];
+      }
+      if (input === `file://${path.resolve('/mock/cwd', 'scenarios/integration/bar.yaml')}`) {
+        return [
+          {
+            config: [{ $values: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ];
+      }
+      if (input === `file://${path.resolve('/mock/cwd', 'scenarios/unit/matrix.yaml')}`) {
+        return unitMatrixValues;
+      }
+      if (input === `file://${path.resolve('/mock/cwd', 'scenarios/integration/matrix.yaml')}`) {
+        return integrationMatrixValues;
+      }
+      return input;
+    });
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: prompt, label: prompt, config: {} }]);
+
+    const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+    expect(testSuite.scenarios?.[0].config).toEqual(unitMatrixValues);
+    expect(testSuite.scenarios?.[1].config).toEqual(integrationMatrixValues);
+  });
+
   it('should reject scenario config values without file protocol', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};

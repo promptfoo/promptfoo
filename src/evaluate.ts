@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -95,6 +97,42 @@ function getScenarioConfigValuesPath(value: Scenario['config'][number]): string 
       : undefined;
 }
 
+function resolveFileRefFromBase(basePath: string, fileRef: string): string {
+  if (!fileRef.startsWith('file://')) {
+    return fileRef;
+  }
+
+  const filePath = fileRef.slice('file://'.length);
+  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
+  return `file://${resolvedPath}`;
+}
+
+function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Scenario): Scenario {
+  if (!Array.isArray(scenario.config)) {
+    return scenario;
+  }
+
+  return {
+    ...scenario,
+    config: scenario.config.map((entry) => {
+      const valuesPath = getScenarioConfigValuesPath(entry);
+      if (!valuesPath) {
+        return entry;
+      }
+      if ((entry as { $values?: string }).$values) {
+        return {
+          ...entry,
+          $values: resolveFileRefFromBase(basePath, (entry as { $values: string }).$values),
+        };
+      }
+      return {
+        ...entry,
+        $expand: resolveFileRefFromBase(basePath, (entry as { $expand: string }).$expand),
+      };
+    }),
+  };
+}
+
 async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
   const expandedConfig: Scenario['config'] = [];
   for (const entry of config) {
@@ -112,6 +150,42 @@ async function expandScenarioConfigValues(config: Scenario['config']): Promise<S
     expandedConfig.push(...(loadedConfig as Scenario['config']));
   }
   return expandedConfig;
+}
+
+async function loadRuntimeScenarios(
+  scenarios: Omit<EvaluateTestSuite, 'author'>['scenarios'],
+): Promise<Scenario[] | undefined> {
+  if (!scenarios) {
+    return undefined;
+  }
+
+  const scenarioInputs = Array.isArray(scenarios) ? scenarios : [scenarios];
+  const loadedScenarios: Scenario[] = [];
+  for (const scenario of scenarioInputs) {
+    if (typeof scenario !== 'string') {
+      loadedScenarios.push(scenario);
+      continue;
+    }
+
+    const scenarioRef = resolveFileRefFromBase(cliState.basePath || '', scenario);
+    const scenarioPath = scenarioRef.slice('file://'.length);
+    const scenarioBasePath = path.dirname(scenarioPath);
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = scenarioBasePath;
+    try {
+      const loaded = await maybeLoadFromExternalFile(scenarioRef);
+      const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
+      loadedScenarios.push(
+        ...(scenarioEntries as Scenario[]).map((entry) =>
+          resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
+        ),
+      );
+    } finally {
+      cliState.basePath = originalBasePath;
+    }
+  }
+
+  return loadedScenarios;
 }
 
 /**
@@ -257,23 +331,20 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
-  const loadedScenarioInput = testSuiteConfig.scenarios
-    ? await maybeLoadFromExternalFile(testSuiteConfig.scenarios)
+  const loadedScenarios = await loadRuntimeScenarios(testSuiteConfig.scenarios);
+  const scenarios = loadedScenarios
+    ? await Promise.all(
+        loadedScenarios.map(async (scenario) => ({
+          ...scenario,
+          config: await expandScenarioConfigValues(scenario.config),
+        })),
+      )
     : undefined;
-  const loadedScenarios = Array.isArray(loadedScenarioInput)
-    ? (loadedScenarioInput.flat() as Scenario[])
-    : [];
-  const scenarios = await Promise.all(
-    (loadedScenarios || []).map(async (scenario) => ({
-      ...scenario,
-      config: await expandScenarioConfigValues(scenario.config),
-    })),
-  );
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios,
+    scenarios: scenarios as TestSuite['scenarios'],
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),

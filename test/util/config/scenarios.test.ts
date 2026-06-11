@@ -101,12 +101,20 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    // Mock glob to return config file
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    // Mock glob to return config file and matched scenario file
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      if (
+        typeof pathOrGlob === 'string' &&
+        normalizePath(pathOrGlob)?.endsWith('/scenarios/*.yaml')
+      ) {
+        return ['/test/path/scenarios/group.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (normalizePath(input)?.endsWith('/scenarios/*.yaml')) {
+      if (normalizePath(input)?.endsWith('/scenarios/group.yaml')) {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
       }
@@ -120,7 +128,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Check if maybeLoadFromExternalFile was called with the expected argument
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
-      expect.stringMatching(/^file:\/\/.*[\\/]scenarios[\\/]\*\.yaml$/),
+      expect.stringMatching(/^file:\/\/.*[\\/]scenarios[\\/]group\.yaml$/),
     );
 
     // Verify scenarios are flattened correctly
@@ -162,14 +170,26 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      const normalizedPath = normalizePath(pathOrGlob);
+      if (normalizedPath?.endsWith('/group1/*.yaml')) {
+        return ['/test/path/group1/a.yaml', '/test/path/group1/b.yaml'];
+      }
+      if (normalizedPath?.endsWith('/group2/*.yaml')) {
+        return ['/test/path/group2/c.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
       const normalizedInput = normalizePath(input);
-      if (normalizedInput?.endsWith('/group1/*.yaml')) {
-        return [scenarios[0], scenarios[1]];
+      if (normalizedInput?.endsWith('/group1/a.yaml')) {
+        return [scenarios[0]];
       }
-      if (normalizedInput?.endsWith('/group2/*.yaml')) {
+      if (normalizedInput?.endsWith('/group1/b.yaml')) {
+        return [scenarios[1]];
+      }
+      if (normalizedInput?.endsWith('/group2/c.yaml')) {
         return [scenarios[2]];
       }
       return input;
@@ -219,10 +239,18 @@ describe('Scenario loading with glob patterns', () => {
       return Promise.resolve('');
     });
 
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
+      if (
+        typeof pathOrGlob === 'string' &&
+        normalizePath(pathOrGlob)?.endsWith('/scenarios/*.yaml')
+      ) {
+        return ['/test/path/scenarios/group.yaml'];
+      }
+      return ['config.yaml'];
+    });
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (normalizePath(input)?.endsWith('/scenarios/*.yaml')) {
+      if (normalizePath(input)?.endsWith('/scenarios/group.yaml')) {
         return globScenarios;
       }
       return input;

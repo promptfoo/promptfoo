@@ -137,6 +137,57 @@ describe('programmatic JSONL output', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('runs the default test when programmatic evals omit scenarios', async () => {
+    const provider: ApiProvider = {
+      id: () => 'default-scenario-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'default answer',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    await evaluate({
+      prompts: ['Default prompt'],
+      providers: [provider],
+    });
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(provider.callApi).mock.calls[0][0]).toContain('Default prompt');
+  });
+
+  it('resolves scenario config refs relative to programmatic scenario files', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-scenario-file-'));
+    const scenarioPath = path.join(tmpDir, 'scenario.json');
+    const matrixPath = path.join(tmpDir, 'matrix.json');
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify([
+        {
+          config: [{ $values: 'file://matrix.json' }],
+          tests: [{}],
+        },
+      ]),
+    );
+    fs.writeFileSync(matrixPath, JSON.stringify([{ vars: { topic: 'billing' } }]));
+
+    const provider: ApiProvider = {
+      id: () => 'scenario-file-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'billing answer',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      scenarios: [`file://${scenarioPath}`],
+    });
+
+    expect(vi.mocked(provider.callApi).mock.calls[0][0]).toContain('billing');
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('finalizes failed streamed rows together with later timeout rows', async () => {
     const outputPath = createOutputPath();
     outputPaths.push(outputPath);
