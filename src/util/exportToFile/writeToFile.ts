@@ -1,5 +1,7 @@
 import { createWriteStream, type WriteStream } from 'fs';
 
+import logger from '../../logger';
+
 export class JsonlFileWriter {
   private readonly flags: 'a' | 'w';
   private writeStream: WriteStream | undefined;
@@ -7,6 +9,10 @@ export class JsonlFileWriter {
   // by a persistent listener so it can be re-thrown from the next write()/close() instead of
   // escaping as an unhandled 'error' event that would crash the process.
   private streamError: Error | undefined;
+  // Whether streamError arrived after the final flush ('finish'). Post-flush errors come
+  // from the fd close(2) itself — the bytes are already on disk — so close() reports them
+  // as a warning instead of failing an otherwise-successful run.
+  private streamErrorAfterFlush = false;
 
   constructor(
     private filePath: string,
@@ -28,6 +34,7 @@ export class JsonlFileWriter {
       stream.on('error', (error: Error) => {
         if (!this.streamError) {
           this.streamError = error;
+          this.streamErrorAfterFlush = stream.writableFinished === true;
         }
       });
       this.writeStream = stream;
@@ -73,11 +80,21 @@ export class JsonlFileWriter {
     // still held between 'finish' and 'close'. Relies on createWriteStream's default
     // emitClose: true, so 'close' always fires once the stream ends, errors, or is
     // destroyed. closeError is seeded from any error recorded before close() was called.
+    //
+    // Errors recorded before the final flush mean data may be missing and reject close().
+    // Errors arriving after 'finish' come from the fd close(2) itself — the bytes are
+    // already flushed and the DB holds the authoritative results, so failing the run (and
+    // skipping the post-run rewrite that regenerates this file) would only hurt; report
+    // them as a warning instead.
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let closeError = this.streamError;
+      let closeErrorAfterFlush = this.streamErrorAfterFlush;
       const onError = (error: Error) => {
-        closeError ??= error;
+        if (!closeError) {
+          closeError = error;
+          closeErrorAfterFlush = stream.writableFinished === true;
+        }
       };
       const settle = () => {
         if (settled) {
@@ -86,9 +103,14 @@ export class JsonlFileWriter {
         settled = true;
         stream.off('error', onError);
         stream.off('close', settle);
-        if (closeError) {
+        if (closeError && !closeErrorAfterFlush) {
           reject(this.wrapStreamError('close', closeError));
         } else {
+          if (closeError) {
+            logger.warn(
+              `Error while closing JSONL output ${this.filePath} after the final flush: ${closeError.message}`,
+            );
+          }
           resolve();
         }
       };
