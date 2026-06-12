@@ -89,56 +89,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
-
-  const startTime = Date.now();
-
-  let outputFormat: CodeScanOutputFormat;
-  try {
-    outputFormat = resolveOutputFormat(options);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Scan failed: ${errorMessage}`);
-    cliState.postActionCallback = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      process.exitCode = 1;
-    };
-    return;
-  }
-
-  // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
-  // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
-  // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
-  // (e.g., library consumers calling executeScan directly).
-  if (outputFormat !== CodeScanOutputFormat.TEXT) {
-    setLogLevel('error');
-  }
-
-  // Load and merge configuration
-  const baseConfig: Config = loadConfigOrDefault(options.config);
-  const config = mergeConfigWithOptions(baseConfig, options);
-
-  // Resolve guidance (CLI options take precedence)
-  const guidance = resolveGuidance(options, config);
-
-  // Resolve repository path
+  const originalLogLevel = getLogLevel();
+  const structuredOutputRequested =
+    options.json === true ||
+    options.format === CodeScanOutputFormat.JSON ||
+    options.format === CodeScanOutputFormat.SARIF;
   const absoluteRepoPath = path.resolve(repoPath);
-
-  // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
-  if (outputFormat === CodeScanOutputFormat.TEXT) {
-    logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
-    logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-    if (config.diffsOnly) {
-      logger.info(`  Mode: diffs only`);
-    } else {
-      logger.info(`  Mode: diffs + tracing into repo`);
-    }
-    logger.info('');
-  }
-
-  logger.debug(`Repository: ${absoluteRepoPath}`);
-
-  // Create mutable refs for cleanup handlers
-  // This allows signal handlers to access resources even if created later
   const cleanupRefs: CleanupRefs = {
     repoPath: absoluteRepoPath,
     socket: null,
@@ -147,25 +103,60 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     spinner: null,
     abortController: null,
   };
+  let outputFormat: CodeScanOutputFormat | null = null;
+  let spinner: ReturnType<typeof createSpinner> | undefined;
+  let showSpinner = false;
 
-  // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
-  registerCleanupHandlers(cleanupRefs);
-
-  // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
-  const isWebUI = Boolean(cliState.webUI);
-  const spinner = createSpinner({
-    format: outputFormat,
-    isWebUI,
-    logLevel: getLogLevel(),
-  });
-
-  if (spinner) {
-    cleanupRefs.spinner = spinner; // Update ref for signal handlers
-  }
-
-  const showSpinner = Boolean(spinner);
+  const startTime = Date.now();
 
   try {
+    outputFormat = resolveOutputFormat(options);
+    // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
+    // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
+    // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
+    // (e.g., library consumers calling executeScan directly).
+    if (outputFormat !== CodeScanOutputFormat.TEXT) {
+      setLogLevel('error');
+    }
+
+    // Load and merge configuration
+    const baseConfig: Config = loadConfigOrDefault(options.config);
+    const config = mergeConfigWithOptions(baseConfig, options);
+
+    // Resolve guidance (CLI options take precedence)
+    const guidance = resolveGuidance(options, config);
+
+    // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
+    if (outputFormat === CodeScanOutputFormat.TEXT) {
+      logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
+      logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+      if (config.diffsOnly) {
+        logger.info(`  Mode: diffs only`);
+      } else {
+        logger.info(`  Mode: diffs + tracing into repo`);
+      }
+      logger.info('');
+    }
+
+    logger.debug(`Repository: ${absoluteRepoPath}`);
+
+    // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
+    registerCleanupHandlers(cleanupRefs);
+
+    // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
+    const isWebUI = Boolean(cliState.webUI);
+    spinner = createSpinner({
+      format: outputFormat,
+      isWebUI,
+      logLevel: getLogLevel(),
+    });
+
+    if (spinner) {
+      cleanupRefs.spinner = spinner; // Update ref for signal handlers
+    }
+
+    showSpinner = Boolean(spinner);
+
     // Create AbortController for cancelling the scan
     const abortController = new AbortController();
     cleanupRefs.abortController = abortController; // Update ref for signal handlers
@@ -346,7 +337,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           githubPr: options.githubPr,
         });
       } else if (outputFormat === CodeScanOutputFormat.SARIF) {
-        logger.error(
+        console.error(
           `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
         );
         cliState.postActionCallback = async () => {
@@ -370,6 +361,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
+    } else if (structuredOutputRequested) {
+      // Structured modes reserve stdout for the payload, so errors go to stderr. This
+      // covers both resolved formats (JSON/SARIF) and requests that failed before the
+      // format resolved (e.g. an invalid --json + --format sarif combination).
+      console.error(msg);
     } else {
       logger.error(msg);
     }
@@ -400,6 +396,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (client) {
       client.disconnect();
       logger.debug('Agent client disconnected');
+    }
+
+    if (
+      outputFormat !== null &&
+      outputFormat !== CodeScanOutputFormat.TEXT &&
+      getLogLevel() !== originalLogLevel
+    ) {
+      setLogLevel(originalLogLevel);
     }
   }
 }

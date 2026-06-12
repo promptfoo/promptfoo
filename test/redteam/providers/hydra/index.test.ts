@@ -245,12 +245,13 @@ describe('HydraProvider', () => {
     });
 
     it('should create agent provider with correct config', () => {
-      new HydraProvider({ injectVar: 'input' });
+      new HydraProvider({ injectVar: 'input', targetId: 'cloud-target-123' });
 
       expect(PromptfooChatCompletionProvider).toHaveBeenCalledWith({
         task: 'hydra-decision',
         jsonOnly: true,
         preferSmallModel: false,
+        targetId: 'cloud-target-123',
       });
     });
   });

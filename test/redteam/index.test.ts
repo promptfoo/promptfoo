@@ -150,18 +150,31 @@ describe('synthesize', () => {
       expect(extractSystemPurpose).not.toHaveBeenCalled();
     });
 
-    it('should extract purpose and entities if not provided', async () => {
+    it('should pass resolved target context when extracting purpose and entities', async () => {
+      const generationContext = {
+        providerTargetIds: ['file://local-provider.ts'],
+        cloudTargetId: 'cloud-target-123',
+      };
       await synthesize({
+        cloudTargetDatabaseId: 'cloud-target-123',
         language: 'english',
         numTests: 1,
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetIds: ['test-provider'],
+        targetIds: ['file://local-provider.ts'],
       });
 
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
+      expect(extractEntities).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Test prompt'],
+        generationContext,
+      );
+      expect(extractSystemPurpose).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Test prompt'],
+        generationContext,
+      );
     });
 
     it('should handle empty prompts array', async () => {
@@ -187,14 +200,15 @@ describe('synthesize', () => {
         targetIds: ['test-provider'],
       });
 
-      expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
+      expect(extractSystemPurpose).toHaveBeenCalledWith(
+        expect.any(Object),
+        ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+        expect.any(Object),
+      );
       expect(extractEntities).toHaveBeenCalledWith(
         expect.objectContaining({ id: expect.any(Function) }),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+        expect.any(Object),
       );
     });
   });
@@ -3069,7 +3083,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'goat' }],
-        targetIds: ['test-provider'],
+        targetIds: ['promptfoo://provider/target-123'],
       });
 
       // Verify extractGoalFromPrompt was called with the policy
@@ -3079,6 +3093,39 @@ describe('Language configuration', () => {
       expect(call[1]).toBe('Test purpose'); // purpose
       expect(call[2]).toBe('policy'); // pluginId
       expect(call[3]).toBe(policyText); // policy
+      expect(call[4]).toBe('target-123'); // targetId
+    });
+
+    it('should pass an explicit linked Cloud target to extractGoalFromPrompt', async () => {
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
+      mockExtractGoal.mockClear();
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: 'Test prompt' },
+          metadata: { pluginId: 'promptfoo:redteam:policy' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'policy',
+        action: mockPluginAction,
+      } as any);
+
+      await synthesize({
+        cloudTargetDatabaseId: 'linked-target-123',
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['file://local-provider.ts'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: 'linked-target-123' }),
+      );
+      expect(mockExtractGoal.mock.calls[0][4]).toBe('linked-target-123');
     });
 
     it('should not pass policy when metadata does not contain policy', async () => {
@@ -3880,6 +3927,7 @@ describe('Language configuration', () => {
 
         try {
           await synthesize({
+            cloudTargetDatabaseId: 'cloud-target-123',
             numTests: 1,
             plugins: [{ id: 'test-plugin', numTests: 1 }],
             prompts: ['Test prompt'],
@@ -3891,6 +3939,7 @@ describe('Language configuration', () => {
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+          expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
           getProviderSpy.mockRestore();
           getGradingProviderSpy.mockRestore();

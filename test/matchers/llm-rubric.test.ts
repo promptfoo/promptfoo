@@ -21,9 +21,13 @@ vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
-vi.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
-}));
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
+  return {
+    ...actual,
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -2264,6 +2268,27 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should include Cloud target context in remote grading requests', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/cloud-target-123'],
+      redteam: {},
+    };
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'cloud-target-123',
+    });
   });
 
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
