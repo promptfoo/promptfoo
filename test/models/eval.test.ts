@@ -15,7 +15,12 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type ApiProvider,
+  type EvaluateResult,
+  type Prompt,
+  ResultFailureReason,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
@@ -595,6 +600,32 @@ describe('evaluator', () => {
       expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockAuthor);
+    });
+
+    it('persists instantiated providers with replayable ids', async () => {
+      const provider = {
+        id: () => 'echo',
+        label: 'Echo target',
+        delay: 0,
+        callApi: async () => ({ output: 'ok' }),
+      } satisfies ApiProvider;
+
+      const evaluation = await Eval.create(
+        {
+          prompts: ['Hello'],
+          providers: [provider] as any,
+        },
+        [{ raw: 'Hello', display: 'Hello', label: 'Hello' } as Prompt],
+      );
+
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.config.providers).toEqual([
+        {
+          id: 'echo',
+          label: 'Echo target',
+          delay: 0,
+        },
+      ]);
     });
 
     it('preserves trace linkage when results are inserted during eval creation', async () => {

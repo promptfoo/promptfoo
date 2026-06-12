@@ -83,6 +83,7 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
     prompts: [],
     addPrompts: vi.fn().mockResolvedValue(undefined),
     fetchResultsBatched: vi.fn(async function* () {}),
+    getProvidersFromResults: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as Eval;
 }
@@ -290,7 +291,13 @@ describe('retryCommand', () => {
   });
 
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
-    const originalEval = createEval({ config: { sharing: false } as UnifiedConfig });
+    const originalEval = createEval({
+      config: {
+        providers: [{ label: 'Echo target', delay: 0 }] as any,
+        sharing: false,
+      } as UnifiedConfig,
+      getProvidersFromResults: vi.fn().mockResolvedValue([{ id: 'echo', label: 'Echo target' }]),
+    });
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
@@ -319,7 +326,15 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config);
+    expect(originalEval.getProvidersFromResults).toHaveBeenCalledTimes(1);
+
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      {},
+      {
+        providers: [{ id: 'echo', label: 'Echo target', delay: 0 }],
+        sharing: false,
+      },
+    );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
     expect(shouldShareResults).toHaveBeenCalledWith({

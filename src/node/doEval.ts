@@ -38,6 +38,7 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import { filterProviders } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
@@ -337,7 +338,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(
+        {},
+        await normalizePersistedConfigForResume(
+          resumeEval.config,
+          resumeEval.getProvidersFromResults.bind(resumeEval),
+        ),
+      ));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -399,7 +406,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(
+        {},
+        await normalizePersistedConfigForResume(
+          resumeEval.config,
+          resumeEval.getProvidersFromResults.bind(resumeEval),
+        ),
+      ));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {

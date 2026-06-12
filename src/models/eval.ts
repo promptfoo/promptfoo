@@ -30,11 +30,13 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type ProviderOptions,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import { normalizeConfigForPersistence } from '../util/config/persistence';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -84,6 +86,25 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+function normalizeStoredProvider(provider: unknown): ProviderOptions | undefined {
+  if (typeof provider === 'string' && provider.length > 0) {
+    return { id: provider };
+  }
+
+  if (typeof provider === 'object' && provider !== null && !Array.isArray(provider)) {
+    const storedProvider = provider as ProviderOptions;
+    if (typeof storedProvider.id === 'string' && storedProvider.id.length > 0) {
+      return {
+        id: storedProvider.id,
+        label: storedProvider.label,
+        ...(storedProvider.config === undefined ? {} : { config: storedProvider.config }),
+      };
+    }
+  }
+
+  return undefined;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -469,13 +490,14 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
+    const persistedConfig = normalizeConfigForPersistence(config);
     // Callers that resolve the author themselves (CLI/programmatic eval, import)
     // pass it explicitly — honor that value. Only fall back to the global
     // resolution chain when the caller did not provide one at all.
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
     const db = await getDb();
 
-    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const datasetId = sha256(JSON.stringify(persistedConfig.tests || []));
 
     const durationResults = {
       ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
@@ -494,13 +516,13 @@ export default class Eval {
           id: evalId,
           createdAt: createdAt.getTime(),
           author,
-          description: config.description,
-          config,
+          description: persistedConfig.description,
+          config: persistedConfig,
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
-          isRedteam: config.redteam !== undefined,
+          isRedteam: persistedConfig.redteam !== undefined,
         })
         .run();
 
@@ -548,7 +570,7 @@ export default class Eval {
         .insert(datasetsTable)
         .values({
           id: datasetId,
-          tests: config.tests,
+          tests: persistedConfig.tests,
         })
         .onConflictDoNothing()
         .run();
@@ -564,8 +586,8 @@ export default class Eval {
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      if (persistedConfig.tags) {
+        for (const [tagKey, tagValue] of Object.entries(persistedConfig.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
           await tx
@@ -594,7 +616,7 @@ export default class Eval {
 
     invalidateEvaluationCache(evalId);
 
-    return new Eval(config, {
+    return new Eval(persistedConfig, {
       id: evalId,
       author,
       createdAt,
@@ -660,11 +682,13 @@ export default class Eval {
 
   async save() {
     const db = await getDb();
+    const persistedConfig = normalizeConfigForPersistence(this.config);
+    this.config = persistedConfig;
     const updateObj: Record<string, unknown> = {
-      config: this.config,
-      isRedteam: this.config.redteam !== undefined,
+      config: persistedConfig,
+      isRedteam: persistedConfig.redteam !== undefined,
       prompts: this.prompts,
-      description: this.config.description,
+      description: persistedConfig.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
@@ -1384,6 +1408,34 @@ export default class Eval {
     await this.loadResults();
     this._resultsLoaded = true;
     return this.results;
+  }
+
+  async getProvidersFromResults(): Promise<ProviderOptions[]> {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      const providers = this.oldResults.results
+        .map((result) => normalizeStoredProvider(result.provider))
+        .filter((provider): provider is ProviderOptions => Boolean(provider));
+      return Array.from(new Map(providers.map((provider) => [provider.id, provider])).values());
+    }
+
+    if (!this.persisted) {
+      const providers = this.results
+        .map((result) => normalizeStoredProvider(result.provider))
+        .filter((provider): provider is ProviderOptions => Boolean(provider));
+      return Array.from(new Map(providers.map((provider) => [provider.id, provider])).values());
+    }
+
+    const db = await getDb();
+    const rows = await db
+      .selectDistinct({ provider: evalResultsTable.provider })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+
+    return rows
+      .map((row) => normalizeStoredProvider(row.provider))
+      .filter((provider): provider is ProviderOptions => Boolean(provider));
   }
 
   clearResults() {

@@ -10,6 +10,7 @@ import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
+import { normalizePersistedConfigForResume } from '../util/config/persistence';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -305,7 +306,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     config = configs.config;
   } else {
     // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
+    const configs = await resolveConfigs(
+      {},
+      await normalizePersistedConfigForResume(
+        originalEval.config,
+        originalEval.getProvidersFromResults.bind(originalEval),
+      ),
+    );
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
     config = configs.config;
