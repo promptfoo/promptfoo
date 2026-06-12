@@ -13,7 +13,8 @@ import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
-    (cliState as any).config = {};
+    cliState.config = {};
+    cliState.selectedProviderConfigs = undefined;
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
         return Promise.resolve({
@@ -31,6 +32,7 @@ describe('matchesSimilarity', () => {
   });
 
   afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
   });
 
@@ -120,11 +122,11 @@ describe('matchesSimilarity', () => {
   });
 
   it('should prefer filtered providers when building remote similarity context', async () => {
-    (cliState as any).config = {
+    cliState.config = {
       providers: ['promptfoo://provider/excluded-target'],
       redteam: {},
     };
-    (cliState as any).selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+    cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
     vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
     vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
       pass: true,

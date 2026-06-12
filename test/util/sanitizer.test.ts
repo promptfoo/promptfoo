@@ -4,6 +4,7 @@ import {
   restoreAzureBlobSasTokens,
   sanitizeBody,
   sanitizeObject,
+  sanitizeRuntimeOptions,
   sanitizeUrl,
 } from '../../src/util/sanitizer';
 
@@ -19,6 +20,18 @@ afterEach(() => {
 afterAll(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('sanitizeRuntimeOptions', () => {
+  it('preserves the provider filter while removing non-serializable runtime state', () => {
+    expect(
+      sanitizeRuntimeOptions({
+        abortSignal: new AbortController().signal,
+        progressCallback: vi.fn(),
+        providerFilter: 'selected-target',
+      }),
+    ).toEqual({ providerFilter: 'selected-target' });
+  });
 });
 
 describe('sanitizeObject', () => {

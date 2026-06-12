@@ -1,5 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { getAndCheckProvider, getGradingProvider } from '../../src/matchers/providers';
+import cliState from '../../src/cliState';
+import {
+  getAndCheckProvider,
+  getGradingProvider,
+  getRemoteGradingContext,
+} from '../../src/matchers/providers';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import {
   DefaultEmbeddingProvider,
@@ -9,6 +14,31 @@ import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderTypeMap } from '../../src/types/index';
+
+describe('getRemoteGradingContext', () => {
+  beforeEach(() => {
+    cliState.config = undefined;
+    cliState.selectedProviderConfigs = undefined;
+  });
+
+  afterEach(() => {
+    cliState.config = undefined;
+    cliState.selectedProviderConfigs = undefined;
+  });
+
+  it('prefers the actively selected provider configs', () => {
+    cliState.config = { providers: ['promptfoo://provider/excluded-target'] };
+    cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+
+    expect(getRemoteGradingContext()).toEqual({ targetId: 'selected-target' });
+  });
+
+  it('falls back to the configured providers', () => {
+    cliState.config = { providers: ['promptfoo://provider/configured-target'] };
+
+    expect(getRemoteGradingContext()).toEqual({ targetId: 'configured-target' });
+  });
+});
 
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {

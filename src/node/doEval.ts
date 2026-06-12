@@ -59,7 +59,13 @@ import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from 
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  CommandLineOptions,
+  EvalRuntimeOptions,
+  Scenario,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
@@ -88,6 +94,20 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+function getPersistedProviderFilter(evalRecord: Eval): string | undefined {
+  const providerFilter = evalRecord.runtimeOptions?.providerFilter;
+  return typeof providerFilter === 'string' && providerFilter.length > 0
+    ? providerFilter
+    : undefined;
+}
+
+function getPersistedProviderFilterOptions(
+  evalRecord: Eval,
+): Partial<Pick<CommandLineOptions, 'filterProviders'>> {
+  const providerFilter = getPersistedProviderFilter(evalRecord);
+  return providerFilter ? { filterProviders: providerFilter } : {};
 }
 
 export class EvalRunError extends Error {
@@ -337,7 +357,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(getPersistedProviderFilterOptions(resumeEval), resumeEval.config));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -399,7 +419,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveConfigs(getPersistedProviderFilterOptions(resumeEval), resumeEval.config));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -628,8 +648,16 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
+    const providerFilter = resumeEval
+      ? getPersistedProviderFilter(resumeEval)
+      : cmdObj.filterProviders || cmdObj.filterTargets;
+
+    const safeEvaluateOptions = { ...evaluateOptions } as InternalEvaluateOptions & {
+      providerFilter?: unknown;
+    };
+    delete safeEvaluateOptions.providerFilter;
     const options: InternalEvaluateOptions = {
-      ...evaluateOptions,
+      ...safeEvaluateOptions,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
@@ -705,13 +733,18 @@ export async function doEval(
       );
     }
 
+    const runtimeOptions: EvalRuntimeOptions = {
+      ...options,
+      ...(providerFilter ? { providerFilter } : {}),
+    };
+
     // Create or load eval record
     const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
-        : new Eval(config, { author, runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(config, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

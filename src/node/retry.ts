@@ -297,15 +297,20 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   let testSuite;
   let commandLineOptions: Record<string, unknown> | undefined;
   let config: Record<string, unknown> | undefined;
+  const providerFilter = originalEval.runtimeOptions?.providerFilter;
+  const providerFilterOptions =
+    typeof providerFilter === 'string' && providerFilter.length > 0
+      ? { filterProviders: providerFilter }
+      : {};
   if (cmdObj.config) {
     // Load configuration from the provided config file
-    const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
+    const configs = await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {});
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
     config = configs.config;
   } else {
     // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
+    const configs = await resolveConfigs(providerFilterOptions, originalEval.config);
     testSuite = configs.testSuite;
     commandLineOptions = configs.commandLineOptions;
     config = configs.config;

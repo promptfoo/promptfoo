@@ -290,7 +290,10 @@ describe('retryCommand', () => {
   });
 
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
-    const originalEval = createEval({ config: { sharing: false } as UnifiedConfig });
+    const originalEval = createEval({
+      config: { sharing: false } as UnifiedConfig,
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
@@ -319,7 +322,10 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { filterProviders: 'selected-target' },
+      originalEval.config,
+    );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
     expect(shouldShareResults).toHaveBeenCalledWith({
@@ -334,7 +340,9 @@ describe('retryCommand', () => {
   });
 
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
-    const originalEval = createEval();
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
@@ -361,7 +369,10 @@ describe('retryCommand', () => {
       }),
     ).resolves.toBe(retriedEval);
 
-    expect(resolveConfigs).toHaveBeenCalledWith({ config: ['retry.yaml'] }, {});
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      { config: ['retry.yaml'], filterProviders: 'selected-target' },
+      {},
+    );
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
     );

@@ -1,6 +1,8 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { remoteGenerationContextPayload } from '../redteam/remoteGenerationContext';
+import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -16,6 +18,12 @@ import type {
   TestCase,
   VarValue,
 } from '../types/index';
+
+export function getRemoteGradingContext(): { targetId?: string } {
+  return remoteGenerationContextPayload(
+    getCloudTargetIdFromProviders(cliState.selectedProviderConfigs ?? cliState.config?.providers),
+  );
+}
 
 /**
  * Helper to call provider with consistent context propagation pattern.

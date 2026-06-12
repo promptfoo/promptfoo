@@ -1210,7 +1210,13 @@ describe('evalCommand', () => {
     resumeEval.prompts = [
       { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
     ] as any;
-    (resumeEval as any).runtimeOptions = { repeat: 2, cache: false, maxConcurrency: 2, delay: 0 };
+    resumeEval.runtimeOptions = {
+      repeat: 2,
+      cache: false,
+      maxConcurrency: 2,
+      delay: 0,
+      providerFilter: 'selected-target',
+    };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config: {} as UnifiedConfig,
@@ -1238,6 +1244,10 @@ describe('evalCommand', () => {
 
       expect(result).toBe(resumeEval);
       expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { filterProviders: 'selected-target' },
+        resumeEval.config,
+      );
     } finally {
       findByIdSpy.mockRestore();
     }
@@ -1246,6 +1256,7 @@ describe('evalCommand', () => {
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
+    latestEval.runtimeOptions = { providerFilter: 'selected-target' };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1266,6 +1277,10 @@ describe('evalCommand', () => {
 
       expect(result).toBe(latestEval);
       expect(latestSpy).toHaveBeenCalledTimes(1);
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { filterProviders: 'selected-target' },
+        latestEval.config,
+      );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
