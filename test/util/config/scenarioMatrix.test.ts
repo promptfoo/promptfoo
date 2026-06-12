@@ -30,6 +30,7 @@ describe('scenarioMatrix (real filesystem)', () => {
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -58,6 +59,15 @@ describe('scenarioMatrix (real filesystem)', () => {
         // POSIX: /C:/... is already absolute and preserved verbatim.
         expect(resolved).toBe('file:///C:/dir/matrix.yaml');
       }
+    });
+
+    it('renders templated file refs before resolving them against the base path', () => {
+      const matrixPath = path.join(tmpDir, 'matrix.yaml');
+      vi.stubEnv('PROMPTFOO_SCENARIO_MATRIX_TEST_PATH', matrixPath);
+
+      expect(
+        resolveFileRefFromBase('/base', 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}'),
+      ).toBe(`file://${matrixPath}`);
     });
   });
 
@@ -268,6 +278,21 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded?.[0].config[0]).toEqual({
         $values: `file://${path.join(tmpDir, 'scenarios', 'matrix.yaml')}`,
       });
+    });
+
+    it('renders templated scenario file refs before loading them', async () => {
+      const scenarioPath = write(
+        'scenarios/scenario.yaml',
+        '- config:\n    - vars:\n        topic: billing\n  tests:\n    - {}\n',
+      );
+      vi.stubEnv('PROMPTFOO_SCENARIO_FILE_TEST_PATH', scenarioPath);
+
+      const loaded = await loadScenarioConfigs([
+        'file://{{ env.PROMPTFOO_SCENARIO_FILE_TEST_PATH }}',
+      ]);
+
+      expect(loaded).toHaveLength(1);
+      expect(loaded?.[0].config).toEqual([{ vars: { topic: 'billing' } }]);
     });
 
     it('resolves $values per matched file for glob scenarios', async () => {

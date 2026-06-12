@@ -103,6 +103,57 @@ describe('programmatic scenario config expansion', () => {
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
   });
 
+  it('loads scenario tests relative to programmatic scenario files', async () => {
+    const tmpDir = makeTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'scenario.json'),
+      JSON.stringify([
+        {
+          config: [{ vars: { topic: 'billing' } }],
+          tests: 'file://tests.json',
+        },
+      ]),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'tests.json'),
+      JSON.stringify([{ vars: { channel: 'email' } }]),
+    );
+
+    const provider = createMockProvider('scenario-tests-provider');
+
+    await evaluate({
+      prompts: ['Topic: {{topic}} Channel: {{channel}}'],
+      providers: [provider],
+      scenarios: [`file://${path.join(tmpDir, 'scenario.json')}`],
+    });
+
+    expect(calledPrompts(provider)).toEqual(['Topic: billing Channel: email']);
+  });
+
+  it('parses scenario tests files through the standard test reader', async () => {
+    const tmpDir = makeTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'scenario.json'),
+      JSON.stringify([
+        {
+          config: [{ vars: { topic: 'billing' } }],
+          tests: 'file://tests.csv',
+        },
+      ]),
+    );
+    fs.writeFileSync(path.join(tmpDir, 'tests.csv'), 'channel\nemail\n');
+
+    const provider = createMockProvider('scenario-csv-tests-provider');
+
+    await evaluate({
+      prompts: ['Topic: {{topic}} Channel: {{channel}}'],
+      providers: [provider],
+      scenarios: [`file://${path.join(tmpDir, 'scenario.json')}`],
+    });
+
+    expect(calledPrompts(provider)).toEqual(['Topic: billing Channel: email']);
+  });
+
   it('resolves scenario config refs relative to each programmatic scenario glob match', async () => {
     const tmpDir = makeTmpDir();
     for (const group of ['unit', 'integration']) {

@@ -28,6 +28,7 @@ import type {
   GradingConfig,
   TestCase,
   TestSuite,
+  TestSuiteConfig,
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
@@ -80,6 +81,27 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
     ...record,
     provider: sanitizeProvider(record.provider),
   };
+}
+
+async function readScenarioTests(tests: unknown): Promise<TestCase[] | undefined> {
+  if (tests === undefined || tests === null) {
+    return undefined;
+  }
+
+  if (typeof tests === 'string') {
+    return readTests(tests);
+  }
+
+  const testsToRead = Array.isArray(tests) ? tests : [tests];
+  const normalizedTests: TestCase[] = [];
+  for (const test of testsToRead) {
+    if (isRecord(test) && Object.keys(test).length === 0) {
+      normalizedTests.push(test as TestCase);
+      continue;
+    }
+    normalizedTests.push(...(await readTests([test] as TestSuiteConfig['tests'])));
+  }
+  return normalizedTests;
 }
 
 /**
@@ -228,10 +250,14 @@ async function createRuntimeTestSuite(
   const loadedScenarios = await loadScenarioConfigs(testSuiteConfig.scenarios);
   const scenarios = loadedScenarios
     ? await Promise.all(
-        loadedScenarios.map(async (scenario) => ({
-          ...scenario,
-          config: await expandScenarioConfigValues(scenario.config),
-        })),
+        loadedScenarios.map(async (scenario) => {
+          const scenarioTests = await readScenarioTests((scenario as { tests?: unknown }).tests);
+          return {
+            ...scenario,
+            ...(scenarioTests === undefined ? {} : { tests: scenarioTests }),
+            config: await expandScenarioConfigValues(scenario.config),
+          };
+        }),
       )
     : undefined;
 

@@ -5,7 +5,7 @@ import { globSync, hasMagic } from 'glob';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { isScenarioConfigValuesRef, TestCaseSchema } from '../../types/index';
-import { maybeLoadFromExternalFile } from '../file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../file';
 import { normalizeFilePath } from '../functions/loadFunction';
 import { ConfigResolutionError } from './errors';
 
@@ -29,7 +29,8 @@ export function resolveFileRefFromBase(basePath: string, fileRef: string): strin
     return fileRef;
   }
 
-  const filePath = fileRefToPath(fileRef);
+  const renderedFileRef = getNunjucksEngineForFilePath().renderString(fileRef, {});
+  const filePath = fileRefToPath(renderedFileRef);
   const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   return `${FILE_REF_PREFIX}${resolvedPath}`;
 }
@@ -53,6 +54,31 @@ export function resolveScenarioConfigValuesRefs(basePath: string, scenario: Scen
   };
 }
 
+function resolveScenarioTestsRefs(basePath: string, scenario: Scenario): Scenario {
+  const tests = (scenario as { tests?: unknown }).tests;
+  if (typeof tests === 'string') {
+    return {
+      ...scenario,
+      tests: resolveFileRefFromBase(basePath, tests),
+    } as unknown as Scenario;
+  }
+  if (!Array.isArray(tests)) {
+    return scenario;
+  }
+
+  const resolvedTests = tests.map((test) =>
+    typeof test === 'string' ? resolveFileRefFromBase(basePath, test) : test,
+  );
+  return {
+    ...scenario,
+    tests: resolvedTests,
+  } as unknown as Scenario;
+}
+
+function resolveScenarioFileRefs(basePath: string, scenario: Scenario): Scenario {
+  return resolveScenarioTestsRefs(basePath, resolveScenarioConfigValuesRefs(basePath, scenario));
+}
+
 function getScenarioFilePaths(basePath: string, fileRef: string): string[] {
   if (!fileRef.startsWith(FILE_REF_PREFIX)) {
     throw new ConfigResolutionError(
@@ -60,7 +86,8 @@ function getScenarioFilePaths(basePath: string, fileRef: string): string[] {
     );
   }
 
-  const rawPath = fileRefToPath(fileRef);
+  const renderedFileRef = getNunjucksEngineForFilePath().renderString(fileRef, {});
+  const rawPath = fileRefToPath(renderedFileRef);
   const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(basePath, rawPath);
   // Detect glob magic on the raw ref, not the resolved path, so directories whose
   // names contain glob metacharacters do not turn plain refs into patterns.
@@ -101,7 +128,7 @@ export async function loadScenarioConfigs(
   const loadedScenarios: Scenario[] = [];
   for (const scenario of scenarioInputs) {
     if (typeof scenario !== 'string') {
-      loadedScenarios.push(resolveScenarioConfigValuesRefs(basePath, scenario));
+      loadedScenarios.push(resolveScenarioFileRefs(basePath, scenario));
       continue;
     }
 
@@ -117,7 +144,7 @@ export async function loadScenarioConfigs(
             `Scenario file ${scenarioFilePath} must contain scenario objects; got ${formatRowPreview(entry)}`,
           );
         }
-        loadedScenarios.push(resolveScenarioConfigValuesRefs(scenarioBasePath, entry as Scenario));
+        loadedScenarios.push(resolveScenarioFileRefs(scenarioBasePath, entry as Scenario));
       }
     }
   }

@@ -1743,7 +1743,9 @@ describe('resolveConfigs', () => {
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'scenarios.yaml')}`,
     );
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('/mock/cwd', 'tests.yaml')}`,
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [
