@@ -43,6 +43,10 @@ import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/ut
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
+  remoteGenerationContextPayload,
+  resolveRedteamGenerationContext,
+} from './remoteGenerationContext';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -61,6 +65,7 @@ import type { Inputs } from '../types/shared';
 import type {
   FailedPluginInfo,
   Policy,
+  RedteamGenerationContext,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -593,6 +598,7 @@ async function applyStrategies(
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
+  redteamGenerationContext?: RedteamGenerationContext,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -672,6 +678,7 @@ async function applyStrategies(
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
+        ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
     );
@@ -948,6 +955,7 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  */
 export async function synthesize({
   abortSignal,
+  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,
   entities: entitiesOverride,
   injectVar,
@@ -959,6 +967,7 @@ export async function synthesize({
   prompts,
   provider,
   purpose: purposeOverride,
+  redteamGenerationContext: inputRedteamGenerationContext,
   strategies,
   targetIds,
   showProgressBar: showProgressBarOverride,
@@ -988,6 +997,13 @@ export async function synthesize({
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
+
+  const redteamGenerationContext = resolveRedteamGenerationContext({
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    targetIds,
+  });
+  const cloudTargetId = redteamGenerationContext.cloudTargetId;
 
   if (maxConcurrency > MAX_MAX_CONCURRENCY) {
     maxConcurrency = MAX_MAX_CONCURRENCY;
@@ -1307,7 +1323,9 @@ export async function synthesize({
   } else {
     logger.info('Extracting system purpose...');
   }
-  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
+  const purpose =
+    purposeOverride ||
+    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1316,7 +1334,7 @@ export async function synthesize({
   }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts);
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -1359,6 +1377,8 @@ export async function synthesize({
           injectVar,
           n: plugin.numTests,
           delayMs: delay || 0,
+          targetId: cloudTargetId,
+          redteamGenerationContext,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1451,7 +1471,13 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const extractedGoal = await extractGoalFromPrompt(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+              cloudTargetId,
+            );
 
             (testCase.metadata as any).goal = extractedGoal;
           }
@@ -1583,7 +1609,13 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const extractedGoal = await extractGoalFromPrompt(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+              cloudTargetId,
+            );
 
             (testCase.metadata as any).goal = extractedGoal;
           }
@@ -1636,7 +1668,7 @@ export async function synthesize({
     }
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetIds,
+      targetIds: redteamGenerationContext.providerTargetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
@@ -1647,6 +1679,7 @@ export async function synthesize({
       purpose,
       undefined,
       maxCharsPerMessage,
+      redteamGenerationContext,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1671,6 +1704,7 @@ export async function synthesize({
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
+      redteamGenerationContext,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

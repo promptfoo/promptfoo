@@ -79,6 +79,27 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('should include target context in harmful generation requests', async () => {
+    provider = new PromptfooHarmfulCompletionProvider({
+      ...options,
+      targetId: 'cloud-target-123',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ output: 'test output' }), { status: 200 }),
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"targetId":"cloud-target-123"'),
+      }),
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
   it('should filter out null and undefined values from output array', async () => {
     const mockResponse = new Response(
       JSON.stringify({ output: ['value1', null, 'value2', undefined] }),
@@ -219,6 +240,28 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(result).toEqual({
       output: 'test result',
       tokenUsage: { total: 100 },
+    });
+  });
+
+  it('should include target context in remote task requests', async () => {
+    provider = new PromptfooChatCompletionProvider({
+      ...options,
+      targetId: 'cloud-target-123',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ result: 'test result' }), { status: 200 }),
+    );
+
+    await provider.callApi('test prompt');
+
+    const request = vi.mocked(fetchWithRetries).mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    if (!request) {
+      throw new Error('Expected remote task request');
+    }
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'crescendo',
     });
   });
 
@@ -444,6 +487,35 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result).toEqual({
       output: 'test result',
       tokenUsage: { total: 100 },
+    });
+  });
+
+  it('should include target context in task requests', async () => {
+    const providerWithTarget = new PromptfooSimulatedUserProvider(
+      {
+        instructions: 'test instructions',
+        targetId: 'cloud-target-123',
+      },
+      REDTEAM_SIMULATED_USER_TASK_ID,
+    );
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await providerWithTarget.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
+
+    const requestBody = JSON.parse(String(vi.mocked(fetchWithRetries).mock.calls[0][1]?.body));
+    expect(requestBody).toMatchObject({
+      task: REDTEAM_SIMULATED_USER_TASK_ID,
+      targetId: 'cloud-target-123',
     });
   });
 

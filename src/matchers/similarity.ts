@@ -1,6 +1,10 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import {
+  getCloudTargetIdFromProviders,
+  remoteGenerationContextPayload,
+  shouldGenerateRemote,
+} from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { getAndCheckProvider } from './providers';
@@ -180,6 +184,9 @@ export async function matchesSimilarity(
         output,
         threshold,
         inverse,
+        ...remoteGenerationContextPayload(
+          getCloudTargetIdFromProviders(cliState.config?.providers),
+        ),
       });
     } catch (error) {
       return fail(`Could not perform remote grading: ${error}`);

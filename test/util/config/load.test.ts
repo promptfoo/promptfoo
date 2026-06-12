@@ -1662,6 +1662,24 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('should return the provider configs selected by a target filter', async () => {
+    const providers = [
+      { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
+      { id: 'promptfoo://provider/selected-target', config: { label: 'selected' } },
+    ];
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ prompts: ['prompt1'], providers }));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+
+    const result = await resolveConfigs(
+      { config: ['config.json'], filterTargets: 'selected-target' },
+      {},
+    );
+
+    expect(result.selectedProviderConfigs).toEqual([providers[1]]);
+    expect(loadApiProviders).toHaveBeenCalledWith([providers[1]], expect.any(Object));
+  });
+
   it('should load scenarios and tests from external files', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
