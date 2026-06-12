@@ -121,6 +121,31 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
+async function createOpenAICodexPluginProvider(
+  providerPath: string,
+  providerOptions: ProviderOptions,
+  context: LoadApiProviderContext,
+  modelName: string,
+  configuredModel: string | undefined,
+) {
+  const { OpenAICodexPluginProvider } = await import('./openai/codex-plugin');
+  const codexModel = modelName || configuredModel;
+  return new OpenAICodexPluginProvider({
+    ...providerOptions,
+    id: providerOptions.id ?? providerPath,
+    config: codexModel
+      ? {
+          ...providerOptions.config,
+          model: codexModel,
+        }
+      : providerOptions.config,
+    env: {
+      ...context.env,
+      ...providerOptions.env,
+    },
+  });
+}
+
 export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
@@ -878,6 +903,22 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(1).join(':');
       return new OllamaCompletionProvider(modelName, providerOptions);
     },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'openai:codex-plugin' || providerPath.startsWith('openai:codex-plugin:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) =>
+      createOpenAICodexPluginProvider(
+        providerPath,
+        providerOptions,
+        context,
+        providerPath.split(':').slice(2).join(':'),
+        getConfiguredOpenAiModel(providerOptions),
+      ),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('openai:'),

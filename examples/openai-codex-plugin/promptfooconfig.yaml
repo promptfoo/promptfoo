@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Codex Security plugin versions
+
+prompts:
+  - Run a minimal Codex Security scan and return only JSON.
+
+providers:
+  - id: openai:codex-plugin
+    label: codex-security-current
+    config:
+      plugin:
+        path: '{{env.CODEX_SECURITY_PLUGIN_CURRENT}}'
+      skill: security-scan
+      workspace: '{{env.CODEX_PLUGIN_WORKSPACE}}'
+      skip_git_repo_check: true
+      sandbox_mode: read-only
+      approval_policy: never
+      output_schema:
+        type: object
+  - id: openai:codex-plugin
+    label: codex-security-baseline
+    config:
+      plugin:
+        path: '{{env.CODEX_SECURITY_PLUGIN_BASELINE}}'
+      skill: security-scan
+      workspace: '{{env.CODEX_PLUGIN_WORKSPACE}}'
+      skip_git_repo_check: true
+      sandbox_mode: read-only
+      approval_policy: never
+      output_schema:
+        type: object
+
+tests:
+  - assert:
+      - type: is-json
