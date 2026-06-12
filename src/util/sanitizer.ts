@@ -13,9 +13,30 @@ export const REDACTED = '[REDACTED]';
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =
   /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-// Userinfo with a password component (`scheme://user:pass@host`), the only
-// userinfo shape worth redacting when a URL fails to parse.
-const URL_USERINFO_WITH_PASSWORD = /:\/\/[^/?#@\s]*:[^/?#@\s]*@/;
+
+/**
+ * Whether a `scheme://user:pass@host` userinfo password is present. Implemented
+ * with plain string scans rather than a regex to avoid polynomial backtracking
+ * on adversarial input (e.g. `://:::::…`).
+ */
+function hasUrlUserinfoPassword(url: string): boolean {
+  const schemeIndex = url.indexOf('://');
+  if (schemeIndex === -1) {
+    return false;
+  }
+  const authorityStart = schemeIndex + 3;
+  let authorityEnd = url.length;
+  for (let i = authorityStart; i < url.length; i++) {
+    const char = url[i];
+    if (char === '/' || char === '?' || char === '#') {
+      authorityEnd = i;
+      break;
+    }
+  }
+  const authority = url.slice(authorityStart, authorityEnd);
+  const atIndex = authority.indexOf('@');
+  return atIndex !== -1 && authority.slice(0, atIndex).includes(':');
+}
 
 /**
  * Whether an unparseable URL string plausibly carries a credential. Used to keep
@@ -27,7 +48,7 @@ const URL_USERINFO_WITH_PASSWORD = /:\/\/[^/?#@\s]*:[^/?#@\s]*@/;
 function unparseableUrlMightLeakSecret(url: string): boolean {
   return (
     SENSITIVE_URL_PARAM_NAMES.test(url) ||
-    URL_USERINFO_WITH_PASSWORD.test(url) ||
+    hasUrlUserinfoPassword(url) ||
     looksLikeSecret(url.trim())
   );
 }
