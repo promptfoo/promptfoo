@@ -1,3 +1,5 @@
+import { isScenarioConfigValuesRef } from '../../types/index';
+
 import type Eval from '../../models/eval';
 
 export function getHeaderForTable(eval_: Eval) {
@@ -48,9 +50,10 @@ export function getHeaderForTable(eval_: Eval) {
       continue;
     }
     for (const config of scenario.config || []) {
-      for (const varName of Object.keys(
-        (config as { vars?: Record<string, unknown> }).vars || {},
-      )) {
+      if (isScenarioConfigValuesRef(config)) {
+        continue;
+      }
+      for (const varName of Object.keys(config.vars || {})) {
         varsForHeader.add(varName);
       }
     }

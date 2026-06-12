@@ -42,7 +42,8 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError } from '../../src/util/config/errors';
+import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';

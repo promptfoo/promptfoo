@@ -45,7 +45,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
-import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
+import { ConfigResolutionError, logConfigResolutionError } from './util/config/errors';
 import { printErrorInformation } from './util/errors/index';
 import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';

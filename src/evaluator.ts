@@ -2156,6 +2156,12 @@ function mergeScenarioTest(
   scenarioIndex: number,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
+  // Expansion happens in config loading (resolveConfigs / createRuntimeTestSuite);
+  // an unexpanded ref here would silently spread junk into the merged test case.
+  invariant(
+    !(data && typeof data === 'object' && ('$values' in data || '$expand' in data)),
+    `Unexpanded scenario config $values reference reached the evaluator: ${JSON.stringify(data)}`,
+  );
   const scenarioData = data as Partial<TestCase>;
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),

@@ -1,3 +1,4 @@
+import { isScenarioConfigValuesRef } from '../types/index';
 import { doesProviderRefMatch, getProviderDescription } from './provider';
 
 import type { Scenario, TestCase } from '../types/index';
@@ -42,18 +43,6 @@ function validateTestProviders(
   for (const ref of test.providers) {
     validateProviderRef(ref, providers, `${context}${desc}`);
   }
-}
-
-function isScenarioConfigValuesRef(
-  value: unknown,
-): value is { $values?: string; $expand?: string } {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      (typeof (value as { $values?: unknown }).$values === 'string' ||
-        typeof (value as { $expand?: unknown }).$expand === 'string'),
-  );
 }
 
 /**

@@ -8,7 +8,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { collectKeyValueOption, normalizeTagOption } from '../../util/cliOptions';
 import { getConfigFromCloud } from '../../util/cloud';
-import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/errors';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
 import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';

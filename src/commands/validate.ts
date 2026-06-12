@@ -8,11 +8,8 @@ import { testProviderConnectivity, testProviderSession } from '../node/testProvi
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
-import {
-  ConfigResolutionError,
-  logConfigResolutionError,
-  resolveConfigs,
-} from '../util/config/load';
+import { ConfigResolutionError, logConfigResolutionError } from '../util/config/errors';
+import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { safeJsonStringify } from '../util/json';

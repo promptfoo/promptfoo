@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import logger from '../logger';
 import { retryCommand } from '../node/retry';
-import { ConfigResolutionError, logConfigResolutionError } from '../util/config/load';
+import { ConfigResolutionError, logConfigResolutionError } from '../util/config/errors';
 import type { Command } from 'commander';
 
 import type { RetryCommandOptions } from '../node/retry';

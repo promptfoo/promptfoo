@@ -27,7 +27,6 @@ import {
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
-  type ScenarioConfigValuesRef,
   type TestCase,
   type TestSuite,
   type TestSuiteConfig,
@@ -48,175 +47,14 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-
-type ConfigResolutionLogLevel = 'error' | 'warn';
-
-interface ConfigResolutionErrorOptions {
-  cliMessage?: string;
-  logLevel?: ConfigResolutionLogLevel;
-}
-
-export class ConfigResolutionError extends Error {
-  readonly cliMessage: string;
-  readonly logLevel: ConfigResolutionLogLevel;
-
-  constructor(message: string, options: ConfigResolutionErrorOptions = {}) {
-    super(message);
-    this.name = 'ConfigResolutionError';
-    this.cliMessage = options.cliMessage ?? message;
-    this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
-  }
-}
-
-export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
-  logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
-}
-
-function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
-  throw new ConfigResolutionError(message, options);
-}
-
-function isScenarioConfigValuesRef(value: unknown): value is ScenarioConfigValuesRef {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const entry = value as ScenarioConfigValuesRef;
-  return typeof entry.$values === 'string' || typeof entry.$expand === 'string';
-}
-
-function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
-  if (!isScenarioConfigValuesRef(value)) {
-    return undefined;
-  }
-
-  return value.$values ?? value.$expand;
-}
-
-function resolveFileRefFromBase(basePath: string, fileRef: string): string {
-  if (!fileRef.startsWith('file://')) {
-    return fileRef;
-  }
-
-  const filePath = fileRef.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
-  return `file://${resolvedPath}`;
-}
-
-function resolveConfigFileRef(configPath: string, fileRef: string): string {
-  return resolveFileRefFromBase(path.dirname(configPath), fileRef);
-}
-
-function hasGlobPattern(filePath: string): boolean {
-  return /[*?[\]{}]/.test(filePath);
-}
-
-function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Scenario): Scenario {
-  if (!Array.isArray(scenario.config)) {
-    return scenario;
-  }
-
-  return {
-    ...scenario,
-    config: scenario.config.map((entry) => {
-      if (!isScenarioConfigValuesRef(entry)) {
-        return entry;
-      }
-
-      if (entry.$values) {
-        return { ...entry, $values: resolveFileRefFromBase(basePath, entry.$values) };
-      }
-      return { ...entry, $expand: resolveFileRefFromBase(basePath, entry.$expand!) };
-    }),
-  };
-}
-
-function getScenarioFilePaths(basePath: string, fileRef: string): string[] {
-  const resolvedRef = resolveFileRefFromBase(basePath, fileRef);
-  const filePath = resolvedRef.slice('file://'.length);
-  if (!hasGlobPattern(filePath)) {
-    return [filePath];
-  }
-
-  const matchedFiles = globSync(filePath, {
-    windowsPathsNoEscape: true,
-  });
-  if (matchedFiles.length === 0) {
-    throw new Error(`No files found matching pattern: ${filePath}`);
-  }
-  return matchedFiles;
-}
-
-function resolveScenarioConfigValuesRefs(configPath: string, scenario: Scenario): Scenario {
-  return resolveScenarioConfigValuesRefsFromBase(path.dirname(configPath), scenario);
-}
-
-async function withCliBasePath<T>(basePath: string, fn: () => Promise<T> | T): Promise<T> {
-  const originalBasePath = cliState.basePath;
-  cliState.basePath = basePath;
-  try {
-    return await fn();
-  } finally {
-    cliState.basePath = originalBasePath;
-  }
-}
-
-export async function loadScenarioConfigs(
-  scenarios: TestSuiteConfig['scenarios'] | TestSuite['scenarios'] | undefined,
-  basePath = cliState.basePath || '',
-): Promise<Scenario[] | undefined> {
-  if (!scenarios) {
-    return undefined;
-  }
-
-  const scenarioInputs = Array.isArray(scenarios) ? scenarios : [scenarios];
-  const loadedScenarios: Scenario[] = [];
-  for (const scenario of scenarioInputs) {
-    if (typeof scenario !== 'string') {
-      loadedScenarios.push(resolveScenarioConfigValuesRefsFromBase(basePath, scenario));
-      continue;
-    }
-
-    for (const scenarioFilePath of getScenarioFilePaths(basePath, scenario)) {
-      const scenarioBasePath = path.dirname(scenarioFilePath);
-      const loaded = await withCliBasePath(scenarioBasePath, () =>
-        maybeLoadFromExternalFile(`file://${scenarioFilePath}`),
-      );
-      const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
-      loadedScenarios.push(
-        ...(scenarioEntries as Scenario[]).map((entry) =>
-          resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
-        ),
-      );
-    }
-  }
-
-  return loadedScenarios;
-}
-
-export async function expandScenarioConfigValues(
-  config: Scenario['config'],
-): Promise<Scenario['config']> {
-  const expandedConfig: Scenario['config'] = [];
-
-  for (const entry of config) {
-    const valuesPath = getScenarioConfigValuesPath(entry);
-    if (!valuesPath) {
-      expandedConfig.push(entry);
-      continue;
-    }
-    if (!valuesPath.startsWith('file://')) {
-      failConfigResolution('Scenario config expansion values must use file:// references');
-    }
-
-    const loadedValues = await maybeLoadFromExternalFile(valuesPath);
-    const loadedConfig = Array.isArray(loadedValues) ? loadedValues : [loadedValues];
-    expandedConfig.push(...(loadedConfig as Scenario['config']));
-  }
-
-  return expandedConfig;
-}
+import {
+  expandScenarioConfigValues,
+  loadScenarioConfigs,
+  resolveFileRefFromBase,
+  resolveScenarioConfigValuesRefs,
+} from './scenarioMatrix';
 
 function normalizeConfiguredCommandLineOptions(
   commandLineOptions: Partial<CommandLineOptions> | undefined,
@@ -812,18 +650,19 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tests,
     scenarios: configs.some((config) => config.scenarios !== undefined)
       ? configs.flatMap((config, idx) => {
-          const scenarios = config.scenarios;
-          if (!Array.isArray(scenarios)) {
-            return scenarios ? [scenarios] : [];
+          if (!config.scenarios) {
+            return [];
           }
-          return scenarios.map((scenario) => {
+          const configBasePath = path.dirname(configSourcePaths[idx]);
+          const entries = Array.isArray(config.scenarios) ? config.scenarios : [config.scenarios];
+          return entries.map((scenario) => {
             if (typeof scenario === 'string') {
-              return resolveConfigFileRef(configSourcePaths[idx], scenario);
+              return resolveFileRefFromBase(configBasePath, scenario);
             }
             if (!scenario || typeof scenario !== 'object') {
               return scenario;
             }
-            return resolveScenarioConfigValuesRefs(configSourcePaths[idx], scenario);
+            return resolveScenarioConfigValuesRefs(configBasePath, scenario);
           });
         })
       : undefined,
@@ -1114,8 +953,8 @@ export async function resolveConfigs(
         );
         scenario.tests = parsedScenarioTests;
       }
-      if (typeof scenario === 'object' && Array.isArray(scenario.config)) {
-        scenario.config = await expandScenarioConfigValues(scenario.config);
+      if (typeof scenario === 'object' && scenario.config !== undefined) {
+        scenario.config = await expandScenarioConfigValues(scenario.config, basePath);
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(

@@ -32,12 +32,9 @@ import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { ConfigResolutionError, logConfigResolutionError } from '../util/config/errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
-import {
-  ConfigResolutionError,
-  logConfigResolutionError,
-  resolveConfigs,
-} from '../util/config/load';
+import { resolveConfigs } from '../util/config/load';
 import { filterProviders } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';

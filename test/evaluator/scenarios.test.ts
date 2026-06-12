@@ -68,6 +68,30 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
   });
 
+  it('rejects unexpanded $values refs in scenario config', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn<ApiProvider['callApi']>(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ language }}')],
+      scenarios: [
+        {
+          config: [{ $values: 'file://matrix.yaml' }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Unexpanded scenario config \$values reference/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('evaluate with scenarios and multiple vars', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

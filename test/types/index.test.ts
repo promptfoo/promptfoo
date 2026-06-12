@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  isScenarioConfigValuesRef,
   MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
@@ -24,7 +25,7 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type { ScenarioConfig, TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -956,6 +957,71 @@ describe('TestSuiteConfigSchema', () => {
       });
 
       expect(result.success).toBe(false);
+    });
+
+    it('accepts and preserves unknown keys in plain scenario config rows', () => {
+      // Regression guard: scenario config rows must stay lenient for API clients and
+      // stored configs that carry extra keys (previously stripped, never rejected).
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ vars: { topic: 'billing' }, customAnnotation: 'kept' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const scenario = result.success ? result.data.scenarios?.[0] : undefined;
+      expect(typeof scenario === 'object' ? scenario.config[0] : undefined).toEqual({
+        vars: { topic: 'billing' },
+        customAnnotation: 'kept',
+      });
+    });
+
+    it('rejects $values refs mixed with other keys', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $values: 'file://matrix.yaml', description: 'oops' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects $expand refs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{ $expand: 'file://matrix.yaml' }],
+            tests: [{}],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('narrows config rows with isScenarioConfigValuesRef', () => {
+      const rows: ScenarioConfig[] = [
+        { $values: 'file://matrix.yaml' },
+        { vars: { topic: 'billing' } },
+      ];
+      const [ref, row] = rows;
+      expect(isScenarioConfigValuesRef(ref)).toBe(true);
+      expect(isScenarioConfigValuesRef(row)).toBe(false);
+      if (!isScenarioConfigValuesRef(row)) {
+        expect(row.vars).toEqual({ topic: 'billing' });
+      }
     });
   });
 

@@ -113,6 +113,7 @@ describe('index.ts exports', () => {
     'isGradingResult',
     'isProviderOptions',
     'isResultFailureReason',
+    'isScenarioConfigValuesRef',
     'isTransformFunction',
     'loadApiProvider',
     'loadApiProviders',

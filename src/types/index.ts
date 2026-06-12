@@ -941,26 +941,55 @@ export const TestCasesWithMetadataSchema = z.object({
 
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
-export type ScenarioConfigValuesRef = { $values?: string; $expand?: string };
+export type ScenarioConfigValuesRef = { $values: string };
 export type ScenarioConfig = Partial<TestCase> | ScenarioConfigValuesRef;
 
-const ScenarioConfigValuesFileRefSchema = z.string().regex(/^file:\/\//, {
-  error: 'Scenario config expansion refs must start with file://',
-});
+/**
+ * Type guard for `$values` matrix-file references in `scenarios[].config`.
+ * Exported so library consumers can narrow `ScenarioConfig` entries.
+ *
+ * Checks shape only: the `file://` prefix and `$values`-as-only-key rules are
+ * enforced by `ScenarioConfigValuesSchema` and the expansion step, not here.
+ */
+export function isScenarioConfigValuesRef(value: unknown): value is ScenarioConfigValuesRef {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as ScenarioConfigValuesRef).$values === 'string'
+  );
+}
 
 const ScenarioConfigValuesSchema = z
-  .union([
-    z.object({ $values: ScenarioConfigValuesFileRefSchema }).strict(),
-    z.object({ $expand: ScenarioConfigValuesFileRefSchema }).strict(),
-  ])
+  .object({
+    $values: z.string().regex(/^file:\/\//, {
+      error: 'Scenario config $values must be a file:// reference',
+    }),
+  })
+  .strict()
   .meta({
     id: 'ScenarioConfigValues',
   });
 
-const ScenarioConfigSchema = z.union([
+// Plain rows accept unknown keys (passthrough, matching the lenient CLI loader) so that
+// configs with extra keys keep validating. Stray $values/$expand keys are rejected here
+// instead, so a malformed matrix reference fails loudly rather than being silently
+// treated as an ordinary row.
+const ScenarioConfigRowSchema = TestCaseSchema.partial()
+  .catchall(z.unknown())
+  .refine((row) => !('$expand' in row), {
+    error: 'Scenario config rows do not support $expand; use $values',
+  })
+  .refine((row) => !('$values' in row), {
+    error:
+      'A scenario config $values entry must have $values as its only key, e.g. { $values: "file://matrix.yaml" }',
+  });
+
+// Checked annotation (not a cast) so schema/type drift fails compilation.
+const ScenarioConfigSchema: z.ZodType<ScenarioConfig> = z.union([
   ScenarioConfigValuesSchema,
-  TestCaseSchema.partial().strict(),
-]) as z.ZodType<ScenarioConfig>;
+  ScenarioConfigRowSchema,
+]);
 
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing

@@ -11,11 +11,10 @@ import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
 import { type Scenario, type TestCase, type UnifiedConfig } from '../../../src/types/index';
+import { ConfigResolutionError, logConfigResolutionError } from '../../../src/util/config/errors';
 import {
-  ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
-  logConfigResolutionError,
   maybeReadConfig,
   readConfig,
   resolveCliProvidersWithConfig,
@@ -603,7 +602,7 @@ describe('combineConfigs', () => {
             description: 'test2',
             scenarios: [
               {
-                config: [{ $expand: 'file://matrix2.yaml' }],
+                config: [{ $values: 'file://matrix2.yaml' }],
                 tests: [{}],
               },
             ],
@@ -620,7 +619,7 @@ describe('combineConfigs', () => {
         tests: [{}],
       },
       {
-        config: [{ $expand: `file://${path.resolve('b', 'matrix2.yaml')}` }],
+        config: [{ $values: `file://${path.resolve('b', 'matrix2.yaml')}` }],
         tests: [{}],
       },
     ]);
@@ -644,6 +643,7 @@ describe('combineConfigs', () => {
         const normalizedPath = normalizePathForTest(path);
         if (normalizedPath?.endsWith('configs/a/config.json')) {
           return JSON.stringify({
+            tests: 'file://tests-a.yaml',
             scenarios: [
               {
                 config: [{ $values: 'file://matrix-a.yaml' }],
@@ -654,9 +654,10 @@ describe('combineConfigs', () => {
         }
         if (normalizedPath?.endsWith('configs/b/config.json')) {
           return JSON.stringify({
+            tests: 'file://tests-b.yaml',
             scenarios: [
               {
-                config: [{ $expand: 'file://matrix-b.yaml' }],
+                config: [{ $values: 'file://matrix-b.yaml' }],
                 tests: [{}],
               },
             ],
@@ -674,10 +675,19 @@ describe('combineConfigs', () => {
         tests: [{}],
       },
       {
-        config: [{ $expand: `file://${path.resolve('/mock/cwd', 'configs/b/matrix-b.yaml')}` }],
+        config: [{ $values: `file://${path.resolve('/mock/cwd', 'configs/b/matrix-b.yaml')}` }],
         tests: [{}],
       },
     ]);
+    // String tests refs must resolve against each glob-matched config's directory too.
+    expect(readTests).toHaveBeenCalledWith(
+      'file://tests-a.yaml',
+      path.resolve('/mock/cwd', 'configs/a'),
+    );
+    expect(readTests).toHaveBeenCalledWith(
+      'file://tests-b.yaml',
+      path.resolve('/mock/cwd', 'configs/b'),
+    );
   });
 
   it('de-duplicates prompts when reading configs', async () => {
@@ -1764,7 +1774,7 @@ describe('resolveConfigs', () => {
       description: 'Scenario',
       config: [
         { $values: 'file://matrix.yaml' },
-        { $expand: 'file://more-matrix.yaml' },
+        { $values: 'file://more-matrix.yaml' },
         { $values: 'file://single-matrix.yaml' },
         { vars: { testPrompt: 'Inline prompt' } },
       ],
@@ -1946,7 +1956,7 @@ describe('resolveConfigs', () => {
     vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (input) => input);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Scenario config expansion values must use file:// references',
+      'Scenario config $values must be a file:// reference',
     );
   });
 

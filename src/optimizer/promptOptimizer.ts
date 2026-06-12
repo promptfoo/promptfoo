@@ -8,8 +8,8 @@ import { getDefaultProviders } from '../providers/defaults';
 import {
   type CompletedPrompt,
   type EvaluateResult,
+  isScenarioConfigValuesRef,
   type Prompt,
-  type TestCase,
   type TestSuite,
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
@@ -560,13 +560,14 @@ function buildCandidateScenarios(
 ): TestSuite['scenarios'] {
   return scenarios?.map((scenario) => ({
     ...scenario,
-    config: scenario.config.map((test) => {
-      const testCase = test as Partial<TestCase>;
-      return {
-        ...testCase,
-        prompts: extendPromptFilter(testCase.prompts, routingPrompt, seedPrompt, candidateLabels),
-      };
-    }),
+    config: scenario.config.map((test) =>
+      isScenarioConfigValuesRef(test)
+        ? test
+        : {
+            ...test,
+            prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+          },
+    ),
     tests: scenario.tests.map((test) => ({
       ...test,
       prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),

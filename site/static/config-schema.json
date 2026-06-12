@@ -26,46 +26,46 @@
           "$ref": "#/definitions/__schema29"
         },
         "defaultTest": {
-          "$ref": "#/definitions/__schema33"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema34"
-        },
-        "sharing": {
-          "$ref": "#/definitions/__schema35"
-        },
-        "nunjucksFilters": {
-          "$ref": "#/definitions/__schema36"
-        },
-        "env": {
-          "$ref": "#/definitions/__schema37"
-        },
-        "derivedMetrics": {
-          "$ref": "#/definitions/__schema38"
-        },
-        "extensions": {
-          "$ref": "#/definitions/__schema39"
-        },
-        "metadata": {
-          "$ref": "#/definitions/__schema40"
-        },
-        "redteam": {
-          "$ref": "#/definitions/__schema41"
-        },
-        "writeLatestResults": {
-          "$ref": "#/definitions/__schema42"
-        },
-        "tracing": {
           "$ref": "#/definitions/__schema43"
         },
-        "evaluateOptions": {
+        "outputPath": {
           "$ref": "#/definitions/__schema44"
         },
-        "commandLineOptions": {
+        "sharing": {
+          "$ref": "#/definitions/__schema45"
+        },
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema46"
         },
-        "targets": {
+        "env": {
           "$ref": "#/definitions/__schema47"
+        },
+        "derivedMetrics": {
+          "$ref": "#/definitions/__schema48"
+        },
+        "extensions": {
+          "$ref": "#/definitions/__schema49"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema50"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema51"
+        },
+        "writeLatestResults": {
+          "$ref": "#/definitions/__schema52"
+        },
+        "tracing": {
+          "$ref": "#/definitions/__schema53"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema54"
+        },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema56"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema57"
         }
       },
       "required": ["prompts"],
@@ -1276,84 +1276,42 @@
                       "type": "object",
                       "properties": {
                         "description": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema16"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema31"
                         },
                         "vars": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema17"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema32"
                         },
                         "provider": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema18"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema33"
                         },
                         "providers": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema19"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema34"
                         },
                         "prompts": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema20"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema35"
                         },
                         "providerOutput": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema21"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema36"
                         },
                         "assert": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema22"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema37"
                         },
                         "assertScoringFunction": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema24"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema38"
                         },
                         "options": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema25"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema39"
                         },
                         "threshold": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema26"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema40"
                         },
                         "metadata": {
-                          "allOf": [
-                            {
-                              "$ref": "#/definitions/__schema27"
-                            }
-                          ]
+                          "$ref": "#/definitions/__schema41"
                         }
                       },
-                      "additionalProperties": false
+                      "additionalProperties": {
+                        "$ref": "#/definitions/__schema42"
+                      }
                     }
                   ]
                 }
@@ -1372,40 +1330,98 @@
       }
     },
     "ScenarioConfigValues": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/__schema30"
-        },
-        {
-          "$ref": "#/definitions/__schema32"
-        }
-      ]
-    },
-    "__schema30": {
       "type": "object",
       "properties": {
         "$values": {
-          "$ref": "#/definitions/__schema31"
+          "$ref": "#/definitions/__schema30"
         }
       },
       "required": ["$values"],
       "additionalProperties": false
     },
-    "__schema31": {
+    "__schema30": {
       "type": "string",
       "pattern": "^file:\\/\\/"
     },
-    "__schema32": {
-      "type": "object",
-      "properties": {
-        "$expand": {
-          "$ref": "#/definitions/__schema31"
+    "__schema31": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema16"
         }
-      },
-      "required": ["$expand"],
-      "additionalProperties": false
+      ]
+    },
+    "__schema32": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema17"
+        }
+      ]
     },
     "__schema33": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema18"
+        }
+      ]
+    },
+    "__schema34": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema19"
+        }
+      ]
+    },
+    "__schema35": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema20"
+        }
+      ]
+    },
+    "__schema36": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema21"
+        }
+      ]
+    },
+    "__schema37": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema22"
+        }
+      ]
+    },
+    "__schema38": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema24"
+        }
+      ]
+    },
+    "__schema39": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema25"
+        }
+      ]
+    },
+    "__schema40": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema26"
+        }
+      ]
+    },
+    "__schema41": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema27"
+        }
+      ]
+    },
+    "__schema42": {},
+    "__schema43": {
       "anyOf": [
         {
           "type": "string"
@@ -1448,7 +1464,7 @@
         }
       ]
     },
-    "__schema34": {
+    "__schema44": {
       "anyOf": [
         {
           "type": "string"
@@ -1461,7 +1477,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema45": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1480,7 +1496,7 @@
         }
       ]
     },
-    "__schema36": {
+    "__schema46": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1489,7 +1505,7 @@
         "type": "string"
       }
     },
-    "__schema37": {
+    "__schema47": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1515,7 +1531,7 @@
         }
       ]
     },
-    "__schema38": {
+    "__schema48": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1536,7 +1552,7 @@
         "additionalProperties": false
       }
     },
-    "__schema39": {
+    "__schema49": {
       "anyOf": [
         {
           "type": "array",
@@ -1549,14 +1565,14 @@
         }
       ]
     },
-    "__schema40": {
+    "__schema50": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema41": {
+    "__schema51": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3100,10 +3116,10 @@
         }
       }
     },
-    "__schema42": {
+    "__schema52": {
       "type": "boolean"
     },
-    "__schema43": {
+    "__schema53": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3206,7 +3222,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema54": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3249,15 +3265,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema45"
+          "$ref": "#/definitions/__schema55"
         }
       },
       "additionalProperties": false
     },
-    "__schema45": {
+    "__schema55": {
       "type": "string"
     },
-    "__schema46": {
+    "__schema56": {
       "type": "object",
       "properties": {
         "description": {
@@ -3385,7 +3401,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema45"
+              "$ref": "#/definitions/__schema55"
             }
           ]
         },
@@ -3459,7 +3475,7 @@
       },
       "additionalProperties": false
     },
-    "__schema47": {
+    "__schema57": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

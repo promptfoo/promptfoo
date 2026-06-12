@@ -1,6 +1,3 @@
-import * as path from 'path';
-
-import { globSync } from 'glob';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -14,6 +11,7 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -28,7 +26,6 @@ import type {
   EnvOverrides,
   EvaluateTestSuite,
   GradingConfig,
-  Scenario,
   TestCase,
   TestSuite,
   UnifiedConfig,
@@ -83,130 +80,6 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
     ...record,
     provider: sanitizeProvider(record.provider),
   };
-}
-
-function getScenarioConfigValuesPath(value: Scenario['config'][number]): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const entry = value as { $values?: unknown; $expand?: unknown };
-  return typeof entry.$values === 'string'
-    ? entry.$values
-    : typeof entry.$expand === 'string'
-      ? entry.$expand
-      : undefined;
-}
-
-function resolveFileRefFromBase(basePath: string, fileRef: string): string {
-  if (!fileRef.startsWith('file://')) {
-    return fileRef;
-  }
-
-  const filePath = fileRef.slice('file://'.length);
-  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
-  return `file://${resolvedPath}`;
-}
-
-function hasGlobPattern(filePath: string): boolean {
-  return /[*?[\]{}]/.test(filePath);
-}
-
-function getRuntimeScenarioFilePaths(basePath: string, fileRef: string): string[] {
-  const scenarioRef = resolveFileRefFromBase(basePath, fileRef);
-  const scenarioPath = scenarioRef.slice('file://'.length);
-  if (!hasGlobPattern(scenarioPath)) {
-    return [scenarioPath];
-  }
-
-  const matchedFiles = globSync(scenarioPath, {
-    windowsPathsNoEscape: true,
-  });
-  if (matchedFiles.length === 0) {
-    throw new Error(`No files found matching pattern: ${scenarioPath}`);
-  }
-  return matchedFiles;
-}
-
-function resolveScenarioConfigValuesRefsFromBase(basePath: string, scenario: Scenario): Scenario {
-  if (!Array.isArray(scenario.config)) {
-    return scenario;
-  }
-
-  return {
-    ...scenario,
-    config: scenario.config.map((entry) => {
-      const valuesPath = getScenarioConfigValuesPath(entry);
-      if (!valuesPath) {
-        return entry;
-      }
-      if ((entry as { $values?: string }).$values) {
-        return {
-          ...entry,
-          $values: resolveFileRefFromBase(basePath, (entry as { $values: string }).$values),
-        };
-      }
-      return {
-        ...entry,
-        $expand: resolveFileRefFromBase(basePath, (entry as { $expand: string }).$expand),
-      };
-    }),
-  };
-}
-
-async function expandScenarioConfigValues(config: Scenario['config']): Promise<Scenario['config']> {
-  const expandedConfig: Scenario['config'] = [];
-  for (const entry of config) {
-    const valuesPath = getScenarioConfigValuesPath(entry);
-    if (!valuesPath) {
-      expandedConfig.push(entry);
-      continue;
-    }
-    if (!valuesPath.startsWith('file://')) {
-      throw new Error('Scenario config expansion values must use file:// references');
-    }
-
-    const loadedValues = await maybeLoadFromExternalFile(valuesPath);
-    const loadedConfig = Array.isArray(loadedValues) ? loadedValues : [loadedValues];
-    expandedConfig.push(...(loadedConfig as Scenario['config']));
-  }
-  return expandedConfig;
-}
-
-async function loadRuntimeScenarios(
-  scenarios: Omit<EvaluateTestSuite, 'author'>['scenarios'],
-): Promise<Scenario[] | undefined> {
-  if (!scenarios) {
-    return undefined;
-  }
-
-  const scenarioInputs = Array.isArray(scenarios) ? scenarios : [scenarios];
-  const loadedScenarios: Scenario[] = [];
-  for (const scenario of scenarioInputs) {
-    if (typeof scenario !== 'string') {
-      loadedScenarios.push(scenario);
-      continue;
-    }
-
-    for (const scenarioPath of getRuntimeScenarioFilePaths(cliState.basePath || '', scenario)) {
-      const scenarioBasePath = path.dirname(scenarioPath);
-      const originalBasePath = cliState.basePath;
-      cliState.basePath = scenarioBasePath;
-      try {
-        const loaded = await maybeLoadFromExternalFile(`file://${scenarioPath}`);
-        const scenarioEntries = Array.isArray(loaded) ? loaded.flat() : [loaded];
-        loadedScenarios.push(
-          ...(scenarioEntries as Scenario[]).map((entry) =>
-            resolveScenarioConfigValuesRefsFromBase(scenarioBasePath, entry),
-          ),
-        );
-      } finally {
-        cliState.basePath = originalBasePath;
-      }
-    }
-  }
-
-  return loadedScenarios;
 }
 
 /**
@@ -352,7 +225,7 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
-  const loadedScenarios = await loadRuntimeScenarios(testSuiteConfig.scenarios);
+  const loadedScenarios = await loadScenarioConfigs(testSuiteConfig.scenarios);
   const scenarios = loadedScenarios
     ? await Promise.all(
         loadedScenarios.map(async (scenario) => ({
@@ -472,8 +345,10 @@ export async function evaluateWithSource(
     testSuiteConfig,
     constructedTestSuite.prompts,
   );
+  // Persist expanded scenario rows (matching CLI behavior) so re-runs and retries
+  // do not re-resolve relative $values refs against a different cwd.
   const unifiedConfig = createSerializableUnifiedConfig(
-    testSuiteConfig,
+    { ...testSuiteConfig, scenarios: constructedTestSuite.scenarios },
     constructedTestSuite.prompts,
   );
   const author = getAuthor(suiteAuthor);

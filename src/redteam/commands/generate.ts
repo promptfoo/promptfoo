@@ -30,11 +30,8 @@ import {
   isCloudProvider,
   resolveTeamId,
 } from '../../util/cloud';
-import {
-  ConfigResolutionError,
-  logConfigResolutionError,
-  resolveConfigs,
-} from '../../util/config/load';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/errors';
+import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';

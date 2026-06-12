@@ -91,7 +91,7 @@ export async function loadFunction<T extends Function>({
 // legitimately start with `/X:` (a directory literally named `X:`) are preserved.
 const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
 
-function normalizeFilePath(filePath: string): string {
+export function normalizeFilePath(filePath: string): string {
   if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)) {
     return filePath.slice(1);
   }

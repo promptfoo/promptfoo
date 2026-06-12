@@ -2,7 +2,8 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
+import { ConfigResolutionError } from '../../../util/config/errors';
+import { resolveConfigs } from '../../../util/config/load';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 

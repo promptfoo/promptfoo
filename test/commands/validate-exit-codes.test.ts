@@ -2,7 +2,8 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError } from '../../src/util/config/errors';
+import { resolveConfigs } from '../../src/util/config/load';
 
 import type { UnifiedConfig } from '../../src/types/index';
 

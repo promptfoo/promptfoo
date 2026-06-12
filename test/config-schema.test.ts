@@ -58,7 +58,7 @@ describe('config-schema.json', () => {
     expect(schema.definitions).toHaveProperty('PromptfooConfigSchema');
   });
 
-  it('validates scenario config file expansion refs without accepting arbitrary keys', () => {
+  it('validates scenario config rows and $values refs', () => {
     const validate = ajv.compile(schema);
 
     expect(
@@ -69,7 +69,7 @@ describe('config-schema.json', () => {
           {
             config: [
               { $values: 'file://matrix.yaml' },
-              { $expand: 'file://more-matrix.yaml' },
+              { $values: 'file://more-matrix.yaml' },
               { vars: { topic: 'billing' } },
             ],
             tests: [{}],
@@ -78,13 +78,28 @@ describe('config-schema.json', () => {
       }),
     ).toBe(true);
 
+    // Plain rows stay lenient: unknown keys are allowed so existing configs keep validating.
     expect(
       validate({
         prompts: ['hello'],
         providers: ['echo'],
         scenarios: [
           {
-            config: [{ $valuez: 'file://matrix.yaml' }],
+            config: [{ vars: { topic: 'billing' }, customAnnotation: 'ok' }],
+            tests: [{}],
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    // Known fields are still type-checked.
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [{ threshold: 'not-a-number' }],
             tests: [{}],
           },
         ],
