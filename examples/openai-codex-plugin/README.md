@@ -2,6 +2,8 @@
 
 Compare two versions of one Codex plugin against the same input and workspace.
 
+## Run the example
+
 ```bash
 npx promptfoo@latest init --example openai-codex-plugin
 cd openai-codex-plugin
