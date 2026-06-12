@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +11,7 @@ import {
   initializeAgenticCache,
   isAgenticProvider,
   resolveAgenticWorkingDir,
+  validateAgenticWorkingDir,
 } from '../../src/providers/agentic-utils';
 
 import type { ApiProvider } from '../../src/types/index';
@@ -352,6 +355,36 @@ describe('agentic-utils', () => {
       expect(resolveAgenticWorkingDir('file:///var/tmp/workspace', '/test/basePath')).toBe(
         'file:///var/tmp/workspace',
       );
+    });
+  });
+
+  describe('validateAgenticWorkingDir', () => {
+    it('accepts an existing directory', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentic-validate-'));
+      try {
+        expect(() => validateAgenticWorkingDir(dir, './workspace')).not.toThrow();
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('throws with the configured value when the directory does not exist', () => {
+      expect(() =>
+        validateAgenticWorkingDir('/does/not/exist-agentic-validate', './workspace'),
+      ).toThrow(
+        /Working directory \.\/workspace \(resolved to \/does\/not\/exist-agentic-validate\) does not exist/,
+      );
+    });
+
+    it('throws when the path is a file rather than a directory', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentic-validate-'));
+      const file = path.join(dir, 'file.txt');
+      fs.writeFileSync(file, 'not a directory');
+      try {
+        expect(() => validateAgenticWorkingDir(file, './workspace')).toThrow(/is not a directory/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

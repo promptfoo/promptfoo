@@ -37,6 +37,12 @@ npm install @earendil-works/pi-coding-agent
 
 Pi requires Node.js 22.19 or newer.
 
+:::note
+
+On Windows, use the project-local install (or set `pi_path` to the package's `dist/cli.js`): promptfoo runs the package script with Node directly, while a globally installed `pi.cmd` shim on PATH cannot be spawned without a shell.
+
+:::
+
 ## Setup
 
 Configure credentials for your LLM provider. Pi reads the standard environment variables:
