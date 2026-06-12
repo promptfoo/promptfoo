@@ -1,7 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
-import { remoteGenerationContextPayload } from '../redteam/remoteGenerationContext';
+import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
@@ -20,9 +20,16 @@ import type {
 } from '../types/index';
 
 export function getRemoteGradingContext(): { targetId?: string } {
-  return remoteGenerationContextPayload(
-    getCloudTargetIdFromProviders(cliState.selectedProviderConfigs ?? cliState.config?.providers),
+  const targetId = getCloudTargetIdFromProviders(
+    cliState.selectedProviderConfigs ?? cliState.config?.providers,
   );
+  return targetId ? { targetId } : {};
+}
+
+export function shouldUseRemoteGrading(
+  options?: Parameters<typeof shouldGenerateRemote>[0],
+): boolean {
+  return shouldGenerateRemote(options);
 }
 
 /**
