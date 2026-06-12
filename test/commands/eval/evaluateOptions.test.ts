@@ -592,7 +592,7 @@ describe('evaluateOptions behavior', () => {
           { id: 'echo', label: 'selected-target' },
         ],
         prompts: ['Hello'],
-        tests: [{}],
+        tests: [{ vars: {} }],
       });
 
       await doEval(
@@ -650,7 +650,7 @@ describe('evaluateOptions behavior', () => {
           { id: 'echo', label: 'selected-target' },
         ],
         prompts: ['Hello'],
-        tests: [{}],
+        tests: [{ vars: {} }],
       });
 
       await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
