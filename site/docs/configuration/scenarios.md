@@ -104,7 +104,7 @@ scenarios:
 
 The external file should follow the same structure as inline scenarios.
 
-You can also keep large `config` matrices in separate files with `$values` or `$expand`:
+You can also keep large `config` matrices in separate files with `$values`:
 
 ```yaml
 scenarios:
@@ -117,7 +117,16 @@ scenarios:
           input: 'Hello world'
 ```
 
-The referenced file should contain one or more `Partial<TestCase>` objects, and the loaded entries are flattened into the `config` array.
+```yaml title="test-matrix.yaml"
+- vars:
+    language: French
+- vars:
+    language: Spanish
+```
+
+The referenced file (YAML or JSON) should contain an array of `Partial<TestCase>` objects; the loaded entries are flattened into the `config` array alongside any inline entries. Glob patterns such as `$values: file://matrices/*.yaml` load all matching files. Rows must contain test case fields like `vars` or `assert` — flat key-value rows (such as raw CSV columns) are rejected with a pointer to nest them under `vars`.
+
+A `$values` entry must have `$values` as its only key, and the referenced rows cannot themselves contain `$values`. Relative paths resolve against the file that declares them: the config file for inline scenarios, or the scenario file when the scenario itself is loaded via `file://`. When loading scenarios with a glob, keep matrix files out of the glob's reach (a different directory or extension) so they are not also loaded as scenarios.
 
 ### Using Glob Patterns
 
