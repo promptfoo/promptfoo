@@ -152,6 +152,7 @@ describe('retry command', () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
       const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const completedPrompt = { ...prompt, provider: 'selected-target' };
       const evalRecord = await Eval.create(
         {
           prompts: [prompt.raw],
@@ -162,6 +163,7 @@ describe('retry command', () => {
         {
           id: uniqueEvalId(),
           runtimeOptions: { providerFilter: 'selected-target' },
+          completedPrompts: [completedPrompt],
         },
       );
       const db = await getDb();
@@ -198,6 +200,7 @@ describe('retry command', () => {
       try {
         const persistedEval = await Eval.findById(evalRecord.id);
         expect(persistedEval?.runtimeOptions?.providerFilter).toBe('selected-target');
+        expect(persistedEval?.prompts).toEqual([expect.objectContaining(completedPrompt)]);
 
         await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
           `Stored provider filter "selected-target" matched no providers in the retry config "${configPath}"`,
@@ -205,7 +208,7 @@ describe('retry command', () => {
 
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
         expect((await Eval.findById(evalRecord.id))?.prompts).toEqual([
-          expect.objectContaining(prompt),
+          expect.objectContaining(completedPrompt),
         ]);
       } finally {
         fs.rmSync(configPath, { force: true });
