@@ -48,6 +48,17 @@ describe('scenarioMatrix (real filesystem)', () => {
     it('returns non-file refs unchanged', () => {
       expect(resolveFileRefFromBase('/base', 'matrix.yaml')).toBe('matrix.yaml');
     });
+
+    it('handles file:///C:/ drive forms per platform', () => {
+      // Runs the win32 branch on CI's Windows shards with the real path module.
+      const resolved = resolveFileRefFromBase('/base', 'file:///C:/dir/matrix.yaml');
+      if (process.platform === 'win32') {
+        expect(resolved).toBe('file://C:/dir/matrix.yaml');
+      } else {
+        // POSIX: /C:/... is already absolute and preserved verbatim.
+        expect(resolved).toBe('file:///C:/dir/matrix.yaml');
+      }
+    });
   });
 
   describe('expandScenarioConfigValues', () => {
