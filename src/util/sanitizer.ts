@@ -39,6 +39,39 @@ function hasUrlUserinfoPassword(url: string): boolean {
 }
 
 /**
+ * Whether any `key=value` segment carries a credential — by a secret-looking
+ * value or a secret-named key. Splits on every URL pair delimiter (`? & ; #`),
+ * so it catches credentials the WHATWG URL parser does not isolate: values under
+ * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
+ * only splits on `&`). Linear: a single split plus per-segment substring checks.
+ */
+function hasSecretFormSegment(text: string): boolean {
+  for (const segment of text.split(/[?&;#]/)) {
+    const equalsIndex = segment.indexOf('=');
+    if (equalsIndex <= 0) {
+      continue;
+    }
+    const rawValue = segment.slice(equalsIndex + 1);
+    if (!rawValue) {
+      continue;
+    }
+    const decodedValue = decodeFormComponent(rawValue);
+    if (
+      looksLikeSecret(rawValue) ||
+      (decodedValue !== undefined && looksLikeSecret(decodedValue))
+    ) {
+      return true;
+    }
+    const decodedKey = decodeFormComponent(segment.slice(0, equalsIndex));
+    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
+    if (keyParts.some(isSecretField)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether an unparseable URL string plausibly carries a credential. Used to keep
  * sanitizeUrl fail-closed for credential-bearing junk while preserving ordinary
  * non-URL strings (bare domains, relative paths, prose), which also flow through
@@ -49,7 +82,8 @@ function unparseableUrlMightLeakSecret(url: string): boolean {
   return (
     SENSITIVE_URL_PARAM_NAMES.test(url) ||
     hasUrlUserinfoPassword(url) ||
-    looksLikeSecret(url.trim())
+    looksLikeSecret(url.trim()) ||
+    hasSecretFormSegment(url)
   );
 }
 
@@ -808,7 +842,11 @@ export function sanitizeUrl(url: string): string {
         if (
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
           rawSecretParamKeys.has(key) ||
-          looksLikeSecret(value)
+          looksLikeSecret(value) ||
+          // URLSearchParams only splits on `&`, so a `;`-delimited credential
+          // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
+          // hides inside one value. Redact the whole value when it conceals one.
+          (value.includes(';') && hasSecretFormSegment(value))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }

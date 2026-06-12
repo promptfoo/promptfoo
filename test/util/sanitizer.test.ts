@@ -1357,6 +1357,17 @@ describe('sanitizeObject url-keyed fields', () => {
     });
   });
 
+  it('redacts credentials hidden behind a semicolon query separator', () => {
+    // URLSearchParams only splits on `&`, so the `;`-delimited credential hides
+    // inside the first param's value; the whole suspect value is redacted.
+    expect(sanitizeUrl('https://example.com/api?data=ok;api_key=sk-1234567890abcdefghij')).toBe(
+      'https://example.com/api?data=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/api?data=ok;password=plain-secret')).toBe(
+      'https://example.com/api?data=%5BREDACTED%5D',
+    );
+  });
+
   it('redacts credentials carried in the URL fragment', () => {
     // OAuth implicit-flow shape: the token lives in the hash, not the query.
     const oauthUrl = 'https://example.com/callback#access_token=sk-1234567890abcdefghij&state=ok';
@@ -1406,6 +1417,14 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
       // `ht!tp://...` fails new URL(); the `token` indicator forces fail-closed.
       expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
+    });
+
+    it('should redact a secret-looking value under a benign key in a malformed URL', () => {
+      // `cursor` is not a sensitive key name and the secret is mid-string, so the
+      // segment scan (not the param-name/whole-string checks) must fail closed.
+      expect(sanitizeUrl('http://[::1?cursor=sk-1234567890abcdefghijklmnopqrstuv')).toBe(
+        '[REDACTED]',
+      );
     });
 
     it('should handle protocol-relative URLs', () => {
