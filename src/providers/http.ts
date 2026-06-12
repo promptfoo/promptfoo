@@ -262,36 +262,42 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
   const firstLine = rawRequest.split('\n')[0];
+  // The first line can embed credentials in the request-target query string. These
+  // error paths surface via logger.error (always on) and the thrown message (persisted
+  // to result.error), so sanitize the line before interpolating it anywhere.
+  const safeFirstLine = sanitizeUrl(firstLine);
 
   const firstSpace = firstLine.indexOf(' ');
   const method = firstLine.slice(0, firstSpace);
   if (!method || !http.METHODS.includes(method)) {
-    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    logger.error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine}`,
+    );
     throw new Error(
-      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine}`,
     );
   }
   const lastSpace = firstLine.lastIndexOf(' ');
   if (lastSpace === -1) {
     logger.error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine}`,
     );
     throw new Error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine}`,
     );
   }
   const url = firstLine.slice(firstSpace + 1, lastSpace);
 
   if (url.length === 0) {
-    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine}`);
   }
 
   const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
 
   if (!protocol.toLowerCase().startsWith('http')) {
-    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine}`);
   }
 
   const sanitizedUrl = sanitizeUrl(url);

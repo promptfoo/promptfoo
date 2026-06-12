@@ -9,6 +9,29 @@ const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
+// Query-parameter names that imply a credential value. Shared by sanitizeUrl's
+// per-param redaction and the fail-closed decision for unparseable URLs.
+const SENSITIVE_URL_PARAM_NAMES =
+  /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+// Userinfo with a password component (`scheme://user:pass@host`), the only
+// userinfo shape worth redacting when a URL fails to parse.
+const URL_USERINFO_WITH_PASSWORD = /:\/\/[^/?#@\s]*:[^/?#@\s]*@/;
+
+/**
+ * Whether an unparseable URL string plausibly carries a credential. Used to keep
+ * sanitizeUrl fail-closed for credential-bearing junk while preserving ordinary
+ * non-URL strings (bare domains, relative paths, prose), which also flow through
+ * sanitizeObject for any field literally named `url` and would otherwise be
+ * destroyed in persisted eval results.
+ */
+function unparseableUrlMightLeakSecret(url: string): boolean {
+  return (
+    SENSITIVE_URL_PARAM_NAMES.test(url) ||
+    URL_USERINFO_WITH_PASSWORD.test(url) ||
+    looksLikeSecret(url.trim())
+  );
+}
+
 /**
  * Set of field names that should be redacted (case-insensitive, with hyphens/underscores normalized)
  * Note: Keys are stored in their normalized form (lowercase, no hyphens/underscores)
@@ -493,6 +516,14 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
 
+    // Preserve Nunjucks template references (e.g. a provider body template
+    // `password={{password}}`): these are config placeholders, not runtime
+    // secrets, and this string flows through sanitizeObject into persisted
+    // provider configs. Mirrors the template guard in sanitizeUrl.
+    if (rawValue.includes('{{') && rawValue.includes('}}')) {
+      return match;
+    }
+
     // An undecodable key (stray `%` not forming %HH) only disables the key-NAME
     // match below — the value-pattern checks must still run, otherwise a malformed
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
@@ -727,13 +758,15 @@ export function sanitizeUrl(url: string): string {
     }
 
     // Sanitize query parameters that might contain sensitive data
-    const sensitiveParams =
-      /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
     const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
 
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
-        if (sensitiveParams.test(key) || rawSecretParamKeys.has(key) || looksLikeSecret(value)) {
+        if (
+          SENSITIVE_URL_PARAM_NAMES.test(key) ||
+          rawSecretParamKeys.has(key) ||
+          looksLikeSecret(value)
+        ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }
@@ -752,6 +785,10 @@ export function sanitizeUrl(url: string): string {
   } catch (error) {
     // Can't use logger here as it would create a circular dependency.
     console.warn(`Failed to sanitize URL: ${error}`);
-    return REDACTED;
+    // Fail closed only when the unparseable value plausibly carries a credential.
+    // sanitizeObject runs this on any field literally named `url`, so blanket
+    // redaction would destroy non-secret bare domains, relative paths, and prose
+    // in persisted eval results and user-facing config error messages.
+    return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
   }
 }

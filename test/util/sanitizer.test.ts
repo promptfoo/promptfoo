@@ -1301,6 +1301,45 @@ describe('sanitizeObject', () => {
       const body = 'data=%7B%22user%22%3A%22alice%22%7D';
       expect(sanitizeUrlEncodedString(body)).toBe(body);
     });
+
+    it('should preserve Nunjucks template values in a secret-named pair', () => {
+      // Provider config body templates flow into persisted provider configs via
+      // sanitizeObject; a `{{...}}` placeholder is config, not a runtime secret.
+      const body = 'username={{user}}&password={{password}}';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should still redact a real secret beside a templated pair', () => {
+      const body = 'password={{password}}&token=sk-1234567890abcdefghijklmnopqrstuv';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('password={{password}}');
+      expect(result).toContain('token=%5BREDACTED%5D');
+      expect(result).not.toContain('sk-1234567890abcdefghijklmnopqrstuv');
+    });
+  });
+});
+
+describe('sanitizeObject url-keyed fields', () => {
+  it('preserves non-secret url values that fail URL parsing', () => {
+    // sanitizeObject runs sanitizeUrl on any field named `url`; persisted eval
+    // result vars must not be destroyed when the value is a bare domain or path.
+    expect(sanitizeObject({ vars: { url: 'example.com' } })).toEqual({
+      vars: { url: 'example.com' },
+    });
+    expect(sanitizeObject({ vars: { url: '/relative/path' } })).toEqual({
+      vars: { url: '/relative/path' },
+    });
+  });
+
+  it('still redacts url values that carry credentials', () => {
+    // Parseable URL with userinfo: credentials redacted in place.
+    expect(sanitizeObject({ url: 'https://user:hunter2@host/api' })).toEqual({
+      url: 'https://***:***@host/api',
+    });
+    // Unparseable but credential-bearing: fail closed.
+    expect(sanitizeObject({ url: 'ht!tp://x?token=sk-1234567890abcdefghij' })).toEqual({
+      url: '[REDACTED]',
+    });
   });
 });
 
@@ -1329,9 +1368,17 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl('   ')).toBe('   ');
     });
 
-    it('should handle malformed URLs gracefully', () => {
+    it('should preserve unparseable URLs that show no credential indicators', () => {
+      // A bare token like this can be a `url` var in persisted eval results;
+      // redacting it would be data loss. Only fail closed when it might leak.
       const malformedUrl = 'not-a-valid-url';
-      expect(sanitizeUrl(malformedUrl)).toBe('[REDACTED]');
+      expect(sanitizeUrl(malformedUrl)).toBe(malformedUrl);
+    });
+
+    it('should redact unparseable URLs that carry credential indicators', () => {
+      expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
+      // `ht!tp://...` fails new URL(); the `token` indicator forces fail-closed.
+      expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
     });
 
     it('should handle protocol-relative URLs', () => {
@@ -1762,7 +1809,8 @@ describe('sanitizeUrl', () => {
     it('should handle URL parsing errors gracefully', () => {
       const invalidUrl = 'ht!tp://invalid';
       const result = sanitizeUrl(invalidUrl);
-      expect(result).toBe('[REDACTED]');
+      // No credential indicators, so the original is preserved for debuggability.
+      expect(result).toBe(invalidUrl);
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 

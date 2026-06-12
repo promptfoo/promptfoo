@@ -2790,6 +2790,32 @@ describe('urlEncodeRawRequestPath', () => {
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
   });
 
+  it('should not leak query credentials from a malformed first line in errors or logs', () => {
+    const errorSpy = vi.spyOn(logger, 'error');
+    try {
+      // A non-HTTP protocol token triggers the protocol-invalid path; the
+      // request target carries a secret in its query string.
+      const rawRequest = 'GET /v1/chat?api_key=sk-realsecret1234567890&note=foo FTP/1.1';
+      expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/protocol is not valid/);
+
+      const thrownMessage = (() => {
+        try {
+          urlEncodeRawRequestPath(rawRequest);
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      })();
+      const loggedOutput = errorSpy.mock.calls.flat().join('\n');
+
+      // The secret never appears in the thrown message or the error log.
+      expect(thrownMessage).not.toContain('sk-realsecret1234567890');
+      expect(loggedOutput).not.toContain('sk-realsecret1234567890');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('should handle complete raw request with headers', () => {
     const rawRequest = dedent`
       GET /summarized?topic=hello world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2
