@@ -89,36 +89,11 @@ describe('JsonlFileWriter', () => {
     await writer.write({ a: 1 });
     const closePromise = writer.close();
 
-    // The flush never completed ('finish' was not emitted), so data may be missing.
     stream.emit('error', new Error('late close error'));
     stream.emit('close');
 
     await expect(closePromise).rejects.toThrow(
       'Failed to close JSONL output /tmp/results.jsonl: late close error',
-    );
-  });
-
-  it('reports and resolves when an error arrives after the final flush', async () => {
-    const onPostFlushError = vi.fn();
-    const stream = createMockWriteStream();
-    stream.end.mockImplementation(() => stream);
-
-    const writer = new JsonlFileWriter('/tmp/results.jsonl', { onPostFlushError });
-    await writer.write({ a: 1 });
-    const closePromise = writer.close();
-
-    // Simulate a failure from the fd close(2) itself: the flush completed ('finish',
-    // writableFinished=true), then the error fires. The bytes are on disk, so close()
-    // must not fail an otherwise-successful run.
-    (stream as { writableFinished?: boolean }).writableFinished = true;
-    stream.emit('error', new Error('EIO: i/o error, close'));
-    stream.emit('close');
-
-    await expect(closePromise).resolves.toBeUndefined();
-    expect(onPostFlushError).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Error while closing JSONL output /tmp/results.jsonl after the final flush',
-      ),
     );
   });
 

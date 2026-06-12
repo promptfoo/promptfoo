@@ -2,28 +2,16 @@ import { createWriteStream, type WriteStream } from 'fs';
 
 export class JsonlFileWriter {
   private readonly flags: 'a' | 'w';
-  // Invoked instead of rejecting close() for errors that arrive after the final flush
-  // (the bytes are on disk). Injected by the caller because this layer must not depend
-  // on the logger (architecture edge ratchet: node -> legacy-runtime).
-  private readonly onPostFlushError: (message: string) => void;
   private writeStream: WriteStream | undefined;
   // The first async stream error (e.g. an fd failure that surfaces between writes). Captured
   // by a persistent listener so it can be re-thrown from the next write()/close() instead of
   // escaping as an unhandled 'error' event that would crash the process.
   private streamError: Error | undefined;
-  // Whether streamError arrived after the final flush ('finish'). Post-flush errors come
-  // from the fd close(2) itself — the bytes are already on disk — so close() reports them
-  // as a warning instead of failing an otherwise-successful run.
-  private streamErrorAfterFlush = false;
 
   constructor(
     private filePath: string,
-    {
-      append = false,
-      onPostFlushError,
-    }: { append?: boolean; onPostFlushError?: (message: string) => void } = {},
+    { append = false }: { append?: boolean } = {},
   ) {
-    this.onPostFlushError = onPostFlushError ?? (() => {});
     // Open lazily on the first write so we never truncate an existing file for an eval that
     // produces no rows — e.g. one that throws during setup before writing anything. The
     // first write still truncates (flags 'w') so a reused path holds only the current run.
@@ -40,7 +28,6 @@ export class JsonlFileWriter {
       stream.on('error', (error: Error) => {
         if (!this.streamError) {
           this.streamError = error;
-          this.streamErrorAfterFlush = stream.writableFinished === true;
         }
       });
       this.writeStream = stream;
@@ -86,21 +73,11 @@ export class JsonlFileWriter {
     // still held between 'finish' and 'close'. Relies on createWriteStream's default
     // emitClose: true, so 'close' always fires once the stream ends, errors, or is
     // destroyed. closeError is seeded from any error recorded before close() was called.
-    //
-    // Errors recorded before the final flush mean data may be missing and reject close().
-    // Errors arriving after 'finish' come from the fd close(2) itself — the bytes are
-    // already flushed and the DB holds the authoritative results, so failing the run (and
-    // skipping the post-run rewrite that regenerates this file) would only hurt; report
-    // them as a warning instead.
     return new Promise<void>((resolve, reject) => {
       let settled = false;
       let closeError = this.streamError;
-      let closeErrorAfterFlush = this.streamErrorAfterFlush;
       const onError = (error: Error) => {
-        if (!closeError) {
-          closeError = error;
-          closeErrorAfterFlush = stream.writableFinished === true;
-        }
+        closeError ??= error;
       };
       const settle = () => {
         if (settled) {
@@ -109,14 +86,9 @@ export class JsonlFileWriter {
         settled = true;
         stream.off('error', onError);
         stream.off('close', settle);
-        if (closeError && !closeErrorAfterFlush) {
+        if (closeError) {
           reject(this.wrapStreamError('close', closeError));
         } else {
-          if (closeError) {
-            this.onPostFlushError(
-              `Error while closing JSONL output ${this.filePath} after the final flush: ${closeError.message}`,
-            );
-          }
           resolve();
         }
       };
