@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Compare models from different providers through the pi agent harness'
+
+prompts:
+  - 'Write a Python function is_palindrome(s) that ignores case and non-alphanumeric characters. Output only the code.'
+
+providers:
+  - pi:openai/gpt-5.4-mini
+  - pi:anthropic/claude-haiku-4-5-20251001
+  - pi:google/gemini-2.5-flash
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'def is_palindrome'
+      - type: python
+        value: "'isalnum' in output or 'sub' in output or 'filter' in output"

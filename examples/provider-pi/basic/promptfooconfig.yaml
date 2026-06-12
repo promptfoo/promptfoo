@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Pi coding agent basic usage - temp directory with no tools'
+
+prompts:
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence. Do not create any files. Just output the code.'
+
+providers:
+  # pi:<provider>/<model> selects the model explicitly
+  - pi:openai/gpt-5.4-mini
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains
+        value: 'print'

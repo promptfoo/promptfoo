@@ -24,6 +24,7 @@ The main providers in this family today are:
 | OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process  |
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library   |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server |
+| Pi Coding Agent         | `pi`, `pi:<provider>/<model>`                         | Local `pi --mode json` one-shot process    |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -327,6 +328,50 @@ Docs and examples:
 
 - `site/docs/providers/opencode-sdk.md`
 - `examples/provider-opencode-sdk/`
+
+### Pi Coding Agent
+
+Status: implemented and documented.
+
+Provider IDs:
+
+- `pi`
+- `pi:<provider>/<model>` (pi model pattern, optional `:<thinking>` suffix)
+
+Implemented capabilities:
+
+- Spawns the `pi` CLI per call in one-shot JSON event-stream mode
+  (`--mode json --no-session`), so no npm package import is required.
+- Resolves the CLI from `pi_path`, a project-local
+  `@earendil-works/pi-coding-agent` install, or `PATH`, with actionable install
+  guidance when missing.
+- Supports provider/model selection, thinking levels, and system prompt
+  replacement or extension.
+- Supports temporary or configured working directories with OpenCode-style safe
+  defaults: chat-only without `working_dir`, read-only tools (`read`, `grep`,
+  `find`, `ls`) with it.
+- Disables extension/skill/prompt-template/context-file discovery by default for
+  reproducible evals; each is opt-in.
+- Maps per-message usage to summed `tokenUsage` and USD `cost`, and surfaces tool
+  activity in `metadata.toolCalls`.
+- Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
+  JSON mode even when the run fails.
+
+Important limits:
+
+- Pi has no built-in permission or sandbox system; write-capable tools execute
+  with the user's privileges and are opt-in only.
+- The spawned pi process inherits promptfoo's full environment (pi resolves
+  provider credentials from env vars); isolate via container or stripped env
+  when evaluating untrusted prompts with tools enabled.
+- Sessions are always ephemeral (`--no-session`); there is no resume support.
+- Uses the user's `~/.pi/agent` config dir by default so subscription auth and
+  custom models work; set `agent_dir` to isolate.
+
+Docs and examples:
+
+- `site/docs/providers/pi.md`
+- `examples/provider-pi/`
 
 ## Current Naming Guidance
 

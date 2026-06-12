@@ -314,11 +314,13 @@ describe('init command', () => {
         const xaiResult = await init.handleExampleDownload('.', 'xai');
         const openSourceResult = await init.handleExampleDownload('.', 'open-source-comparison');
         const opencodeResult = await init.handleExampleDownload('.', 'opencode-sdk');
+        const piResult = await init.handleExampleDownload('.', 'pi');
 
         expect(amazonBedrockResult).toEqual('amazon-bedrock/models');
         expect(xaiResult).toEqual('xai/chat');
         expect(openSourceResult).toEqual('compare-open-source-models');
         expect(opencodeResult).toEqual('provider-opencode-sdk/basic');
+        expect(piResult).toEqual('provider-pi/basic');
       });
 
       it('should preserve legacy GPT model comparison example names', async () => {

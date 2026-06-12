@@ -48,6 +48,7 @@ Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-
 | OpenAI Codex app-server | `openai:codex-app-server` or `openai:codex-desktop`     |
 | Claude Agent SDK        | `anthropic:claude-agent-sdk` or `anthropic:claude-code` |
 | OpenCode SDK            | `opencode:sdk` or `opencode`                            |
+| Pi Coding Agent         | `pi` or `pi:<provider>/<model>`                         |
 
 For example, use Claude Agent SDK as the judge with read-only filesystem tools:
 

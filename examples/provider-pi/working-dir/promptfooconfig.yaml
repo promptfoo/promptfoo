@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Pi coding agent working_dir with default read-only tools'
+
+prompts:
+  - 'Read the local promptfooconfig.yaml in the working directory and report the configured provider id in one sentence.'
+
+providers:
+  - id: pi:openai/gpt-5.4-mini
+    config:
+      working_dir: ../basic
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'gpt-5.4-mini'

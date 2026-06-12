@@ -48,6 +48,8 @@ describe('agentic-utils', () => {
       'anthropic:claude-code:sonnet',
       'opencode',
       'opencode:sdk',
+      'pi',
+      'pi:anthropic/claude-sonnet-4-5',
     ])('recognizes %s as a coding-agent provider', (id) => {
       expect(isAgenticProvider(provider(id))).toBe(true);
     });
@@ -55,6 +57,7 @@ describe('agentic-utils', () => {
     it('does not classify plain model providers as coding-agent runtimes', () => {
       expect(isAgenticProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
       expect(isAgenticProvider(provider('anthropic:messages:claude-opus-4-6'))).toBe(false);
+      expect(isAgenticProvider(provider('pinecone:index'))).toBe(false);
     });
   });
 

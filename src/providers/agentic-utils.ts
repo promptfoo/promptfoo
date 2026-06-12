@@ -26,6 +26,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex-sdk',
   'opencode',
   'opencode:sdk',
+  'pi',
 ] as const;
 
 /**
