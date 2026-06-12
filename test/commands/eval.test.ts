@@ -876,6 +876,34 @@ describe('evalCommand', () => {
     loadDefaultConfigSpy.mockRestore();
   });
 
+  it('should list every config-less directory when all of them are dropped', async () => {
+    const cmdObj = { config: ['/empty-a', '/empty-b'], write: false };
+    const loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const statSpy = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+      isDirectory: () => true,
+    } as any);
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValue({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      } as any);
+
+    await expect(doEval(cmdObj, defaultConfig, undefined, {})).rejects.toEqual(
+      expect.objectContaining({
+        name: 'EvalRunError',
+        message: expect.stringContaining('No configuration file found in /empty-a, /empty-b.'),
+      }),
+    );
+
+    expect(resolveConfigs).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+
+    loggerWarnSpy.mockClear();
+    statSpy.mockRestore();
+    loadDefaultConfigSpy.mockRestore();
+  });
+
   it('should throw without mutating process.exitCode for reusable callers', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
