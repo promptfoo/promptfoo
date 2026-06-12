@@ -12,6 +12,7 @@ import {
   getCachedResponse,
   initializeAgenticCache,
   resolveAgenticWorkingDir,
+  validateAgenticWorkingDir,
 } from './agentic-utils';
 
 import type { EnvOverrides } from '../types/env';
@@ -52,7 +53,7 @@ const DEFAULT_TIMEOUT_MS = 600_000;
 const KILL_GRACE_MS = 5_000;
 // After the pi process exits, wait briefly for stdio to flush before settling.
 // A descendant process that inherited stdout can otherwise hold the 'close'
-// event open forever (codex-app-server uses the same guard).
+// event open forever.
 const STDIO_FLUSH_GRACE_MS = 1_000;
 const MAX_STDERR_LENGTH = 16_384;
 
@@ -99,10 +100,10 @@ export interface PiProviderConfig {
 
   /**
    * API key for the selected LLM provider. Injected into the pi process
-   * environment using the provider's standard env var when the provider is
-   * recognized, or the env var named by `api_key_env`.
-   * Falls back to the env vars pi reads natively (ANTHROPIC_API_KEY,
-   * OPENAI_API_KEY, GEMINI_API_KEY, ...).
+   * environment using the env var named by `api_key_env` if set, otherwise
+   * the provider's standard env var when the provider is recognized.
+   * When unset, pi reads its native env vars (ANTHROPIC_API_KEY,
+   * OPENAI_API_KEY, GEMINI_API_KEY, ...) from the inherited environment.
    */
   apiKey?: string;
 
@@ -247,8 +248,14 @@ interface PiRunResult {
 
 interface PiPreparedCall {
   config: PiProviderConfig;
-  isTempDir: boolean;
+  /** Resolved working_dir; undefined means run in a fresh temp directory */
   workingDir: string | undefined;
+}
+
+function resolveBasePath(): string {
+  return cliState.basePath && path.isAbsolute(cliState.basePath)
+    ? cliState.basePath
+    : process.cwd();
 }
 
 function truncateStderr(stderr: string): string {
@@ -260,9 +267,34 @@ function truncateStderr(stderr: string): string {
 }
 
 /**
+ * Read the pi bin script path from an installed package's package.json.
+ * Returns undefined when the package or its bin script is absent or unreadable.
+ */
+function readPiBinScript(packageJsonPath: string): string | undefined {
+  try {
+    if (!fs.existsSync(packageJsonPath)) {
+      return undefined;
+    }
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const binEntry = typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin?.pi;
+    if (typeof binEntry !== 'string') {
+      return undefined;
+    }
+    const scriptPath = path.join(path.dirname(packageJsonPath), binEntry);
+    return fs.existsSync(scriptPath) ? scriptPath : undefined;
+  } catch (err) {
+    logger.debug(`[Pi] Failed to inspect ${packageJsonPath}: ${err}`);
+    return undefined;
+  }
+}
+
+/**
  * Locate the pi CLI entry point from a project-local install of
  * @earendil-works/pi-coding-agent by walking up from the given base directories.
  * Returns the absolute path to the package's bin script, or undefined.
+ *
+ * esm.ts's resolvePackageEntryPoint is not usable here: it resolves the
+ * package's main export, while spawning requires the `bin.pi` script.
  */
 export function findPiCliScript(baseDirs: Array<string | undefined>): string | undefined {
   const seen = new Set<string>();
@@ -274,26 +306,11 @@ export function findPiCliScript(baseDirs: Array<string | undefined>): string | u
     while (true) {
       if (!seen.has(current)) {
         seen.add(current);
-        const packageJsonPath = path.join(
-          current,
-          'node_modules',
-          ...PI_PACKAGE_NAME.split('/'),
-          'package.json',
+        const scriptPath = readPiBinScript(
+          path.join(current, 'node_modules', ...PI_PACKAGE_NAME.split('/'), 'package.json'),
         );
-        try {
-          if (fs.existsSync(packageJsonPath)) {
-            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-            const binEntry =
-              typeof packageJson.bin === 'string' ? packageJson.bin : packageJson.bin?.pi;
-            if (typeof binEntry === 'string') {
-              const scriptPath = path.join(path.dirname(packageJsonPath), binEntry);
-              if (fs.existsSync(scriptPath)) {
-                return scriptPath;
-              }
-            }
-          }
-        } catch (err) {
-          logger.debug(`[Pi] Failed to inspect ${packageJsonPath}: ${err}`);
+        if (scriptPath) {
+          return scriptPath;
         }
       }
       const parent = path.dirname(current);
@@ -324,6 +341,8 @@ export class PiProvider implements ApiProvider {
   env?: EnvOverrides;
 
   private providerId = 'pi';
+  /** Memoized findPiCliScript result; null = searched and not found */
+  private cachedCliScript: string | null | undefined;
 
   constructor(
     options: {
@@ -352,21 +371,23 @@ export class PiProvider implements ApiProvider {
    */
   private resolvePiCommand(config: PiProviderConfig): { command: string; argsPrefix: string[] } {
     if (config.pi_path) {
-      const basePath =
-        cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
       const resolved = path.isAbsolute(config.pi_path)
         ? config.pi_path
-        : path.resolve(basePath, config.pi_path);
+        : path.resolve(resolveBasePath(), config.pi_path);
       if (resolved.endsWith('.js') || resolved.endsWith('.mjs')) {
         return { command: process.execPath, argsPrefix: [resolved] };
       }
       return { command: resolved, argsPrefix: [] };
     }
 
-    const cliScript = findPiCliScript([cliState.basePath, process.cwd()]);
-    if (cliScript) {
-      logger.debug(`[Pi] Using project-local pi CLI: ${cliScript}`);
-      return { command: process.execPath, argsPrefix: [cliScript] };
+    // The node_modules walk is stable for the lifetime of a provider instance;
+    // cache it so repeated calls don't re-stat the directory tree.
+    if (this.cachedCliScript === undefined) {
+      this.cachedCliScript = findPiCliScript([cliState.basePath, process.cwd()]) ?? null;
+    }
+    if (this.cachedCliScript) {
+      logger.debug(`[Pi] Using project-local pi CLI: ${this.cachedCliScript}`);
+      return { command: process.execPath, argsPrefix: [this.cachedCliScript] };
     }
 
     return { command: 'pi', argsPrefix: [] };
@@ -492,11 +513,9 @@ export class PiProvider implements ApiProvider {
     }
 
     if (config.agent_dir) {
-      const basePath =
-        cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
       env.PI_CODING_AGENT_DIR = path.isAbsolute(config.agent_dir)
         ? config.agent_dir
-        : path.resolve(basePath, config.agent_dir);
+        : path.resolve(resolveBasePath(), config.agent_dir);
     }
 
     if (config.apiKey) {
@@ -532,28 +551,13 @@ export class PiProvider implements ApiProvider {
     if (config.working_dir) {
       const workingDir =
         resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
-
-      let stats: fs.Stats;
-      try {
-        stats = fs.statSync(workingDir);
-      } catch (err: any) {
-        throw new Error(
-          `Working directory ${config.working_dir} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
-        );
-      }
-
-      if (!stats.isDirectory()) {
-        throw new Error(
-          `Working directory ${config.working_dir} (resolved to ${workingDir}) is not a directory`,
-        );
-      }
-
-      return { config, isTempDir: false, workingDir };
+      validateAgenticWorkingDir(workingDir, config.working_dir);
+      return { config, workingDir };
     }
 
     // The temp directory is created later in callApi, after the cache and
     // abort checks, so cache hits don't leave empty directories behind.
-    return { config, isTempDir: true, workingDir: undefined };
+    return { config, workingDir: undefined };
   }
 
   private runPi(
@@ -580,7 +584,6 @@ export class PiProvider implements ApiProvider {
       let timedOut = false;
       let aborted = false;
       let settled = false;
-      let exitCode: number | null = null;
 
       const killChild = () => {
         try {
@@ -657,11 +660,10 @@ export class PiProvider implements ApiProvider {
       // inherited pipes can delay it indefinitely. Settle from 'exit' after a
       // short flush grace period so the call can't hang forever.
       child.on('exit', (code) => {
-        exitCode = code;
         setTimeout(() => resolveRun(code), STDIO_FLUSH_GRACE_MS).unref();
       });
       child.on('close', (code) => {
-        resolveRun(code ?? exitCode);
+        resolveRun(code);
       });
     });
   }
@@ -693,10 +695,13 @@ export class PiProvider implements ApiProvider {
   }
 
   private collectAssistantMessages(events: PiEvent[]): PiMessage[] {
-    // agent_end carries the authoritative final message list.
-    const agentEnd = [...events].reverse().find((event) => event.type === 'agent_end');
-    if (agentEnd?.messages) {
-      return agentEnd.messages.filter((message) => message.role === 'assistant');
+    // agent_end carries the authoritative final message list; scan backwards
+    // for the last one.
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      if (event.type === 'agent_end' && event.messages) {
+        return event.messages.filter((message) => message.role === 'assistant');
+      }
     }
 
     // Fall back to message_end events when the run ended without agent_end.
@@ -761,7 +766,7 @@ export class PiProvider implements ApiProvider {
       }));
   }
 
-  private buildProviderResponse(events: PiEvent[], runResult: PiRunResult): ProviderResponse {
+  private buildProviderResponse(events: PiEvent[], stderr: string): ProviderResponse {
     const assistantMessages = this.collectAssistantMessages(events);
     const finalMessage = assistantMessages[assistantMessages.length - 1];
 
@@ -769,7 +774,7 @@ export class PiProvider implements ApiProvider {
     const cost = this.buildCost(assistantMessages);
 
     if (!finalMessage) {
-      const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
+      const stderrSuffix = stderr ? `\n${truncateStderr(stderr)}` : '';
       return {
         error: `Pi agent produced no assistant response.${stderrSuffix}`,
       };
@@ -810,7 +815,7 @@ export class PiProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { config, isTempDir, workingDir } = this.prepareCall(context);
+    const { config, workingDir } = this.prepareCall(context);
     const args = this.buildArgs(config);
 
     const cacheResult = await initializeAgenticCache(
@@ -875,7 +880,7 @@ export class PiProvider implements ApiProvider {
       }
 
       const events = this.parseEvents(runResult.stdout);
-      const providerResponse = this.buildProviderResponse(events, runResult);
+      const providerResponse = this.buildProviderResponse(events, runResult.stderr);
 
       if (!providerResponse.error) {
         await cacheResponse(cacheResult, providerResponse, 'Pi');
@@ -893,7 +898,7 @@ export class PiProvider implements ApiProvider {
       logger.error('Error calling Pi', { error });
       return { error: `Error calling Pi: ${errorMessage}` };
     } finally {
-      if (isTempDir) {
+      if (!workingDir) {
         await fsPromises.rm(runDir, { recursive: true, force: true }).catch((err) => {
           logger.debug(`[Pi] Failed to remove temp dir ${runDir}: ${err}`);
         });

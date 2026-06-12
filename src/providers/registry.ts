@@ -224,6 +224,7 @@ export const providerMap: ProviderFactory[] = [
 
       // pi - uses pi's configured default model
       // pi:<provider>/<model> - explicit model pattern (e.g. pi:anthropic/claude-sonnet-4-5)
+      // join(':') preserves pi's optional :<thinking> suffix (e.g. pi:sonnet:high)
       const modelPattern = providerPath.split(':').slice(1).join(':');
       return new PiProvider({
         ...providerOptions,

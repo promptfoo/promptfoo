@@ -34,7 +34,6 @@ class FakeChildProcess extends EventEmitter {
 interface FakeRunOptions {
   exitCode?: number;
   stderr?: string;
-  emitClose?: boolean;
 }
 
 function buildUsage(input: number, output: number, costTotal: number, cacheRead = 0) {
@@ -92,11 +91,9 @@ function mockPiRun(events: unknown[], options: FakeRunOptions = {}): FakeChildPr
       if (options.stderr) {
         child.stderr.emit('data', options.stderr);
       }
-      if (options.emitClose !== false) {
-        const exitCode = options.exitCode ?? 0;
-        child.exitCode = exitCode;
-        child.emit('close', exitCode);
-      }
+      const exitCode = options.exitCode ?? 0;
+      child.exitCode = exitCode;
+      child.emit('close', exitCode);
     });
     return child as never;
   });

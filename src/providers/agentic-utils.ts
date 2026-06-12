@@ -7,6 +7,7 @@
  */
 
 import crypto from 'crypto';
+import nodeFs from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -75,6 +76,30 @@ export function resolveAgenticWorkingDir(
 
   const basePath = configBasePath ? path.resolve(configBasePath) : process.cwd();
   return safeResolve(basePath, workingDir);
+}
+
+/**
+ * Validate a resolved coding-agent working directory, throwing the error
+ * messages shared by agentic providers.
+ *
+ * @param workingDir - Absolute resolved directory path
+ * @param configuredValue - The configured working_dir value, for error messages
+ */
+export function validateAgenticWorkingDir(workingDir: string, configuredValue: string): void {
+  let stats: nodeFs.Stats;
+  try {
+    stats = nodeFs.statSync(workingDir);
+  } catch (err: any) {
+    throw new Error(
+      `Working directory ${configuredValue} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
+    );
+  }
+
+  if (!stats.isDirectory()) {
+    throw new Error(
+      `Working directory ${configuredValue} (resolved to ${workingDir}) is not a directory`,
+    );
+  }
 }
 
 /**
