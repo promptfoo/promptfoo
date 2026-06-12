@@ -86,7 +86,7 @@
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "tsx src/main.ts",
+    "local": "tsx src/localEntrypoint.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
@@ -192,7 +192,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.158",
+    "@anthropic-ai/claude-agent-sdk": "0.3.160",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -251,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.158",
+    "@anthropic-ai/claude-agent-sdk": "0.3.160",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -272,7 +272,7 @@
     "@openai/codex-sdk": "^0.130.0",
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.60.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.61.0",
     "@slack/web-api": "^7.15.2",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.18",
