@@ -2816,6 +2816,19 @@ describe('urlEncodeRawRequestPath', () => {
     }
   });
 
+  it('should not warn when encoding a valid raw request line', () => {
+    // The first line is not a URL, so eagerly sanitizing it would console.warn on
+    // every valid raw request. The sanitize must be deferred to the error branches.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = urlEncodeRawRequestPath('GET /api/data?q=hello world HTTP/1.1');
+      expect(result).toBe('GET /api/data?q=hello%20world HTTP/1.1');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('should handle complete raw request with headers', () => {
     const rawRequest = dedent`
       GET /summarized?topic=hello world&start=01/01/2025&end=01/07/2025&auto_extract_keywords=false HTTP/2

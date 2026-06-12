@@ -1316,6 +1316,21 @@ describe('sanitizeObject', () => {
       expect(result).toContain('token=%5BREDACTED%5D');
       expect(result).not.toContain('sk-1234567890abcdefghijklmnopqrstuv');
     });
+
+    it('should redact a secret-named key whose value only embeds a template', () => {
+      // A placeholder amid literal text is not a pure config template; the secret
+      // key must redact the whole value rather than skip it.
+      expect(sanitizeUrlEncodedString('password=abc{{x}}def')).toBe('password=%5BREDACTED%5D');
+    });
+
+    it('should fully redact a secret-named key holding a JSON value', () => {
+      // A secret key must redact its entire value before nested-JSON recursion, so
+      // a non-secret-named field inside the JSON (`value`) cannot leak.
+      const body = `password=${encodeURIComponent('{"value":"plain-secret","api_key":"sk-xxxxxxxxxxxxxxxxxxxx"}')}`;
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('password=%5BREDACTED%5D');
+      expect(result).not.toContain('plain-secret');
+    });
   });
 });
 
@@ -1340,6 +1355,18 @@ describe('sanitizeObject url-keyed fields', () => {
     expect(sanitizeObject({ url: 'ht!tp://x?token=sk-1234567890abcdefghij' })).toEqual({
       url: '[REDACTED]',
     });
+  });
+
+  it('redacts credentials carried in the URL fragment', () => {
+    // OAuth implicit-flow shape: the token lives in the hash, not the query.
+    const oauthUrl = 'https://example.com/callback#access_token=sk-1234567890abcdefghij&state=ok';
+    expect(sanitizeUrl(oauthUrl)).toBe(
+      'https://example.com/callback#access_token=%5BREDACTED%5D&state=ok',
+    );
+    // A plain anchor fragment is left intact.
+    expect(sanitizeUrl('https://example.com/api?data=public#section')).toBe(
+      'https://example.com/api?data=public#section',
+    );
   });
 });
 

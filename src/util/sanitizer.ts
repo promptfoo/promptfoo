@@ -524,6 +524,18 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
 }
 
+// Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
+// cannot backtrack against the closing `}}` (linear, no ReDoS).
+const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
+
+// A value that is entirely Nunjucks placeholders (e.g. `{{password}}`) with no
+// literal content is a config template, not a runtime secret. A value that merely
+// CONTAINS a placeholder alongside literal text (e.g. `abc{{x}}def`) is not, so a
+// secret-named key must still redact it.
+function isPureTemplateValue(value: string): boolean {
+  return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
+}
+
 export function sanitizeUrlEncodedString(value: string): string {
   if (!value.includes('=')) {
     return value;
@@ -537,18 +549,35 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
 
-    // Preserve Nunjucks template references (e.g. a provider body template
-    // `password={{password}}`): these are config placeholders, not runtime
-    // secrets, and this string flows through sanitizeObject into persisted
-    // provider configs. Mirrors the template guard in sanitizeUrl.
-    if (rawValue.includes('{{') && rawValue.includes('}}')) {
+    // Preserve pure Nunjucks placeholders (e.g. a provider body template
+    // `password={{password}}`): these are config templates, not runtime secrets,
+    // and this string flows through sanitizeObject into persisted provider
+    // configs. Mirrors the template guard in sanitizeUrl. Checked before the
+    // secret-key redaction so a templated secret field is kept, but a value that
+    // only embeds a placeholder among literal text is not exempted.
+    if (isPureTemplateValue(rawValue)) {
       return match;
     }
 
     // An undecodable key (stray `%` not forming %HH) only disables the key-NAME
-    // match below — the value-pattern checks must still run, otherwise a malformed
+    // match — the value-pattern checks below must still run, otherwise a malformed
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
     const decodedKey = decodeFormComponent(rawKey);
+    // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
+    // can match the leaf name against SECRET_FIELD_NAMES.
+    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
+    const keyIsSecret = keyParts.some(isSecretField);
+
+    // A secret-named key redacts its ENTIRE value before any template skip or
+    // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
+    // or a JSON value (`password={"value":"plain"}`) can't leak a fragment.
+    if (keyIsSecret) {
+      changed = true;
+      // `encodeURIComponent(REDACTED)` keeps the output a valid form-encoded
+      // body; debug consumers that decode it see `[REDACTED]`.
+      return `${separator}${rawKey}=${encodeURIComponent(REDACTED)}`;
+    }
+
     const decodedValue = decodeFormComponent(rawValue);
 
     // Recurse into JSON-shaped values so credentials buried in a
@@ -567,15 +596,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     const valueLooksSecret =
       looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
 
-    // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so
-    // we can match the leaf name against SECRET_FIELD_NAMES.
-    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.some(isSecretField);
-
-    if (keyIsSecret || valueLooksSecret) {
+    if (valueLooksSecret) {
       changed = true;
-      // `encodeURIComponent(REDACTED)` keeps the output a valid form-encoded
-      // body; debug consumers that decode it see `[REDACTED]`.
       return `${separator}${rawKey}=${encodeURIComponent(REDACTED)}`;
     }
     return match;
@@ -795,6 +817,14 @@ export function sanitizeUrl(url: string): string {
       // Can't use logger here as it would create a circular dependency.
       console.warn(`Failed to sanitize URL parameters: ${paramError}`);
       return REDACTED;
+    }
+
+    // Redact credentials carried in the fragment too (e.g. the OAuth implicit-flow
+    // shape `#access_token=...`). The hash is a `key=value(&...)` string after the
+    // leading `#`, so reuse the same form-pair scrubbing as the query.
+    if (sanitizedUrl.hash.length > 1) {
+      const sanitizedHash = sanitizeUrlEncodedString(sanitizedUrl.hash.slice(1));
+      sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
     // For path-only URLs, return just the path (+ search + hash), not the dummy base
