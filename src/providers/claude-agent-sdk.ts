@@ -317,6 +317,7 @@ export interface ClaudeCodeOptions {
   /**
    * 'model' and 'fallback_model' are optional
    * if not supplied, Claude Agent SDK uses default models
+   * 'fallback_model' accepts a comma-separated list, tried in order (SDK >= 0.3.160)
    */
   model?: string;
   fallback_model?: string;
@@ -1003,14 +1004,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       logger.warn(`Using unknown model for Claude Agent SDK: ${this.config.model}`);
     }
 
-    if (
-      this.config.fallback_model &&
-      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.fallback_model) &&
-      !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.fallback_model)
-    ) {
-      logger.warn(
-        `Using unknown model for Claude Agent SDK fallback: ${this.config.fallback_model}`,
-      );
+    // Since SDK 0.3.160, fallback_model accepts a comma-separated list tried in order.
+    for (const fallbackModel of (this.config.fallback_model ?? '')
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean)) {
+      if (
+        !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(fallbackModel) &&
+        !CLAUDE_CODE_MODEL_ALIASES.includes(fallbackModel)
+      ) {
+        logger.warn(`Using unknown model for Claude Agent SDK fallback: ${fallbackModel}`);
+      }
     }
   }
 
