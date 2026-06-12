@@ -182,13 +182,8 @@ describe('runtimeTransform', () => {
         expect.objectContaining({ targetId: 'cloud-target-123' }),
       );
 
-      const parsedPrompt = JSON.parse(result.prompt);
-      expect(parsedPrompt).toEqual(
-        expect.objectContaining({
-          prompt: 'aGVsbG8=',
-          targetId: 'cloud-target-123',
-        }),
-      );
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.originalPrompt).toBe('hello');
     });
 
     it('should skip unknown strategies with warning', async () => {
