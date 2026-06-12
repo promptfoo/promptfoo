@@ -25,30 +25,9 @@ type LegacyCompletedPrompt = Omit<CompletedPrompt, 'metrics'> & {
   metrics: Omit<NonNullable<CompletedPrompt['metrics']>, 'namedScoresCount'>;
 };
 
-const parseCSVLine = (line: string): string[] => {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-
-    if (char === '"' && nextChar === '"') {
-      current += '"';
-      i++;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  result.push(current);
-  return result;
+const parseCsvRow = (line: string): string[] => {
+  const [row = []] = parseCsv(line, { relax_quotes: true }) as string[][];
+  return row;
 };
 
 describe('evalTableUtils', () => {
@@ -615,8 +594,8 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithMultipleOutputs); // No isRedteam flag
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
-        const headerCols = parseCSVLine(lines[0]);
-        const dataCols = parseCSVLine(lines[1]);
+        const headerCols = parseCsvRow(lines[0]);
+        const dataCols = parseCsvRow(lines[1]);
 
         // Header and data row should have the same number of columns
         expect(headerCols.length).toBe(dataCols.length);
@@ -686,8 +665,8 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithMultipleOutputs, { isRedteam: true });
         const lines = csv.split('\n').filter((line: string) => line.trim());
 
-        const headerCols = parseCSVLine(lines[0]);
-        const dataCols = parseCSVLine(lines[1]);
+        const headerCols = parseCsvRow(lines[0]);
+        const dataCols = parseCsvRow(lines[1]);
 
         // Header and data row should have the same number of columns
         expect(headerCols.length).toBe(dataCols.length);

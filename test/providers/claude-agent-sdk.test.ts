@@ -319,6 +319,33 @@ describe('ClaudeCodeSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it('should not warn about comma-separated fallback models that are all known', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn only about the unknown entries in a comma-separated fallback list', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022,unknown-fallback' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
+      );
+
+      warnSpy.mockRestore();
+    });
+
     it('should not warn about Claude Agent SDK model aliases', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 

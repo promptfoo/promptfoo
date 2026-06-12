@@ -10,6 +10,8 @@ import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
 
+export const PROMPTFOO_TEAM_ID_HEADER = 'x-promptfoo-team-id';
+
 function isConnectionError(error: Error) {
   return (
     error instanceof TypeError &&
@@ -85,6 +87,30 @@ export function getCloudBearerToken(url: string | URL | Request): string | undef
   return token ? `Bearer ${token}` : undefined;
 }
 
+function isPromptfooCloudTaskUrl(url: string | URL | Request): boolean {
+  if (!isPromptfooCloudApiHost(url)) {
+    return false;
+  }
+
+  try {
+    const targetUrl = new URL(getRequestUrlString(url));
+    const pathname = targetUrl.pathname.replace(/\/+$/, '');
+    return pathname.endsWith('/api/v1/task') || pathname.endsWith('/api/v1/task/harmful');
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the persisted CLI team for authenticated Cloud task requests. */
+export function getCloudTaskTeamId(url: string | URL | Request): string | undefined {
+  if (!isPromptfooCloudTaskUrl(url)) {
+    return undefined;
+  }
+
+  const organizationId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(organizationId);
+}
+
 /**
  * Resolves the caller-supplied headers for a request: the explicit `options.headers` when
  * present, otherwise the headers carried by a `Request` URL.
@@ -103,6 +129,10 @@ function getEffectiveHeaders(
 /** Case-insensitive check for a caller-supplied `Authorization` header (any `HeadersInit` shape). */
 function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
   return new Headers(headers).has('authorization');
+}
+
+function hasHeader(headers: HeadersInit | undefined, name: string): boolean {
+  return new Headers(headers).has(name);
 }
 
 /**
@@ -156,6 +186,12 @@ export async function monkeyPatchFetch(
   const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
   if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
     opts.headers = setHeader(effectiveHeaders, 'Authorization', cloudAuth);
+  }
+
+  const cloudTaskTeamId = getCloudTaskTeamId(url);
+  const headersWithAuth = getEffectiveHeaders(url, opts.headers);
+  if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
+    opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here

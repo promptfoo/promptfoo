@@ -122,6 +122,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/extension-hooks.test.ts',
+    kind: 'skipIf',
+    linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,
+    reason: 'Python extension-hook smoke coverage requires an available Python interpreter',
+  },
+  {
     file: 'redteam/plugins/codingAgent.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,

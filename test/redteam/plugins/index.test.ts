@@ -302,6 +302,7 @@ describe('Plugins', () => {
         n: 1,
         config: {},
         delayMs: 0,
+        targetId: 'cloud-target-123',
       });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -315,6 +316,7 @@ describe('Plugins', () => {
             n: 1,
             purpose: 'test',
             task: 'ssrf',
+            targetId: 'cloud-target-123',
             version: VERSION,
             email: null,
           }),

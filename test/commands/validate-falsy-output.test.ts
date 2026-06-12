@@ -58,14 +58,18 @@ describe('validate target falsy outputs', () => {
 
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Response: 7'));
+    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     expect(process.exitCode).toBe(0);
   });
 
-  it('rejects null provider output', async () => {
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ])('rejects %s provider output', async (_label, output) => {
     const provider = createMockProvider({
       id: 'echo',
-      response: { output: null },
+      response: { output },
     });
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
