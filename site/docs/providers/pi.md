@@ -157,4 +157,5 @@ prompts:
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - Anthropic's coding agent
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) - OpenAI's coding agent
 - [OpenCode SDK](/docs/providers/opencode-sdk/) - Multi-provider coding agent with a client/server architecture
+- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Pi vs Codex vs Claude Agent SDK vs OpenCode on one task
 - [Pi documentation](https://pi.dev/docs)

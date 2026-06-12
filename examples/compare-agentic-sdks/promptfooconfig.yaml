@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Compare agentic SDK providers: Codex, Claude Agent, OpenCode'
+description: 'Compare agentic SDK providers: Codex, Claude Agent, OpenCode, Pi'
 
 prompts:
   - |
@@ -58,6 +58,12 @@ providers:
     config:
       provider_id: anthropic
       model: claude-sonnet-4-6
+      working_dir: ./test-codebase
+
+  # Pi coding agent with read-only file tools (provider-agnostic)
+  - id: pi:anthropic/claude-sonnet-4-6
+    label: pi
+    config:
       working_dir: ./test-codebase
 
   # Plain LLM for baseline (no file access)
