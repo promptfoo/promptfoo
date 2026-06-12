@@ -287,6 +287,9 @@
         "ELEVENLABS_API_KEY": {
           "type": "string"
         },
+        "EVOLINK_API_KEY": {
+          "type": "string"
+        },
         "FAL_KEY": {
           "type": "string"
         },
@@ -1753,6 +1756,9 @@
                       "type": "string"
                     },
                     "ELEVENLABS_API_KEY": {
+                      "type": "string"
+                    },
+                    "EVOLINK_API_KEY": {
                       "type": "string"
                     },
                     "FAL_KEY": {

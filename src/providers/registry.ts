@@ -38,6 +38,7 @@ import {
   ElevenLabsTTSProvider,
 } from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
+import { createEvoLinkProvider } from './evolink';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -566,6 +567,20 @@ export const providerMap: ProviderFactory[] = [
             `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
           );
       }
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'evolink' || providerPath.startsWith('evolink:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEvoLinkProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
