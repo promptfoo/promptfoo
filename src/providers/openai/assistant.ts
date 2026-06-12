@@ -247,9 +247,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // When the caller supplies a case-variant OpenAI-Organization header, let that
-    // header win: passing `organization` too makes the SDK inject its own canonical
-    // header, producing a duplicate the override can't reliably beat.
+    // When the caller supplies an OpenAI-Organization header override (any case), drop
+    // the SDK `organization` option so only the override is sent. The current SDK's
+    // Headers-based merge already lets defaultHeaders beat the organization option
+    // case-insensitively; doing this explicitly keeps the intent visible and independent
+    // of the SDK's merge semantics.
     const orgHeaderOverridden = hasHeaderOverride(
       this.assistantConfig.headers,
       OPENAI_ORGANIZATION_HEADER,
