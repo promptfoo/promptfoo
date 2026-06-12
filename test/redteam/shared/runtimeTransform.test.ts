@@ -172,7 +172,7 @@ describe('runtimeTransform', () => {
     });
 
     it('should pass target context to per-turn layer strategies', async () => {
-      await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
         targetId: 'cloud-target-123',
       });
 
@@ -181,6 +181,9 @@ describe('runtimeTransform', () => {
         'input',
         expect.objectContaining({ targetId: 'cloud-target-123' }),
       );
+
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.originalPrompt).toBe('hello');
     });
 
     it('should skip unknown strategies with warning', async () => {
