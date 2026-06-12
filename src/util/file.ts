@@ -179,8 +179,10 @@ export function maybeLoadFromExternalFile(
 
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
-  // Check if the path contains glob patterns
-  if (hasMagic(pathToUse)) {
+  // Check if the path contains glob patterns. windowsPathsNoEscape must match the
+  // globSync call below, else Windows backslash paths read as escape sequences and
+  // dodge detection.
+  if (hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
     // Use globSync to expand the pattern
     const matchedFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,

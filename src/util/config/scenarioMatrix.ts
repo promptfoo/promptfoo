@@ -64,7 +64,9 @@ function getScenarioFilePaths(basePath: string, fileRef: string): string[] {
   const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(basePath, rawPath);
   // Detect glob magic on the raw ref, not the resolved path, so directories whose
   // names contain glob metacharacters do not turn plain refs into patterns.
-  if (!hasMagic(rawPath)) {
+  // windowsPathsNoEscape must match the globSync call below, else Windows
+  // backslash paths read as escape sequences and dodge detection.
+  if (!hasMagic(rawPath, { windowsPathsNoEscape: true })) {
     return [resolvedPath];
   }
 
