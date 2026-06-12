@@ -3,6 +3,7 @@ import {
   filterProviderConfigs,
   filterProviders,
   getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
 } from '../../../src/util/eval/filterProviders';
 
 import type { ApiProvider, TestSuiteConfig } from '../../../src/types/index';
@@ -15,8 +16,24 @@ describe('getPersistedProviderFilterOptions', () => {
     });
   });
 
-  it.each([undefined, null, '', 42, {}])('ignores invalid persisted filters: %j', (value) => {
+  it.each([undefined, null])('treats a missing persisted filter as no filter: %j', (value) => {
     expect(getPersistedProviderFilterOptions(value)).toEqual({});
+  });
+
+  it.each(['', 42, {}, ['echo']])('fails closed on a tampered persisted filter: %j', (value) => {
+    expect(() => getPersistedProviderFilterOptions(value)).toThrow(
+      'Stored provider filter is invalid',
+    );
+  });
+});
+
+describe('getProviderFilterRegexError', () => {
+  it('returns undefined for a valid pattern', () => {
+    expect(getProviderFilterRegexError('selected-.*')).toBeUndefined();
+  });
+
+  it('returns the reason for an invalid pattern', () => {
+    expect(getProviderFilterRegexError('[')).toContain('Invalid regular expression');
   });
 });
 

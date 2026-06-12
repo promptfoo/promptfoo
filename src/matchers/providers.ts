@@ -19,6 +19,10 @@ import type {
   VarValue,
 } from '../types/index';
 
+// These wrappers keep src/matchers' imports of the redteam layer confined to this file.
+// Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
+// llmGrading.ts adds core->redteam import statements beyond the ratchet in
+// architecture/edge-baseline.json and fails `npm run architecture:check`.
 export function getRemoteGradingContext(): { targetId?: string } {
   const targetId = getCloudTargetIdFromProviders(
     cliState.selectedProviderConfigs ?? cliState.config?.providers,

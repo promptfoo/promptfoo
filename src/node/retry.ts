@@ -10,7 +10,11 @@ import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
-import { getPersistedProviderFilterOptions } from '../util/eval/filterProviders';
+import {
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../util/eval/filterProviders';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -62,24 +66,29 @@ async function resolveRetryConfigs(
     originalEval.runtimeOptions?.providerFilter,
   );
   const providerFilter = providerFilterOptions.filterProviders;
-  const configDescription = cmdObj.config
-    ? `retry config "${cmdObj.config}"`
-    : 'saved evaluation config';
 
-  let configs: Awaited<ReturnType<typeof resolveConfigs>>;
-  try {
-    configs = cmdObj.config
-      ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
-      : await resolveConfigs(providerFilterOptions, originalEval.config);
-  } catch (error) {
-    if (!providerFilter) {
-      throw error;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
+  // Validate the stored pattern up front so a regex failure is attributed to the filter,
+  // while unrelated resolution errors (missing prompt files, provider load failures)
+  // propagate unchanged with their original class and stack.
+  const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
+  if (providerFilter && regexError) {
+    const configDescription = cmdObj.config
+      ? `retry config "${cmdObj.config}"`
+      : 'saved evaluation config';
     throw new ConfigResolutionError(
-      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${reason}. Existing ERROR results were preserved.`,
+      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${regexError}. Existing ERROR results were preserved.`,
     );
   }
+
+  const configs = cmdObj.config
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    : await resolveConfigs(providerFilterOptions, originalEval.config);
+
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label in doEval. Replay both stages so the retried provider
+  // set matches the original even when an instantiated id or label diverges from its
+  // raw config reference.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
 
   assertRetryProviderFilterMatched(
     providerFilter,

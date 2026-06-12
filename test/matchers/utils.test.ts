@@ -38,6 +38,13 @@ describe('getRemoteGradingContext', () => {
 
     expect(getRemoteGradingContext()).toEqual({ targetId: 'configured-target' });
   });
+
+  it('does not fall back to configured providers when the filter matched nothing', () => {
+    cliState.config = { providers: ['promptfoo://provider/configured-target'] };
+    cliState.selectedProviderConfigs = [];
+
+    expect(getRemoteGradingContext()).toEqual({});
+  });
 });
 
 describe('getGradingProvider', () => {

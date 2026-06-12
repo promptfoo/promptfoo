@@ -38,7 +38,11 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
-import { filterProviders, getPersistedProviderFilterOptions } from '../util/eval/filterProviders';
+import {
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
@@ -103,19 +107,25 @@ async function resolveReplayConfigs(
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
   );
+  const providerFilter = providerFilterOptions.filterProviders;
 
-  try {
-    return await resolveConfigs(providerFilterOptions, evalRecord.config);
-  } catch (error) {
-    const providerFilter = providerFilterOptions.filterProviders;
-    if (!providerFilter) {
-      throw error;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
+  // Validate the stored pattern up front so a regex failure is attributed to the filter,
+  // while unrelated resolution errors (missing prompt files, provider load failures)
+  // propagate unchanged with their original class and stack.
+  const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
+  if (providerFilter && regexError) {
     throw new ConfigResolutionError(
-      `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${reason}. The evaluation was not changed.`,
+      `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
     );
   }
+
+  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config);
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label below in doEval. Replay both stages so the resumed
+  // provider set matches the original even when an instantiated id or label diverges
+  // from its raw config reference.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+  return configs;
 }
 
 export class EvalRunError extends Error {
@@ -378,7 +388,6 @@ export async function doEval(
             }) as any,
         );
       }
-      // Mark resume mode in CLI state so evaluator can skip completed work
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
@@ -450,6 +459,12 @@ export async function doEval(
       ? getPersistedProviderFilterOptions(resumeEval.runtimeOptions?.providerFilter)
       : {};
     const persistedProviderFilter = persistedProviderFilterOptions.filterProviders;
+    const cliProviderFilter = cmdObj.filterProviders || cmdObj.filterTargets;
+    if (resumeEval && cliProviderFilter && cliProviderFilter !== persistedProviderFilter) {
+      logger.warn(
+        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+      );
+    }
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id}. The evaluation was not changed.`,
@@ -666,14 +681,12 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
-    const providerFilter = resumeEval
-      ? persistedProviderFilter
-      : cmdObj.filterProviders || cmdObj.filterTargets;
+    const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
-    const safeEvaluateOptions = { ...evaluateOptions } as InternalEvaluateOptions & {
-      providerFilter?: unknown;
-    };
-    delete safeEvaluateOptions.providerFilter;
+    // Strip any providerFilter a config file injected via evaluateOptions — only the
+    // normalized CLI/persisted value above may be persisted and replayed.
+    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
+      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       showProgressBar:
