@@ -276,10 +276,42 @@ describe('file utilities', () => {
 
     it('should throw error when glob pattern matches no files', () => {
       vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue(undefined as never);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent/*.yaml')).toThrow(
         `No files found matching pattern: ${path.resolve('/mock/base/path', 'nonexistent/*.yaml')}`,
       );
+    });
+
+    it('should load a literal file whose path looks like a glob but exists', () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as never);
+      vi.mocked(fs.readFileSync).mockReturnValue('- value1\n- value2');
+
+      const result = maybeLoadFromExternalFile('file://configs [prod]/list.yaml');
+
+      expect(result).toEqual(['value1', 'value2']);
+    });
+
+    it('should keep single-file shape for an object file loaded via the literal fallback', () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as never);
+      vi.mocked(fs.readFileSync).mockReturnValue('vars:\n  language: French');
+
+      const result = maybeLoadFromExternalFile('file://configs [prod]/defaultTest.yaml');
+
+      // Must NOT be array-wrapped: consumers like defaultTest expect the object itself.
+      expect(result).toEqual({ vars: { language: 'French' } });
+    });
+
+    it('should not let a literal file shadow real glob matches', () => {
+      vi.mocked(globSync).mockReturnValue(['/mock/base/path/a.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('- value1');
+
+      const result = maybeLoadFromExternalFile('file://*.yaml');
+
+      expect(result).toEqual(['value1']);
+      expect(fs.statSync).not.toHaveBeenCalled();
     });
 
     it('should throw error when file does not exist', () => {

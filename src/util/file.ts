@@ -58,6 +58,56 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
   return env;
 }
 
+function combineGlobMatches(matchedFiles: string[]): any[] {
+  const allContents: any[] = [];
+  for (const matchedFile of matchedFiles) {
+    let contents: string;
+    try {
+      contents = fs.readFileSync(matchedFile, 'utf8');
+    } catch (error) {
+      // File may have been deleted between glob and read (race condition)
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
+        continue;
+      }
+      throw error;
+    }
+    if (matchedFile.endsWith('.json')) {
+      const parsed = JSON.parse(contents);
+      if (Array.isArray(parsed)) {
+        allContents.push(...parsed);
+      } else {
+        allContents.push(parsed);
+      }
+    } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+      const parsed = yaml.load(contents);
+      if (parsed === null || parsed === undefined) {
+        continue; // Skip empty files
+      }
+      if (Array.isArray(parsed)) {
+        allContents.push(...parsed);
+      } else {
+        allContents.push(parsed);
+      }
+    } else if (matchedFile.endsWith('.csv')) {
+      const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+        columns: true as const,
+      };
+      const records = csvParse<Record<string, string>>(contents, csvOptions);
+      // If single column, return array of values to match single file behavior
+      if (records.length > 0 && Object.keys(records[0]).length === 1) {
+        allContents.push(...records.map((record) => Object.values(record)[0]));
+      } else {
+        allContents.push(...records);
+      }
+    } else {
+      allContents.push(contents);
+    }
+  }
+
+  return allContents;
+}
+
 /**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
@@ -137,57 +187,16 @@ export function maybeLoadFromExternalFile(
     });
 
     if (matchedFiles.length === 0) {
-      throw new Error(`No files found matching pattern: ${resolvedPath}`);
-    }
-
-    // Load all matched files and combine their contents
-    const allContents: any[] = [];
-    for (const matchedFile of matchedFiles) {
-      let contents: string;
-      try {
-        contents = fs.readFileSync(matchedFile, 'utf8');
-      } catch (error) {
-        // File may have been deleted between glob and read (race condition)
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
-          continue;
-        }
-        throw error;
+      // A path can look like a glob yet name a real file, e.g. when a parent
+      // directory contains brackets. Fall through to the single-file branch so the
+      // result shape matches a non-glob load.
+      if (!fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile()) {
+        throw new Error(`No files found matching pattern: ${resolvedPath}`);
       }
-      if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
-        if (parsed === null || parsed === undefined) {
-          continue; // Skip empty files
-        }
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.csv')) {
-        const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-          columns: true as const,
-        };
-        const records = csvParse<Record<string, string>>(contents, csvOptions);
-        // If single column, return array of values to match single file behavior
-        if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(...records.map((record) => Object.values(record)[0]));
-        } else {
-          allContents.push(...records);
-        }
-      } else {
-        allContents.push(contents);
-      }
+      logger.debug(`Glob pattern matched no files; loading literal file: ${resolvedPath}`);
+    } else {
+      return combineGlobMatches(matchedFiles);
     }
-
-    return allContents;
   }
 
   // Original single file logic
