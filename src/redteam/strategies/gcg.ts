@@ -11,6 +11,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -53,6 +54,7 @@ async function generateGcgPrompts(
         task: 'gcg',
         query: testCase.vars[injectVar],
         ...(config.n && { n: config.n }),
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 
