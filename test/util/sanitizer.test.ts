@@ -6,6 +6,7 @@ import {
   sanitizeObject,
   sanitizeRuntimeOptions,
   sanitizeUrl,
+  sanitizeUrlEncodedString,
 } from '../../src/util/sanitizer';
 
 // Mock console methods to prevent test noise
@@ -1154,6 +1155,242 @@ describe('sanitizeObject', () => {
       expect(parsedBody.email).toBe('user@example.com');
       expect(parsedBody.conversationId).toBe('12345');
     });
+
+    it('should sanitize URL-encoded string request bodies', () => {
+      const logContext = {
+        message: 'API request',
+        url: 'https://example.com/api',
+        method: 'POST',
+        requestBody:
+          'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890',
+        status: 200,
+        statusText: 'OK',
+      };
+
+      const result = sanitizeObject(logContext);
+
+      expect(result.requestBody).toContain('username=alice');
+      expect(result.requestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.requestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.requestBody).not.toContain('plain-secret');
+      expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should sanitize URL-encoded request bodies with raw spaces', () => {
+      const result = sanitizeObject({
+        requestBody: 'username=alice&password=plain-secret&note=hello world',
+      });
+
+      expect(result.requestBody).toContain('username=alice');
+      expect(result.requestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.requestBody).toContain('note=hello world');
+      expect(result.requestBody).not.toContain('plain-secret');
+    });
+
+    it('should not collapse multiline key-value diagnostic text into one form field', () => {
+      const text = 'token=short-value\nowner=user@example.com\n';
+
+      expect(sanitizeObject(text)).toBe(text);
+    });
+
+    it('should not URL-encode prose strings that happen to contain "="', () => {
+      // Regression: previously, any string containing `=` was parsed by
+      // URLSearchParams and re-serialized, mangling prose like shell commands
+      // and breaking downstream regex-based redaction (e.g. Codex trace text).
+      const command =
+        'curl -H "Authorization: Bearer abc" https://example.test?api_key=sk-xyz user@example.com';
+
+      expect(sanitizeObject(command)).toBe(command);
+    });
+
+    it('should redact form bodies that end with a trailing &', () => {
+      const body = 'username=alice&api_key=sk-1234567890abcdefghijklmnopqrstuv&';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('username=alice');
+      expect(result).toContain('api_key=%5BREDACTED%5D');
+      expect(result).not.toContain('sk-1234567890abcdefghijklmnopqrstuv');
+    });
+
+    it('should redact when value contains "=" (base64 padding)', () => {
+      const body = 'token=aGVsbG8=&data=public';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('token=%5BREDACTED%5D&data=public');
+    });
+
+    it('should redact PHP/qs-style bracket keys', () => {
+      const body = 'user[password]=hunter2&user[name]=alice';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('user[password]=%5BREDACTED%5D');
+      expect(result).toContain('user[name]=alice');
+      expect(result).not.toContain('hunter2');
+    });
+
+    it('should still redact a secret value when the key has malformed percent-encoding', () => {
+      // `api%ZZkey` throws in decodeURIComponent. The key-name match is skipped,
+      // but the value-pattern check must still run — otherwise a stray `%` in the
+      // key smuggles the secret past redaction (regression: the URLSearchParams
+      // implementation this replaced redacted these).
+      const body = 'api%ZZkey=AKIAIOSFODNN7EXAMPLE';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('api%ZZkey=%5BREDACTED%5D');
+      expect(result).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    });
+
+    it('does not over-redact a non-secret value when the key has malformed percent-encoding', () => {
+      // The malformed-key fallthrough must not redact indiscriminately: with neither a
+      // secret key name nor a secret-looking value, the pair is preserved verbatim.
+      const body = 'na%ZZme=John+Doe';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should redact when "+" in the key decodes to a space', () => {
+      // `api+key` URL-decodes to `api key`; normalizeFieldName must collapse
+      // whitespace so this still matches SECRET_FIELD_NAMES.
+      const body = 'api+key=secret-value-12345';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('api+key=%5BREDACTED%5D');
+    });
+
+    it('should redact when "+" in the value would otherwise defeat secret detection', () => {
+      // Raw chunk matches `^[a-zA-Z0-9+/=_-]{64,}$`; decoded form contains a
+      // space and wouldn't. We must check the raw form too.
+      const body = `opaque=${'A'.repeat(32)}+${'B'.repeat(32)}`;
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('opaque=%5BREDACTED%5D');
+    });
+
+    it('should not redact an empty value (no field-presence leak)', () => {
+      const body = 'password=&username=alice';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should preserve original encoding for non-redacted values', () => {
+      // URLSearchParams.toString() would have re-encoded `~` as `%7E`.
+      // Targeted replacement should leave the untouched value byte-identical.
+      const body = 'name=John~Doe&password=hunter2';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('name=John~Doe&password=%5BREDACTED%5D');
+    });
+
+    it('should return original input when nothing matches a secret', () => {
+      const body = 'a=1&b=2&c=3';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should redact secret-looking values under non-sensitive key names', () => {
+      const body = 'cursor=sk-1234567890abcdefghijklmnopqrstuv&page=2';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('cursor=%5BREDACTED%5D&page=2');
+    });
+
+    it('should accept `;` as a pair separator (PHP/CGI behavior)', () => {
+      // Without this, `[^&]*` would swallow the trailing `;password=...` as
+      // part of the first value and never see the password pair.
+      const body = 'a=1;password=hunter2';
+      expect(sanitizeUrlEncodedString(body)).toBe('a=1;password=%5BREDACTED%5D');
+    });
+
+    it('should redact when key uses percent-encoded `=` (e.g. api%3Dkey)', () => {
+      // `api%3Dkey` decodes to `api=key`; normalizeFieldName must collapse it
+      // to `apikey` so the SECRET_FIELD_NAMES lookup matches.
+      const body = 'api%3Dkey=mysecretvalue';
+      expect(sanitizeUrlEncodedString(body)).toBe('api%3Dkey=%5BREDACTED%5D');
+    });
+
+    it('should recurse into JSON-shaped form values', () => {
+      // Form value `data` URL-decodes to {"password":"hunter2","user":"alice"}.
+      // The leaf password must get redacted; the user field must survive.
+      const body = 'data=%7B%22password%22%3A%22hunter2%22%2C%22user%22%3A%22alice%22%7D&id=42';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).not.toContain('hunter2');
+      expect(result).toContain('id=42');
+      const sanitizedData = result.match(/data=([^&]+)/)?.[1] ?? '';
+      const decoded = decodeURIComponent(sanitizedData);
+      const parsed = JSON.parse(decoded);
+      expect(parsed).toEqual({ password: '[REDACTED]', user: 'alice' });
+    });
+
+    it('should leave a non-secret JSON form value byte-identical', () => {
+      const body = 'data=%7B%22user%22%3A%22alice%22%7D';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should preserve Nunjucks template values in a secret-named pair', () => {
+      // Provider config body templates flow into persisted provider configs via
+      // sanitizeObject; a `{{...}}` placeholder is config, not a runtime secret.
+      const body = 'username={{user}}&password={{password}}';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should still redact a real secret beside a templated pair', () => {
+      const body = 'password={{password}}&token=sk-1234567890abcdefghijklmnopqrstuv';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('password={{password}}');
+      expect(result).toContain('token=%5BREDACTED%5D');
+      expect(result).not.toContain('sk-1234567890abcdefghijklmnopqrstuv');
+    });
+
+    it('should redact a secret-named key whose value only embeds a template', () => {
+      // A placeholder amid literal text is not a pure config template; the secret
+      // key must redact the whole value rather than skip it.
+      expect(sanitizeUrlEncodedString('password=abc{{x}}def')).toBe('password=%5BREDACTED%5D');
+    });
+
+    it('should fully redact a secret-named key holding a JSON value', () => {
+      // A secret key must redact its entire value before nested-JSON recursion, so
+      // a non-secret-named field inside the JSON (`value`) cannot leak.
+      const body = `password=${encodeURIComponent('{"value":"plain-secret","api_key":"sk-xxxxxxxxxxxxxxxxxxxx"}')}`;
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('password=%5BREDACTED%5D');
+      expect(result).not.toContain('plain-secret');
+    });
+  });
+});
+
+describe('sanitizeObject url-keyed fields', () => {
+  it('preserves non-secret url values that fail URL parsing', () => {
+    // sanitizeObject runs sanitizeUrl on any field named `url`; persisted eval
+    // result vars must not be destroyed when the value is a bare domain or path.
+    expect(sanitizeObject({ vars: { url: 'example.com' } })).toEqual({
+      vars: { url: 'example.com' },
+    });
+    expect(sanitizeObject({ vars: { url: '/relative/path' } })).toEqual({
+      vars: { url: '/relative/path' },
+    });
+  });
+
+  it('still redacts url values that carry credentials', () => {
+    // Parseable URL with userinfo: credentials redacted in place.
+    expect(sanitizeObject({ url: 'https://user:hunter2@host/api' })).toEqual({
+      url: 'https://***:***@host/api',
+    });
+    // Unparseable but credential-bearing: fail closed.
+    expect(sanitizeObject({ url: 'ht!tp://x?token=sk-1234567890abcdefghij' })).toEqual({
+      url: '[REDACTED]',
+    });
+  });
+
+  it('redacts credentials hidden behind a semicolon query separator', () => {
+    // URLSearchParams only splits on `&`, so the `;`-delimited credential hides
+    // inside the first param's value; the whole suspect value is redacted.
+    expect(sanitizeUrl('https://example.com/api?data=ok;api_key=sk-1234567890abcdefghij')).toBe(
+      'https://example.com/api?data=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/api?data=ok;password=plain-secret')).toBe(
+      'https://example.com/api?data=%5BREDACTED%5D',
+    );
+  });
+
+  it('redacts credentials carried in the URL fragment', () => {
+    // OAuth implicit-flow shape: the token lives in the hash, not the query.
+    const oauthUrl = 'https://example.com/callback#access_token=sk-1234567890abcdefghij&state=ok';
+    expect(sanitizeUrl(oauthUrl)).toBe(
+      'https://example.com/callback#access_token=%5BREDACTED%5D&state=ok',
+    );
+    // A plain anchor fragment is left intact.
+    expect(sanitizeUrl('https://example.com/api?data=public#section')).toBe(
+      'https://example.com/api?data=public#section',
+    );
   });
 });
 
@@ -1182,14 +1419,30 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl('   ')).toBe('   ');
     });
 
-    it('should handle malformed URLs gracefully', () => {
+    it('should preserve unparseable URLs that show no credential indicators', () => {
+      // A bare token like this can be a `url` var in persisted eval results;
+      // redacting it would be data loss. Only fail closed when it might leak.
       const malformedUrl = 'not-a-valid-url';
       expect(sanitizeUrl(malformedUrl)).toBe(malformedUrl);
     });
 
+    it('should redact unparseable URLs that carry credential indicators', () => {
+      expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
+      // `ht!tp://...` fails new URL(); the `token` indicator forces fail-closed.
+      expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
+    });
+
+    it('should redact a secret-looking value under a benign key in a malformed URL', () => {
+      // `cursor` is not a sensitive key name and the secret is mid-string, so the
+      // segment scan (not the param-name/whole-string checks) must fail closed.
+      expect(sanitizeUrl('http://[::1?cursor=sk-1234567890abcdefghijklmnopqrstuv')).toBe(
+        '[REDACTED]',
+      );
+    });
+
     it('should handle protocol-relative URLs', () => {
       const url = '//example.com/api?api_key=secret123';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
     it('should handle URLs with invalid protocols', () => {
@@ -1395,6 +1648,12 @@ describe('sanitizeUrl', () => {
       expect(result).toBe('https://example.com/api?limit=10&page=1&sort=name&filter=active');
     });
 
+    it('should redact secret-looking values in non-sensitive parameters', () => {
+      const url = 'https://example.com/api?cursor=sk-123456789012345678901234567890&data=public';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
+    });
+
     it('should handle parameters with empty values', () => {
       const url = 'https://example.com/api?api_key=&data=public';
       const result = sanitizeUrl(url);
@@ -1484,11 +1743,32 @@ describe('sanitizeUrl', () => {
     });
 
     it('should handle very long URLs', () => {
-      const longParam = 'a'.repeat(1000);
+      const longParam = 'public.value.'.repeat(100);
       const url = `https://example.com/api?data=${longParam}&api_key=secret123`;
       const result = sanitizeUrl(url);
       expect(result).toContain('data=' + longParam);
       expect(result).toContain('api_key=%5BREDACTED%5D');
+    });
+
+    it('should redact long token-like values under non-sensitive parameter names', () => {
+      const token = 'a'.repeat(64);
+      const url = `https://example.com/api?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
+    });
+
+    it('should redact raw base64-like values containing plus signs', () => {
+      const token = `${'a'.repeat(31)}+${'b'.repeat(32)}`;
+      const url = `https://example.com/api?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
+    });
+
+    it('should preserve base64-like values below the secret-detection threshold', () => {
+      const value = 'a'.repeat(63);
+      const url = `https://example.com/api?cursor=${value}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe(url);
     });
   });
 
@@ -1555,6 +1835,13 @@ describe('sanitizeUrl', () => {
       expect(result).toBe('/api/endpoint?api_key=%5BREDACTED%5D&data=public');
     });
 
+    it('should redact long token-like values in path-only URLs', () => {
+      const token = 'a'.repeat(64);
+      const url = `/api/endpoint?cursor=${token}&data=public`;
+
+      expect(sanitizeUrl(url)).toBe('/api/endpoint?cursor=%5BREDACTED%5D&data=public');
+    });
+
     it('should handle path-only URL with fragment', () => {
       const url = '/api/endpoint?token=secret#section';
       const result = sanitizeUrl(url);
@@ -1572,8 +1859,8 @@ describe('sanitizeUrl', () => {
 
     it('should not treat protocol-relative URLs as path-only', () => {
       const url = '//example.com/api?api_key=secret123';
-      // Protocol-relative URLs fail new URL() and fall through to the catch
-      expect(sanitizeUrl(url)).toBe(url);
+      // Protocol-relative URLs fail new URL() and fall through to the fail-closed catch.
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
   });
 
@@ -1581,6 +1868,7 @@ describe('sanitizeUrl', () => {
     it('should handle URL parsing errors gracefully', () => {
       const invalidUrl = 'ht!tp://invalid';
       const result = sanitizeUrl(invalidUrl);
+      // No credential indicators, so the original is preserved for debuggability.
       expect(result).toBe(invalidUrl);
       expect(consoleWarnSpy).toHaveBeenCalled();
     });

@@ -90,6 +90,29 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
+    it('should send a case-variant originator override on the wire instead of the default', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { headers: { 'x-openai-originator': 'custom-originator' } },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test prompt' }]));
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['x-openai-originator']).toBe('custom-originator');
+      expect(requestHeaders).not.toHaveProperty('X-OpenAI-Originator');
+    });
+
     it('should include HTTP metadata in response', async () => {
       const mockHeaders = {
         'content-type': 'application/json',

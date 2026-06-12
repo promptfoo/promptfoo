@@ -86,6 +86,7 @@ import {
   isGoogleProvider,
   isOpenAiProvider,
   isProviderAllowed,
+  sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
@@ -914,7 +915,7 @@ async function callActiveProvider({
     isApiProvider(test.provider) ? test.provider : originalProvider,
     test,
   );
-  logger.debug(`Provider type: ${activeProvider.id()}`);
+  logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -4797,7 +4798,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           const metrics = this.rateLimitRegistry.getMetrics();
           for (const [key, m] of Object.entries(metrics)) {
             if (m.totalRequests > 0) {
-              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
                 totalRequests: m.totalRequests,
                 completedRequests: m.completedRequests,
                 failedRequests: m.failedRequests,
@@ -4828,12 +4829,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // Only surface a writer-close failure when nothing else failed, so the original
           // evaluation/cleanup error is never masked by a secondary I/O error.
           if (evaluationError === undefined && cleanupError === undefined) {
-            throw writerCloseErrors.length === 1
-              ? writerCloseErrors[0]
-              : new AggregateError(
-                  writerCloseErrors,
-                  'Multiple JSONL output writers failed to close',
-                );
+            // When results persisted to the database, that copy is authoritative and the
+            // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
+            // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
+            // — log it rather than failing an otherwise-successful run. Only when persistence
+            // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
+            if (this.store.resultPersistenceFailed) {
+              throw writerCloseErrors.length === 1
+                ? writerCloseErrors[0]
+                : new AggregateError(
+                    writerCloseErrors,
+                    'Multiple JSONL output writers failed to close',
+                  );
+            }
+            logger.warn(
+              `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+            );
           }
         }
       }
