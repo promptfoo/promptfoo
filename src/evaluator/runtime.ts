@@ -63,6 +63,12 @@ export interface EvaluatorResultWriter {
 
 export interface EvaluatorResultWriterOptions {
   append: boolean;
+  /**
+   * Reports a non-fatal writer error that arrived after the final flush (the data is
+   * already on disk). Writers must not depend on the logger directly, so the caller
+   * injects its own reporting.
+   */
+  onPostFlushError?: (message: string) => void;
 }
 
 export interface EvaluatorRuntime<

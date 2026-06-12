@@ -162,7 +162,10 @@ describeEvaluator('evaluator runtime ports', () => {
     await evaluate(testSuite, evalRecord, {}, runtime);
 
     expect(runtime.createEvaluationStore).toHaveBeenCalledWith(evalRecord);
-    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', { append: false });
+    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', {
+      append: false,
+      onPostFlushError: expect.any(Function),
+    });
     expect(appendResult).toHaveBeenCalledOnce();
     expect(resultWriter.write).toHaveBeenCalledOnce();
     expect(appendResult.mock.invocationCallOrder[0]).toBeLessThan(
@@ -182,7 +185,10 @@ describeEvaluator('evaluator runtime ports', () => {
 
     await evaluate(testSuite, createEvalRecord(), {}, runtime);
 
-    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', { append: true });
+    expect(runtime.createResultWriters).toHaveBeenCalledWith('results.jsonl', {
+      append: true,
+      onPostFlushError: expect.any(Function),
+    });
   });
 
   it('continues streaming output when result persistence fails', async () => {

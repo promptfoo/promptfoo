@@ -98,13 +98,12 @@ describe('JsonlFileWriter', () => {
     );
   });
 
-  it('warns and resolves when an error arrives after the final flush', async () => {
-    const logger = (await import('../../src/logger')).default;
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+  it('reports and resolves when an error arrives after the final flush', async () => {
+    const onPostFlushError = vi.fn();
     const stream = createMockWriteStream();
     stream.end.mockImplementation(() => stream);
 
-    const writer = new JsonlFileWriter('/tmp/results.jsonl');
+    const writer = new JsonlFileWriter('/tmp/results.jsonl', { onPostFlushError });
     await writer.write({ a: 1 });
     const closePromise = writer.close();
 
@@ -116,12 +115,11 @@ describe('JsonlFileWriter', () => {
     stream.emit('close');
 
     await expect(closePromise).resolves.toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(onPostFlushError).toHaveBeenCalledWith(
       expect.stringContaining(
         'Error while closing JSONL output /tmp/results.jsonl after the final flush',
       ),
     );
-    warnSpy.mockRestore();
   });
 
   it('resolves immediately when the stream already closed cleanly', async () => {

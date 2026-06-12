@@ -1,9 +1,11 @@
 import { createWriteStream, type WriteStream } from 'fs';
 
-import logger from '../../logger';
-
 export class JsonlFileWriter {
   private readonly flags: 'a' | 'w';
+  // Invoked instead of rejecting close() for errors that arrive after the final flush
+  // (the bytes are on disk). Injected by the caller because this layer must not depend
+  // on the logger (architecture edge ratchet: node -> legacy-runtime).
+  private readonly onPostFlushError: (message: string) => void;
   private writeStream: WriteStream | undefined;
   // The first async stream error (e.g. an fd failure that surfaces between writes). Captured
   // by a persistent listener so it can be re-thrown from the next write()/close() instead of
@@ -16,8 +18,12 @@ export class JsonlFileWriter {
 
   constructor(
     private filePath: string,
-    { append = false }: { append?: boolean } = {},
+    {
+      append = false,
+      onPostFlushError,
+    }: { append?: boolean; onPostFlushError?: (message: string) => void } = {},
   ) {
+    this.onPostFlushError = onPostFlushError ?? (() => {});
     // Open lazily on the first write so we never truncate an existing file for an eval that
     // produces no rows — e.g. one that throws during setup before writing anything. The
     // first write still truncates (flags 'w') so a reused path holds only the current run.
@@ -107,7 +113,7 @@ export class JsonlFileWriter {
           reject(this.wrapStreamError('close', closeError));
         } else {
           if (closeError) {
-            logger.warn(
+            this.onPostFlushError(
               `Error while closing JSONL output ${this.filePath} after the final flush: ${closeError.message}`,
             );
           }

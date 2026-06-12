@@ -3113,6 +3113,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.fileWriters = runtime.createResultWriters(store.config.outputPath, {
       append: Boolean(cliState.resume),
+      onPostFlushError: (message) => logger.warn(message),
     });
 
     // Create rate limit registry for adaptive concurrency control
