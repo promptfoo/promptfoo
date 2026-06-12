@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   doEval as commandDoEval,
   EvalCommandSchema as commandEvalCommandSchema,
@@ -172,6 +173,9 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    cliState.resume = false;
+    cliState.retryMode = false;
+    cliState._retryErrorResultIds = undefined;
     chokidarMocks.handlers.clear();
     chokidarMocks.watcher.on
       .mockReset()
@@ -198,6 +202,12 @@ describe('evalCommand', () => {
     vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    cliState.resume = false;
+    cliState.retryMode = false;
+    cliState._retryErrorResultIds = undefined;
   });
 
   it('should create eval command with correct options', () => {
@@ -254,7 +264,13 @@ describe('evalCommand', () => {
       config,
       testSuite: {
         prompts: [],
-        providers: [],
+        providers: [
+          {
+            id: () => 'echo',
+            label: 'selected-target',
+            callApi: vi.fn(),
+          } as ApiProvider,
+        ],
       },
       basePath: path.resolve('/'),
     });
@@ -277,7 +293,13 @@ describe('evalCommand', () => {
       config,
       testSuite: {
         prompts: [],
-        providers: [],
+        providers: [
+          {
+            id: () => 'echo',
+            label: 'selected-target',
+            callApi: vi.fn(),
+          } as ApiProvider,
+        ],
       },
       basePath: path.resolve('/'),
     });
@@ -1222,7 +1244,13 @@ describe('evalCommand', () => {
       config: {} as UnifiedConfig,
       testSuite: {
         prompts: [],
-        providers: [],
+        providers: [
+          {
+            id: () => 'echo',
+            label: 'selected-target',
+            callApi: vi.fn(),
+          } as ApiProvider,
+        ],
       },
       basePath: path.resolve('/'),
     });
@@ -1263,7 +1291,13 @@ describe('evalCommand', () => {
       config: {} as UnifiedConfig,
       testSuite: {
         prompts: [],
-        providers: [],
+        providers: [
+          {
+            id: () => 'echo',
+            label: 'selected-target',
+            callApi: vi.fn(),
+          } as ApiProvider,
+        ],
       },
       basePath: path.resolve('/'),
     });
@@ -1298,6 +1332,59 @@ describe('evalCommand', () => {
 
       expect(result).toBe(latestEval);
       expect(evaluate).not.toHaveBeenCalled();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('should preserve error results when the stored provider filter matches no providers', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    latestEval.runtimeOptions = { providerFilter: 'selected-target' };
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: { prompts: [], providers: [] },
+      basePath: path.resolve('/'),
+    });
+
+    try {
+      await expect(
+        doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+      ).rejects.toThrow(
+        `Stored provider filter "selected-target" matched no providers while retrying errors for evaluation ${latestEval.id}`,
+      );
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(recalculatePromptMetrics).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+      expect(cliState._retryErrorResultIds).toBeUndefined();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('should clear retry state when a stored provider filter cannot be resolved', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    latestEval.runtimeOptions = { providerFilter: '[' };
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(resolveConfigs).mockRejectedValueOnce(new SyntaxError('Invalid regular expression'));
+
+    try {
+      await expect(
+        doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+      ).rejects.toThrow(
+        `Could not apply stored provider filter "[" while retrying errors for evaluation ${latestEval.id}: Invalid regular expression`,
+      );
+
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+      expect(cliState._retryErrorResultIds).toBeUndefined();
     } finally {
       latestSpy.mockRestore();
     }

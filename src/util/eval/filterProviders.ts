@@ -1,7 +1,20 @@
 import { normalizeProviderRef } from '../../util/providerRef';
 
-import type { ApiProvider, TestSuiteConfig } from '../../types/index';
+import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
+
+/**
+ * Converts an untrusted persisted provider filter into the CLI option shape used by config
+ * resolution. Older evaluations may omit this value, and malformed persisted JSON must not
+ * accidentally enable filtering.
+ */
+export function getPersistedProviderFilterOptions(
+  providerFilter: unknown,
+): Partial<Pick<CommandLineOptions, 'filterProviders'>> {
+  return typeof providerFilter === 'string' && providerFilter.length > 0
+    ? { filterProviders: providerFilter }
+    : {};
+}
 
 /**
  * Extracts the id and label from a raw provider config without instantiating it.

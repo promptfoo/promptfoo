@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { filterProviderConfigs, filterProviders } from '../../../src/util/eval/filterProviders';
+import {
+  filterProviderConfigs,
+  filterProviders,
+  getPersistedProviderFilterOptions,
+} from '../../../src/util/eval/filterProviders';
 
 import type { ApiProvider, TestSuiteConfig } from '../../../src/types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../../src/types/providers';
+
+describe('getPersistedProviderFilterOptions', () => {
+  it('converts a persisted filter into config resolution options', () => {
+    expect(getPersistedProviderFilterOptions('selected-target')).toEqual({
+      filterProviders: 'selected-target',
+    });
+  });
+
+  it.each([undefined, null, '', 42, {}])('ignores invalid persisted filters: %j', (value) => {
+    expect(getPersistedProviderFilterOptions(value)).toEqual({});
+  });
+});
 
 describe('filterProviders', () => {
   const mockProviders: ApiProvider[] = [

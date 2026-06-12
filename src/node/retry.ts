@@ -9,7 +9,8 @@ import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import { resolveConfigs } from '../util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
+import { getPersistedProviderFilterOptions } from '../util/eval/filterProviders';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -36,6 +37,56 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
   return (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
     (path): path is string => typeof path === 'string' && getOutputFileFormat(path) === 'jsonl',
   );
+}
+
+function assertRetryProviderFilterMatched(
+  providerFilter: string | undefined,
+  providerCount: number,
+  configPath?: string,
+): void {
+  if (!providerFilter || providerCount > 0) {
+    return;
+  }
+
+  const configDescription = configPath ? `retry config "${configPath}"` : 'saved evaluation config';
+  throw new ConfigResolutionError(
+    `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
+  );
+}
+
+async function resolveRetryConfigs(
+  originalEval: Eval,
+  cmdObj: RetryCommandOptions,
+): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+  const providerFilterOptions = getPersistedProviderFilterOptions(
+    originalEval.runtimeOptions?.providerFilter,
+  );
+  const providerFilter = providerFilterOptions.filterProviders;
+  const configDescription = cmdObj.config
+    ? `retry config "${cmdObj.config}"`
+    : 'saved evaluation config';
+
+  let configs: Awaited<ReturnType<typeof resolveConfigs>>;
+  try {
+    configs = cmdObj.config
+      ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+      : await resolveConfigs(providerFilterOptions, originalEval.config);
+  } catch (error) {
+    if (!providerFilter) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new ConfigResolutionError(
+      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${reason}. Existing ERROR results were preserved.`,
+    );
+  }
+
+  assertRetryProviderFilterMatched(
+    providerFilter,
+    configs.testSuite.providers.length,
+    cmdObj.config,
+  );
+  return configs;
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -294,27 +345,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  let testSuite;
-  let commandLineOptions: Record<string, unknown> | undefined;
-  let config: Record<string, unknown> | undefined;
-  const providerFilter = originalEval.runtimeOptions?.providerFilter;
-  const providerFilterOptions =
-    typeof providerFilter === 'string' && providerFilter.length > 0
-      ? { filterProviders: providerFilter }
-      : {};
-  if (cmdObj.config) {
-    // Load configuration from the provided config file
-    const configs = await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {});
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  } else {
-    // Load configuration from the original evaluation
-    const configs = await resolveConfigs(providerFilterOptions, originalEval.config);
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  }
+  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:

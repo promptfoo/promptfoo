@@ -71,7 +71,13 @@ vi.mock('../../src/util/sharing');
 
 const testSuite = {
   prompts: [],
-  providers: [],
+  providers: [
+    {
+      id: () => 'echo',
+      label: 'selected-target',
+      callApi: vi.fn(),
+    },
+  ],
   tests: [],
 } as unknown as TestSuite;
 
@@ -90,15 +96,17 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
 function mockResolvedConfig({
   commandLineOptions,
   config,
+  providers,
 }: {
   commandLineOptions?: Record<string, unknown>;
   config?: Record<string, unknown>;
+  providers?: TestSuite['providers'];
 } = {}) {
   vi.mocked(resolveConfigs).mockResolvedValue({
     basePath: '/workspace',
     commandLineOptions,
     config: (config ?? {}) as UnifiedConfig,
-    testSuite,
+    testSuite: providers ? { ...testSuite, providers } : testSuite,
   });
 }
 
@@ -376,6 +384,40 @@ describe('retryCommand', () => {
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
     );
+  });
+
+  it('preserves error results when an explicit config no longer matches the stored filter', async () => {
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: 'selected-target' },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig({ providers: [] });
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'Stored provider filter "selected-target" matched no providers in the retry config "retry.yaml"',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves error results when the stored filter cannot be applied to the config', async () => {
+    const originalEval = createEval({
+      runtimeOptions: { providerFilter: '[' },
+    });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    vi.mocked(resolveConfigs).mockRejectedValueOnce(new SyntaxError('Invalid regular expression'));
+
+    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
+      'Could not resolve the retry config "retry.yaml" using stored provider filter "[": Invalid regular expression',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(cliState.resume).toBe(false);
+    expect(cliState.retryMode).toBe(false);
   });
 
   it('preserves error results and clears retry state when evaluation fails', async () => {
