@@ -9,17 +9,17 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import {
-  getCloudTargetIdFromProviders,
-  remoteGenerationContextPayload,
-  shouldGenerateRemote,
-} from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callProviderWithContext,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
@@ -197,7 +197,7 @@ export async function matchesLlmRubric(
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
       return {
@@ -207,9 +207,7 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
-          ...remoteGenerationContextPayload(
-            getCloudTargetIdFromProviders(cliState.config?.providers),
-          ),
+          ...getRemoteGradingContext(),
         })),
         assertion,
       };

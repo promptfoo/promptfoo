@@ -1532,6 +1532,7 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(globSync).mockReset();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    cliState.selectedProviderConfigs = undefined;
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
     const actualPath = await vi.importActual<typeof import('path')>('path');
@@ -1539,6 +1540,7 @@ describe('resolveConfigs', () => {
   });
 
   afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
   });
 
@@ -1575,6 +1577,7 @@ describe('resolveConfigs', () => {
     );
 
     expect(result.selectedProviderConfigs).toEqual([providers[1]]);
+    expect(cliState.selectedProviderConfigs).toEqual([providers[1]]);
     expect(loadApiProviders).toHaveBeenCalledWith([providers[1]], expect.any(Object));
   });
 

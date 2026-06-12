@@ -38,7 +38,11 @@ import {
   logConfigResolutionError,
   resolveConfigs,
 } from '../util/config/load';
-import { filterProviders } from '../util/eval/filterProviders';
+import {
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
@@ -59,7 +63,13 @@ import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from 
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  CommandLineOptions,
+  EvalRuntimeOptions,
+  Scenario,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
@@ -88,6 +98,34 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+async function resolveReplayConfigs(
+  evalRecord: Eval,
+  action: 'resuming' | 'retrying errors for',
+): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+  const providerFilterOptions = getPersistedProviderFilterOptions(
+    evalRecord.runtimeOptions?.providerFilter,
+  );
+  const providerFilter = providerFilterOptions.filterProviders;
+
+  // Validate the stored pattern up front so a regex failure is attributed to the filter,
+  // while unrelated resolution errors (missing prompt files, provider load failures)
+  // propagate unchanged with their original class and stack.
+  const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
+  if (providerFilter && regexError) {
+    throw new ConfigResolutionError(
+      `Could not apply stored provider filter "${providerFilter}" while ${action} evaluation ${evalRecord.id}: ${regexError}. The evaluation was not changed.`,
+    );
+  }
+
+  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config);
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label below in doEval. Replay both stages so the resumed
+  // provider set matches the original even when an instantiated id or label diverges
+  // from its raw config reference.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+  return configs;
 }
 
 export class EvalRunError extends Error {
@@ -319,6 +357,7 @@ export async function doEval(
 
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
+    let retryErrorResultIds: string[] | undefined;
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
@@ -343,7 +382,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -355,8 +394,6 @@ export async function doEval(
             }) as any,
         );
       }
-      // Mark resume mode in CLI state so evaluator can skip completed work
-      cliState.resume = true;
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
@@ -378,22 +415,19 @@ export async function doEval(
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
-      const errorResultIds = await getErrorResultIds(latestEval.id);
-      if (errorResultIds.length === 0) {
+      retryErrorResultIds = await getErrorResultIds(latestEval.id);
+      if (retryErrorResultIds.length === 0) {
         logger.info('✅ No ERROR results found in the latest evaluation');
         return latestEval;
       }
 
-      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+      logger.info(`Found ${retryErrorResultIds.length} ERROR results to retry`);
 
       // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
       // Previously, deletion happened before evaluate(), causing data loss if retry failed.
       // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
-      // Store errorResultIds for post-evaluation cleanup
-      cliState._retryErrorResultIds = errorResultIds;
-
       logger.info(
-        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+        `🔄 Running evaluation with resume mode to retry ${retryErrorResultIds.length} test cases...`,
       );
 
       // Set up for resume mode
@@ -405,7 +439,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
+      } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -418,11 +452,6 @@ export async function doEval(
             }) as any,
         );
       }
-
-      // Mark resume mode in CLI state so evaluator can skip completed work
-      // Enable retry mode so getCompletedIndexPairs excludes ERROR results
-      cliState.resume = true;
-      cliState.retryMode = true;
     } else {
       ({
         config,
@@ -430,6 +459,30 @@ export async function doEval(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveConfigs(cmdObj, defaultConfig));
+    }
+
+    const persistedProviderFilterOptions = resumeEval
+      ? getPersistedProviderFilterOptions(resumeEval.runtimeOptions?.providerFilter)
+      : {};
+    const persistedProviderFilter = persistedProviderFilterOptions.filterProviders;
+    const cliProviderFilter = cmdObj.filterProviders || cmdObj.filterTargets;
+    if (resumeEval && cliProviderFilter && cliProviderFilter !== persistedProviderFilter) {
+      logger.warn(
+        `Ignoring --filter-providers/--filter-targets "${cliProviderFilter}": ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id} with stored provider filter ${persistedProviderFilter ? `"${persistedProviderFilter}"` : '(none)'} to preserve test indices.`,
+      );
+    }
+    if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
+      return failEvalRun(
+        `Stored provider filter "${persistedProviderFilter}" matched no providers while ${retryErrors ? 'retrying errors for' : 'resuming'} evaluation ${resumeEval.id}. The evaluation was not changed.`,
+        isCliInvocation,
+      );
+    }
+    if (resumeEval) {
+      cliState.resume = true;
+      if (retryErrorResultIds) {
+        cliState.retryMode = true;
+        cliState._retryErrorResultIds = retryErrorResultIds;
+      }
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
@@ -634,8 +687,14 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
+    const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
+
+    // Strip any providerFilter a config file injected via evaluateOptions — only the
+    // normalized CLI/persisted value above may be persisted and replayed.
+    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
+      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
-      ...evaluateOptions,
+      ...safeEvaluateOptions,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
@@ -711,13 +770,18 @@ export async function doEval(
       );
     }
 
+    const runtimeOptions: EvalRuntimeOptions = {
+      ...options,
+      ...(providerFilter ? { providerFilter } : {}),
+    };
+
     // Create or load eval record
     const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
-        : new Eval(config, { author, runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(config, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

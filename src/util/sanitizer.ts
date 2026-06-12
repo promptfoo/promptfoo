@@ -4,6 +4,8 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
+import type { EvalRuntimeOptions } from '../types';
+
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
 
@@ -176,8 +178,8 @@ export function isSecretField(fieldName: string): boolean {
  * Removes non-serializable fields like AbortSignal, functions, and symbols.
  */
 export function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
+  options?: EvalRuntimeOptions,
+): EvalRuntimeOptions | undefined {
   if (!options) {
     return undefined;
   }

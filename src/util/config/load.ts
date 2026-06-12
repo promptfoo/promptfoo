@@ -1046,6 +1046,7 @@ export async function resolveConfigs(
   );
 
   cliState.config = config;
+  cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
