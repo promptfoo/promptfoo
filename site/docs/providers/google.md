@@ -1155,13 +1155,18 @@ Other configuration options are available, such as setting proactive audio, sett
 Try the examples:
 
 ```sh
-# Basic text-only example
+# Initialize the basic text-only and function calling/tools examples
 promptfoo init --example google-live
+cd google-live
+
+# Basic text-only example
+promptfoo eval -c promptfooconfig.yaml -j 3
 
 # Function calling and tools example
-promptfoo init --example google-live
+promptfoo eval -c promptfooconfig.tools.yaml -j 3
 
 # Audio generation example
+cd ..
 promptfoo init --example google-live-audio
 ```
 
