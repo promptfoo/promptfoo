@@ -701,13 +701,31 @@ const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): st
 // `{ '<provider-id>': { ...options } }` — where the id key itself may embed
 // credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
 // scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
-// Detect the shape by the presence of a key outside the known option fields.
-// Do NOT additionally require every value to be a record: a malformed entry that
-// pairs a credential-bearing key with a non-record sibling (e.g. `prompts: [...]`)
-// would otherwise skip key scrubbing entirely and persist the secret verbatim,
-// since walkValue never rewrites object keys.
+// Only an unambiguous map takes this path: at least one key outside the known
+// option fields AND every value a record. A provider OBJECT with a stray
+// non-record field (e.g. `{ id, apiKey: '...' }` or a top-level headers bag)
+// must take the normal walk instead, which drops credential-named keys and
+// applies parent-key semantics (headers, opaque tool schemas, raw requests,
+// env indirection) that the map path would bypass.
 const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
-  isRecord(value) && Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key));
+  isRecord(value) &&
+  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
+  Object.values(value).every(isRecord);
+
+// walkValue never rewrites object keys, so after the walk the surviving
+// top-level keys are scrubbed here. This covers a credential-bearing id key on
+// a malformed map that failed the strict shape check above (e.g. paired with a
+// non-record sibling); keys whose name already matches the credential patterns
+// were dropped by the walk itself. Plain field names are untouched.
+const scrubRecordKeys = (value: unknown, templatePaths?: Set<string>): unknown =>
+  isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          scrubProviderIdentifier(key, templatePaths),
+          nested,
+        ]),
+      )
+    : value;
 
 const omitConfiguredProviderCredentials = (
   provider: unknown,
@@ -720,7 +738,7 @@ const omitConfiguredProviderCredentials = (
           omitProviderCredentials(options, undefined, templatePaths),
         ]),
       )
-    : omitProviderCredentials(provider, undefined, templatePaths);
+    : scrubRecordKeys(omitProviderCredentials(provider, undefined, templatePaths), templatePaths);
 
 const omitConfiguredProvidersCredentials = (
   providers: unknown,
@@ -751,7 +769,7 @@ const omitAssertionProviderCredentials = (
         ? { value: scrubProviderUrl(redactAzureBlobSasTokens(assertion.value), templatePaths) }
         : {}),
       ...(hasOwn(assertion, 'provider')
-        ? { provider: omitProviderCredentials(assertion.provider, undefined, templatePaths) }
+        ? { provider: omitConfiguredProviderCredentials(assertion.provider, templatePaths) }
         : {}),
       ...(hasOwn(assertion, 'config')
         ? { config: omitProviderCredentials(assertion.config, undefined, templatePaths) }
@@ -808,7 +826,7 @@ const omitTestCaseProviderCredentials = (
   return {
     ...testCase,
     ...(hasOwn(testCase, 'provider')
-      ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
+      ? { provider: omitConfiguredProviderCredentials(testCase.provider, templatePaths) }
       : {}),
     ...(hasOwn(testCase, 'providers')
       ? {
@@ -892,7 +910,7 @@ const omitRedteamProviderCredentials = (redteam: unknown, templatePaths?: Set<st
   return {
     ...redteam,
     ...(hasOwn(redteam, 'provider')
-      ? { provider: omitProviderCredentials(redteam.provider, undefined, templatePaths) }
+      ? { provider: omitConfiguredProviderCredentials(redteam.provider, templatePaths) }
       : {}),
     ...(Array.isArray(redteam.plugins)
       ? {

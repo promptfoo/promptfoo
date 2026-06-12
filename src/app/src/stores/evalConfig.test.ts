@@ -1264,13 +1264,16 @@ describe('evalConfig store', () => {
       // with a non-record sibling (e.g. `prompts: [...]`) previously failed the
       // `every(isRecord)` map check, fell through to value-only scrubbing, and
       // persisted the credential URL verbatim in the key. No shape may bypass
-      // redaction.
-      const urlProvider =
+      // redaction. This malformed shape takes the walk path: an id key whose name
+      // matches the credential patterns (`token`) is dropped entirely (fail
+      // closed), while a userinfo-only id key is preserved with the key scrubbed.
+      const credentialNamedKeyProvider =
         'https://mixed-user:mixed-password@api.example.com/v1?token=mixed-token-secret&region=us';
-      const scrubbedUrlProvider =
-        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      const userinfoOnlyProvider = 'https://mixed-svc:mixed-hunter2@api.example.com/v1?region=us';
+      const scrubbedUserinfoOnlyProvider = 'https://[REDACTED]@api.example.com/v1?region=us';
       const providerMap = {
-        [urlProvider]: { config: { region: 'us' } },
+        [credentialNamedKeyProvider]: { config: { region: 'us' } },
+        [userinfoOnlyProvider]: { config: { region: 'eu' } },
         prompts: ['Hello {{topic}}'],
       };
 
@@ -1281,7 +1284,7 @@ describe('evalConfig store', () => {
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       const expectedEntry = {
-        [scrubbedUrlProvider]: { config: { region: 'us' } },
+        [scrubbedUserinfoOnlyProvider]: { config: { region: 'eu' } },
         prompts: ['Hello {{topic}}'],
       };
       expect(persisted.tests[0].providers[0]).toEqual(expectedEntry);
@@ -1290,6 +1293,8 @@ describe('evalConfig store', () => {
       expect(persistedJson).not.toContain('mixed-user');
       expect(persistedJson).not.toContain('mixed-password');
       expect(persistedJson).not.toContain('mixed-token-secret');
+      expect(persistedJson).not.toContain('mixed-svc');
+      expect(persistedJson).not.toContain('mixed-hunter2');
     });
 
     it('redacts credentials in object-shaped providers within test filters', () => {
@@ -1364,6 +1369,89 @@ describe('evalConfig store', () => {
 
       const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
       expect(persisted.tests[0].providers).toEqual(['openai:gpt-4o', 'file://provider.py']);
+    });
+
+    it('redacts provider-map identifiers in every singular provider slot', () => {
+      // Userinfo-only credential: the key name itself does not match the credential
+      // name patterns, so nothing masks a key-scrubbing bypass by luck.
+      const urlProvider = 'https://svc-account:hunter2value@grader.example.com/v1?region=us';
+      const scrubbedUrlProvider = 'https://[REDACTED]@grader.example.com/v1?region=us';
+      const providerMap = { [urlProvider]: { config: { temperature: 0 } } };
+      const scrubbedProviderMap = { [scrubbedUrlProvider]: { config: { temperature: 0 } } };
+
+      useStore.getState().setConfig({
+        defaultTest: { provider: providerMap },
+        tests: [{ provider: providerMap, assert: [{ type: 'llm-rubric', provider: providerMap }] }],
+        scenarios: [{ tests: [{ provider: providerMap }] }],
+        redteam: { provider: providerMap },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].assert[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.scenarios[0].tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.redteam.provider).toEqual(scrubbedProviderMap);
+      expect(JSON.stringify(persisted)).not.toContain('hunter2value');
+    });
+
+    it('drops stray top-level credential fields on provider objects', () => {
+      // A credential mistakenly placed at provider top level (outside config) must
+      // still be dropped: the stray key must not flip the object into the
+      // options-map path, which only URL-scrubs keys.
+      useStore.getState().setConfig({
+        providers: [{ id: 'http', apiKey: 'top-level-stray-credential' }],
+        targets: [{ id: 'http', accessToken: 'stray-target-credential' }],
+        tests: [{ providers: [{ id: 'http', apiKey: 'filter-stray-credential' }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([{ id: 'http' }]);
+      expect(persisted.targets).toEqual([{ id: 'http' }]);
+      expect(persisted.tests[0].providers).toEqual([{ id: 'http' }]);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('top-level-stray-credential');
+      expect(persistedJson).not.toContain('stray-target-credential');
+      expect(persistedJson).not.toContain('filter-stray-credential');
+    });
+
+    it('scrubs a top-level headers bag on provider objects with stray fields', () => {
+      // The non-record stray field keeps this off the options-map path, so the
+      // walk's header-aware scrubbing must still apply to the headers bag.
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            stray: 'unrelated',
+            headers: { 'X-Auth': 'short-header-credential', 'Content-Type': 'application/json' },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].headers).toEqual({ 'Content-Type': 'application/json' });
+      expect(JSON.stringify(persisted)).not.toContain('short-header-credential');
+    });
+
+    it('preserves opaque tool schemas on provider objects with stray fields', () => {
+      // tools/functions schemas are model-facing contracts: a parameter literally
+      // named `password` must survive persistence even when a stray field keeps
+      // the provider off the canonical shape.
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'login',
+            parameters: { type: 'object', properties: { password: { type: 'string' } } },
+          },
+        },
+      ];
+      useStore.getState().setConfig({
+        providers: [{ id: 'openai:gpt-4', config: {}, stray: 'unrelated', tools }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].tools).toEqual(tools);
     });
 
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
