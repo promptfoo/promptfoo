@@ -70,7 +70,7 @@
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "roots": ["src/entrypoint.ts", "src/localEntrypoint.ts", "src/main.ts", "src/commands"],
       "allowedDependencies": [
         "core",
         "legacy-contracts",

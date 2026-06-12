@@ -7,7 +7,7 @@
   "app -> redteam": 115,
   "cli -> core": 5,
   "cli -> legacy-contracts": 24,
-  "cli -> legacy-runtime": 82,
+  "cli -> legacy-runtime": 83,
   "cli -> node": 121,
   "cli -> providers": 3,
   "cli -> redteam": 10,

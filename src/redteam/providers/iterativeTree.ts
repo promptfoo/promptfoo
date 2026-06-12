@@ -25,6 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -518,6 +519,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
   treeParams,
 }: {
   context: CallApiContextParams;
@@ -533,6 +535,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
   treeParams?: {
     maxDepth?: number;
     maxAttempts?: number;
@@ -684,6 +687,7 @@ async function runRedteamConversation({
             perTurnLayers,
             Strategies,
             {
+              targetId,
               evaluationId: context?.evaluationId,
               testCaseId: test?.metadata?.testCaseId as string | undefined,
               purpose: test?.metadata?.purpose as string | undefined,
@@ -1319,11 +1323,13 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -1359,6 +1365,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
     });
   }
