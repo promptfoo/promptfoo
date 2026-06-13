@@ -29,7 +29,11 @@ export const MediaInfoResponseSchema = z.object({
   data: z.object({
     key: z.string(),
     exists: z.literal(true),
-    url: z.string().nullable(),
+    url: z
+      .string()
+      .nullable()
+      .describe('Storage provider URL; local providers may return a file:// URL'),
+    apiUrl: z.string().describe('Root-relative API URL for fetching the media bytes'),
   }),
 });
 

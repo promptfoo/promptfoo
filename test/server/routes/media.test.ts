@@ -171,13 +171,14 @@ describe('Media Routes', () => {
           key: 'audio/abcdef123456.mp3',
           exists: true,
           url: 'https://storage.example.com/audio/abcdef123456.mp3',
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it('should return API URL if local storage provides a file URL', async () => {
+    it('should preserve local file URL and provide an API URL', async () => {
       const localPath = '/Users/test-user/.promptfoo/media/audio/abcdef123456.mp3';
       const mockStorage = {
         providerId: 'local',
@@ -195,11 +196,10 @@ describe('Media Routes', () => {
         data: {
           key: 'audio/abcdef123456.mp3',
           exists: true,
-          url: '/api/media/audio/abcdef123456.mp3',
+          url: `file://${localPath}`,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
-      expect(response.body.data.url).not.toContain('/Users/test-user');
-      expect(response.body.data.url).not.toMatch(/^file:\/\//);
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
@@ -221,6 +221,7 @@ describe('Media Routes', () => {
           key: 'audio/abcdef123456.mp3',
           exists: true,
           url: null,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');

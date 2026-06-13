@@ -147,7 +147,21 @@ describe('server OpenAPI generation', () => {
     expect(
       getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.url,
-    ).toEqual({ type: ['string', 'null'] });
+    ).toEqual(
+      expect.objectContaining({
+        description: 'Storage provider URL; local providers may return a file:// URL',
+        type: ['string', 'null'],
+      }),
+    );
+    expect(
+      getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
+        ?.data?.properties?.apiUrl,
+    ).toEqual(
+      expect.objectContaining({
+        description: 'Root-relative API URL for fetching the media bytes',
+        type: 'string',
+      }),
+    );
     expect(
       modelAuditScanOperation?.requestBody?.content?.['application/json']?.schema?.properties
         ?.options?.properties?.timeout,
