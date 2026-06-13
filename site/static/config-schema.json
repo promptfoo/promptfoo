@@ -287,6 +287,9 @@
         "ELEVENLABS_API_KEY": {
           "type": "string"
         },
+        "EMPIRIOLABS_API_KEY": {
+          "type": "string"
+        },
         "FAL_KEY": {
           "type": "string"
         },
@@ -1745,6 +1748,9 @@
                       "type": "string"
                     },
                     "ELEVENLABS_API_KEY": {
+                      "type": "string"
+                    },
+                    "EMPIRIOLABS_API_KEY": {
                       "type": "string"
                     },
                     "FAL_KEY": {
