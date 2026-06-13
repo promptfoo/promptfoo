@@ -1,4 +1,5 @@
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -101,6 +102,8 @@ interface CodexPluginRuntime {
   pluginVersion: string;
   pluginSource: 'package' | 'path';
   pluginSourceIdentity: string;
+  pluginSourceDigest?: string;
+  pluginGitCommit?: string;
 }
 
 interface CodexPluginArtifactReference {
@@ -144,15 +147,72 @@ function resolveExistingDirectory(inputPath: string, label: string): string {
   return resolvedPath;
 }
 
-function assertTreeHasNoSymlinks(root: string): void {
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+function abortError(message = 'OpenAI Codex plugin call aborted'): Error {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw abortError();
+  }
+}
+
+async function withAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function assertTreeHasNoSymlinks(root: string, signal: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  for (const entry of await withAbort(fs.promises.readdir(root, { withFileTypes: true }), signal)) {
+    throwIfAborted(signal);
     const entryPath = path.join(root, entry.name);
-    const entryStat = fs.lstatSync(entryPath);
+    const entryStat = await withAbort(fs.promises.lstat(entryPath), signal);
     if (entryStat.isSymbolicLink()) {
       throw new Error(`Codex plugin trees may not contain symlinks: ${entryPath}`);
     }
     if (entryStat.isDirectory()) {
-      assertTreeHasNoSymlinks(entryPath);
+      await assertTreeHasNoSymlinks(entryPath, signal);
+    }
+  }
+}
+
+async function copyTree(source: string, destination: string, signal: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  await withAbort(fs.promises.mkdir(destination, { recursive: false }), signal);
+  for (const entry of await withAbort(
+    fs.promises.readdir(source, { withFileTypes: true }),
+    signal,
+  )) {
+    throwIfAborted(signal);
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    const stat = await withAbort(fs.promises.lstat(sourcePath), signal);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Codex plugin trees may not contain symlinks: ${sourcePath}`);
+    }
+    if (stat.isDirectory()) {
+      await copyTree(sourcePath, destinationPath, signal);
+    } else if (stat.isFile()) {
+      await withAbort(
+        fs.promises.copyFile(sourcePath, destinationPath, fs.constants.COPYFILE_EXCL),
+        signal,
+      );
     }
   }
 }
@@ -209,53 +269,92 @@ function checkTarEntry(entry: string): void {
   }
 }
 
-function runCommand(command: string, args: string[], cwd: string): string {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    shell: false,
+async function runCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  signal: AbortSignal,
+): Promise<string> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      shell: false,
+      signal,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    child.once('error', (error) => reject(error.name === 'AbortError' ? abortError() : error));
+    child.once('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        reject(
+          new Error(`${command} failed while resolving a Codex plugin source: ${stderr.trim()}`),
+        );
+      }
+    });
   });
-  if (result.status !== 0) {
-    throw new Error(`${command} failed while resolving a Codex plugin source`);
-  }
-  return result.stdout;
 }
 
-function unpackPluginPackage(source: CodexPluginSource, runtimeRoot: string): string {
+async function unpackPluginPackage(
+  source: CodexPluginSource,
+  runtimeRoot: string,
+  signal: AbortSignal,
+): Promise<string> {
   const packageDir = path.join(runtimeRoot, 'package');
   fs.mkdirSync(packageDir, { recursive: true });
   const packageSpec = npmPackageSpec(source);
-  const packOutput = runCommand(
+  const packOutput = await runCommand(
     'npm',
     ['pack', '--ignore-scripts', '--json', '--pack-destination', packageDir, '--', packageSpec],
     runtimeRoot,
+    signal,
   );
   const packResult = z
     .array(z.object({ filename: z.string().min(1) }))
     .min(1)
     .parse(JSON.parse(packOutput));
   const archivePath = path.join(packageDir, packResult[0].filename);
-  const archiveEntries = runCommand('tar', ['-tzf', archivePath], runtimeRoot)
+  const archiveEntries = (await runCommand('tar', ['-tzf', archivePath], runtimeRoot, signal))
     .split('\n')
     .filter(Boolean);
   for (const entry of archiveEntries) {
     checkTarEntry(entry);
   }
 
+  // Package sources are trusted executable inputs, but archive link entries are still
+  // rejected before extraction so trusted-source evaluation cannot escape its runtime.
+  const verboseArchiveEntries = await runCommand(
+    'tar',
+    ['-tvzf', archivePath],
+    runtimeRoot,
+    signal,
+  );
+  for (const entry of verboseArchiveEntries.split('\n').filter(Boolean)) {
+    if (/^[lh]/.test(entry)) {
+      throw new Error('Codex plugin package archive may not contain link entries');
+    }
+  }
+
   const extractedRoot = path.join(packageDir, 'extracted');
   fs.mkdirSync(extractedRoot, { recursive: true });
-  runCommand('tar', ['-xzf', archivePath, '-C', extractedRoot], runtimeRoot);
+  await runCommand('tar', ['-xzf', archivePath, '-C', extractedRoot], runtimeRoot, signal);
   return resolveExistingDirectory(path.join(extractedRoot, 'package'), 'Codex plugin package root');
 }
 
-function resolvePluginRoot(
+async function resolvePluginRoot(
   source: CodexPluginSource,
   runtimeRoot: string,
-): {
+  signal: AbortSignal,
+): Promise<{
   root: string;
   sourceIdentity: string;
   sourceType: CodexPluginRuntime['pluginSource'];
-} {
+}> {
   if (source.path) {
     const root = resolveExistingDirectory(source.path, 'Codex plugin path');
     return { root, sourceIdentity: `local:${path.basename(root)}`, sourceType: 'path' };
@@ -263,10 +362,93 @@ function resolvePluginRoot(
 
   const packageSpec = npmPackageSpec(source);
   return {
-    root: unpackPluginPackage(source, runtimeRoot),
+    root: await unpackPluginPackage(source, runtimeRoot, signal),
     sourceIdentity: packageSpec,
     sourceType: 'package',
   };
+}
+
+async function digestTree(root: string, signal: AbortSignal): Promise<string> {
+  const digest = crypto.createHash('sha256');
+  const visit = async (directory: string): Promise<void> => {
+    throwIfAborted(signal);
+    const entries = await withAbort(
+      fs.promises.readdir(directory, { withFileTypes: true }),
+      signal,
+    );
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      throwIfAborted(signal);
+      const entryPath = path.join(directory, entry.name);
+      const relativePath = path.relative(root, entryPath).split(path.sep).join('/');
+      const stat = await withAbort(fs.promises.lstat(entryPath), signal);
+      digest.update(`${entry.isDirectory() ? 'd' : 'f'}:${relativePath}\0`);
+      if (stat.isDirectory()) {
+        await visit(entryPath);
+      } else if (stat.isFile()) {
+        digest.update(await withAbort(fs.promises.readFile(entryPath), signal));
+      }
+    }
+  };
+  await visit(root);
+  return `sha256:${digest.digest('hex')}`;
+}
+
+async function gitCommitForPath(root: string, signal: AbortSignal): Promise<string | undefined> {
+  try {
+    return (
+      (await runCommand('git', ['-C', root, 'rev-parse', 'HEAD'], root, signal)).trim() || undefined
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+    return undefined;
+  }
+}
+
+function artifactNamespace(
+  context: CallApiContextParams | undefined,
+  providerId: string,
+  pluginName: string,
+  runtimeRoot: string,
+): string {
+  return [
+    context?.evaluationId ?? 'manual-eval',
+    providerId,
+    pluginName,
+    context?.testCaseId ?? `test-${context?.testIdx ?? 'manual'}`,
+    `prompt-${context?.promptIdx ?? 'manual'}`,
+    `repeat-${context?.repeatIndex ?? 0}`,
+    path.basename(runtimeRoot),
+  ]
+    .map(sanitizePathSegment)
+    .join(path.sep);
+}
+
+function sourceIdentity(config: OpenAICodexPluginConfig): string {
+  return config.plugin.path
+    ? `local:${path.basename(path.resolve(config.plugin.path))}`
+    : npmPackageSpec(config.plugin);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function executionIdentity(response: ProviderResponse): {
+  sessionId: string | null;
+  turnId: string | null;
+} {
+  let turnId: string | null = null;
+  try {
+    const raw = typeof response.raw === 'string' ? JSON.parse(response.raw) : response.raw;
+    turnId =
+      typeof raw?.id === 'string' ? raw.id : typeof raw?.turn_id === 'string' ? raw.turn_id : null;
+  } catch {
+    turnId = null;
+  }
+  return { sessionId: response.sessionId ?? null, turnId };
 }
 
 function writeJson(pathToWrite: string, payload: unknown): void {
@@ -277,11 +459,14 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-function resolveArtifactExportDir(config: OpenAICodexPluginConfig): string | undefined {
+function resolveArtifactExportDir(
+  config: OpenAICodexPluginConfig,
+  namespace: string,
+): string | undefined {
   if (!config.artifacts_dir) {
     return undefined;
   }
-  const artifactExportDir = path.resolve(config.artifacts_dir);
+  const artifactExportDir = path.join(path.resolve(config.artifacts_dir), namespace);
   fs.mkdirSync(artifactExportDir, { recursive: true });
   return artifactExportDir;
 }
@@ -318,6 +503,55 @@ function copyCodexAuthIfConfigured(config: OpenAICodexPluginConfig, codexHome: s
   return true;
 }
 
+async function makeRuntimeRemovable(root: string): Promise<void> {
+  if (!pathExists(root)) {
+    return;
+  }
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+    let stat: fs.Stats;
+    try {
+      stat = await fs.promises.lstat(entryPath);
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+    if (stat.isSymbolicLink()) {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      await fs.promises.chmod(entryPath, 0o700).catch(() => undefined);
+      await makeRuntimeRemovable(entryPath);
+    } else {
+      await fs.promises.chmod(entryPath, 0o600).catch(() => undefined);
+    }
+  }
+  await fs.promises.chmod(root, 0o700).catch(() => undefined);
+}
+
+async function removeRuntime(root: string): Promise<void> {
+  try {
+    await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'EACCES') {
+      throw error;
+    }
+    await makeRuntimeRemovable(root);
+    await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
 function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArtifactReference[] {
   const references: CodexPluginArtifactReference[] = [];
   if (!pathExists(runtime.artifactDir)) {
@@ -348,6 +582,18 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
   };
   collect(runtime.artifactDir);
   return references;
+}
+
+function safelyExportArtifacts(
+  runtime: CodexPluginRuntime,
+  retainRuntime: boolean,
+): CodexPluginArtifactReference[] {
+  try {
+    return exportArtifacts(runtime, collectArtifactReferences(runtime), retainRuntime);
+  } catch (error) {
+    logger.warn('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
+    return [];
+  }
 }
 
 function exportArtifacts(
@@ -446,13 +692,19 @@ export class OpenAICodexPluginProvider implements ApiProvider {
     }
   }
 
-  private createRuntime(config: OpenAICodexPluginConfig): CodexPluginRuntime {
+  private async createRuntime(
+    config: OpenAICodexPluginConfig,
+    context: CallApiContextParams | undefined,
+    signal: AbortSignal,
+  ): Promise<CodexPluginRuntime> {
+    throwIfAborted(signal);
     const workspace = resolveExistingDirectory(
       config.workspace ?? config.working_dir ?? process.cwd(),
       'Codex plugin workspace',
     );
     const root = fs.mkdtempSync(path.join(os.tmpdir(), CODEX_PLUGIN_RUNTIME_PREFIX));
     try {
+      throwIfAborted(signal);
       const home = path.join(root, 'home');
       const codexHome = path.join(home, '.codex');
       const tmpDir = path.join(root, 'tmp');
@@ -465,16 +717,20 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         path.join(codexHome, '.agents', 'plugins'),
         path.join(codexHome, 'plugins', 'cache', CODEX_PLUGIN_MARKETPLACE),
       ]) {
-        fs.mkdirSync(directory, { recursive: true });
+        throwIfAborted(signal);
+        await withAbort(fs.promises.mkdir(directory, { recursive: true }), signal);
       }
 
-      const source = resolvePluginRoot(config.plugin, root);
-      assertTreeHasNoSymlinks(source.root);
+      const source = await resolvePluginRoot(config.plugin, root, signal);
+      await assertTreeHasNoSymlinks(source.root, signal);
       const manifest = readPluginManifest(source.root);
       const pluginVersion =
         manifest.version ??
         config.plugin.version ??
         (source.sourceType === 'path' ? 'local' : 'unknown');
+      const pluginSourceDigest = await digestTree(source.root, signal);
+      const pluginGitCommit =
+        source.sourceType === 'path' ? await gitCommitForPath(source.root, signal) : undefined;
       const installedRoot = path.join(
         codexHome,
         'plugins',
@@ -483,12 +739,8 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         sanitizePathSegment(manifest.name),
         sanitizePathSegment(pluginVersion),
       );
-      fs.mkdirSync(path.dirname(installedRoot), { recursive: true });
-      fs.cpSync(source.root, installedRoot, {
-        recursive: true,
-        dereference: false,
-        errorOnExist: true,
-      });
+      await withAbort(fs.promises.mkdir(path.dirname(installedRoot), { recursive: true }), signal);
+      await copyTree(source.root, installedRoot, signal);
 
       writeJson(path.join(codexHome, '.agents', 'plugins', 'marketplace.json'), {
         name: CODEX_PLUGIN_MARKETPLACE,
@@ -498,6 +750,7 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         path.join(codexHome, 'config.toml'),
         `[features]\nplugins = true\n\n[plugins.${tomlString(`${manifest.name}@${CODEX_PLUGIN_MARKETPLACE}`)}]\nenabled = true\n\n[projects.${tomlString(workspace)}]\ntrust_level = "trusted"\n`,
       );
+      throwIfAborted(signal);
       const copiedAuth = copyCodexAuthIfConfigured(config, codexHome);
       writeJson(path.join(root, 'runtime.json'), {
         plugin: {
@@ -505,6 +758,8 @@ export class OpenAICodexPluginProvider implements ApiProvider {
           version: pluginVersion,
           source: source.sourceType,
           sourceIdentity: source.sourceIdentity,
+          sourceDigest: pluginSourceDigest,
+          gitCommit: pluginGitCommit ?? null,
         },
         workspace,
         copiedAuth,
@@ -516,15 +771,20 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         codexHome,
         tmpDir,
         artifactDir,
-        exportedArtifactDir: resolveArtifactExportDir(config),
+        exportedArtifactDir: resolveArtifactExportDir(
+          config,
+          artifactNamespace(context, this.id(), manifest.name, root),
+        ),
         workspace,
         pluginName: manifest.name,
         pluginVersion,
         pluginSource: source.sourceType,
         pluginSourceIdentity: source.sourceIdentity,
+        pluginSourceDigest,
+        pluginGitCommit,
       };
     } catch (error) {
-      fs.rmSync(root, { recursive: true, force: true });
+      await removeRuntime(root);
       throw error;
     }
   }
@@ -548,12 +808,16 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       ...this.config,
       ...(context?.prompt?.config as OpenAICodexPluginConfig | undefined),
     });
-    const runtime = this.createRuntime(config);
     const startedAt = Date.now();
     const controller = new AbortController();
     let timedOut = false;
     let cancelled = false;
     let timeout: NodeJS.Timeout | undefined;
+    let runtime: CodexPluginRuntime | undefined;
+    let sdkProvider: OpenAICodexSDKProvider | undefined;
+    let response: ProviderResponse | undefined;
+    let shutdownError: unknown;
+    let artifactReferences: CodexPluginArtifactReference[] = [];
     const onAbort = () => {
       cancelled = true;
       controller.abort();
@@ -569,14 +833,14 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       }, config.timeout_ms);
     }
 
-    const sdkProvider = new OpenAICodexSDKProvider({
-      id: this.id(),
-      config: withoutPluginConfig(config, runtime),
-      env: this.env,
-    });
-    this.activeProviders.add(sdkProvider);
-
     try {
+      runtime = await this.createRuntime(config, context, controller.signal);
+      sdkProvider = new OpenAICodexSDKProvider({
+        id: this.id(),
+        config: withoutPluginConfig(config, runtime),
+        env: this.env,
+      });
+      this.activeProviders.add(sdkProvider);
       const sdkContext = context
         ? {
             ...context,
@@ -586,51 +850,89 @@ export class OpenAICodexPluginProvider implements ApiProvider {
             },
           }
         : context;
-      const response = await sdkProvider.callApi(
-        this.buildPrompt(prompt, config, runtime.pluginName),
-        sdkContext,
-        { ...callOptions, abortSignal: controller.signal },
-      );
-      const durationMs = Date.now() - startedAt;
-      const artifactReferences = exportArtifacts(
-        runtime,
-        collectArtifactReferences(runtime),
-        config.retain_runtime === true,
-      );
-      return {
-        ...response,
-        latencyMs: durationMs,
-        metadata: {
-          ...response.metadata,
-          codexPlugin: {
-            plugin: {
-              name: runtime.pluginName,
-              version: runtime.pluginVersion,
-              source: runtime.pluginSource,
-              sourceIdentity: runtime.pluginSourceIdentity,
-            },
-            invocation: config.skill ? `skill:${config.skill}` : (config.invocation ?? null),
-            workspace: runtime.workspace,
-            status: terminalStatus(response, timedOut, cancelled),
-            durationMs,
-            traceIdentity: context?.traceparent ?? null,
-            artifacts: artifactReferences,
-          },
-        },
-      };
+      try {
+        response = await sdkProvider.callApi(
+          this.buildPrompt(prompt, config, runtime.pluginName),
+          sdkContext,
+          { ...callOptions, abortSignal: controller.signal },
+        );
+      } catch (error) {
+        logger.error('[CodexPlugin] Error calling OpenAI Codex plugin provider', { error });
+        response = { error: errorMessage(error) };
+      }
     } catch (error) {
-      logger.error('[CodexPlugin] Error calling OpenAI Codex plugin provider', { error });
-      throw error;
+      logger.error('[CodexPlugin] Error preparing OpenAI Codex plugin provider', { error });
+      response = { error: errorMessage(error) };
     } finally {
       if (timeout) {
         clearTimeout(timeout);
       }
       callOptions?.abortSignal?.removeEventListener('abort', onAbort);
-      await sdkProvider.shutdown();
-      this.activeProviders.delete(sdkProvider);
-      if (!config.retain_runtime) {
-        fs.rmSync(runtime.root, { recursive: true, force: true });
+      if (sdkProvider) {
+        try {
+          await sdkProvider.shutdown();
+        } catch (error) {
+          shutdownError = error;
+        } finally {
+          this.activeProviders.delete(sdkProvider);
+        }
+      }
+      if (runtime) {
+        try {
+          artifactReferences = safelyExportArtifacts(runtime, config.retain_runtime === true);
+        } finally {
+          if (!config.retain_runtime) {
+            await removeRuntime(runtime.root);
+          }
+        }
       }
     }
+
+    const normalizedResponse = response ?? { error: 'Codex plugin provider returned no response' };
+    const durationMs = Date.now() - startedAt;
+    const plugin = runtime
+      ? {
+          name: runtime.pluginName,
+          version: runtime.pluginVersion,
+          source: runtime.pluginSource,
+          sourceIdentity: runtime.pluginSourceIdentity,
+          sourceDigest: runtime.pluginSourceDigest,
+          gitCommit: runtime.pluginGitCommit ?? null,
+        }
+      : {
+          name: null,
+          version: config.plugin.version ?? null,
+          source: config.plugin.path ? 'path' : 'package',
+          sourceIdentity: sourceIdentity(config),
+          sourceDigest: null,
+          gitCommit: null,
+        };
+    const result: ProviderResponse = {
+      ...normalizedResponse,
+      latencyMs: durationMs,
+      metadata: {
+        ...normalizedResponse.metadata,
+        codexPlugin: {
+          plugin,
+          invocation: config.skill ? `skill:${config.skill}` : (config.invocation ?? null),
+          workspace: runtime?.workspace ?? config.workspace ?? config.working_dir ?? process.cwd(),
+          status: terminalStatus(normalizedResponse, timedOut, cancelled),
+          durationMs,
+          traceIdentity: context?.traceparent ?? null,
+          executionIdentity: executionIdentity(normalizedResponse),
+          artifacts: artifactReferences,
+        },
+      },
+    };
+    if (shutdownError) {
+      if (result.error) {
+        logger.warn('[CodexPlugin] Ignoring shutdown error after primary provider error', {
+          error: shutdownError,
+        });
+      } else {
+        throw shutdownError;
+      }
+    }
+    return result;
   }
 }

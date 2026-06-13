@@ -18,10 +18,12 @@ after the result is recorded.
 ```bash
 CODEX_PLUGIN_WORKSPACE="$PWD/../../.." \
 CODEX_SECURITY_PLUGIN_CURRENT="$PWD/../../../plugins/codex-security" \
-CODEX_SECURITY_PLUGIN_BASELINE="$PWD/../../../plugins/codex-security" \
+CODEX_SECURITY_PLUGIN_BASELINE="/trusted/distinct/codex-security-baseline" \
 npm run local -- eval -c examples/openai-codex-plugin/promptfooconfig.yaml --no-cache
 ```
 
-Use distinct plugin paths or package versions to compare released and candidate
-plugin versions. Package and path sources are executable code; evaluate only
-trusted plugin inputs and export artifacts only to trusted directories.
+The current and baseline values must be distinct plugin paths or pinned package
+versions to compare released and candidate plugin versions. Package and path
+sources are executable code; evaluate only trusted plugin inputs. The example
+asserts deterministic `security-scan` blocked-scan evidence, not only JSON syntax, and
+exports artifacts only to trusted directories.

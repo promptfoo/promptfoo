@@ -29,3 +29,16 @@ providers:
 tests:
   - assert:
       - type: is-json
+      - type: javascript
+        value: |
+          if (!process.env.CODEX_SECURITY_PLUGIN_CURRENT ||
+              !process.env.CODEX_SECURITY_PLUGIN_BASELINE ||
+              process.env.CODEX_SECURITY_PLUGIN_CURRENT === process.env.CODEX_SECURITY_PLUGIN_BASELINE) {
+            return false;
+          }
+          const plugin = context.providerResponse?.metadata?.codexPlugin;
+          const parsedOutput = JSON.parse(output);
+          return plugin?.invocation === 'skill:security-scan' &&
+            plugin?.plugin?.sourceIdentity &&
+            parsedOutput?.status === 'blocked' &&
+            Boolean(plugin?.executionIdentity?.sessionId);
