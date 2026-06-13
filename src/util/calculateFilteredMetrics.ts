@@ -294,36 +294,41 @@ async function aggregateAssertions(
 ): Promise<void> {
   const db = await getDb();
 
-  // SQLite query to count assertions from nested JSON
-  // This is complex but avoids fetching all results into memory
+  // Walk only the componentResults axis so nested `pass` keys inside
+  // assertion.value or metadata cannot be mistaken for real results. Non-object
+  // entries are skipped because json_type probes would raise on string scalars.
   const query = sql`
+    WITH RECURSIVE walker(prompt_idx, value) AS (
+      SELECT prompt_idx, entry.value
+      FROM eval_results,
+        json_each(json_extract(grading_result, '$.componentResults')) AS entry
+      WHERE ${whereSql}
+        AND grading_result IS NOT NULL
+        AND json_valid(grading_result)
+        AND json_type(json_extract(grading_result, '$.componentResults')) = 'array'
+        AND entry.type = 'object'
+      UNION ALL
+      SELECT walker.prompt_idx, entry.value
+      FROM walker,
+        json_each(
+          CASE
+            WHEN json_type(walker.value, '$.componentResults') = 'array'
+            THEN json_extract(walker.value, '$.componentResults')
+            ELSE '[]'
+          END
+        ) AS entry
+      WHERE entry.type = 'object'
+    )
     SELECT
       prompt_idx,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-            )
-          ELSE 0
-        END
-      ) as assert_pass_count,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-            )
-          ELSE 0
-        END
-      ) as assert_fail_count
-    FROM eval_results
-    WHERE ${whereSql}
-      AND grading_result IS NOT NULL
+      SUM(CASE WHEN CAST(json_extract(value, '$.pass') AS INTEGER) = 1 THEN 1 ELSE 0 END) as assert_pass_count,
+      SUM(CASE WHEN COALESCE(CAST(json_extract(value, '$.pass') AS INTEGER), 0) = 0 THEN 1 ELSE 0 END) as assert_fail_count
+    FROM walker
+    WHERE COALESCE(CAST(json_extract(value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
+      AND (
+        json_type(value, '$.assertion') = 'object'
+        OR COALESCE(json_array_length(value, '$.componentResults'), 0) = 0
+      )
     GROUP BY prompt_idx
   `;
 

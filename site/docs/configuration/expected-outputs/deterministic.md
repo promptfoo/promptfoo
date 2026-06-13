@@ -29,57 +29,57 @@ keywords:
 
 These metrics are created by logical tests that are run on LLM output.
 
-| Assertion Type                                                  | Returns true if...                                                 |
-| --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
-| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold      |
-| [contains](#contains)                                           | output contains substring                                          |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                             |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
-| [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
-| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [cost](#cost)                                                   | Inference cost is below a threshold                                |
-| [equals](#equality)                                             | output matches exactly                                             |
-| [f-score](#f-score)                                             | F-score is above a threshold                                       |
-| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
-| [icontains](#contains)                                          | output contains substring, case insensitive                        |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
-| [is-html](#is-html)                                             | output is valid HTML                                               |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
-| [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
-| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
-| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
-| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
-| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
-| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
-| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
-| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is valid xml                                                |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
-| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
-| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
-| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
-| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
-| [regex](#regex)                                                 | output matches regex                                               |
-| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
-| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
-| [similar](#similar)                                             | Embedding similarity is above threshold                            |
-| [starts-with](#starts-with)                                     | output starts with string                                          |
-| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
-| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
-| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
-| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
-| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
+| Assertion Type                                                  | Returns true if...                                                              |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                             |
+| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold                   |
+| [contains](#contains)                                           | output contains substring                                                       |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                                          |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                                    |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)                    |
+| [contains-html](#contains-html)                                 | output contains HTML content                                                    |
+| [contains-sql](#contains-sql)                                   | output contains valid sql                                                       |
+| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                                           |
+| [cost](#cost)                                                   | Inference cost is below a threshold, or records raw cost as a metric            |
+| [equals](#equality)                                             | output matches exactly                                                          |
+| [f-score](#f-score)                                             | F-score is above a threshold                                                    |
+| [finish-reason](#finish-reason)                                 | model stopped for the expected reason                                           |
+| [icontains](#contains)                                          | output contains substring, case insensitive                                     |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive                        |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive                  |
+| [is-html](#is-html)                                             | output is valid HTML                                                            |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)                          |
+| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation)              |
+| [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema                |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema                |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                               |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                                |
+| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills              |
+| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                                |
+| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads                     |
+| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order                          |
+| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern                            |
+| [is-xml](#is-xml)                                               | output is valid xml                                                             |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                               |
+| [latency](#latency)                                             | Latency is below a threshold (milliseconds), or records raw latency as a metric |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                                       |
+| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                                           |
+| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                                 |
+| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                                    |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                                   |
+| [regex](#regex)                                                 | output matches regex                                                            |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                                        |
+| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                               |
+| [similar](#similar)                                             | Embedding similarity is above threshold                                         |
+| [starts-with](#starts-with)                                     | output starts with string                                                       |
+| [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds                           |
+| [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                                    |
+| [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages               |
+| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                                         |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range                   |
 
 :::tip
-Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`. `cost` and `latency` still require a `threshold` when used with `not-`.
 :::
 
 ## Assertion types
@@ -283,6 +283,17 @@ assert:
   - type: cost
     threshold: 0.001
 ```
+
+To record raw cost as a named metric without affecting pass/fail scoring, omit `threshold` and
+set `metric`:
+
+```yaml
+assert:
+  - type: cost
+    metric: cost_usd
+```
+
+The thresholdless form requires `metric`. `not-cost` always requires `threshold`.
 
 ### Equality
 
@@ -909,6 +920,17 @@ assert:
   - type: latency
     threshold: 5000
 ```
+
+To record raw latency as a named metric without affecting pass/fail scoring, omit `threshold` and
+set `metric`:
+
+```yaml
+assert:
+  - type: latency
+    metric: latency_ms
+```
+
+The thresholdless form requires `metric`. `not-latency` always requires `threshold`.
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
 

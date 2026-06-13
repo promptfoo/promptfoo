@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing assert-set prompt-level assertion counts
+description: 'Smoke test - assert-set counts'
+
+providers:
+  - file://../providers/metrics-provider.mjs
+
+prompts:
+  - 'assert count check'
+
+tests:
+  - assert:
+      - type: assert-set
+        assert:
+          - type: contains
+            value: Metrics Echo
+          - type: contains
+            value: assert count check

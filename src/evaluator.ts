@@ -56,6 +56,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  countAssertionPassFail,
   type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
@@ -3273,10 +3274,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    metrics.assertPassCount +=
-      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-    metrics.assertFailCount +=
-      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+    const { passCount, failCount } = countAssertionPassFail(row.gradingResult?.componentResults);
+    metrics.assertPassCount += passCount;
+    metrics.assertFailCount += failCount;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 

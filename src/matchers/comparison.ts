@@ -1,17 +1,17 @@
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import {
+  type Assertion,
+  type CallApiContextParams,
+  collectAssertedComponentResults,
+  type GradingConfig,
+  type GradingResult,
+  type VarValue,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
-
-import type {
-  Assertion,
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-  VarValue,
-} from '../types/index';
 
 export async function matchesSelectBest(
   criteria: string,
@@ -117,10 +117,14 @@ export async function selectMaxScore(
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
-    // Filter out max-score and select-best assertions
-    const relevantResults = componentResults.filter(
+    // Metric-only results (e.g. thresholdless cost/latency) carry raw numeric
+    // scores that would skew max-score aggregation, so skip them alongside
+    // max-score/select-best self-references.
+    const relevantResults = collectAssertedComponentResults(componentResults).filter(
       (r: GradingResult) =>
-        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+        r.assertion?.type !== 'max-score' &&
+        r.assertion?.type !== 'select-best' &&
+        r.metadata?.isMetricOnly !== true,
     );
 
     if (relevantResults.length === 0) {

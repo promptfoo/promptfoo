@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing metric-only cost assertions
+description: 'Smoke test - cost metric assertion'
+
+providers:
+  - file://../providers/metrics-provider.mjs
+
+prompts:
+  - 'Test prompt for {{label}} cost check'
+
+tests:
+  - vars:
+      label: first
+      cost: 0.2
+    assert:
+      - type: cost
+        metric: total_cost
+  - vars:
+      label: second
+      cost: 0.4
+    assert:
+      - type: cost
+        metric: total_cost
+
+derivedMetrics:
+  - name: avg_cost
+    value: total_cost / __count

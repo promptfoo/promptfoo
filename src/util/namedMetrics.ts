@@ -1,6 +1,5 @@
 import { renderMetricName } from '../assertions/index';
-
-import type { GradingResult, Vars } from '../types/index';
+import { collectAssertedComponentResults, type GradingResult, type Vars } from '../types/index';
 
 export interface NamedMetricAccumulator {
   namedScores: Record<string, number>;
@@ -19,11 +18,12 @@ function getContributingAssertionCount(
   metricName: string,
   testVars: Vars,
 ): number {
-  const contributingAssertions =
-    gradingResult?.componentResults?.reduce((count, componentResult) => {
-      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-      return renderedMetric === metricName ? count + 1 : count;
-    }, 0) ?? 0;
+  const contributingAssertions = collectAssertedComponentResults(
+    gradingResult?.componentResults,
+  ).reduce((count, componentResult) => {
+    const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+    return renderedMetric === metricName ? count + 1 : count;
+  }, 0);
 
   return contributingAssertions > 0 ? contributingAssertions : 1;
 }

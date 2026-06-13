@@ -93,8 +93,15 @@ export class AssertionsResult {
     metric?: string;
     weight?: number;
   }) {
-    this.totalScore += result.score * weight;
-    this.totalWeight += weight;
+    // Metric-only results (thresholdless cost/latency) must not influence the
+    // aggregate pass/fail score, but still accumulate at weight 1 so the normalized
+    // named metric reflects the raw value.
+    const isMetricOnly = result.metadata?.isMetricOnly === true;
+    const aggregateWeight = isMetricOnly ? 0 : weight;
+    const namedScoreWeight = isMetricOnly ? 1 : weight;
+
+    this.totalScore += result.score * aggregateWeight;
+    this.totalWeight += aggregateWeight;
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =
@@ -105,15 +112,15 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * namedScoreWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + namedScoreWeight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
           const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * namedScoreWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
@@ -146,7 +153,12 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    let score: number;
+    if (this.totalWeight > 0) {
+      score = this.totalScore / this.totalWeight;
+    } else {
+      score = this.failedReason ? 0 : 1;
+    }
 
     let pass = !this.failedReason;
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
@@ -167,9 +179,10 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, and copy the assertion into the child results.
+    // Flatten nested component results only when the parent has a real assertion for
+    // children to inherit. Assert-set aggregate results do not carry one.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
+      if (result.componentResults && result.assertion) {
         return [
           result,
           ...result.componentResults.map((subResult) => ({

@@ -21,6 +21,7 @@ import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
+  type AssertionOrSet,
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -44,6 +45,11 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
+import {
+  getMetricDisplayKind,
+  getMetricDisplayKinds,
+  isValueMetricAssertion,
+} from './metricDisplay';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -71,6 +77,33 @@ import {
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
+
+function addPercentageMetricTotal(totals: Record<string, number>, assertion: AssertionOrSet): void {
+  if (!assertion.metric || isValueMetricAssertion(assertion)) {
+    return;
+  }
+  totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
+}
+
+function collectPercentageMetricTotals(
+  assertions: AssertionOrSet[] | undefined,
+  totals: Record<string, number>,
+): void {
+  for (const assertion of assertions ?? []) {
+    addPercentageMetricTotal(totals, assertion);
+    if ('assert' in assertion && Array.isArray(assertion.assert)) {
+      collectPercentageMetricTotals(assertion.assert, totals);
+    }
+  }
+}
+
+function getFallbackPercentageMetricTotals(body: EvaluateTable['body']): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of body) {
+    collectPercentageMetricTotals(row.test.assert, totals);
+  }
+  return totals;
+}
 
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
@@ -2091,33 +2124,48 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
+  const metricDisplayKinds = React.useMemo(
+    () => getMetricDisplayKinds(table, config),
+    [table, config],
+  );
 
-    if (backendTotals) {
-      return backendTotals;
+  const percentageMetricTotalsByPrompt = React.useMemo(() => {
+    // Pre-compute which metrics are percentage-type so we only classify each once.
+    const allMetrics = new Set<string>();
+    for (const prompt of head.prompts) {
+      if (prompt.metrics?.namedScoresCount) {
+        for (const metric of Object.keys(prompt.metrics.namedScoresCount)) {
+          allMetrics.add(metric);
+        }
+      }
+    }
+    const isPercentageMetric: Record<string, boolean> = {};
+    for (const metric of allMetrics) {
+      const counts = head.prompts.map(
+        (candidatePrompt) => candidatePrompt.metrics?.namedScoresCount?.[metric],
+      );
+      isPercentageMetric[metric] =
+        getMetricDisplayKind(metric, metricDisplayKinds, counts) === 'percentage';
     }
 
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
+    // Fallback totals are derived from the test config (not per-prompt) and only
+    // used when the backend didn't persist namedScoreWeights. Compute lazily.
+    let fallbackTotals: Record<string, number> | undefined;
+    function getFallbackTotals(): Record<string, number> {
+      fallbackTotals ??= getFallbackPercentageMetricTotals(body);
+      return fallbackTotals;
+    }
+
+    return head.prompts.map((prompt) => {
+      const backendTotals = getNamedMetricTotals(prompt.metrics);
+      if (backendTotals) {
+        return Object.fromEntries(
+          Object.entries(backendTotals).filter(([metric]) => isPercentageMetric[metric]),
+        );
+      }
+      return getFallbackTotals();
     });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
+  }, [body, head.prompts, metricDisplayKinds]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
@@ -2141,7 +2189,7 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
+                metricTotals={percentageMetricTotalsByPrompt[idx] ?? {}}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2208,7 +2256,7 @@ function ResultsTable({
     head,
     head.prompts,
     maxTextLength,
-    metricTotals,
+    percentageMetricTotalsByPrompt,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

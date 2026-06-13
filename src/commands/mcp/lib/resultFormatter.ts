@@ -1,4 +1,7 @@
-import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
+import {
+  countAssertionPassFail,
+  ResultFailureReason as ResultFailureReasonEnum,
+} from '../../../types/index';
 import { truncateText } from './utils';
 
 import type {
@@ -126,18 +129,22 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
+    const { passCount, failCount } = countAssertionPassFail(componentResults);
     assertions = {
       totalAssertions: result.testCase.assert?.length || 0,
-      passedAssertions: componentResults.filter((r) => r.pass).length,
-      failedAssertions: componentResults.filter((r) => !r.pass).length,
-      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
-        index: idx,
-        type: result.testCase.assert?.[idx]?.type || 'unknown',
-        pass: cr.pass,
-        score: cr.score,
-        reason: truncateText(cr.reason || '', 100),
-        metric: result.testCase.assert?.[idx]?.metric,
-      })),
+      passedAssertions: passCount,
+      failedAssertions: failCount,
+      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => {
+        const fallbackAssertion = result.testCase.assert?.[idx];
+        return {
+          index: idx,
+          type: cr.assertion?.type || fallbackAssertion?.type || 'unknown',
+          pass: cr.pass,
+          score: cr.score,
+          reason: truncateText(cr.reason || '', 100),
+          metric: cr.assertion?.metric || fallbackAssertion?.metric,
+        };
+      }),
     };
   }
 

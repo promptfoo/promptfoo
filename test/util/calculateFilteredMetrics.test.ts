@@ -14,6 +14,8 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
+import type { AssertionType, GradingResult } from '../../src/types/index';
+
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -380,6 +382,329 @@ describe('calculateFilteredMetrics', () => {
       // Total assertions should equal results (1 assertion per result)
       const totalAssertions = metrics[0].assertPassCount + metrics[0].assertFailCount;
       expect(totalAssertions).toBe(10);
+    });
+
+    it('should skip metric-only and anonymous wrapper componentResults', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            {
+              pass: true,
+              score: 0.25,
+              reason: 'Metric only',
+              assertion: { type: 'cost', metric: 'total_cost' },
+              metadata: { isMetricOnly: true },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'Anonymous wrapper',
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'Nested pass',
+                  assertion: { type: 'contains', value: 'test' },
+                },
+                {
+                  pass: true,
+                  score: 0.25,
+                  reason: 'Nested metric only',
+                  assertion: { type: 'cost', metric: 'nested_cost' },
+                  metadata: { isMetricOnly: true },
+                },
+              ],
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Anonymous leaf failure',
+            },
+          ],
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
+    it('should not count nested pass keys inside assertion.value or metadata', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'javascript assertion with pass-keyed value',
+              assertion: {
+                type: 'javascript',
+                value: [{ pass: true }, { pass: false }] as unknown as string,
+              },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'assertion with pass-keyed metadata',
+              assertion: { type: 'equals', value: 'expected' },
+              metadata: { trace: { pass: true, nested: { pass: false } } },
+            },
+          ],
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
+    it('should count nested asserted wrappers from assert-sets', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'assert-set parent',
+              assertion: { type: 'assert-set' as AssertionType },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'child 1',
+                  assertion: { type: 'equals', value: 'a' },
+                },
+                {
+                  pass: false,
+                  score: 0,
+                  reason: 'child 2',
+                  assertion: { type: 'contains', value: 'b' },
+                },
+              ],
+            },
+          ],
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(2);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
+    it('should mix metric-only and asserted children inside an asserted assert-set wrapper', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'assert-set parent',
+              assertion: { type: 'assert-set' as AssertionType },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 0.25,
+                  reason: 'metric-only cost child',
+                  assertion: { type: 'cost', metric: 'child_cost' },
+                  metadata: { isMetricOnly: true },
+                },
+                {
+                  pass: false,
+                  score: 0,
+                  reason: 'asserted child',
+                  assertion: { type: 'equals', value: 'expected' },
+                },
+              ],
+            },
+          ],
+        },
+        namedScores: {},
+        cost: 0.25,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      // Wrapper pass (1) + asserted child fail (1) = 1 pass / 1 fail. Metric-only child skipped.
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
+    it('should skip malformed non-object entries inside componentResults', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            'corrupt-string-entry' as unknown as GradingResult,
+            { pass: true, score: 1, reason: 'valid', assertion: { type: 'equals' } },
+            42 as unknown as GradingResult,
+          ],
+        },
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(0);
     });
 
     it('should handle results without grading results', async () => {

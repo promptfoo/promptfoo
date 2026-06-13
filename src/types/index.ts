@@ -563,6 +563,7 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    isMetricOnly?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -590,6 +591,56 @@ export function isGradingResult(result: any): result is GradingResult {
       typeof result.assertion === 'object') &&
     (typeof result.comment === 'undefined' || typeof result.comment === 'string')
   );
+}
+
+function collectComponentResults(
+  componentResults: GradingResult[] | undefined,
+  includeAnonymousLeaves: boolean,
+): GradingResult[] {
+  return (componentResults || []).flatMap((result) => {
+    const nestedResults = collectComponentResults(result.componentResults, includeAnonymousLeaves);
+
+    if (result.assertion) {
+      return [result, ...nestedResults];
+    }
+
+    if (nestedResults.length > 0) {
+      return nestedResults;
+    }
+
+    return includeAnonymousLeaves ? [result] : [];
+  });
+}
+
+export function collectAssertedComponentResults(
+  componentResults: GradingResult[] | undefined,
+): GradingResult[] {
+  return collectComponentResults(componentResults, false);
+}
+
+export function collectCountableComponentResults(
+  componentResults: GradingResult[] | undefined,
+): GradingResult[] {
+  return collectComponentResults(componentResults, true);
+}
+
+export function countAssertionPassFail(componentResults: GradingResult[] | undefined): {
+  passCount: number;
+  failCount: number;
+} {
+  let passCount = 0;
+  let failCount = 0;
+  for (const result of collectCountableComponentResults(componentResults)) {
+    if (result.metadata?.isMetricOnly) {
+      continue;
+    }
+    if (result.pass) {
+      passCount++;
+    } else {
+      failCount++;
+    }
+  }
+  return { passCount, failCount };
 }
 
 export const BaseAssertionTypesSchema = z.enum([
@@ -705,39 +756,80 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const METRIC_ONLY_ASSERTION_LABELS: Record<string, string> = {
+  cost: 'Cost',
+  latency: 'Latency',
+};
+
+function validateMetricOnlyNumericAssertion(
+  assertion: { type: AssertionType; threshold?: number; metric?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (typeof assertion.type !== 'string') {
+    return;
+  }
+
+  const inverse = assertion.type.startsWith('not-');
+  const baseType = inverse ? assertion.type.slice(4) : assertion.type;
+  const label = METRIC_ONLY_ASSERTION_LABELS[baseType];
+
+  if (!label || assertion.threshold !== undefined) {
+    return;
+  }
+
+  if (inverse) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['threshold'],
+      message: `${label} assertion requires a threshold when using ${assertion.type}`,
+    });
+    return;
+  }
+
+  if (!assertion.metric) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['metric'],
+      message: `${label} assertion without a threshold must set \`metric\` to record as a named metric`,
+    });
+  }
+}
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: AssertionTypeSchema,
+export const AssertionSchema = z
+  .object({
+    // Type of assertion
+    type: AssertionTypeSchema,
 
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
+    // The expected value, if applicable
+    value: z.custom<AssertionValue>().optional(),
 
-  // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom asserts
-  config: z.record(z.string(), z.any()).optional(),
+    // An external mapping of arbitrary strings to values that is passed
+    // to the assertion for custom asserts
+    config: z.record(z.string(), z.any()).optional(),
 
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold: z.number().optional(),
+    // The threshold value, only applicable for similarity (cosine distance)
+    threshold: z.number().optional(),
 
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
+    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+    weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
+    // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
+    provider: z.custom<GradingConfig['provider']>().optional(),
 
-  // Override the grading rubric
-  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+    // Override the grading rubric
+    rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
+    // Tag this assertion result as a named metric
+    metric: z.string().optional(),
 
-  // Process the output before running the assertion
-  transform: StringOrFunctionSchema.optional(),
+    // Process the output before running the assertion
+    transform: StringOrFunctionSchema.optional(),
 
-  // Extract context from the output using a transform
-  contextTransform: StringOrFunctionSchema.optional(),
-});
+    // Extract context from the output using a transform
+    contextTransform: StringOrFunctionSchema.optional(),
+  })
+  .superRefine(validateMetricOnlyNumericAssertion);
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
