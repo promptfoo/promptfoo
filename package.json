@@ -115,12 +115,12 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
-      "esbuild": "0.27.7"
+      "esbuild": "0.28.1"
     },
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -128,7 +128,7 @@
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
-      "esbuild": "0.28.0",
+      "esbuild": "0.28.1",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
