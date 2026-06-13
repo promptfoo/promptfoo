@@ -744,7 +744,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
 
       const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
+        normalizedPath.startsWith(`${prefix}/`),
       );
       if (!matchingRoot) {
         continue;
@@ -752,8 +752,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
       const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
+      const pluginCacheMatch = relativeSkillPath.match(
+        /^plugins\/cache\/[^/\s]+\/[^/\s]+\/[^/\s]+\/skills\/([^/\s]+)\/SKILL\.md$/,
+      );
+      const skillName = customRootMatch?.[1] ?? pluginCacheMatch?.[1];
+      if (skillName && this.isValidCodexSkillName(skillName)) {
+        matches.set(normalizedPath, { name: skillName, path: normalizedPath });
       }
     }
 

@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { type ChildProcess, spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -22,8 +22,9 @@ const CODEX_PLUGIN_ARTIFACT_DIR_ENV = 'PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR';
 const CODEX_PLUGIN_RUNTIME_PREFIX = 'promptfoo-codex-plugin-';
 const NPM_PACKAGE_NAME_PATTERN = /^(?:@[^/@\s]+\/)?[^/@\s]+$/;
 const NPM_PACKAGE_VERSION_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._+-]*$/;
-const PROCESS_TERMINATION_GRACE_MS = 250;
-const CLEANUP_TIMEOUT_MS = 1000;
+const DEFAULT_CLEANUP_TIMEOUT_MS = 30_000;
+const PROCESS_TERMINATION_GRACE_MS = 1_000;
+const VCS_INTERNAL_DIRECTORIES = new Set(['.git']);
 
 const PluginSourceSchema = z
   .object({
@@ -106,13 +107,20 @@ interface CodexPluginRuntime {
   pluginSourceIdentity: string;
   pluginSourceDigest?: string;
   pluginGitCommit?: string;
-  copiedAuth: boolean;
 }
 
 interface CodexPluginArtifactReference {
   path: string;
   relativePath: string;
   owner: 'provider-runtime' | 'caller-export';
+}
+
+type CleanupStepStatus = 'completed' | 'failed' | 'not-requested' | 'timeout';
+
+interface CodexPluginCleanupMetadata {
+  shutdown: CleanupStepStatus;
+  artifacts: CleanupStepStatus;
+  runtimeRemoved: boolean;
 }
 
 function formatZodIssues(error: z.ZodError): string {
@@ -160,6 +168,44 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw abortError();
   }
+}
+
+function timeoutError(label: string): Error {
+  const error = new Error(`${label} timed out`);
+  error.name = 'TimeoutError';
+  return error;
+}
+
+async function withDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(timeoutError(label)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function cleanupTimeoutMs(config: OpenAICodexPluginConfig): number {
+  return config.timeout_ms ?? DEFAULT_CLEANUP_TIMEOUT_MS;
+}
+
+function remainingDeadlineMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+function cleanupStatus(error: unknown): CleanupStepStatus {
+  return error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'failed';
 }
 
 async function withAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -251,57 +297,42 @@ function readPluginManifest(pluginRoot: string): PluginManifest {
   };
 }
 
-function sanitizePathSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'local';
-}
-
-function safeArtifactNamespaceSegment(value: string): string {
-  if (
-    value.length === 0 ||
-    value === '.' ||
-    value === '..' ||
-    path.isAbsolute(value) ||
-    value.includes('/') ||
-    value.includes('\\')
-  ) {
-    throw new Error(`Codex plugin artifact namespace contains an unsafe path segment: ${value}`);
-  }
-  return sanitizePathSegment(value);
-}
-
-function assertPathContained(root: string, candidate: string, label: string): string {
-  const resolvedRoot = path.resolve(root);
-  const resolvedCandidate = path.resolve(candidate);
-  if (
-    resolvedCandidate !== resolvedRoot &&
-    !resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`)
-  ) {
-    throw new Error(`${label} escapes its configured root: ${resolvedCandidate}`);
-  }
-  return resolvedCandidate;
-}
-
-function isNotFound(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-}
-
-async function withTimeout<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
+function decodePathEquivalent(value: string): string {
+  let decoded = value;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        return decoded;
+      }
+      decoded = next;
+    } catch {
+      return decoded;
     }
+  }
+  return decoded;
+}
+
+function sanitizePathSegment(value: unknown): string {
+  const raw = String(value);
+  const decoded = decodePathEquivalent(raw);
+  if (
+    raw.length === 0 ||
+    decoded === '.' ||
+    decoded === '..' ||
+    decoded.includes('/') ||
+    decoded.includes('\\') ||
+    /[\u0000-\u001f\u007f]/.test(decoded)
+  ) {
+    throw new Error('Codex plugin artifact namespace contains an unsafe path segment');
+  }
+  return decoded.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'local';
+}
+
+function assertContainedPath(root: string, candidate: string, label: string): void {
+  const relative = path.relative(root, candidate);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${label} must stay within configured artifacts_dir`);
   }
 }
 
@@ -322,6 +353,43 @@ function checkTarEntry(entry: string): void {
   }
 }
 
+function signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (!child.pid) {
+    return;
+  }
+  try {
+    process.kill(process.platform === 'win32' ? child.pid : -child.pid, signal);
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
+async function terminateProcessGroup(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  signalProcessGroup(child, 'SIGTERM');
+  try {
+    await withDeadline(
+      new Promise<void>((resolve) => child.once('close', () => resolve())),
+      PROCESS_TERMINATION_GRACE_MS,
+      'Codex plugin child process termination',
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== 'TimeoutError') {
+      throw error;
+    }
+    signalProcessGroup(child, 'SIGKILL');
+    await withDeadline(
+      new Promise<void>((resolve) => child.once('close', () => resolve())),
+      PROCESS_TERMINATION_GRACE_MS,
+      'Codex plugin child process kill',
+    );
+  }
+}
+
 async function runCommand(
   command: string,
   args: string[],
@@ -332,53 +400,51 @@ async function runCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      shell: false,
       detached: process.platform !== 'win32',
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let terminationTimer: NodeJS.Timeout | undefined;
-    const terminateProcessGroup = () => {
-      if (child.exitCode !== null || child.pid === undefined) {
-        return;
-      }
-      const kill = (signalToSend: NodeJS.Signals) => {
-        try {
-          if (process.platform === 'win32') {
-            child.kill(signalToSend);
-          } else {
-            process.kill(-child.pid!, signalToSend);
-          }
-        } catch (error) {
-          if (!isNotFound(error)) {
-            logger.debug('[CodexPlugin] Unable to terminate command process group', { error });
-          }
-        }
-      };
-      kill('SIGTERM');
-      terminationTimer = setTimeout(() => kill('SIGKILL'), PROCESS_TERMINATION_GRACE_MS);
-    };
-    const onAbort = () => terminateProcessGroup();
-    signal.addEventListener('abort', onAbort, { once: true });
     let stdout = '';
     let stderr = '';
-    child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
-    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
-    child.once('error', (error) => reject(error.name === 'AbortError' ? abortError() : error));
+    let terminating = false;
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (!settled) {
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        callback();
+      }
+    };
+    const onAbort = () => {
+      terminating = true;
+      void terminateProcessGroup(child).then(
+        () => finish(() => reject(abortError())),
+        (error) => finish(() => reject(error)),
+      );
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    child.stdout?.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
+    child.stderr?.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    child.once('error', (error) =>
+      finish(() => reject(error.name === 'AbortError' ? abortError() : error)),
+    );
     child.once('close', (code) => {
-      signal.removeEventListener('abort', onAbort);
-      if (terminationTimer) {
-        clearTimeout(terminationTimer);
+      if (terminating) {
+        return;
       }
-      if (signal.aborted) {
-        reject(abortError());
-      } else if (code === 0) {
-        resolve(stdout);
-      } else {
-        reject(
-          new Error(`${command} failed while resolving a Codex plugin source: ${stderr.trim()}`),
-        );
-      }
+      finish(() => {
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          reject(
+            new Error(`${command} failed while resolving a Codex plugin source: ${stderr.trim()}`),
+          );
+        }
+      });
     });
+    if (signal.aborted) {
+      onAbort();
+    }
   });
 }
 
@@ -461,12 +527,12 @@ async function digestTree(root: string, signal: AbortSignal): Promise<string> {
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       throwIfAborted(signal);
-      if (entry.name === '.git') {
-        continue;
-      }
       const entryPath = path.join(directory, entry.name);
       const relativePath = path.relative(root, entryPath).split(path.sep).join('/');
       const stat = await withAbort(fs.promises.lstat(entryPath), signal);
+      if (stat.isDirectory() && VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
+        continue;
+      }
       digest.update(`${entry.isDirectory() ? 'd' : 'f'}:${relativePath}\0`);
       if (stat.isDirectory()) {
         await visit(entryPath);
@@ -507,7 +573,7 @@ function artifactNamespace(
     `repeat-${context?.repeatIndex ?? 0}`,
     path.basename(runtimeRoot),
   ]
-    .map(safeArtifactNamespaceSegment)
+    .map(sanitizePathSegment)
     .join(path.sep);
 }
 
@@ -551,14 +617,19 @@ function resolveArtifactExportDir(
   if (!config.artifacts_dir) {
     return undefined;
   }
-  const artifactRoot = path.resolve(config.artifacts_dir);
-  const artifactExportDir = assertPathContained(
-    artifactRoot,
-    path.join(artifactRoot, namespace),
-    'Codex plugin artifact export directory',
-  );
+  const configuredArtifactsDir = path.resolve(config.artifacts_dir);
+  fs.mkdirSync(configuredArtifactsDir, { recursive: true });
+  const resolvedArtifactsDir = fs.realpathSync(configuredArtifactsDir);
+  const artifactExportDir = path.join(resolvedArtifactsDir, namespace);
+  assertContainedPath(resolvedArtifactsDir, artifactExportDir, 'Codex plugin artifact export path');
   fs.mkdirSync(artifactExportDir, { recursive: true });
-  return artifactExportDir;
+  const resolvedArtifactExportDir = fs.realpathSync(artifactExportDir);
+  assertContainedPath(
+    resolvedArtifactsDir,
+    resolvedArtifactExportDir,
+    'Codex plugin artifact export path',
+  );
+  return resolvedArtifactExportDir;
 }
 
 function getCodexAuthSource(config: OpenAICodexPluginConfig): string {
@@ -630,7 +701,12 @@ async function makeRuntimeRemovable(root: string): Promise<void> {
   await fs.promises.chmod(root, 0o700).catch(() => undefined);
 }
 
+function deleteRuntimeAuth(root: string): void {
+  fs.rmSync(path.join(root, 'home', '.codex', 'auth.json'), { force: true });
+}
+
 async function removeRuntime(root: string): Promise<void> {
+  deleteRuntimeAuth(root);
   try {
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch (error) {
@@ -650,23 +726,16 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
 
   const collect = (directory: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const entryPath = assertPathContained(
-        runtime.artifactDir,
-        path.join(directory, entry.name),
-        'Codex plugin runtime artifact',
-      );
+      const entryPath = path.join(directory, entry.name);
       const entryStat = fs.lstatSync(entryPath);
       if (entryStat.isSymbolicLink()) {
-        throw new Error(`Codex plugin artifacts may not contain symlinks: ${entryPath}`);
+        throw new Error('Codex plugin artifacts may not contain symlinks');
       }
-      if (entry.isDirectory()) {
+      if (entryStat.isDirectory()) {
         collect(entryPath);
         continue;
       }
-      if (!entry.isFile()) {
-        continue;
-      }
-      if (entryStat.nlink !== 1) {
+      if (!entryStat.isFile() || entryStat.nlink !== 1) {
         continue;
       }
 
@@ -691,50 +760,43 @@ function exportArtifacts(
   }
 
   return references.map((reference) => {
-    const exportedPath = assertPathContained(
+    const exportedPath = path.join(runtime.exportedArtifactDir!, reference.relativePath);
+    assertContainedPath(
       runtime.exportedArtifactDir!,
-      path.join(runtime.exportedArtifactDir!, reference.relativePath),
-      'Codex plugin exported artifact',
+      exportedPath,
+      'Codex plugin artifact export path',
     );
     fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
+    const resolvedParent = fs.realpathSync(path.dirname(exportedPath));
+    assertContainedPath(
+      runtime.exportedArtifactDir!,
+      resolvedParent,
+      'Codex plugin artifact export path',
+    );
     fs.copyFileSync(reference.path, exportedPath, fs.constants.COPYFILE_EXCL);
     return { path: exportedPath, relativePath: reference.relativePath, owner: 'caller-export' };
   });
 }
 
-async function finalizeRuntime(
+async function exportArtifactsWithinDeadline(
   runtime: CodexPluginRuntime,
   retainRuntime: boolean,
-  response: ProviderResponse | undefined,
-): Promise<{
-  response: ProviderResponse | undefined;
-  artifactReferences: CodexPluginArtifactReference[];
-}> {
-  let artifactReferences: CodexPluginArtifactReference[] = [];
+  timeoutMs: number,
+): Promise<CodexPluginArtifactReference[]> {
+  const controller = new AbortController();
   try {
-    artifactReferences = exportArtifacts(
-      runtime,
-      collectArtifactReferences(runtime),
-      retainRuntime,
+    return await withDeadline(
+      Promise.resolve().then(() => {
+        throwIfAborted(controller.signal);
+        return exportArtifacts(runtime, collectArtifactReferences(runtime), retainRuntime);
+      }),
+      timeoutMs,
+      'Codex plugin artifact collection/export',
     );
   } catch (error) {
-    logger.error('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
-    response = response?.error
-      ? response
-      : { ...response, error: `Codex plugin artifact export failed: ${errorMessage(error)}` };
-  } finally {
-    if (runtime.copiedAuth) {
-      await fs.promises.rm(path.join(runtime.codexHome, 'auth.json'), { force: true });
-    }
-    if (!retainRuntime) {
-      await withTimeout(
-        removeRuntime(runtime.root),
-        CLEANUP_TIMEOUT_MS,
-        'Codex plugin runtime cleanup timed out',
-      );
-    }
+    controller.abort();
+    throw error;
   }
-  return { response, artifactReferences };
 }
 
 function terminalStatus(response: ProviderResponse, timedOut: boolean, cancelled: boolean): string {
@@ -804,16 +866,15 @@ export class OpenAICodexPluginProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    await Promise.all(
-      Array.from(this.activeProviders).map((provider) =>
-        withTimeout(
-          provider.shutdown(),
-          CLEANUP_TIMEOUT_MS,
-          'Codex plugin provider shutdown timed out',
-        ),
-      ),
-    );
-    this.activeProviders.clear();
+    try {
+      await withDeadline(
+        Promise.all(Array.from(this.activeProviders).map((provider) => provider.shutdown())),
+        cleanupTimeoutMs(this.config),
+        'Codex plugin provider cleanup',
+      );
+    } finally {
+      this.activeProviders.clear();
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -914,12 +975,81 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         pluginSourceIdentity: source.sourceIdentity,
         pluginSourceDigest,
         pluginGitCommit,
-        copiedAuth,
       };
     } catch (error) {
-      await removeRuntime(root);
+      deleteRuntimeAuth(root);
+      await withDeadline(
+        removeRuntime(root),
+        cleanupTimeoutMs(config),
+        'Codex plugin runtime setup cleanup',
+      ).catch((cleanupError) =>
+        logger.warn('[CodexPlugin] Runtime setup cleanup did not complete cleanly', {
+          error: cleanupError,
+        }),
+      );
       throw error;
     }
+  }
+
+  private async cleanupAfterCall(
+    config: OpenAICodexPluginConfig,
+    runtime: CodexPluginRuntime | undefined,
+    sdkProvider: OpenAICodexSDKProvider | undefined,
+    cleanupMetadata: CodexPluginCleanupMetadata,
+  ): Promise<{
+    shutdownError?: unknown;
+    artifactError?: unknown;
+    artifactReferences: CodexPluginArtifactReference[];
+  }> {
+    const cleanupDeadline = Date.now() + cleanupTimeoutMs(config);
+    let shutdownError: unknown;
+    let artifactError: unknown;
+    let artifactReferences: CodexPluginArtifactReference[] = [];
+    if (sdkProvider) {
+      try {
+        await withDeadline(
+          sdkProvider.shutdown(),
+          remainingDeadlineMs(cleanupDeadline),
+          'Codex plugin SDK shutdown',
+        );
+        cleanupMetadata.shutdown = 'completed';
+      } catch (error) {
+        shutdownError = error;
+        cleanupMetadata.shutdown = cleanupStatus(error);
+      } finally {
+        this.activeProviders.delete(sdkProvider);
+      }
+    }
+    if (!runtime) {
+      return { shutdownError, artifactError, artifactReferences };
+    }
+    try {
+      artifactReferences = await exportArtifactsWithinDeadline(
+        runtime,
+        config.retain_runtime === true,
+        remainingDeadlineMs(cleanupDeadline),
+      );
+      cleanupMetadata.artifacts = 'completed';
+    } catch (error) {
+      artifactError = error;
+      cleanupMetadata.artifacts = cleanupStatus(error);
+      logger.warn('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
+    } finally {
+      if (!config.retain_runtime) {
+        deleteRuntimeAuth(runtime.root);
+        try {
+          await withDeadline(
+            removeRuntime(runtime.root),
+            remainingDeadlineMs(cleanupDeadline),
+            'Codex plugin runtime cleanup',
+          );
+          cleanupMetadata.runtimeRemoved = true;
+        } catch (error) {
+          logger.warn('[CodexPlugin] Runtime cleanup did not complete cleanly', { error });
+        }
+      }
+    }
+    return { shutdownError, artifactError, artifactReferences };
   }
 
   private buildPrompt(prompt: string, config: OpenAICodexPluginConfig, pluginName: string): string {
@@ -950,6 +1080,12 @@ export class OpenAICodexPluginProvider implements ApiProvider {
     let sdkProvider: OpenAICodexSDKProvider | undefined;
     let response: ProviderResponse | undefined;
     let shutdownError: unknown;
+    let artifactError: unknown;
+    const cleanupMetadata: CodexPluginCleanupMetadata = {
+      shutdown: 'not-requested',
+      artifacts: 'not-requested',
+      runtimeRemoved: false,
+    };
     let artifactReferences: CodexPluginArtifactReference[] = [];
     const onAbort = () => {
       cancelled = true;
@@ -1001,32 +1137,24 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         clearTimeout(timeout);
       }
       callOptions?.abortSignal?.removeEventListener('abort', onAbort);
-      if (sdkProvider) {
-        if (timedOut || cancelled) {
-          controller.abort();
-        }
-        try {
-          await withTimeout(
-            sdkProvider.shutdown(),
-            CLEANUP_TIMEOUT_MS,
-            'Codex plugin provider shutdown timed out',
-          );
-        } catch (error) {
-          shutdownError = error;
-        } finally {
-          this.activeProviders.delete(sdkProvider);
-        }
-      }
-      if (runtime) {
-        ({ response, artifactReferences } = await finalizeRuntime(
-          runtime,
-          config.retain_runtime === true,
-          response,
-        ));
-      }
+      const cleanupResult = await this.cleanupAfterCall(
+        config,
+        runtime,
+        sdkProvider,
+        cleanupMetadata,
+      );
+      shutdownError = cleanupResult.shutdownError;
+      artifactError = cleanupResult.artifactError;
+      artifactReferences = cleanupResult.artifactReferences;
     }
 
     const normalizedResponse = response ?? { error: 'Codex plugin provider returned no response' };
+    if (artifactError && !normalizedResponse.error) {
+      normalizedResponse.error = 'Codex plugin artifact export failed';
+    }
+    if (shutdownError && !normalizedResponse.error) {
+      normalizedResponse.error = `Codex plugin SDK shutdown failed: ${errorMessage(shutdownError)}`;
+    }
     const durationMs = Date.now() - startedAt;
     const plugin = runtime
       ? {
@@ -1059,17 +1187,13 @@ export class OpenAICodexPluginProvider implements ApiProvider {
           traceIdentity: context?.traceparent ?? null,
           executionIdentity: executionIdentity(normalizedResponse),
           artifacts: artifactReferences,
+          artifactError: artifactError ? 'Codex plugin artifact export failed' : null,
+          cleanup: cleanupMetadata,
         },
       },
     };
     if (shutdownError) {
-      if (result.error) {
-        logger.warn('[CodexPlugin] Ignoring shutdown error after primary provider error', {
-          error: shutdownError,
-        });
-      } else {
-        throw shutdownError;
-      }
+      logger.warn('[CodexPlugin] SDK shutdown did not complete cleanly', { error: shutdownError });
     }
     return result;
   }

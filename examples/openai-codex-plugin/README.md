@@ -25,5 +25,5 @@ npm run local -- eval -c examples/openai-codex-plugin/promptfooconfig.yaml --no-
 The current and baseline values must be distinct plugin paths or pinned package
 versions to compare released and candidate plugin versions. Package and path
 sources are executable code; evaluate only trusted plugin inputs. The example
-asserts deterministic `security-scan` blocked-scan evidence, not only JSON syntax, and
+asserts observed `security-scan` skill-call evidence plus execution/source identity, not only JSON syntax, and
 exports artifacts only to trusted directories.

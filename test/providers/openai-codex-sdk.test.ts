@@ -723,6 +723,36 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should infer skillCalls from Codex plugin cache skill directories', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('PLUGIN-SKILL', undefined, [
+            {
+              id: 'item-1',
+              type: 'command_execution',
+              command:
+                "/bin/zsh -lc 'cat /tmp/promptfoo-codex-home/plugins/cache/promptfoo-eval/codex-security/0.1.7/skills/security-scan/SKILL.md'",
+              aggregated_output: '',
+              exit_code: 0,
+              status: 'completed',
+            },
+          ]),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { cli_env: { CODEX_HOME: '/tmp/promptfoo-codex-home' } },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the plugin skill');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'security-scan',
+            path: '/tmp/promptfoo-codex-home/plugins/cache/promptfoo-eval/codex-security/0.1.7/skills/security-scan/SKILL.md',
+            source: 'heuristic',
+          },
+        ]);
+      });
+
       it('should infer skillCalls from USERPROFILE .codex skill directories on Windows', async () => {
         const originalHome = process.env.HOME;
         const originalUserProfile = process.env.USERPROFILE;

@@ -194,7 +194,9 @@ describe('OpenAICodexPluginProvider', () => {
     const provider = new OpenAICodexPluginProvider({
       config: { plugin: { path: pluginRoot }, workspace, codex_home: codexHome },
     });
-    await expect(provider.callApi('Return JSON', context())).rejects.toThrow('shutdown failed');
+    const shutdownResult = await provider.callApi('Return JSON', context());
+    expect(shutdownResult.error).toBe('Codex plugin SDK shutdown failed: shutdown failed');
+    expect(shutdownResult.metadata?.codexPlugin.status).toBe('failed');
     const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
     expect(fs.existsSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'auth.json'))).toBe(false);
     expect(fs.existsSync(path.dirname(sdkConfig.cli_env.HOME))).toBe(false);
@@ -204,145 +206,6 @@ describe('OpenAICodexPluginProvider', () => {
     const primaryErrorResult = await provider.callApi('Return JSON', context());
     expect(primaryErrorResult.error).toBe('primary failed');
     expect(primaryErrorResult.metadata?.codexPlugin.status).toBe('failed');
-  });
-
-  it('rejects artifact namespace traversal before exporting outside the artifact root', async () => {
-    const exportedArtifacts = path.join(root, 'exported-artifacts');
-    const outsideArtifacts = path.join(root, 'outside-artifacts');
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
-    });
-
-    const result = await provider.callApi('Return JSON', {
-      ...context(),
-      evaluationId: '../outside-artifacts',
-    });
-
-    expect(result.error).toContain('artifact namespace contains an unsafe path segment');
-    expect(result.metadata?.codexPlugin.status).toBe('failed');
-    expect(fs.existsSync(outsideArtifacts)).toBe(false);
-  });
-
-  it('fails terminally when requested artifact export cannot be copied', async () => {
-    const exportedArtifacts = path.join(root, 'exported-artifacts');
-    mocks.callApi.mockImplementationOnce(async () => {
-      const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-      fs.writeFileSync(
-        path.join(sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR, 'scan.json'),
-        '{"ok":true}',
-      );
-      return { output: 'ok' };
-    });
-    vi.spyOn(fs, 'copyFileSync').mockImplementationOnce(() => {
-      throw new Error('disk full');
-    });
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
-    });
-
-    const result = await provider.callApi('Return JSON', context());
-
-    expect(result.error).toContain('Codex plugin artifact export failed: disk full');
-    expect(result.metadata?.codexPlugin.status).toBe('failed');
-    expect(result.metadata?.codexPlugin.artifacts).toEqual([]);
-  });
-
-  it('rejects symlinked runtime artifacts instead of exporting an escaped path', async () => {
-    const exportedArtifacts = path.join(root, 'exported-artifacts');
-    const outsideArtifact = path.join(root, 'outside.json');
-    fs.writeFileSync(outsideArtifact, '{"secret":true}');
-    mocks.callApi.mockImplementationOnce(async () => {
-      const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-      fs.symlinkSync(
-        outsideArtifact,
-        path.join(sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR, 'scan.json'),
-      );
-      return { output: 'ok' };
-    });
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
-    });
-
-    const result = await provider.callApi('Return JSON', context());
-
-    expect(result.error).toContain('Codex plugin artifacts may not contain symlinks');
-    expect(result.metadata?.codexPlugin.status).toBe('failed');
-  });
-
-  it('aborts in-flight work before cleanup so it cannot recreate runtime files', async () => {
-    const controller = new AbortController();
-    let lateWrite: NodeJS.Timeout | undefined;
-    let startCall: (() => void) | undefined;
-    const callStarted = new Promise<void>((resolve) => (startCall = resolve));
-    mocks.callApi.mockImplementationOnce((_prompt, sdkContext, options) => {
-      startCall?.();
-      const runtimeRoot = path.dirname(sdkContext.prompt.config.cli_env.HOME);
-      lateWrite = setTimeout(
-        () => fs.writeFileSync(path.join(runtimeRoot, 'late-write'), 'late'),
-        50,
-      );
-      options.abortSignal.addEventListener(
-        'abort',
-        () => {
-          if (lateWrite) {
-            clearTimeout(lateWrite);
-          }
-        },
-        { once: true },
-      );
-      return new Promise((resolve) =>
-        options.abortSignal.addEventListener('abort', () => resolve({ error: 'aborted' }), {
-          once: true,
-        }),
-      );
-    });
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace },
-    });
-    const resultPromise = provider.callApi('Return JSON', context(), {
-      abortSignal: controller.signal,
-    });
-    await callStarted;
-    controller.abort();
-    const result = await resultPromise;
-    const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-    const runtimeRoot = path.dirname(sdkConfig.cli_env.HOME);
-    await new Promise((resolve) => setTimeout(resolve, 75));
-
-    expect(result.metadata?.codexPlugin.status).toBe('cancelled');
-    expect(fs.existsSync(runtimeRoot)).toBe(false);
-  });
-
-  it('bounds shutdown and deletes copied auth and runtime after cancellation', async () => {
-    const codexHome = path.join(root, 'codex-home');
-    fs.mkdirSync(codexHome);
-    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"token":"secret"}');
-    mocks.shutdown.mockImplementationOnce(() => new Promise(() => {}));
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, codex_home: codexHome },
-    });
-
-    await expect(provider.callApi('Return JSON', context())).rejects.toThrow(
-      'Codex plugin provider shutdown timed out',
-    );
-    const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-    expect(fs.existsSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'auth.json'))).toBe(false);
-    expect(fs.existsSync(path.dirname(sdkConfig.cli_env.HOME))).toBe(false);
-  });
-
-  it('excludes git internals from local plugin source digests', async () => {
-    fs.mkdirSync(path.join(pluginRoot, '.git'), { recursive: true });
-    fs.writeFileSync(path.join(pluginRoot, '.git', 'HEAD'), 'first');
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace },
-    });
-    const first = await provider.callApi('Return JSON', context());
-    fs.writeFileSync(path.join(pluginRoot, '.git', 'HEAD'), 'second');
-    const second = await provider.callApi('Return JSON', context());
-
-    expect(first.metadata?.codexPlugin.plugin.sourceDigest).toBe(
-      second.metadata?.codexPlugin.plugin.sourceDigest,
-    );
   });
 
   it('namespaces concurrent artifact exports by case', async () => {
@@ -377,6 +240,159 @@ describe('OpenAICodexPluginProvider', () => {
     expect(leftPath).not.toBe(rightPath);
     expect(fs.existsSync(leftPath)).toBe(true);
     expect(fs.existsSync(rightPath)).toBe(true);
+  });
+
+  it('rejects traversal-equivalent artifact namespace identifiers before export', async () => {
+    const exportedArtifacts = path.join(root, 'exported-artifacts');
+    for (const maliciousIdentifier of [
+      '.',
+      '..',
+      '../escape',
+      '..%2fescape',
+      '%252e%252e%252fescape',
+    ]) {
+      const provider = new OpenAICodexPluginProvider({
+        id: maliciousIdentifier,
+        config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
+      });
+      const result = await provider.callApi('Return JSON', context());
+      expect(result.error).toContain('unsafe path segment');
+      expect(result.metadata?.codexPlugin.status).toBe('failed');
+    }
+    expect(fs.existsSync(path.join(root, 'escape'))).toBe(false);
+  });
+
+  it('asserts artifact export containment after resolving an existing symlink', async () => {
+    const exportedArtifacts = path.join(root, 'exported-artifacts');
+    const outside = path.join(root, 'outside');
+    fs.mkdirSync(exportedArtifacts);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(exportedArtifacts, 'manual-eval'));
+    const provider = new OpenAICodexPluginProvider({
+      config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
+    });
+    const result = await provider.callApi('Return JSON', context());
+    expect(result.error).toContain('must stay within configured artifacts_dir');
+    expect(result.metadata?.codexPlugin.status).toBe('failed');
+  });
+
+  it('kills aborted package resolver descendants before removing runtime', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const binDir = path.join(root, 'bin');
+    const pidPath = path.join(root, 'descendant.pid');
+    const runtimePath = path.join(root, 'runtime-path');
+    const lateWritePath = path.join(root, 'late-write');
+    fs.mkdirSync(binDir);
+    fs.writeFileSync(
+      path.join(binDir, 'npm'),
+      `#!/bin/sh
+while [ "$1" != "--pack-destination" ]; do shift; done
+shift
+runtime=$(dirname "$1")
+printf '%s' "$runtime" > ${JSON.stringify(runtimePath)}
+(sh -c 'trap "" TERM; sleep 2; printf late > ${lateWritePath}') &
+printf '%s' "$!" > ${JSON.stringify(pidPath)}
+trap '' TERM
+while :; do sleep 1; done
+`,
+      { mode: 0o755 },
+    );
+    vi.stubEnv('PATH', `${binDir}:${process.env.PATH}`);
+    try {
+      const provider = new OpenAICodexPluginProvider({
+        config: { plugin: { package: 'demo-plugin' }, workspace },
+      });
+      const controller = new AbortController();
+      const resultPromise = provider.callApi('Return JSON', context(), {
+        abortSignal: controller.signal,
+      });
+      while (!fs.existsSync(pidPath)) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      controller.abort();
+      const result = await resultPromise;
+      const descendantPid = Number(fs.readFileSync(pidPath, 'utf8'));
+      const runtime = fs.readFileSync(runtimePath, 'utf8');
+      expect(result.metadata?.codexPlugin.status).toBe('cancelled');
+      expect(() => process.kill(descendantPid, 0)).toThrow();
+      expect(fs.existsSync(runtime)).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      expect(fs.existsSync(lateWritePath)).toBe(false);
+      expect(fs.existsSync(runtime)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('reports artifact export errors as terminal sanitized failures', async () => {
+    const exportedArtifacts = path.join(root, 'exported-artifacts');
+    mocks.callApi.mockImplementationOnce(async () => {
+      const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
+      fs.writeFileSync(
+        path.join(sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR, 'scan.json'),
+        'ok',
+      );
+      return { output: 'ok' };
+    });
+    fs.mkdirSync(exportedArtifacts);
+    const provider = new OpenAICodexPluginProvider({
+      config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
+    });
+    const originalCopyFileSync = fs.copyFileSync.bind(fs);
+    vi.spyOn(fs, 'copyFileSync').mockImplementation((...args: any[]) => {
+      if (String(args[1]).includes(exportedArtifacts)) {
+        throw new Error('secret-token=do-not-leak');
+      }
+      return originalCopyFileSync(...(args as Parameters<typeof fs.copyFileSync>));
+    });
+    const result = await provider.callApi('Return JSON', context());
+    expect(result.error).toBe('Codex plugin artifact export failed');
+    expect(result.error).not.toContain('secret-token');
+    expect(result.metadata?.codexPlugin).toMatchObject({
+      status: 'failed',
+      artifactError: 'Codex plugin artifact export failed',
+      artifacts: [],
+    });
+  });
+
+  it('deletes copied auth within the cleanup deadline even when runtime deletion hangs', async () => {
+    const codexHome = path.join(root, 'codex-home');
+    fs.mkdirSync(codexHome);
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"token":"secret"}');
+    const originalRm = fs.promises.rm.bind(fs.promises);
+    vi.spyOn(fs.promises, 'rm').mockImplementation(async (...args: any[]) => {
+      if (String(args[0]).includes('promptfoo-codex-plugin-')) {
+        return new Promise(() => {});
+      }
+      return originalRm(...(args as Parameters<typeof fs.promises.rm>));
+    });
+    const provider = new OpenAICodexPluginProvider({
+      config: { plugin: { path: pluginRoot }, workspace, codex_home: codexHome, timeout_ms: 100 },
+    });
+    const startedAt = Date.now();
+    const result = await provider.callApi('Return JSON', context());
+    const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(fs.existsSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'auth.json'))).toBe(false);
+    expect(result.metadata?.codexPlugin.cleanup.runtimeRemoved).toBe(false);
+    vi.restoreAllMocks();
+    fs.rmSync(path.dirname(sdkConfig.cli_env.HOME), { recursive: true, force: true });
+  });
+
+  it('excludes .git internals while hashing path plugin content', async () => {
+    fs.mkdirSync(path.join(pluginRoot, '.git'));
+    fs.writeFileSync(path.join(pluginRoot, '.git', 'HEAD'), 'first');
+    const provider = new OpenAICodexPluginProvider({
+      config: { plugin: { path: pluginRoot }, workspace },
+    });
+    const first = await provider.callApi('Return JSON', context());
+    fs.writeFileSync(path.join(pluginRoot, '.git', 'HEAD'), 'second');
+    const second = await provider.callApi('Return JSON', context());
+    expect(first.metadata?.codexPlugin.plugin.sourceDigest).toBe(
+      second.metadata?.codexPlugin.plugin.sourceDigest,
+    );
   });
 
   it('marks timeout and cancellation terminal statuses', async () => {
