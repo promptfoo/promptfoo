@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { doEval } from '../node/doEval';
+import telemetry, { sanitizeTelemetryIdentifier } from '../telemetry';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
@@ -18,6 +19,7 @@ import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
+import type { UnifiedConfig } from '../types/index';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -179,6 +181,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     } else {
       logger.info(chalk.green('\nRed team scan complete!'));
     }
+
+    if (evalResult) {
+      await recordRedteamCompletionTelemetry(evalResult, options, redteamConfig);
+    }
+
     if (!evalResult?.shared) {
       if (options.liveRedteamConfig) {
         logger.info(
@@ -200,6 +207,79 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       verboseToggleCleanup();
     }
   }
+}
+
+function getConfigIds(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .map((value) => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      if (value && typeof value === 'object' && 'id' in value) {
+        return String((value as { id?: unknown }).id ?? '');
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function isSampleTarget(target: unknown): boolean {
+  if (typeof target === 'string') {
+    return (
+      target.includes('promptfoo:') ||
+      target.includes('promptfoo.app') ||
+      target.includes('promptfoo.dev')
+    );
+  }
+  if (!target || typeof target !== 'object') {
+    return false;
+  }
+  const { id, config } = target as { id?: string; config?: { url?: string } };
+  const url = config?.url || '';
+  return (
+    Object.keys(target).some((key) => isSampleTarget(key)) ||
+    id?.includes('promptfoo:') ||
+    id?.includes('promptfoo.app') ||
+    id?.includes('promptfoo.dev') ||
+    url.includes('promptfoo.app') ||
+    url.includes('promptfoo.dev')
+  );
+}
+
+async function recordRedteamCompletionTelemetry(
+  evalResult: Eval,
+  options: RedteamRunOptions,
+  config: Partial<UnifiedConfig>,
+) {
+  const { successes: numPasses, failures: numFails, errors: numErrors } = evalResult.getStats();
+  const numTests = numPasses + numFails + numErrors;
+  const plugins = getConfigIds(config.redteam?.plugins).map(sanitizeTelemetryIdentifier);
+  const strategies = getConfigIds(config.redteam?.strategies).map(sanitizeTelemetryIdentifier);
+  const targets = config.targets;
+  const isPromptfooSampleTarget =
+    typeof targets === 'string'
+      ? isSampleTarget(targets)
+      : Array.isArray(targets)
+        ? targets.some(isSampleTarget)
+        : false;
+
+  telemetry.record('redteam run', {
+    phase: 'completed',
+    numPlugins: plugins.length,
+    numStrategies: strategies.length,
+    plugins: plugins.slice(0, 50),
+    strategies: strategies.slice(0, 20),
+    numTests,
+    numPasses,
+    numFails,
+    numErrors,
+    passRate: numTests > 0 ? numPasses / numTests : 0,
+    isPromptfooSampleTarget,
+    loadedFromCloud: Boolean(options.loadedFromCloud),
+  });
 }
 
 /**

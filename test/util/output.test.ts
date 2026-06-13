@@ -69,6 +69,43 @@ vi.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: vi.fn(),
 }));
 
+function createEmptyRowsResult() {
+  const rows: never[] = [];
+  const result = Promise.resolve(rows) as Promise<never[]> & {
+    all: ReturnType<typeof vi.fn>;
+  };
+  result.all = vi.fn().mockResolvedValue(rows);
+  return result;
+}
+
+function createEmptyResultsDbMock() {
+  const distinctQuery = {
+    from: vi.fn(),
+    where: vi.fn(),
+    orderBy: vi.fn(),
+    limit: vi.fn(),
+    all: vi.fn().mockResolvedValue([]),
+  };
+  distinctQuery.from.mockImplementation(() => distinctQuery);
+  distinctQuery.where.mockImplementation(() => distinctQuery);
+  distinctQuery.orderBy.mockImplementation(() => distinctQuery);
+  distinctQuery.limit.mockImplementation(() => distinctQuery);
+
+  return {
+    selectDistinct: vi.fn().mockReturnValue(distinctQuery),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue(createEmptyRowsResult()),
+      }),
+    }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([]),
+      }),
+    }),
+  };
+}
+
 describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
@@ -89,18 +126,7 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockResolvedValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    });
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
   });
 
   afterEach(() => {
@@ -110,18 +136,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockResolvedValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
-        }),
-      }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    });
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const outputPath = 'output.csv';
     const results: EvaluateResult[] = [
       {
@@ -1083,18 +1098,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockResolvedValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
-        }),
-      }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    });
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const config: Record<string, unknown> = {};
     Object.defineProperty(config, 'bad', {
       enumerable: true,
@@ -1111,18 +1115,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-expect-error getDb is mocked with a partial test double.
-    vi.mocked(getDb).mockResolvedValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
-        }),
-      }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    });
+    vi.mocked(getDb).mockResolvedValue(createEmptyResultsDbMock());
     const config: Record<string, unknown> = {};
     Object.defineProperty(config, 'bad', {
       enumerable: true,

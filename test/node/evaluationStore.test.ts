@@ -30,11 +30,14 @@ describe('EvalEvaluationStore', () => {
     const modelResult = { testIdx: 0 } as EvalResult;
     const completed = new Set(['0:0']);
 
-    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(undefined);
+    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(modelResult);
     const addPrompts = vi.spyOn(evaluation, 'addPrompts').mockResolvedValue(undefined);
     const getCompletedIndexPairs = vi
       .spyOn(EvalResult, 'getCompletedIndexPairs')
       .mockResolvedValue(completed);
+    const getFailedResults = vi
+      .spyOn(evaluation, 'getFailedResults')
+      .mockResolvedValue([modelResult]);
     const getFailedResultsByTestIdx = vi
       .spyOn(evaluation, 'getFailedResultsByTestIdx')
       .mockResolvedValue([modelResult]);
@@ -47,12 +50,14 @@ describe('EvalEvaluationStore', () => {
     await store.appendPrompts(prompts);
 
     expect(await store.readCompletedIndexPairs({ excludeErrors: true })).toBe(completed);
+    expect(await store.readFailedResults()).toEqual([modelResult]);
     expect(await store.readFailedResultsByTestIdx(0)).toEqual([modelResult]);
     expect(await store.readResults()).toEqual([modelResult]);
     expect(await store.readResultsByTestIdx(0)).toEqual([modelResult]);
     expect(addResult).toHaveBeenCalledWith(result);
     expect(addPrompts).toHaveBeenCalledWith(prompts);
     expect(getCompletedIndexPairs).toHaveBeenCalledWith(evaluation.id, { excludeErrors: true });
+    expect(getFailedResults).toHaveBeenCalledOnce();
     expect(getFailedResultsByTestIdx).toHaveBeenCalledWith(0);
     expect(getResults).toHaveBeenCalledOnce();
     expect(fetchResultsByTestIdx).toHaveBeenCalledWith(0);

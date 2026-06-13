@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 
 import type { EvaluateResult } from '../../src/types/index';
@@ -62,7 +63,7 @@ describe('nodeEvaluatorRuntime', () => {
   it('creates an Eval-backed evaluation store', async () => {
     const result = { success: true } as EvaluateResult;
     const evaluation = new Eval({});
-    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(undefined);
+    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue({} as EvalResult);
     const store = nodeEvaluatorRuntime.createEvaluationStore(evaluation);
 
     await store.appendResult(result);

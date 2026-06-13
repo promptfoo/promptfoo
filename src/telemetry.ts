@@ -5,12 +5,79 @@ import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
+import { sanitizeTelemetryProviderIdentifier } from './util/telemetryIdentifiers';
 
+import type { ProviderStats } from './runStats/types';
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
+export {
+  sanitizeTelemetryIdentifier,
+  sanitizeTelemetryProviderIdentifier,
+} from './util/telemetryIdentifiers';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
+
+/**
+ * Aggregate after sanitizing so different private endpoints do not create
+ * indistinguishable rows in the emitted provider breakdown.
+ */
+export function sanitizeTelemetryProviderBreakdown(
+  providerStats: ProviderStats[],
+): ProviderStats[] {
+  const aggregated = new Map<
+    string,
+    Omit<
+      ProviderStats,
+      'provider' | 'successRate' | 'avgLatencyMs' | 'tokensPerRequest' | 'cacheRate'
+    > & {
+      totalLatencyMs: number;
+    }
+  >();
+
+  for (const stats of providerStats) {
+    const provider = sanitizeTelemetryProviderIdentifier(stats.provider);
+    const aggregate = aggregated.get(provider) ?? {
+      requests: 0,
+      successes: 0,
+      failures: 0,
+      totalLatencyMs: 0,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cachedTokens: 0,
+    };
+
+    aggregate.requests += stats.requests;
+    aggregate.successes += stats.successes;
+    aggregate.failures += stats.failures;
+    aggregate.totalLatencyMs += stats.avgLatencyMs * stats.requests;
+    aggregate.totalTokens += stats.totalTokens;
+    aggregate.promptTokens += stats.promptTokens;
+    aggregate.completionTokens += stats.completionTokens;
+    aggregate.cachedTokens += stats.cachedTokens;
+    aggregated.set(provider, aggregate);
+  }
+
+  return Array.from(aggregated.entries())
+    .map(([provider, aggregate]) => ({
+      provider,
+      requests: aggregate.requests,
+      successes: aggregate.successes,
+      failures: aggregate.failures,
+      successRate: aggregate.requests > 0 ? aggregate.successes / aggregate.requests : 0,
+      avgLatencyMs:
+        aggregate.requests > 0 ? Math.round(aggregate.totalLatencyMs / aggregate.requests) : 0,
+      totalTokens: aggregate.totalTokens,
+      promptTokens: aggregate.promptTokens,
+      completionTokens: aggregate.completionTokens,
+      cachedTokens: aggregate.cachedTokens,
+      tokensPerRequest:
+        aggregate.requests > 0 ? Math.round(aggregate.totalTokens / aggregate.requests) : 0,
+      cacheRate: aggregate.totalTokens > 0 ? aggregate.cachedTokens / aggregate.totalTokens : 0,
+    }))
+    .sort((a, b) => b.requests - a.requests || a.provider.localeCompare(b.provider));
+}
 
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;

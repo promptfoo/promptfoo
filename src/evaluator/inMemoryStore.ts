@@ -1,3 +1,4 @@
+import type { EvalRunStats } from '../runStats/types';
 import type {
   CompletedPrompt,
   EvaluateResult,
@@ -21,6 +22,7 @@ export interface InMemoryEvaluation {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  runStats?: EvalRunStats;
 }
 
 function getResultIndexKey(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): string {
@@ -71,8 +73,9 @@ export class InMemoryEvaluationStore
     return this.evaluation.resultPersistenceFailed;
   }
 
-  async appendResult(result: EvaluateResult): Promise<void> {
+  async appendResult(result: EvaluateResult): Promise<EvaluateResult> {
     this.evaluation.results.push(result);
+    return result;
   }
 
   async appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
@@ -94,14 +97,37 @@ export class InMemoryEvaluationStore
     return completedPairs;
   }
 
+  async readFailedResults(): Promise<EvaluateResult[]> {
+    return Array.from(this.failedResultsByIndex.values());
+  }
+
   async readFailedResultsByTestIdx(testIdx: number): Promise<EvaluateResult[]> {
     return Array.from(this.failedResultsByIndex.values()).filter(
       (result) => result.testIdx === testIdx,
     );
   }
 
+  async *readResultBatches(batchSize: number = 100): AsyncGenerator<EvaluateResult[]> {
+    for (let offset = 0; offset < this.evaluation.results.length; offset += batchSize) {
+      yield this.evaluation.results.slice(offset, offset + batchSize);
+    }
+  }
+
   async readResults(): Promise<EvaluateResult[]> {
     return this.evaluation.results;
+  }
+
+  async *readResultsByIdsBatched(
+    resultIds: readonly string[],
+    batchSize: number = 100,
+  ): AsyncGenerator<EvaluateResult[]> {
+    const ids = new Set(resultIds);
+    const matchingResults = this.evaluation.results.filter(
+      (result) => result.id !== undefined && ids.has(result.id),
+    );
+    for (let offset = 0; offset < matchingResults.length; offset += batchSize) {
+      yield matchingResults.slice(offset, offset + batchSize);
+    }
   }
 
   async readResultsByTestIdx(testIdx: number): Promise<EvaluateResult[]> {
@@ -141,6 +167,10 @@ export class InMemoryEvaluationStore
     }
     this.evaluation.evaluationDurationMs = durationMs;
     this.evaluation.durationMs = (this.evaluation.generationDurationMs ?? 0) + durationMs;
+  }
+
+  setRunStats(runStats: EvalRunStats): void {
+    this.evaluation.runStats = runStats;
   }
 
   setVars(vars: string[]): void {

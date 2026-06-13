@@ -112,6 +112,7 @@ describe('InMemoryEvaluationStore', () => {
     expect(store.resultPersistenceFailed).toBe(true);
     expect(store.hasResultPersistenceFailure({ testIdx: 2, promptIdx: 0 })).toBe(true);
     expect(store.hasResultPersistenceFailure({ testIdx: 2, promptIdx: 1 })).toBe(false);
+    expect(await store.readFailedResults()).toEqual([first, otherTest]);
 
     const [failed] = await store.readFailedResultsByTestIdx(2);
     failed.score = 0;
@@ -166,6 +167,55 @@ describe('InMemoryEvaluationStore', () => {
     store.setDurationMs(Number.POSITIVE_INFINITY);
     expect(evaluation.evaluationDurationMs).toBe(75);
     expect(evaluation.durationMs).toBe(100);
+  });
+
+  it('streams result batches, filters by ids, and stores run statistics', async () => {
+    const results = [
+      createEvaluateResult({ id: 'result-1' }),
+      createEvaluateResult({ id: 'result-2' }),
+      createEvaluateResult({ id: 'result-3' }),
+    ];
+    const evaluation = createEvaluation({ results });
+    const store = new InMemoryEvaluationStore(evaluation);
+
+    const batches = [];
+    for await (const batch of store.readResultBatches(2)) {
+      batches.push(batch.map((result) => result.id));
+    }
+    const selected = [];
+    for await (const batch of store.readResultsByIdsBatched(['result-3', 'result-1'], 1)) {
+      selected.push(...batch.map((result) => result.id));
+    }
+    store.setRunStats({
+      latency: { avgMs: 0, p50Ms: 0, p95Ms: 0, p99Ms: 0 },
+      cache: { hits: 0, misses: 0, hitRate: null },
+      errors: {
+        total: 0,
+        types: [],
+        breakdown: { timeout: 0, rate_limit: 0, auth: 0, server_error: 0, network: 0, other: 0 },
+      },
+      providers: [],
+      assertions: {
+        total: 0,
+        passed: 0,
+        passRate: 0,
+        modelGraded: 0,
+        breakdown: [],
+        tokenUsage: {
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          cachedTokens: 0,
+          numRequests: 0,
+          reasoningTokens: 0,
+        },
+      },
+      models: { ids: [], isComparison: false, hasCustom: false },
+    });
+
+    expect(batches).toEqual([['result-1', 'result-2'], ['result-3']]);
+    expect(selected).toEqual(['result-1', 'result-3']);
+    expect(evaluation.runStats?.errors.total).toBe(0);
   });
 
   it('returns EvaluateResult values unchanged', () => {

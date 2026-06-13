@@ -982,6 +982,69 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('findManyByEvalIdBatched', () => {
+    it('should continue across sparse test-index ranges', async () => {
+      const evalId = 'test-eval-id-batched-sparse';
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        testCase: mockTestCase,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 250,
+        promptIdx: 0,
+        testCase: mockTestCase,
+      });
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of EvalResult.findManyByEvalIdBatched(evalId, { batchSize: 1 })) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.testIdx))).toEqual([[0], [250]]);
+    });
+
+    it('should keep all prompt results for a test index in the same batch', async () => {
+      const evalId = 'test-eval-id-batched-prompt-group';
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 0,
+        testCase: mockTestCase,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 0,
+        promptIdx: 1,
+        testCase: mockTestCase,
+      });
+
+      await EvalResult.createFromEvaluateResult(evalId, {
+        ...mockEvaluateResult,
+        testIdx: 1,
+        promptIdx: 0,
+        testCase: mockTestCase,
+      });
+
+      const batches: EvalResult[][] = [];
+      for await (const batch of EvalResult.findManyByEvalIdBatched(evalId, { batchSize: 1 })) {
+        batches.push(batch);
+      }
+
+      expect(batches.map((batch) => batch.map((result) => result.promptIdx))).toEqual([
+        [0, 1],
+        [0],
+      ]);
+      expect(batches.map((batch) => batch.map((result) => result.testIdx))).toEqual([[0, 0], [1]]);
+    });
+  });
+
   describe('createManyFromEvaluateResult', () => {
     it('preserves trace linkage across bulk persistence', async () => {
       const [result] = await EvalResult.createManyFromEvaluateResult(

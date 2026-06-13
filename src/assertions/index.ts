@@ -119,19 +119,7 @@ const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
-export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
-  'agent-rubric',
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'factuality',
-  'llm-rubric',
-  'model-graded-closedqa',
-  'model-graded-factuality',
-  'search-rubric',
-  'trajectory:goal-success',
-]);
+export { MODEL_GRADED_ASSERTION_TYPES } from './constants';
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'javascript',

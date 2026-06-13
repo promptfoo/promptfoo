@@ -61,6 +61,7 @@ import EvalResult, {
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
+import type { EvalRunStats } from '../runStats/types';
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
@@ -339,6 +340,13 @@ export default class Eval {
    * Set by the evaluate() function when sharing is enabled.
    */
   shareableUrl?: string;
+
+  /**
+   * Evaluation run statistics.
+   * Computed once after evaluation completes and available on the returned Eval instance.
+   * Not persisted to database.
+   */
+  runStats?: EvalRunStats;
 
   static async latest() {
     const db = await getDb();
@@ -754,6 +762,7 @@ export default class Eval {
       // Notify watchers that new results are available, passing the eval ID
       notifyEvaluationChanged(this.id);
     }
+    return newResult;
   }
 
   recordFinalJsonlResult(result: EvaluateResult) {
@@ -779,6 +788,23 @@ export default class Eval {
     return this.failedResults.has(getResultIndexKey(result));
   }
 
+  private async getOrCreateFailedEvalResult(key: string, row: EvaluateResult): Promise<EvalResult> {
+    let evalResult = this.failedEvalResults.get(key);
+    if (!evalResult) {
+      evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
+      this.failedEvalResults.set(key, evalResult);
+    }
+    return evalResult;
+  }
+
+  async getFailedResults(): Promise<EvalResult[]> {
+    const reconstructed: EvalResult[] = [];
+    for (const [key, row] of this.failedResults) {
+      reconstructed.push(await this.getOrCreateFailedEvalResult(key, row));
+    }
+    return reconstructed;
+  }
+
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
   // so the comparison input (which otherwise reads only the database) sees the full set.
   // The reconstruction is cached and reused: when a test has both select-best and max-score,
@@ -788,15 +814,9 @@ export default class Eval {
   async getFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
     const reconstructed: EvalResult[] = [];
     for (const [key, row] of this.failedResults) {
-      if (row.testIdx !== testIdx) {
-        continue;
+      if (row.testIdx === testIdx) {
+        reconstructed.push(await this.getOrCreateFailedEvalResult(key, row));
       }
-      let evalResult = this.failedEvalResults.get(key);
-      if (!evalResult) {
-        evalResult = await EvalResult.createFromEvaluateResult(this.id, row, { persist: false });
-        this.failedEvalResults.set(key, evalResult);
-      }
-      reconstructed.push(evalResult);
     }
     return reconstructed;
   }
@@ -810,6 +830,12 @@ export default class Eval {
     }
 
     for await (const batch of EvalResult.findManyByEvalIdBatched(this.id, { batchSize })) {
+      yield batch;
+    }
+  }
+
+  async *fetchResultsByIdsBatched(resultIds: readonly string[], batchSize: number = 100) {
+    for await (const batch of EvalResult.findManyByIdsBatched(resultIds, { batchSize })) {
       yield batch;
     }
   }

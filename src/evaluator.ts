@@ -32,6 +32,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
+import { computeRunStatsBatched } from './runStats/index';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -40,7 +41,10 @@ import {
 import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
-import telemetry from './telemetry';
+import telemetry, {
+  sanitizeTelemetryProviderBreakdown,
+  sanitizeTelemetryProviderIdentifier,
+} from './telemetry';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -3036,29 +3040,6 @@ function createMaxDurationTimeoutResult(
   };
 }
 
-function getAssertionTelemetryStats(prompts: CompletedPrompt[], assertionTypes: Set<string>) {
-  const totalAssertions = prompts.reduce(
-    (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
-    0,
-  );
-  const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
-  const modelGradedAssertions = Array.from(assertionTypes).filter((type) =>
-    MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
-  ).length;
-
-  return {
-    numAssertions: totalAssertions,
-    passedAssertions,
-    modelGradedAssertions,
-    assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
-  };
-}
-
-function getAverageLatencyMs(results: EvaluationStoreResult[]) {
-  const totalLatencyMs = results.reduce((sum, result) => sum + (result.latencyMs || 0), 0);
-  return results.length > 0 ? totalLatencyMs / results.length : 0;
-}
-
 function getProviderPrefixes(testSuite: TestSuite) {
   return Array.from(
     new Set(
@@ -3094,6 +3075,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly invocationResultIds: string[] = [];
+  private readonly unpersistedInvocationResults: EvaluateResult[] = [];
+
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3230,7 +3214,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
     try {
-      await this.store.appendResult(row);
+      await this.addResult(row);
     } catch (error) {
       this.store.recordResultPersistenceFailure(row);
       const resultSummary = summarizeEvaluateResultForLogging(row);
@@ -3242,6 +3226,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     for (const writer of this.fileWriters) {
       await writer.write(sanitizeResultForJsonlArtifact(row));
+    }
+  }
+
+  private async addResult(row: EvaluateResult): Promise<void> {
+    const result = await this.store.appendResult(row);
+    if (this.store.persisted && cliState.resume) {
+      if (result?.id) {
+        this.invocationResultIds.push(result.id);
+      } else {
+        this.unpersistedInvocationResults.push(row);
+      }
     }
   }
 
@@ -3547,7 +3542,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       error,
     );
     this.trackFinalJsonlResult(timeoutResult);
-    await this.store.appendResult(timeoutResult);
+    await this.addResult(timeoutResult);
     this.stats.errors++;
 
     const { metrics } = context.prompts[evalStep.promptIdx];
@@ -4326,7 +4321,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.store.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
-    this.recordEvalTelemetry({
+    await this.recordEvalTelemetry({
       assertionTypes,
       concurrency,
       evalTimedOut,
@@ -4364,7 +4359,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const evalStep = runEvalOptions[i];
       const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
       this.trackFinalJsonlResult(timeoutResult);
-      await this.store.appendResult(timeoutResult);
+      await this.addResult(timeoutResult);
       this.stats.errors++;
       const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
@@ -4391,7 +4386,75 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
-  private recordEvalTelemetry({
+  private async *getCompleteRunStatsResultBatches(): AsyncGenerator<TResult[]> {
+    const retryErrorResultIds =
+      this.store.persisted && cliState.retryMode && cliState._retryErrorResultIds?.length
+        ? new Set(cliState._retryErrorResultIds)
+        : undefined;
+
+    if (this.store.persisted) {
+      const seenResultIndexes = this.store.resultPersistenceFailed ? new Set<string>() : undefined;
+      for await (const batch of this.store.readResultBatches()) {
+        const filteredBatch = retryErrorResultIds
+          ? batch.filter((result) => !result.id || !retryErrorResultIds.has(result.id))
+          : batch;
+        for (const result of filteredBatch) {
+          seenResultIndexes?.add(getResultIndexKey(result));
+        }
+        yield filteredBatch;
+      }
+      if (this.store.resultPersistenceFailed) {
+        const failedResults = (await this.store.readFailedResults()).filter(
+          (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+        );
+        if (failedResults.length > 0) {
+          yield failedResults;
+        }
+      }
+      return;
+    }
+
+    yield this.store.results;
+  }
+
+  private async *getInvocationTelemetryResultBatches(): AsyncGenerator<
+    Array<TResult | EvaluateResult>
+  > {
+    if (this.store.persisted) {
+      const seenResultIndexes =
+        this.store.resultPersistenceFailed || this.unpersistedInvocationResults.length > 0
+          ? new Set<string>()
+          : undefined;
+      for await (const batch of this.store.readResultsByIdsBatched(this.invocationResultIds)) {
+        for (const result of batch) {
+          seenResultIndexes?.add(getResultIndexKey(result));
+        }
+        yield batch;
+      }
+      const unpersistedResults = this.unpersistedInvocationResults.filter(
+        (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+      );
+      for (const result of unpersistedResults) {
+        seenResultIndexes?.add(getResultIndexKey(result));
+      }
+      if (unpersistedResults.length > 0) {
+        yield unpersistedResults;
+      }
+      if (this.store.resultPersistenceFailed) {
+        const failedResults = (await this.store.readFailedResults()).filter(
+          (result) => !seenResultIndexes?.has(getResultIndexKey(result)),
+        );
+        if (failedResults.length > 0) {
+          yield failedResults;
+        }
+      }
+      return;
+    }
+
+    yield this.store.results;
+  }
+
+  private async recordEvalTelemetry({
     assertionTypes,
     concurrency,
     evalTimedOut,
@@ -4417,23 +4480,42 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const totalEvalTimeMs = Date.now() - startTime;
     this.store.setDurationMs(totalEvalTimeMs);
 
-    const assertionStats = getAssertionTelemetryStats(prompts, assertionTypes);
-    const avgLatencyMs = getAverageLatencyMs(this.store.results);
-    const timeoutOccurred =
-      evalTimedOut ||
-      this.store.results.some(
-        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
-      );
+    const completeRunStats = await computeRunStatsBatched({
+      resultBatches: this.getCompleteRunStatsResultBatches(),
+      stats: this.stats,
+      providers: testSuite.providers,
+    });
+    this.store.setRunStats(completeRunStats.runStats);
+
+    // A resumed evaluation includes historic persisted rows in its complete summary,
+    // but eval_ran describes only work performed by this invocation.
+    const telemetryRunStats =
+      this.store.persisted && cliState.resume
+        ? await computeRunStatsBatched({
+            resultBatches: this.getInvocationTelemetryResultBatches(),
+            stats: this.stats,
+            providers: testSuite.providers,
+          })
+        : completeRunStats;
+    const { runStats, resultCount, hasTimedOutResult } = telemetryRunStats;
+    const telemetryModelIds = Array.from(
+      new Set(runStats.models.ids.map(sanitizeTelemetryProviderIdentifier)),
+    ).sort();
+
+    const timeoutOccurred = evalTimedOut || hasTimedOutResult;
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numRequests: this.stats.tokenUsage.numRequests || 0,
-      numResults: this.store.results.length,
+      numResults: resultCount,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: getProviderPrefixes(testSuite).sort(),
+      models: telemetryModelIds,
+      isModelComparison: telemetryModelIds.length > 1,
+      hasCustomProvider: runStats.models.hasCustom,
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
@@ -4442,16 +4524,32 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       numFails: this.stats.failures,
       numErrors: this.stats.errors,
       totalEvalTimeMs,
-      avgLatencyMs: Math.round(avgLatencyMs),
+      avgLatencyMs: runStats.latency.avgMs,
+      latencyP50Ms: runStats.latency.p50Ms,
+      latencyP95Ms: runStats.latency.p95Ms,
+      latencyP99Ms: runStats.latency.p99Ms,
       concurrencyUsed: concurrency,
       timeoutOccurred,
+      cacheHits: runStats.cache.hits,
+      cacheMisses: runStats.cache.misses,
+      ...(runStats.cache.hitRate == null ? {} : { cacheHitRate: runStats.cache.hitRate }),
       totalTokens: this.stats.tokenUsage.total,
       promptTokens: this.stats.tokenUsage.prompt,
       completionTokens: this.stats.tokenUsage.completion,
       cachedTokens: this.stats.tokenUsage.cached,
       totalCost: prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0),
       totalRequests: this.stats.tokenUsage.numRequests,
-      ...assertionStats,
+      numAssertions: runStats.assertions.total,
+      passedAssertions: runStats.assertions.passed,
+      modelGradedAssertions: runStats.assertions.modelGraded,
+      assertionPassRate: runStats.assertions.passRate,
+      assertionTokenUsage: JSON.stringify(runStats.assertions.tokenUsage),
+      assertionBreakdown: JSON.stringify(runStats.assertions.breakdown),
+      providerBreakdown: JSON.stringify(
+        sanitizeTelemetryProviderBreakdown(telemetryRunStats.allProviderStats),
+      ),
+      errorTypes: runStats.errors.types,
+      errorBreakdown: JSON.stringify(runStats.errors.breakdown),
       usesConversationVar,
       usesTransforms: usesTransforms(testSuite, tests),
       usesScenarios: Boolean(testSuite.scenarios?.length),
