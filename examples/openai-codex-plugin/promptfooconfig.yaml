@@ -38,7 +38,12 @@ tests:
           }
           const plugin = context.providerResponse?.metadata?.codexPlugin;
           const parsedOutput = JSON.parse(output);
+          const skillCalls = context.providerResponse?.metadata?.skillCalls ?? [];
           return plugin?.invocation === 'skill:security-scan' &&
             plugin?.plugin?.sourceIdentity &&
+            plugin?.plugin?.sourceDigest &&
+            plugin?.plugin?.gitCommit &&
+            skillCalls.some((skillCall) => skillCall?.name === 'security-scan') &&
             parsedOutput?.status === 'blocked' &&
-            Boolean(plugin?.executionIdentity?.sessionId);
+            Boolean(plugin?.executionIdentity?.sessionId) &&
+            Boolean(plugin?.executionIdentity?.turnId);

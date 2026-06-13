@@ -22,6 +22,8 @@ const CODEX_PLUGIN_ARTIFACT_DIR_ENV = 'PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR';
 const CODEX_PLUGIN_RUNTIME_PREFIX = 'promptfoo-codex-plugin-';
 const NPM_PACKAGE_NAME_PATTERN = /^(?:@[^/@\s]+\/)?[^/@\s]+$/;
 const NPM_PACKAGE_VERSION_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._+-]*$/;
+const PROCESS_TERMINATION_GRACE_MS = 250;
+const CLEANUP_TIMEOUT_MS = 1000;
 
 const PluginSourceSchema = z
   .object({
@@ -104,6 +106,7 @@ interface CodexPluginRuntime {
   pluginSourceIdentity: string;
   pluginSourceDigest?: string;
   pluginGitCommit?: string;
+  copiedAuth: boolean;
 }
 
 interface CodexPluginArtifactReference {
@@ -252,6 +255,56 @@ function sanitizePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'local';
 }
 
+function safeArtifactNamespaceSegment(value: string): string {
+  if (
+    value.length === 0 ||
+    value === '.' ||
+    value === '..' ||
+    path.isAbsolute(value) ||
+    value.includes('/') ||
+    value.includes('\\')
+  ) {
+    throw new Error(`Codex plugin artifact namespace contains an unsafe path segment: ${value}`);
+  }
+  return sanitizePathSegment(value);
+}
+
+function assertPathContained(root: string, candidate: string, label: string): string {
+  const resolvedRoot = path.resolve(root);
+  const resolvedCandidate = path.resolve(candidate);
+  if (
+    resolvedCandidate !== resolvedRoot &&
+    !resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`)
+  ) {
+    throw new Error(`${label} escapes its configured root: ${resolvedCandidate}`);
+  }
+  return resolvedCandidate;
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 function npmPackageSpec(source: CodexPluginSource): string {
   if (!source.package) {
     throw new Error('Codex plugin package source is missing plugin.package');
@@ -280,16 +333,45 @@ async function runCommand(
     const child = spawn(command, args, {
       cwd,
       shell: false,
-      signal,
+      detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let terminationTimer: NodeJS.Timeout | undefined;
+    const terminateProcessGroup = () => {
+      if (child.exitCode !== null || child.pid === undefined) {
+        return;
+      }
+      const kill = (signalToSend: NodeJS.Signals) => {
+        try {
+          if (process.platform === 'win32') {
+            child.kill(signalToSend);
+          } else {
+            process.kill(-child.pid!, signalToSend);
+          }
+        } catch (error) {
+          if (!isNotFound(error)) {
+            logger.debug('[CodexPlugin] Unable to terminate command process group', { error });
+          }
+        }
+      };
+      kill('SIGTERM');
+      terminationTimer = setTimeout(() => kill('SIGKILL'), PROCESS_TERMINATION_GRACE_MS);
+    };
+    const onAbort = () => terminateProcessGroup();
+    signal.addEventListener('abort', onAbort, { once: true });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
     child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
     child.once('error', (error) => reject(error.name === 'AbortError' ? abortError() : error));
     child.once('close', (code) => {
-      if (code === 0) {
+      signal.removeEventListener('abort', onAbort);
+      if (terminationTimer) {
+        clearTimeout(terminationTimer);
+      }
+      if (signal.aborted) {
+        reject(abortError());
+      } else if (code === 0) {
         resolve(stdout);
       } else {
         reject(
@@ -379,6 +461,9 @@ async function digestTree(root: string, signal: AbortSignal): Promise<string> {
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       throwIfAborted(signal);
+      if (entry.name === '.git') {
+        continue;
+      }
       const entryPath = path.join(directory, entry.name);
       const relativePath = path.relative(root, entryPath).split(path.sep).join('/');
       const stat = await withAbort(fs.promises.lstat(entryPath), signal);
@@ -422,7 +507,7 @@ function artifactNamespace(
     `repeat-${context?.repeatIndex ?? 0}`,
     path.basename(runtimeRoot),
   ]
-    .map(sanitizePathSegment)
+    .map(safeArtifactNamespaceSegment)
     .join(path.sep);
 }
 
@@ -466,7 +551,12 @@ function resolveArtifactExportDir(
   if (!config.artifacts_dir) {
     return undefined;
   }
-  const artifactExportDir = path.join(path.resolve(config.artifacts_dir), namespace);
+  const artifactRoot = path.resolve(config.artifacts_dir);
+  const artifactExportDir = assertPathContained(
+    artifactRoot,
+    path.join(artifactRoot, namespace),
+    'Codex plugin artifact export directory',
+  );
   fs.mkdirSync(artifactExportDir, { recursive: true });
   return artifactExportDir;
 }
@@ -560,7 +650,15 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
 
   const collect = (directory: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const entryPath = path.join(directory, entry.name);
+      const entryPath = assertPathContained(
+        runtime.artifactDir,
+        path.join(directory, entry.name),
+        'Codex plugin runtime artifact',
+      );
+      const entryStat = fs.lstatSync(entryPath);
+      if (entryStat.isSymbolicLink()) {
+        throw new Error(`Codex plugin artifacts may not contain symlinks: ${entryPath}`);
+      }
       if (entry.isDirectory()) {
         collect(entryPath);
         continue;
@@ -568,7 +666,6 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
       if (!entry.isFile()) {
         continue;
       }
-      const entryStat = fs.lstatSync(entryPath);
       if (entryStat.nlink !== 1) {
         continue;
       }
@@ -584,18 +681,6 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
   return references;
 }
 
-function safelyExportArtifacts(
-  runtime: CodexPluginRuntime,
-  retainRuntime: boolean,
-): CodexPluginArtifactReference[] {
-  try {
-    return exportArtifacts(runtime, collectArtifactReferences(runtime), retainRuntime);
-  } catch (error) {
-    logger.warn('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
-    return [];
-  }
-}
-
 function exportArtifacts(
   runtime: CodexPluginRuntime,
   references: CodexPluginArtifactReference[],
@@ -606,11 +691,50 @@ function exportArtifacts(
   }
 
   return references.map((reference) => {
-    const exportedPath = path.join(runtime.exportedArtifactDir!, reference.relativePath);
+    const exportedPath = assertPathContained(
+      runtime.exportedArtifactDir!,
+      path.join(runtime.exportedArtifactDir!, reference.relativePath),
+      'Codex plugin exported artifact',
+    );
     fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
     fs.copyFileSync(reference.path, exportedPath, fs.constants.COPYFILE_EXCL);
     return { path: exportedPath, relativePath: reference.relativePath, owner: 'caller-export' };
   });
+}
+
+async function finalizeRuntime(
+  runtime: CodexPluginRuntime,
+  retainRuntime: boolean,
+  response: ProviderResponse | undefined,
+): Promise<{
+  response: ProviderResponse | undefined;
+  artifactReferences: CodexPluginArtifactReference[];
+}> {
+  let artifactReferences: CodexPluginArtifactReference[] = [];
+  try {
+    artifactReferences = exportArtifacts(
+      runtime,
+      collectArtifactReferences(runtime),
+      retainRuntime,
+    );
+  } catch (error) {
+    logger.error('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
+    response = response?.error
+      ? response
+      : { ...response, error: `Codex plugin artifact export failed: ${errorMessage(error)}` };
+  } finally {
+    if (runtime.copiedAuth) {
+      await fs.promises.rm(path.join(runtime.codexHome, 'auth.json'), { force: true });
+    }
+    if (!retainRuntime) {
+      await withTimeout(
+        removeRuntime(runtime.root),
+        CLEANUP_TIMEOUT_MS,
+        'Codex plugin runtime cleanup timed out',
+      );
+    }
+  }
+  return { response, artifactReferences };
 }
 
 function terminalStatus(response: ProviderResponse, timedOut: boolean, cancelled: boolean): string {
@@ -680,7 +804,15 @@ export class OpenAICodexPluginProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    await Promise.all(Array.from(this.activeProviders).map((provider) => provider.shutdown()));
+    await Promise.all(
+      Array.from(this.activeProviders).map((provider) =>
+        withTimeout(
+          provider.shutdown(),
+          CLEANUP_TIMEOUT_MS,
+          'Codex plugin provider shutdown timed out',
+        ),
+      ),
+    );
     this.activeProviders.clear();
   }
 
@@ -782,6 +914,7 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         pluginSourceIdentity: source.sourceIdentity,
         pluginSourceDigest,
         pluginGitCommit,
+        copiedAuth,
       };
     } catch (error) {
       await removeRuntime(root);
@@ -869,8 +1002,15 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       }
       callOptions?.abortSignal?.removeEventListener('abort', onAbort);
       if (sdkProvider) {
+        if (timedOut || cancelled) {
+          controller.abort();
+        }
         try {
-          await sdkProvider.shutdown();
+          await withTimeout(
+            sdkProvider.shutdown(),
+            CLEANUP_TIMEOUT_MS,
+            'Codex plugin provider shutdown timed out',
+          );
         } catch (error) {
           shutdownError = error;
         } finally {
@@ -878,13 +1018,11 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         }
       }
       if (runtime) {
-        try {
-          artifactReferences = safelyExportArtifacts(runtime, config.retain_runtime === true);
-        } finally {
-          if (!config.retain_runtime) {
-            await removeRuntime(runtime.root);
-          }
-        }
+        ({ response, artifactReferences } = await finalizeRuntime(
+          runtime,
+          config.retain_runtime === true,
+          response,
+        ));
       }
     }
 
