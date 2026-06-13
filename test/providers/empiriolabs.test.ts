@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateEmpirioLabsCost,
   createEmpirioLabsProvider,
   EMPIRIOLABS_CHAT_MODELS,
 } from '../../src/providers/empiriolabs';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 describe('calculateEmpirioLabsCost', () => {
   it('should calculate cost for deepseek-v4-pro', () => {
@@ -82,5 +83,136 @@ describe('createEmpirioLabsProvider', () => {
     expect(createEmpirioLabsProvider('empiriolabs:deepseek-v4-flash:variant1').id()).toBe(
       'empiriolabs:deepseek-v4-flash:variant1',
     );
+  });
+
+  it('should default options to an empty object when none are provided', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    expect(provider.id()).toBe('empiriolabs:deepseek-v4-pro');
+  });
+});
+
+describe('EmpirioLabsProvider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return the correct string representation', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    expect(provider.toString()).toBe('[EmpirioLabs Provider deepseek-v4-pro]');
+  });
+
+  it('should point at the EmpirioLabs API base URL and env var', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    const json = (provider as any).toJSON();
+    expect(json.provider).toBe('empiriolabs');
+    expect(json.model).toBe('deepseek-v4-pro');
+    expect(json.config.apiBaseUrl).toBe('https://api.empiriolabs.ai/v1');
+    expect(json.config.apiKeyEnvar).toBe('EMPIRIOLABS_API_KEY');
+  });
+
+  it('should merge the nested config overrides into the provider config', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro', {
+      config: {
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+    });
+    const json = (provider as any).toJSON();
+    expect(json.config.temperature).toBe(0.7);
+    expect(json.config.max_tokens).toBe(100);
+  });
+
+  it('should not expose the apiKey in JSON serialization', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro', {
+      config: {
+        config: {
+          apiKey: 'secret-empiriolabs-key',
+        },
+      },
+    });
+    const json = (provider as any).toJSON();
+    expect('apiKey' in json.config).toBe(true);
+    expect(json.config.apiKey).toBeUndefined();
+  });
+
+  it('should keep the apiKey absent from JSON when none is configured', () => {
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    const json = (provider as any).toJSON();
+    expect(json.config.apiKey).toBeUndefined();
+  });
+
+  it('should attach a calculated cost for a known model response', async () => {
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      output: 'EmpirioLabs response',
+      tokenUsage: {
+        total: 150,
+        prompt: 100,
+        completion: 50,
+      },
+    });
+
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toBe('EmpirioLabs response');
+    expect(result.cost).toBe(calculateEmpirioLabsCost('deepseek-v4-pro', {}, 100, 50));
+  });
+
+  it('should leave cost undefined for an unknown model without published pricing', async () => {
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      output: 'unknown model response',
+      tokenUsage: {
+        total: 150,
+        prompt: 100,
+        completion: 50,
+      },
+    });
+
+    const provider = createEmpirioLabsProvider('empiriolabs:some-other-model');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('should not recalculate cost for cached responses', async () => {
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      output: 'Cached EmpirioLabs response',
+      tokenUsage: {
+        total: 150,
+        prompt: 100,
+        completion: 50,
+      },
+      cached: true,
+    });
+
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('should not attach cost when the parent response has no token usage', async () => {
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      output: 'response without usage',
+    });
+
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('should pass through empty and error parent responses unchanged', async () => {
+    const callApi = vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
+    callApi.mockResolvedValueOnce(undefined as any);
+    callApi.mockResolvedValueOnce({ error: 'API error' });
+
+    const provider = createEmpirioLabsProvider('empiriolabs:deepseek-v4-pro');
+
+    await expect(provider.callApi('Empty response')).resolves.toBeUndefined();
+    await expect(provider.callApi('Error response')).resolves.toEqual({ error: 'API error' });
   });
 });
