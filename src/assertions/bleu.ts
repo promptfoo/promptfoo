@@ -53,11 +53,15 @@ export function calculateBleuScore(
 
   const candidateWords = candidate.toLowerCase().trim().split(/\s+/);
 
-  // Find reference with closest length to candidate
+  // Find reference with closest length to candidate. On ties, prefer the shorter
+  // reference (BLEU / NLTK `closest_ref_length` convention) so the score does not
+  // depend on the order references are provided in.
   const refLengths = references.map((ref) => ref.toLowerCase().trim().split(/\s+/).length);
-  const closestRefLength = refLengths.reduce((prev, curr) =>
-    Math.abs(curr - candidateWords.length) < Math.abs(prev - candidateWords.length) ? curr : prev,
-  );
+  const closestRefLength = refLengths.reduce((prev, curr) => {
+    const distCurr = Math.abs(curr - candidateWords.length);
+    const distPrev = Math.abs(prev - candidateWords.length);
+    return distCurr < distPrev || (distCurr === distPrev && curr < prev) ? curr : prev;
+  });
 
   const maxN = 4;
   const precisions: number[] = [];

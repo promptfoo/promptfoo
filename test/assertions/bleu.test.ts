@@ -76,6 +76,20 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.999);
   });
 
+  it('should not depend on the order of equidistant references', () => {
+    const candidate = 'a b c d'; // 4 tokens
+    const shorterRef = 'a b c'; // 3 tokens (distance 1 from candidate)
+    const longerRef = 'a b c d e'; // 5 tokens (distance 1 from candidate)
+
+    // When two references are equally close to the candidate length, BLEU breaks the
+    // tie toward the shorter reference (Papineni et al. / NLTK `closest_ref_length`),
+    // so the score must be independent of the order the references are provided in.
+    const scoreShorterFirst = calculateBleuScore(candidate, [shorterRef, longerRef]);
+    const scoreLongerFirst = calculateBleuScore(candidate, [longerRef, shorterRef]);
+
+    expect(scoreLongerFirst).toBeCloseTo(scoreShorterFirst, 10);
+  });
+
   it('should throw error for empty reference array', () => {
     expect(() => {
       calculateBleuScore('test', []);
