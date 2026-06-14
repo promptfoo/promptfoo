@@ -27,7 +27,7 @@ function calculateBrevityPenalty(candidateLength: number, referenceLength: numbe
   if (candidateLength > referenceLength) {
     return 1;
   }
-  return Math.exp(1 - candidateLength / referenceLength);
+  return Math.exp(1 - referenceLength / candidateLength);
 }
 
 /**

@@ -76,6 +76,22 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.999);
   });
 
+  it('should penalize short candidates and never exceed 1.0', () => {
+    // Every 1- to 4-gram of the candidate appears in the reference, so n-gram
+    // precision is perfect, but the candidate is shorter than the reference. BLEU is
+    // bounded by 1.0, so the brevity penalty must pull the score down (penalize),
+    // never above 1.0. Per Papineni et al., BP = exp(1 - referenceLength/candidateLength)
+    // for candidateLength <= referenceLength.
+    const candidate = 'a b c d e'; // 5 tokens, perfect n-gram precision
+    const reference = 'a b c d e f g'; // 7 tokens
+
+    const score = calculateBleuScore(candidate, [reference]);
+
+    expect(score).toBeLessThanOrEqual(1);
+    // precision product is 1, so the score equals the brevity penalty itself.
+    expect(score).toBeCloseTo(Math.exp(1 - 7 / 5), 10);
+  });
+
   it('should throw error for empty reference array', () => {
     expect(() => {
       calculateBleuScore('test', []);
