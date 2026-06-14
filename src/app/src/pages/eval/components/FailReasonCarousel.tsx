@@ -1,11 +1,21 @@
 import React, { useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import './FailReasonCarousel.css';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import { IMAGE_DATA_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 
 interface FailReasonCarouselProps {
   failReasons: string[];
 }
+
+const MARKDOWN_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+  img: ({ src, alt }) => (
+    <img src={src} alt={alt || ''} loading="lazy" className="fail-reason-image" />
+  ),
+  p: ({ children }) => <p className="fail-reason-paragraph">{children}</p>,
+};
 
 const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
   // Validate props BEFORE hooks to comply with Rules of Hooks
@@ -46,15 +56,19 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
           </button>
         </span>
       )}
-      {failReasons[currentIndex]
-        .trim()
-        .split('\n')
-        .map((line, index) => (
-          <React.Fragment key={index}>
-            {line}
-            <br />
-          </React.Fragment>
-        ))}
+      {failReasons[currentIndex] ? (
+        <MarkdownErrorBoundary fallback={failReasons[currentIndex]}>
+          <div className="fail-reason-content">
+            <ReactMarkdown
+              components={MARKDOWN_COMPONENTS}
+              remarkPlugins={REMARK_PLUGINS}
+              urlTransform={IMAGE_DATA_URL_TRANSFORM}
+            >
+              {failReasons[currentIndex].trim()}
+            </ReactMarkdown>
+          </div>
+        </MarkdownErrorBoundary>
+      ) : null}
     </div>
   );
 };

@@ -3,3 +3,19 @@
   color: var(--text-color);
   font-weight: normal;
 }
+
+.fail-reason-content {
+  white-space: pre-wrap;
+}
+
+.fail-reason-paragraph {
+  margin: 0;
+}
+
+.fail-reason-image {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+  margin-top: 0.5rem;
+  object-fit: contain;
+}

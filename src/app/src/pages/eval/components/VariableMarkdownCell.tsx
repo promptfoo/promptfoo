@@ -2,7 +2,7 @@ import React from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { REMARK_PLUGINS } from './markdown-config';
+import { IMAGE_DATA_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import TruncatedText from './TruncatedText';
 
 interface VariableMarkdownCellProps {
@@ -28,7 +28,11 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
   return (
     <MarkdownErrorBoundary fallback={value}>
       <TruncatedText
-        text={<ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{value}</ReactMarkdown>}
+        text={
+          <ReactMarkdown remarkPlugins={REMARK_PLUGINS} urlTransform={IMAGE_DATA_URL_TRANSFORM}>
+            {value}
+          </ReactMarkdown>
+        }
         maxLength={maxTextLength}
       />
     </MarkdownErrorBoundary>

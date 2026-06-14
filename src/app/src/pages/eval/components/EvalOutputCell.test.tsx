@@ -2543,6 +2543,66 @@ describe('EvalOutputCell provider error display', () => {
     expect(screen.getByText('AuthenticationError: Invalid API key')).toBeInTheDocument();
   });
 
+  it('renders markdown image previews in assertion failure reasons', () => {
+    const dataUri = 'data:image/png;base64,encodedImage';
+    const propsWithImageFailureReason: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                type: 'contains' as AssertionType,
+                value: 'expected',
+              },
+              pass: false,
+              reason: `Expected image to match\n![Actual image](${dataUri})`,
+              score: 0,
+            },
+          ],
+          pass: false,
+          reason: 'Assertion failed',
+          score: 0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithImageFailureReason} />);
+
+    expect(screen.getByText('Expected image to match')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Actual image' })).toHaveAttribute('src', dataUri);
+  });
+
   it('does not display error when output.error is null', () => {
     const propsWithNullError: MockEvalOutputCellProps = {
       firstOutput: {

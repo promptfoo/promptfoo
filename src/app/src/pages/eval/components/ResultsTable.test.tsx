@@ -812,6 +812,41 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    it('renders markdown image variables with data URIs', () => {
+      const dataUri = 'data:image/png;base64,encodedImage';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [`![Preview image](${dataUri})`],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByRole('img', { name: 'Preview image' })).toHaveAttribute('src', dataUri);
+    });
+
     it('renders variable video from file metadata', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
