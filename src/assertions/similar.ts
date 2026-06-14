@@ -36,7 +36,12 @@ export const handleSimilar = async ({
   }
 
   if (Array.isArray(renderedValue)) {
-    let minScore = Number.POSITIVE_INFINITY;
+    // The assertion passes if the output matches ANY of the values (we return
+    // early on the first pass), so when none pass, report the best (highest)
+    // score — how close the output got to its closest value — not the worst.
+    // matchesSimilarity normalizes score so higher is always better, including
+    // for inverse and euclidean. This matches bleu/gleu/meteor (Math.max).
+    let maxScore = Number.NEGATIVE_INFINITY;
     for (const value of renderedValue) {
       const result = await matchesSimilarity(
         value,
@@ -52,14 +57,14 @@ export const handleSimilar = async ({
           ...result,
         };
       }
-      if (result.score < minScore) {
-        minScore = result.score;
+      if (result.score > maxScore) {
+        maxScore = result.score;
       }
     }
     return {
       assertion,
       pass: false,
-      score: minScore,
+      score: maxScore,
       reason: `None of the provided values met the similarity threshold`,
     };
   } else {
