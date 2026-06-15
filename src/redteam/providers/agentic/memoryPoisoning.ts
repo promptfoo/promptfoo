@@ -6,6 +6,7 @@ import invariant from '../../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
@@ -17,8 +18,21 @@ import type {
   ProviderResponse,
 } from '../../../types/providers';
 
+interface MemoryPoisoningConfig extends ProviderOptions {
+  targetId?: string;
+}
+
 export class MemoryPoisoningProvider implements ApiProvider {
-  constructor(readonly config: ProviderOptions) {}
+  constructor(readonly config: MemoryPoisoningConfig) {}
+
+  private get targetId(): string | undefined {
+    if (typeof this.config.targetId === 'string') {
+      return this.config.targetId;
+    }
+    return typeof this.config.config?.targetId === 'string'
+      ? this.config.config.targetId
+      : undefined;
+  }
 
   id() {
     return REDTEAM_MEMORY_POISONING_PLUGIN_ID;
@@ -55,6 +69,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
         {
           body: JSON.stringify({
             task: 'agentic:memory-poisoning-scenario',
+            ...remoteGenerationContextPayload(this.targetId),
             purpose,
             version: VERSION,
             email: getUserEmail(),

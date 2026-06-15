@@ -1532,6 +1532,7 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(globSync).mockReset();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    cliState.selectedProviderConfigs = undefined;
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
     const actualPath = await vi.importActual<typeof import('path')>('path');
@@ -1539,6 +1540,7 @@ describe('resolveConfigs', () => {
   });
 
   afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
   });
 
@@ -1558,6 +1560,25 @@ describe('resolveConfigs', () => {
     await resolveConfigs(cmdObj, defaultConfig);
 
     expect(cliState.basePath).toBe(path.dirname('config.json'));
+  });
+
+  it('should return the provider configs selected by a target filter', async () => {
+    const providers = [
+      { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
+      { id: 'promptfoo://provider/selected-target', config: { label: 'selected' } },
+    ];
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ prompts: ['prompt1'], providers }));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+
+    const result = await resolveConfigs(
+      { config: ['config.json'], filterTargets: 'selected-target' },
+      {},
+    );
+
+    expect(result.selectedProviderConfigs).toEqual([providers[1]]);
+    expect(cliState.selectedProviderConfigs).toEqual([providers[1]]);
+    expect(loadApiProviders).toHaveBeenCalledWith([providers[1]], expect.any(Object));
   });
 
   it('should load scenarios and tests from external files', async () => {

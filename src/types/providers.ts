@@ -37,6 +37,13 @@ export type ProviderConfig =
   | ProviderOptionsMap;
 export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
 
+export interface RemoteGenerationContext {
+  /** Provider IDs used for filtering, retry, and target identity. */
+  providerTargetIds: string[];
+  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
+  cloudTargetId?: string;
+}
+
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
 export interface SkillCallEntry {

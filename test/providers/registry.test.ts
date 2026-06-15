@@ -393,6 +393,15 @@ describe('Provider Registry', () => {
       expect(shorthandProvider).toBeDefined();
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
+      for (const model of ['claude-fable-5', 'claude-mythos-5']) {
+        const claude5Provider = await factory!.create(
+          `anthropic:${model}`,
+          anthropicOptions,
+          mockContext,
+        );
+        expect(claude5Provider.id()).toBe(`anthropic:${model}`);
+      }
+
       // Test error case with invalid model type
       await expect(
         factory!.create('anthropic:invalid:model', mockProviderOptions, mockContext),

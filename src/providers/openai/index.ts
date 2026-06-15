@@ -11,7 +11,22 @@ import type {
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
+export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
 export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
+
+/**
+ * Whether `customHeaders` contains a case-insensitive override for `headerName`.
+ * A differently-cased duplicate would otherwise survive an object spread and be
+ * sent as two header values, so callers use this to suppress the default they
+ * would otherwise inject (or the SDK option that produces the same header).
+ */
+export function hasHeaderOverride(
+  customHeaders: Record<string, string> | undefined,
+  headerName: string,
+): boolean {
+  const target = headerName.toLowerCase();
+  return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
+}
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -58,9 +73,18 @@ export class OpenAiGenericProvider implements ApiProvider {
       // Leave malformed custom URLs to the request path to validate.
     }
 
+    // Custom headers win over both injected defaults. The override checks are
+    // case-insensitive because a differently-cased duplicate key would survive
+    // the spread and be sent as two header values (e.g. "test-org, custom").
+    const hasOriginatorOverride = hasHeaderOverride(customHeaders, OPENAI_ORIGINATOR_HEADER);
+    const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
+
+    const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
+    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+
     return {
-      ...(sendsToOpenAiApi ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
+      ...(organization ? { [OPENAI_ORGANIZATION_HEADER]: organization } : {}),
       ...customHeaders,
     };
   }

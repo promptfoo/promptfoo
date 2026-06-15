@@ -1,6 +1,8 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { shouldGenerateRemote } from '../redteam/remoteGeneration';
+import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -16,6 +18,23 @@ import type {
   TestCase,
   VarValue,
 } from '../types/index';
+
+// These wrappers keep src/matchers' imports of the redteam layer confined to this file.
+// Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
+// llmGrading.ts adds core->redteam import statements beyond the ratchet in
+// architecture/edge-baseline.json and fails `npm run architecture:check`.
+export function getRemoteGradingContext(): { targetId?: string } {
+  const targetId = getCloudTargetIdFromProviders(
+    cliState.selectedProviderConfigs ?? cliState.config?.providers,
+  );
+  return targetId ? { targetId } : {};
+}
+
+export function shouldUseRemoteGrading(
+  options?: Parameters<typeof shouldGenerateRemote>[0],
+): boolean {
+  return shouldGenerateRemote(options);
+}
 
 /**
  * Helper to call provider with consistent context propagation pattern.
