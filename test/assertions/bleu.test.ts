@@ -76,6 +76,38 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.999);
   });
 
+  it('should not depend on the order of equidistant references', () => {
+    const candidate = 'a b c d'; // 4 tokens
+    const shorterRef = 'a b c'; // 3 tokens (distance 1 from candidate)
+    const longerRef = 'a b c d e'; // 5 tokens (distance 1 from candidate)
+
+    // When two references are equally close to the candidate length, BLEU breaks the
+    // tie toward the shorter reference (Papineni et al. / NLTK `closest_ref_length`),
+    // so the score must be independent of the order the references are provided in.
+    const scoreShorterFirst = calculateBleuScore(candidate, [shorterRef, longerRef]);
+    const scoreLongerFirst = calculateBleuScore(candidate, [longerRef, shorterRef]);
+
+    expect(scoreLongerFirst).toBeCloseTo(scoreShorterFirst, 10);
+  });
+
+  it('should break equidistant ties toward the shorter reference (direction, not just determinism)', () => {
+    // Two references equidistant from the candidate length (both distance 2): lengths 2
+    // and 6. Every 1- to 4-gram of the candidate is contained in the longer reference, so
+    // n-gram precision is perfect and the score reduces to the brevity penalty alone.
+    // NLTK `closest_ref_length` breaks the tie toward the SHORTER reference (length 2);
+    // the candidate (4 tokens) is longer than it, so the brevity penalty is 1 and the
+    // score is exactly 1. Preferring the longer reference (length 6) would instead give
+    // exp(1 - 6/4) ≈ 0.6065 — so this pins the tie-break DIRECTION. The order-independence
+    // test above passes for either direction; only this test fails if the tie flips.
+    const candidate = 'a b c d'; // 4 tokens
+    const refs = ['a b', 'a b c d e f']; // lengths 2 and 6, both distance 2 from candidate
+
+    expect(calculateBleuScore(candidate, refs)).toBe(1);
+    expect(calculateBleuScore(candidate, [...refs].reverse())).toBe(1);
+    // Guard: a regression preferring the longer reference would yield exp(1 - 6/4).
+    expect(calculateBleuScore(candidate, refs)).not.toBeCloseTo(Math.exp(1 - 6 / 4), 5);
+  });
+
   it('should penalize short candidates and never exceed 1.0', () => {
     // Every 1- to 4-gram of the candidate appears in the reference, so n-gram
     // precision is perfect, but the candidate is shorter than the reference. BLEU is
@@ -169,6 +201,26 @@ describe('handleBleuScore', () => {
       reason: 'Assertion passed',
       assertion: expect.any(Object),
     });
+  });
+
+  it('should produce an order-independent score and verdict for an array of references', () => {
+    // End-to-end guard through the public handler: the same equidistant references supplied
+    // in different orders via renderedValue must yield the same score and pass/fail verdict.
+    const outputString = 'a b c d'; // 4 tokens
+    const refs = ['a b c', 'a b c d e']; // lengths 3 and 5, both distance 1 from candidate
+    const base = {
+      assertion: { type: 'bleu' },
+      outputString,
+      inverse: false,
+    };
+    const shorterFirst = handleBleuScore({ ...base, renderedValue: refs } as AssertionParams);
+    const longerFirst = handleBleuScore({
+      ...base,
+      renderedValue: [...refs].reverse(),
+    } as AssertionParams);
+
+    expect(longerFirst.score).toBeCloseTo(shorterFirst.score, 10);
+    expect(longerFirst.pass).toBe(shorterFirst.pass);
   });
 
   it('should handle custom threshold', () => {

@@ -76,11 +76,15 @@ export function calculateBleuScore(
   const candidateWords = tokenize(candidate);
   const referenceWordsList = references.map(tokenize);
 
-  // Find reference length closest to the candidate length for the brevity penalty
+  // Find reference length closest to the candidate length for the brevity penalty.
+  // On ties, prefer the shorter reference (BLEU / NLTK `closest_ref_length`
+  // convention) so the score does not depend on the order references are provided in.
   const refLengths = referenceWordsList.map((words) => words.length);
-  const closestRefLength = refLengths.reduce((prev, curr) =>
-    Math.abs(curr - candidateWords.length) < Math.abs(prev - candidateWords.length) ? curr : prev,
-  );
+  const closestRefLength = refLengths.reduce((prev, curr) => {
+    const distCurr = Math.abs(curr - candidateWords.length);
+    const distPrev = Math.abs(prev - candidateWords.length);
+    return distCurr < distPrev || (distCurr === distPrev && curr < prev) ? curr : prev;
+  });
 
   const maxN = 4;
   const precisions: number[] = [];
