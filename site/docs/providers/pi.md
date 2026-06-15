@@ -13,7 +13,7 @@ Promptfoo runs the `pi` CLI in one-shot JSON mode for each test case, so evals e
 ## Provider IDs
 
 - `pi` - Uses pi's configured default model
-- `pi:<provider>/<model>` - Explicit model (e.g. `pi:anthropic/claude-sonnet-4-5`, `pi:openai/gpt-5.4-mini`)
+- `pi:<provider>/<model>` - Explicit model (e.g. `pi:anthropic/claude-sonnet-4-6`, `pi:openai/gpt-5.4-mini`)
 
 The model segment accepts pi's model patterns, including an optional thinking-level suffix such as `pi:openai/gpt-5.2:high`.
 
@@ -72,7 +72,7 @@ Specify a working directory to enable read-only file tools:
 
 ```yaml
 providers:
-  - id: pi:anthropic/claude-sonnet-4-5
+  - id: pi:anthropic/claude-sonnet-4-6
     config:
       working_dir: ./src
 ```
@@ -91,7 +91,7 @@ Pi has no built-in permission or sandbox system, so write access is opt-in:
 
 ```yaml
 providers:
-  - id: pi:anthropic/claude-sonnet-4-5
+  - id: pi:anthropic/claude-sonnet-4-6
     config:
       working_dir: ./sandbox
       tools: [read, bash, edit, write, grep, find, ls]
@@ -186,7 +186,7 @@ Because pi is multi-provider, one config can compare how the same agent harness 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - pi:openai/gpt-5.4-mini
-  - pi:anthropic/claude-sonnet-4-5
+  - pi:anthropic/claude-sonnet-4-6
   - pi:google/gemini-2.5-flash
 
 prompts:

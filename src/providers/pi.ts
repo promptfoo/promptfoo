@@ -658,6 +658,11 @@ export class PiProvider implements ApiProvider {
     return this.resolveProviderName(config) || 'pi';
   }
 
+  /** EnvOverrides as a plain record (empty when unset), avoiding repeated casts. */
+  private get envOverrides(): Record<string, string | undefined> {
+    return (this.env ?? {}) as Record<string, string | undefined>;
+  }
+
   /**
    * The explicitly-configured provider env: EnvOverrides merged with config.env
    * (config wins), skipping undefined EnvOverrides values and coercing config.env
@@ -665,11 +670,9 @@ export class PiProvider implements ApiProvider {
    */
   private mergeConfiguredEnv(config: PiProviderConfig): Record<string, string> {
     const merged: Record<string, string> = {};
-    if (this.env) {
-      for (const [key, value] of Object.entries(this.env as Record<string, string | undefined>)) {
-        if (value !== undefined) {
-          merged[key] = value;
-        }
+    for (const [key, value] of Object.entries(this.envOverrides)) {
+      if (value !== undefined) {
+        merged[key] = value;
       }
     }
     if (config.env) {
@@ -719,7 +722,7 @@ export class PiProvider implements ApiProvider {
     const raw =
       config.agent_dir ??
       config.env?.PI_CODING_AGENT_DIR ??
-      (this.env as Record<string, string | undefined> | undefined)?.PI_CODING_AGENT_DIR ??
+      this.envOverrides.PI_CODING_AGENT_DIR ??
       process.env.PI_CODING_AGENT_DIR;
     if (!raw) {
       return undefined;
@@ -739,11 +742,7 @@ export class PiProvider implements ApiProvider {
     if (configured) {
       return configured;
     }
-    const home =
-      config.env?.HOME ??
-      (this.env as Record<string, string | undefined> | undefined)?.HOME ??
-      process.env.HOME ??
-      os.homedir();
+    const home = config.env?.HOME ?? this.envOverrides.HOME ?? process.env.HOME ?? os.homedir();
     return path.join(home, '.pi', 'agent');
   }
 
@@ -1112,15 +1111,19 @@ export class PiProvider implements ApiProvider {
       };
     }
 
+    // Usage, cost, and the transcript are reported on both the error and success
+    // branches (the error branch keeps them so a failed row stays inspectable).
+    const usageCostRaw = {
+      ...(tokenUsage ? { tokenUsage } : {}),
+      ...(cost === undefined ? {} : { cost }),
+      raw: JSON.stringify(assistantMessages),
+    };
+
     if (finalMessage.stopReason === 'error' || finalMessage.stopReason === 'aborted') {
       return {
         error:
           finalMessage.errorMessage ?? `Pi agent stopped with reason: ${finalMessage.stopReason}`,
-        ...(tokenUsage ? { tokenUsage } : {}),
-        ...(cost === undefined ? {} : { cost }),
-        // Preserve the transcript (including any partial output the model
-        // produced before failing) so the error row is still inspectable.
-        raw: JSON.stringify(assistantMessages),
+        ...usageCostRaw,
       };
     }
 
@@ -1138,9 +1141,7 @@ export class PiProvider implements ApiProvider {
 
     return {
       output: this.getMessageText(finalMessage),
-      ...(tokenUsage ? { tokenUsage } : {}),
-      ...(cost === undefined ? {} : { cost }),
-      raw: JSON.stringify(assistantMessages),
+      ...usageCostRaw,
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
   }

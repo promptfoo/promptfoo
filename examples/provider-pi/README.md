@@ -89,7 +89,7 @@ The provider supports these high-value options:
 
 ```yaml
 providers:
-  - id: pi:anthropic/claude-sonnet-4-5
+  - id: pi:anthropic/claude-sonnet-4-6
     config:
       # Thinking level: off, minimal, low, medium, high, xhigh
       thinking: medium

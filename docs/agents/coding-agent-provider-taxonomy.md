@@ -162,8 +162,10 @@ The coding-agent providers already share several practical patterns:
 - Session or thread caches are keyed by provider config.
 - Provider-level config is stricter than prompt-level merged config.
 - Tool and skill usage are surfaced through metadata where possible.
-- Tracing is supported for Codex and is partially shared through OpenAI agent
-  tracing helpers.
+- A top-level GenAI `callApi` span is shared across providers via `withGenAISpan`
+  (Pi emits this span too). Deep tracing into the agent runtime — child OTEL
+  spans linked by `traceparent` — is implemented for Codex and the Claude Agent
+  SDK; Pi has no native OpenTelemetry, so the provider-level span is its boundary.
 
 Useful files:
 
@@ -172,6 +174,7 @@ Useful files:
 - `src/providers/opencode-sdk.ts`
 - `src/providers/openai/codex-sdk.ts`
 - `src/providers/openai/codex-app-server.ts`
+- `src/providers/pi.ts`
 - `src/providers/registry.ts`
 
 ### OpenAI Codex SDK
