@@ -75,7 +75,7 @@ describe('Blobs Routes', () => {
 
       const response = await api.post('/api/blobs').send({
         data: Buffer.from('image-bytes').toString('base64'),
-        mimeType: 'application/vnd.promptfoo.trace+json',
+        mimeType: 'image/png',
         context: {
           evalId,
           kind: 'image',
@@ -87,17 +87,89 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.ref.uri).toBe(`promptfoo://blob/${hash}`);
-      expect(mockedStoreBlob).toHaveBeenCalledWith(
-        Buffer.from('image-bytes'),
-        'application/vnd.promptfoo.trace+json',
-        {
-          evalId,
-          kind: 'image',
-          location: 'share',
-          promptIdx: 2,
-          testIdx: 1,
+      expect(mockedStoreBlob).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+        evalId,
+        kind: 'image',
+        location: 'share',
+        promptIdx: 2,
+        testIdx: 1,
+      });
+    });
+
+    it('downgrades a non-media (text/html) MIME to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
         },
+      });
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('<script>alert(1)</script>').toString('base64'),
+        mimeType: 'text/html',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(200);
+      // A stored text/html blob would be a same-origin stored-XSS vector when served back.
+      expect(mockedStoreBlob).toHaveBeenCalledWith(expect.any(Buffer), 'application/octet-stream', {
+        evalId,
+      });
+    });
+
+    it('downgrades image/svg+xml to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('<svg onload="alert(1)"></svg>').toString('base64'),
+        mimeType: 'image/svg+xml',
+        context: { evalId },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'application/octet-stream',
+        expect.anything(),
       );
+    });
+
+    it('rejects non-canonical base64 that passes the charset check', async () => {
+      // "QR==" passes the charset regex and decodes, but is not the canonical encoding of its
+      // bytes ("QQ=="), so the round-trip guard rejects it to prevent hash/content confusion.
+      const response = await api.post('/api/blobs').send({
+        data: 'QR==',
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects pad-only base64 that would store an empty blob', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: '==',
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
     });
 
     it('rejects malformed base64 before storage', async () => {
@@ -268,6 +340,7 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
+      expect(response.header['x-content-type-options']).toBe('nosniff');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
       // Content-Length may be absent if response is gzipped (Express uses transfer-encoding: chunked)

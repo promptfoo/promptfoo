@@ -40,8 +40,13 @@ export interface ShareOptions {
   showAuth?: boolean;
 }
 
-/** Error types that indicate chunk size issues */
-type ChunkSizeError = 'PAYLOAD_TOO_LARGE' | 'NETWORK_TIMEOUT' | 'UNSUPPORTED_ENDPOINT' | 'UNKNOWN';
+/** Error types that indicate chunk send failures */
+type ChunkSizeError =
+  | 'PAYLOAD_TOO_LARGE'
+  | 'NETWORK_TIMEOUT'
+  | 'UNSUPPORTED_ENDPOINT'
+  | 'EVAL_NOT_FOUND'
+  | 'UNKNOWN';
 
 /** Result of attempting to send a chunk */
 interface ChunkSendResult {
@@ -50,7 +55,16 @@ interface ChunkSendResult {
   originalError?: Error;
 }
 
+/** The remote server lacks the endpoint entirely (old self-hosted server). Non-fatal: warn and share without it. */
 class UnsupportedShareEndpointError extends Error {}
+
+/** The remote eval is missing on a server that does support the endpoint. Fatal: roll back the share. */
+class ShareEvalNotFoundError extends Error {}
+
+/** Tolerant match for "Eval not found" / "Evaluation not found" across handlers and JSON/plain bodies. */
+function responseSignalsMissingEval(responseBody: string): boolean {
+  return /eval(uation)? not found/i.test(responseBody);
+}
 
 /** Configuration for adaptive chunking */
 interface AdaptiveChunkConfig {
@@ -252,11 +266,19 @@ async function sendJsonChunk<T>(
         };
       }
 
-      const endpointIsUnsupported =
-        itemName === 'trace' &&
-        (response.status === 405 ||
-          (response.status === 404 && !responseBody.includes('Eval not found')));
-      if (endpointIsUnsupported) {
+      if (itemName === 'trace' && (response.status === 404 || response.status === 405)) {
+        // A 404 whose body reports the eval is missing means the route exists but the remote eval
+        // is gone (fatal — roll back). Any other 404/405 means the route is absent on an older
+        // server (non-fatal — share without traces).
+        if (response.status === 404 && responseSignalsMissingEval(responseBody)) {
+          return {
+            success: false,
+            errorType: 'EVAL_NOT_FOUND',
+            originalError: new ShareEvalNotFoundError(
+              `Remote eval not found while sharing traces (${response.status})`,
+            ),
+          };
+        }
         return {
           success: false,
           errorType: 'UNSUPPORTED_ENDPOINT',
@@ -331,6 +353,10 @@ async function sendChunkWithRetry<T>(
 
   if (result.errorType === 'UNSUPPORTED_ENDPOINT') {
     throw result.originalError ?? new UnsupportedShareEndpointError();
+  }
+
+  if (result.errorType === 'EVAL_NOT_FOUND') {
+    throw result.originalError ?? new ShareEvalNotFoundError();
   }
 
   // On retryable failures, split the chunk and retry each half
@@ -556,13 +582,22 @@ async function sendTraceChunksForShare(
       );
     }
   } catch (error) {
+    // The remote eval being missing is fatal: let it roll back the whole share.
+    if (error instanceof ShareEvalNotFoundError) {
+      throw error;
+    }
+    // Everything else (old server without the route, a rejected/oversized/malformed trace, or a
+    // transient trace-endpoint error) is non-fatal: the eval and results already uploaded fine, so
+    // keep the share and warn rather than discarding it for best-effort trace data.
     if (error instanceof UnsupportedShareEndpointError) {
       logger.warn(
         'The self-hosted server does not support trace sharing. The eval was shared without traces; upgrade the server to transfer trace data.',
       );
-      return;
+    } else {
+      logger.warn(
+        `Failed to upload trace data; the eval was shared without traces. ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    throw error;
   }
 }
 
@@ -751,7 +786,11 @@ async function sendChunkedResults(
       resultsPerChunk,
       remoteEvalId,
       inlineCache,
-      remoteBlobUploadCache: inlineCache && !isCloudEnabled ? null : remoteBlobUploadCache,
+      // Result blobs that are inlined into the payload never also need an out-of-band upload;
+      // only trace-referenced blobs (which keep raw URIs) are uploaded separately below. This
+      // also covers the cloud + PROMPTFOO_SHARE_INLINE_BLOBS override, where result blobs would
+      // otherwise be both inlined into the chunk and re-uploaded to cloud blob storage.
+      remoteBlobUploadCache: inlineCache ? null : remoteBlobUploadCache,
       traceIds,
       blobUploader,
       sendResultChunk,

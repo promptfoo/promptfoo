@@ -2,6 +2,7 @@ import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
 import { BLOB_MAX_SIZE, getBlobByHash, getBlobUrl, storeBlob } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { sanitizeBlobMimeType } from '../../blobs/mimeTypes';
 import { getDb } from '../../database';
 import {
   blobAssetsTable,
@@ -26,6 +27,10 @@ function decodeBase64(value: string): Buffer | null {
     return null;
   }
   const data = Buffer.from(value, 'base64');
+  if (data.length === 0) {
+    // Pad-only input (e.g. "=") passes the charset check but decodes to nothing.
+    return null;
+  }
   const normalizedInput = value.replace(/=+$/, '');
   const normalizedOutput = data.toString('base64').replace(/=+$/, '');
   return normalizedInput === normalizedOutput ? data : null;
@@ -53,7 +58,11 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { mimeType, context } = bodyResult.data;
+  const { context } = bodyResult.data;
+  // Blobs are served back from this server's own origin, so a client-supplied MIME like
+  // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
+  // everything else is downgraded to application/octet-stream (same gate as portable imports).
+  const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
   try {
     if (context?.evalId) {
       const db = await getDb();
@@ -547,6 +556,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
     res.setHeader('Content-Type', 'application/octet-stream');
   }
+  // Defense in depth: never let the browser MIME-sniff stored bytes into active content.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Accept-Ranges', 'none');

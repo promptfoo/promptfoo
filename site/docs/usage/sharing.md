@@ -138,6 +138,12 @@ Self-hosted sharing doesn't require `promptfoo auth login` when these environmen
 
 :::
 
+:::note
+
+Trace data is transferred to self-hosted servers out-of-band after the eval is uploaded. A self-hosted server older than the client may not support the trace endpoint; in that case the eval is shared successfully **without** its traces and the client prints a warning advising you to upgrade the server. Eval results, media, and other data are unaffected.
+
+:::
+
 ### Troubleshooting Upload Issues
 
 #### Handling "413 Request Entity Too Large" Errors

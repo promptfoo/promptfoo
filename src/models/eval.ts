@@ -72,35 +72,6 @@ interface FilteredCountRow {
   count: number | null;
 }
 
-type ImportedTraceSpan = TraceData['spans'][number] & {
-  status?: {
-    code?: number | 'unset' | 'ok' | 'error';
-    message?: string;
-  };
-};
-
-function normalizeImportedTraceSpan(span: ImportedTraceSpan): TraceData['spans'][number] {
-  const importedStatusCode = span.status?.code;
-  const statusCode =
-    span.statusCode ??
-    (typeof importedStatusCode === 'number'
-      ? importedStatusCode
-      : importedStatusCode === 'ok'
-        ? 1
-        : importedStatusCode === 'error'
-          ? 2
-          : importedStatusCode === 'unset'
-            ? 0
-            : undefined);
-  const statusMessage = span.statusMessage ?? span.status?.message;
-
-  return {
-    ...span,
-    ...(statusCode !== undefined && { statusCode }),
-    ...(statusMessage !== undefined && { statusMessage }),
-  };
-}
-
 /** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
@@ -1477,11 +1448,8 @@ export default class Eval {
   }
 
   async appendTraces(traces: TraceData[]): Promise<boolean> {
-    const normalizedTraces = traces.map((trace) => ({
-      ...trace,
-      spans: trace.spans.map((span) => normalizeImportedTraceSpan(span)),
-    }));
-    return getTraceStore().importTraces(this.id, normalizedTraces);
+    // The trace store normalizes each span's status into statusCode/statusMessage on write.
+    return getTraceStore().importTraces(this.id, traces);
   }
 
   async getTraces(): Promise<TraceData[]> {

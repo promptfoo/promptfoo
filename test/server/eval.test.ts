@@ -247,6 +247,42 @@ describe('eval routes', () => {
         spans: [{ spanId: 'span-1', name: 'provider call' }],
       });
     });
+
+    it('rejects a multi-trace batch atomically when one trace belongs to another eval', async () => {
+      const firstEval = await EvalFactory.create();
+      const secondEval = await EvalFactory.create();
+      testEvalIds.add(firstEval.id);
+      testEvalIds.add(secondEval.id);
+      const collidingId = randomUUID().replaceAll('-', '');
+      const freshId = randomUUID().replaceAll('-', '');
+
+      // The colliding trace is owned by firstEval.
+      await expect(firstEval.appendTraces([trace(collidingId)])).resolves.toBe(true);
+
+      // A batch mixing a brand-new trace with the colliding one must be rejected as a whole,
+      // and must NOT partially persist the new trace into secondEval.
+      await expect(secondEval.appendTraces([trace(freshId), trace(collidingId)])).resolves.toBe(
+        false,
+      );
+      expect(await getTraceStore().getTrace(freshId)).toBeNull();
+      expect(await getTraceStore().getTracesByEvaluation(secondEval.id)).toEqual([]);
+    });
+
+    it('deduplicates repeated span IDs within a single imported trace', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      const withDuplicateSpan = trace(traceId);
+      withDuplicateSpan.spans = [
+        withDuplicateSpan.spans[0],
+        { ...withDuplicateSpan.spans[0], name: 'duplicate-span-id' },
+      ];
+
+      await expect(eval_.appendTraces([withDuplicateSpan])).resolves.toBe(true);
+      const stored = await getTraceStore().getTrace(traceId, { sanitizeAttributes: false });
+      expect(stored?.spans).toHaveLength(1);
+      expect(stored?.spans[0]).toMatchObject({ spanId: 'span-1', name: 'provider call' });
+    });
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
