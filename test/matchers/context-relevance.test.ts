@@ -74,6 +74,55 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.relevantSentenceCount).toBe(1);
   });
 
+  it('should still segment prose when the context carries an incidental trailing newline', async () => {
+    // Regression: a context loaded from a file/template/YAML block scalar almost
+    // always carries a trailing newline. Keying segmentation off the mere presence
+    // of a newline collapsed such a context back to a single unit, reviving the
+    // forced ~1.0 score. The mode must key off two-or-more non-empty lines instead.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.\n';
+    const threshold = 0.3;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // Still 3 sentences despite the trailing newline → 1/3 ≈ 0.33 (not 1.0).
+    expect(result.score).toBeCloseTo(0.33, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
+  it('should segment grader output with the same mode as the context', async () => {
+    // Regression: for a multi-line (pre-segmented) string context, a prose grader
+    // response (no newlines) was split on sentence boundaries while the context was
+    // split on newlines. The mismatched units inflated the numerator and forced the
+    // score to 1.0. Both must be segmented in the context's mode.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe.\nBerlin is the capital of Germany. Germany is in Europe.';
+    const threshold = 0.5;
+
+    // Grader returns one line verbatim (prose with two sentences, no newline).
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // Context is 2 lines; 1 line relevant → 1/2 = 0.5 (was 1.0 before the fix).
+    expect(result.score).toBe(0.5);
+    expect(result.metadata?.totalContextUnits).toBe(2);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
   it('should handle insufficient information responses', async () => {
     const input = 'What is quantum computing?';
     const context =

@@ -16,6 +16,7 @@ import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
+  detectSentenceSegmentMode,
   fail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
@@ -263,22 +264,29 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Split context into units: use chunks if provided, otherwise segment the
-  // prose context into sentences. We must split on sentence boundaries (not just
-  // newlines) — a retrieved context is typically a single prose paragraph with
-  // no newlines, and splitting on newlines alone would yield one unit, making
-  // the denominator 1 and forcing the score to ~1.0 regardless of relevance.
+  // Split context into units, then segment the grader's extracted sentences the
+  // SAME way so the numerator and denominator use consistent units.
   const isArrayContext = Array.isArray(context);
-  const contextUnits = isArrayContext
-    ? context.filter((chunk) => chunk.trim().length > 0)
-    : splitTextIntoSentences(context);
+  let contextUnits: string[];
+  let extractedSentences: string[];
+  if (isArrayContext) {
+    // Each chunk is already a unit; the grader echoes back relevant chunks one per line.
+    contextUnits = context.filter((chunk) => chunk.trim().length > 0);
+    extractedSentences = splitIntoSentences(resp.output);
+  } else {
+    // A retrieved context is typically a single prose paragraph with no newlines.
+    // Splitting on newlines alone would yield one unit, making the denominator 1
+    // and forcing the score to ~1.0 regardless of relevance, so we segment on
+    // sentence boundaries. The mode is derived once from the context and reused
+    // for the grader output: the grading prompt does not constrain its output
+    // format, so segmenting both independently could measure them in different
+    // units (e.g. a multi-line context vs. a single-line prose response) and
+    // inflate the numerator above the true relevant count.
+    const mode = detectSentenceSegmentMode(context);
+    contextUnits = splitTextIntoSentences(context, mode);
+    extractedSentences = splitTextIntoSentences(resp.output, mode);
+  }
   const totalContextUnits = contextUnits.length;
-
-  // Segment the grader's extracted sentences the same way the context was
-  // segmented so the numerator and denominator use consistent units.
-  const extractedSentences = isArrayContext
-    ? splitIntoSentences(resp.output)
-    : splitTextIntoSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
 
