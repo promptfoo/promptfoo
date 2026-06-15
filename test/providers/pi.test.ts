@@ -49,13 +49,19 @@ interface FakeRunOptions {
   stderr?: string;
 }
 
-function buildUsage(input: number, output: number, costTotal: number, cacheRead = 0) {
+function buildUsage(
+  input: number,
+  output: number,
+  costTotal: number,
+  cacheRead = 0,
+  cacheWrite = 0,
+) {
   return {
     input,
     output,
     cacheRead,
-    cacheWrite: 0,
-    totalTokens: input + output,
+    cacheWrite,
+    totalTokens: input + output + cacheRead + cacheWrite,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: costTotal },
   };
 }
@@ -566,11 +572,36 @@ describe('PiProvider', () => {
       expect(result.tokenUsage).toEqual({
         prompt: 300,
         completion: 30,
-        total: 330,
+        total: 345,
         cached: 15,
         numRequests: 2,
+        completionDetails: {
+          cacheReadInputTokens: 15,
+          cacheCreationInputTokens: 0,
+        },
       });
       expect(result.cost).toBeCloseTo(0.003);
+    });
+
+    it('preserves cache creation usage and includes cache tokens in fallback totals', async () => {
+      const usage = buildUsage(100, 10, 0.001, 5, 7);
+      delete (usage as Partial<typeof usage>).totalTokens;
+      mockPiRun([{ type: 'agent_end', messages: [assistantMessage('done', { usage })] }]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toEqual({
+        prompt: 100,
+        completion: 10,
+        total: 122,
+        cached: 5,
+        numRequests: 1,
+        completionDetails: {
+          cacheReadInputTokens: 5,
+          cacheCreationInputTokens: 7,
+        },
+      });
     });
 
     it('captures tool calls in metadata', async () => {

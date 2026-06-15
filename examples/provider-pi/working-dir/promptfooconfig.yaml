@@ -5,7 +5,7 @@ prompts:
   - 'Read sample.py in the working directory and name the function it defines, in one sentence.'
 
 providers:
-  - id: pi:openai/gpt-5.4-mini
+  - id: pi:openai/gpt-5.5
     config:
       # The working directory is this example folder, which ships with sample.py,
       # so the example is self-contained when initialized on its own.

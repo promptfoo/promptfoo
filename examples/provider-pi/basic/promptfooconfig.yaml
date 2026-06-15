@@ -6,7 +6,7 @@ prompts:
 
 providers:
   # pi:<provider>/<model> selects the model explicitly
-  - pi:openai/gpt-5.4-mini
+  - pi:openai/gpt-5.5
 
 tests:
   - vars: {}

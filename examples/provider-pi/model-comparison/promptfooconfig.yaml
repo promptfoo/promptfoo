@@ -5,7 +5,7 @@ prompts:
   - 'Write a Python function is_palindrome(s) that ignores case and non-alphanumeric characters. Output only the code.'
 
 providers:
-  - pi:openai/gpt-5.4-mini
+  - pi:openai/gpt-5.5
   - pi:anthropic/claude-haiku-4-5-20251001
   - pi:google/gemini-2.5-flash
 

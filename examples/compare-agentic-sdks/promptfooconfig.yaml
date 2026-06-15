@@ -67,7 +67,7 @@ providers:
       working_dir: ./test-codebase
 
   # Plain LLM for baseline (no file access)
-  - id: openai:chat:gpt-5.4
+  - id: openai:chat:gpt-5.5
     label: plain-llm
     config:
       temperature: 0

@@ -1039,12 +1039,18 @@ export class PiProvider implements ApiProvider {
     let completion = 0;
     let total = 0;
     let cached = 0;
+    let cacheCreation = 0;
     for (const message of withUsage) {
       const usage = message.usage!;
-      prompt += usage.input ?? 0;
-      completion += usage.output ?? 0;
-      total += usage.totalTokens ?? (usage.input ?? 0) + (usage.output ?? 0);
-      cached += usage.cacheRead ?? 0;
+      const input = usage.input ?? 0;
+      const output = usage.output ?? 0;
+      const cacheRead = usage.cacheRead ?? 0;
+      const cacheWrite = usage.cacheWrite ?? 0;
+      prompt += input;
+      completion += output;
+      total += usage.totalTokens ?? input + output + cacheRead + cacheWrite;
+      cached += cacheRead;
+      cacheCreation += cacheWrite;
     }
 
     return {
@@ -1053,6 +1059,14 @@ export class PiProvider implements ApiProvider {
       total,
       cached,
       numRequests: withUsage.length,
+      ...(cached > 0 || cacheCreation > 0
+        ? {
+            completionDetails: {
+              cacheReadInputTokens: cached,
+              cacheCreationInputTokens: cacheCreation,
+            },
+          }
+        : {}),
     };
   }
 

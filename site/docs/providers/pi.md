@@ -13,9 +13,9 @@ Promptfoo runs the `pi` CLI in one-shot JSON mode for each test case, so evals e
 ## Provider IDs
 
 - `pi` - Uses pi's configured default model
-- `pi:<provider>/<model>` - Explicit model (e.g. `pi:anthropic/claude-sonnet-4-6`, `pi:openai/gpt-5.4-mini`)
+- `pi:<provider>/<model>` - Explicit model (e.g. `pi:anthropic/claude-sonnet-4-6`, `pi:openai/gpt-5.5`)
 
-The model segment accepts pi's model patterns, including an optional thinking-level suffix such as `pi:openai/gpt-5.2:high`.
+The model segment accepts pi's model patterns, including an optional thinking-level suffix such as `pi:openai/gpt-5.5:high`.
 
 ## Installation
 
@@ -58,10 +58,17 @@ Subscription auth (such as Claude Pro/Max via `pi /login`) also works because th
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - pi:openai/gpt-5.4-mini
+  - pi:openai/gpt-5.5
 
 prompts:
   - 'Write a Python function that validates email addresses'
+```
+
+If you use Pi's OpenAI Codex subscription auth (`pi /login`), select the Codex provider explicitly:
+
+```yaml
+providers:
+  - pi:openai-codex/gpt-5.5
 ```
 
 By default the agent runs in a temporary directory with all tools disabled (chat-only), and nothing is written to pi's session history.
@@ -144,7 +151,7 @@ Pi reads the prompt from piped stdin and trims leading/trailing whitespace (an a
 The provider returns:
 
 - `output` - Final assistant message text
-- `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`)
+- `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`, plus cache read/write details when pi reports them)
 - `cost` - USD cost as reported by pi
 - `metadata.toolCalls` - Tools the agent invoked, with arguments and error status
 - `metadata.model` / `metadata.provider_id` - Model that actually served the run
@@ -185,7 +192,7 @@ Because pi is multi-provider, one config can compare how the same agent harness 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - pi:openai/gpt-5.4-mini
+  - pi:openai/gpt-5.5
   - pi:anthropic/claude-sonnet-4-6
   - pi:google/gemini-2.5-flash
 
