@@ -619,6 +619,18 @@ export class PiProvider implements ApiProvider {
   }
 
   /**
+   * The underlying model-provider name pi routes to, derived from provider_id or
+   * the `provider/` prefix of the model pattern (lowercased), or undefined when
+   * neither is set (a bare `pi` run using pi's configured default).
+   */
+  private resolveProviderName(config: PiProviderConfig): string | undefined {
+    return (
+      config.provider_id?.toLowerCase() ??
+      (config.model?.includes('/') ? config.model.split('/')[0].toLowerCase() : undefined)
+    );
+  }
+
+  /**
    * Determine which env var should carry config.apiKey: an explicit
    * api_key_env, or the standard env var for the provider derived from
    * provider_id or the provider prefix of the model pattern.
@@ -630,9 +642,7 @@ export class PiProvider implements ApiProvider {
     if (config.api_key_env) {
       return config.api_key_env;
     }
-    const provider =
-      config.provider_id?.toLowerCase() ??
-      (config.model?.includes('/') ? config.model.split('/')[0].toLowerCase() : undefined);
+    const provider = this.resolveProviderName(config);
     if (!provider) {
       return undefined;
     }
@@ -645,35 +655,42 @@ export class PiProvider implements ApiProvider {
    * (e.g. a bare `pi` run using pi's configured default).
    */
   private resolveGenAiSystem(config: PiProviderConfig): string {
-    const provider =
-      config.provider_id?.toLowerCase() ??
-      (config.model?.includes('/') ? config.model.split('/')[0].toLowerCase() : undefined);
-    return provider || 'pi';
+    return this.resolveProviderName(config) || 'pi';
+  }
+
+  /**
+   * The explicitly-configured provider env: EnvOverrides merged with config.env
+   * (config wins), skipping undefined EnvOverrides values and coercing config.env
+   * values to strings. The ambient process.env is intentionally NOT included here.
+   */
+  private mergeConfiguredEnv(config: PiProviderConfig): Record<string, string> {
+    const merged: Record<string, string> = {};
+    if (this.env) {
+      for (const [key, value] of Object.entries(this.env as Record<string, string | undefined>)) {
+        if (value !== undefined) {
+          merged[key] = value;
+        }
+      }
+    }
+    if (config.env) {
+      for (const [key, value] of Object.entries(config.env)) {
+        merged[key] = String(value);
+      }
+    }
+    return merged;
   }
 
   private buildEnv(config: PiProviderConfig): Record<string, string> {
+    // Seed with the full ambient environment, then overlay the configured
+    // provider env (EnvOverrides + config.env). Insertion order does not affect
+    // the resulting Record's values, so the merge is order-independent.
     const env: Record<string, string> = {};
-
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) {
         env[key] = value;
       }
     }
-
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = (this.env as Record<string, string | undefined>)[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    if (config.env) {
-      for (const [key, value] of Object.entries(config.env)) {
-        env[key] = String(value);
-      }
-    }
+    Object.assign(env, this.mergeConfiguredEnv(config));
 
     const configuredAgentDir = this.resolveConfiguredAgentDir(config);
     if (configuredAgentDir) {
@@ -740,19 +757,7 @@ export class PiProvider implements ApiProvider {
    * (e.g. a base URL or region) are kept so changing them busts the cache.
    */
   private cacheEnv(config: PiProviderConfig): Record<string, string> {
-    const merged: Record<string, string> = {};
-    if (this.env) {
-      for (const [key, value] of Object.entries(this.env as Record<string, string | undefined>)) {
-        if (value !== undefined) {
-          merged[key] = value;
-        }
-      }
-    }
-    if (config.env) {
-      for (const [key, value] of Object.entries(config.env)) {
-        merged[key] = String(value);
-      }
-    }
+    const merged = this.mergeConfiguredEnv(config);
     const credentialVar = this.getApiKeyEnvVar(config);
     // Canonicalize (sort keys) and drop the credential var plus any secret-named
     // var so semantically identical, credential-independent envs hash the same.
@@ -1222,6 +1227,9 @@ export class PiProvider implements ApiProvider {
     const { args, workingDir, config, cacheResult, prompt, callOptions } = opts;
     const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
 
+    const timeoutMs = config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const maxOutputBytes = config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+
     try {
       const { command, argsPrefix } = this.resolvePiCommand(config);
       const fullArgs = [...argsPrefix, ...args];
@@ -1231,8 +1239,8 @@ export class PiProvider implements ApiProvider {
         cwd: runDir,
         env: this.buildEnv(config),
         prompt,
-        timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
-        maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+        timeoutMs,
+        maxOutputBytes,
         abortSignal: callOptions?.abortSignal,
       });
 
@@ -1240,11 +1248,11 @@ export class PiProvider implements ApiProvider {
         return { error: 'Pi call aborted' };
       }
       if (runResult.timedOut) {
-        return { error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms` };
+        return { error: `Pi call timed out after ${timeoutMs}ms` };
       }
       if (runResult.stdoutOverflow) {
         return {
-          error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+          error: `Pi produced more than ${maxOutputBytes} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
         };
       }
 

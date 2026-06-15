@@ -121,6 +121,23 @@ function spawnedOptions(callIndex = 0): Record<string, any> {
   return mockSpawn.mock.calls[callIndex][2] as Record<string, any>;
 }
 
+/** Write a pi config file with an explicit mtime so mtime+size fingerprints change deterministically. */
+function writeConfigAt(filePath: string, body: string, mtimeMs: number) {
+  fs.writeFileSync(filePath, body);
+  fs.utimesSync(filePath, new Date(mtimeMs), new Date(mtimeMs));
+}
+
+/** Assert an agent-dir change busted the cache: two distinct runs, no cache hit. */
+function expectCacheBusted(
+  first: { output?: string; cached?: boolean },
+  second: { output?: string; cached?: boolean },
+) {
+  expect(first.output).toBe('first');
+  expect(second.output).toBe('second');
+  expect(second.cached).toBeFalsy();
+  expect(mockSpawn).toHaveBeenCalledTimes(2);
+}
+
 describe('PiProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -1269,23 +1286,18 @@ describe('PiProvider', () => {
       const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agent-'));
       const settingsPath = path.join(agentDir, 'settings.json');
       try {
-        // Different size + explicit older mtime so the mtime/size fingerprint
-        // changes deterministically regardless of write timing resolution.
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
-        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
+        // Different size + explicit mtime so the mtime/size fingerprint changes
+        // deterministically regardless of write timing resolution.
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
         mockPiRun(defaultEvents('first'));
         mockPiRun(defaultEvents('second'));
         const provider = new PiProvider({ config: { agent_dir: agentDir } });
 
         const first = await provider.callApi('same prompt');
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
-        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
         const second = await provider.callApi('same prompt');
 
-        expect(first.output).toBe('first');
-        expect(second.output).toBe('second');
-        expect(second.cached).toBeFalsy();
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expectCacheBusted(first, second);
       } finally {
         fs.rmSync(agentDir, { recursive: true, force: true });
       }
@@ -1316,21 +1328,16 @@ describe('PiProvider', () => {
       const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-sysprompt-'));
       const systemPath = path.join(agentDir, 'SYSTEM.md');
       try {
-        fs.writeFileSync(systemPath, 'You are terse.');
-        fs.utimesSync(systemPath, new Date(1000), new Date(1000));
+        writeConfigAt(systemPath, 'You are terse.', 1000);
         mockPiRun(defaultEvents('first'));
         mockPiRun(defaultEvents('second'));
         const provider = new PiProvider({ config: { agent_dir: agentDir } });
 
         const first = await provider.callApi('same prompt');
-        fs.writeFileSync(systemPath, 'You are a verbose and thorough assistant.');
-        fs.utimesSync(systemPath, new Date(2000), new Date(2000));
+        writeConfigAt(systemPath, 'You are a verbose and thorough assistant.', 2000);
         const second = await provider.callApi('same prompt');
 
-        expect(first.output).toBe('first');
-        expect(second.output).toBe('second');
-        expect(second.cached).toBeFalsy();
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expectCacheBusted(first, second);
       } finally {
         fs.rmSync(agentDir, { recursive: true, force: true });
       }
@@ -1341,21 +1348,16 @@ describe('PiProvider', () => {
       const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-envagent-'));
       const settingsPath = path.join(agentDir, 'settings.json');
       try {
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
-        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
         mockPiRun(defaultEvents('first'));
         mockPiRun(defaultEvents('second'));
         const provider = new PiProvider({ config: { env: { PI_CODING_AGENT_DIR: agentDir } } });
 
         const first = await provider.callApi('same prompt');
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
-        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
         const second = await provider.callApi('same prompt');
 
-        expect(first.output).toBe('first');
-        expect(second.output).toBe('second');
-        expect(second.cached).toBeFalsy();
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expectCacheBusted(first, second);
       } finally {
         fs.rmSync(agentDir, { recursive: true, force: true });
       }
@@ -1367,22 +1369,17 @@ describe('PiProvider', () => {
       const settingsPath = path.join(home, '.pi', 'agent', 'settings.json');
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
       try {
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
-        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
         mockPiRun(defaultEvents('first'));
         mockPiRun(defaultEvents('second'));
         // HOME overridden via env, no agent_dir: pi reads <HOME>/.pi/agent.
         const provider = new PiProvider({ config: { env: { HOME: home } } });
 
         const first = await provider.callApi('same prompt');
-        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
-        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
+        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
         const second = await provider.callApi('same prompt');
 
-        expect(first.output).toBe('first');
-        expect(second.output).toBe('second');
-        expect(second.cached).toBeFalsy();
-        expect(mockSpawn).toHaveBeenCalledTimes(2);
+        expectCacheBusted(first, second);
       } finally {
         fs.rmSync(home, { recursive: true, force: true });
       }
