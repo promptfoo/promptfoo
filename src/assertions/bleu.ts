@@ -98,9 +98,12 @@ export function calculateBleuScore(
     // exist. Skip the order and renormalize the weights over the remaining
     // orders, rather than recording precision 0 — that would be smoothed to a
     // tiny value and collapse the whole score (e.g. a perfect 1-3 word match
-    // scoring ~0). This matches NLTK, which reweights when higher orders are
-    // unavailable. A genuine zero-overlap precision (n-grams exist but none
-    // match) is still kept and smoothed below.
+    // scoring ~0). This mirrors NLTK's opt-in `auto_reweigh` option, which
+    // renormalizes the weights when higher-order n-grams are unavailable.
+    // (NLTK's default instead returns 0 for such short hypotheses; reweighting
+    // is the more useful behavior for a thresholded assertion.) A genuine
+    // zero-overlap precision (n-grams exist but none match) is still kept and
+    // smoothed below.
     if (totalCount === 0) {
       continue;
     }
