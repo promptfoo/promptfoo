@@ -89,6 +89,39 @@ const SECRET_ENV_NAME_PATTERN = /(?:key|token|secret|password|passwd|credential|
 // Query-param names that carry credentials in URL-shaped env values.
 const SECRET_QUERY_PARAM_PATTERN = /(?:key|token|secret|password|credential|auth|sig|signature)/i;
 
+// Flag names whose VALUE is a credential (only reachable via user extra_args;
+// the provider never puts secrets on argv). Used to redact the debug-log argv.
+const SECRET_ARG_FLAG_PATTERN = /^--?[a-z0-9-]*(?:key|token|secret|password|credential|auth)/i;
+
+/**
+ * Redact the value following a credential-bearing flag in an argv array before
+ * it is debug-logged. The structured logger sanitizes object keys but not
+ * positional argv, so a secret a user passed via extra_args (e.g. `--api-key`)
+ * could otherwise reach debug logs. Handles both `--flag value` and `--flag=v`.
+ */
+export function redactArgsForLog(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const eq = arg.indexOf('=');
+    const flag = eq >= 0 ? arg.slice(0, eq) : arg;
+    if (SECRET_ARG_FLAG_PATTERN.test(flag)) {
+      if (eq >= 0) {
+        out.push(`${flag}=[redacted]`);
+      } else {
+        out.push(arg);
+        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+          out.push('[redacted]');
+          i++;
+        }
+      }
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
 /**
  * Strip embedded credentials from a (non-secret-named) env value before it is
  * hashed into the cache key. A value like a gateway base URL can carry secrets
@@ -678,12 +711,23 @@ export class PiProvider implements ApiProvider {
   }
 
   /**
-   * The agent dir pi will actually read, including its default (~/.pi/agent)
-   * when none is configured. Used for cache fingerprinting so config changes in
-   * the effective dir bust the cache.
+   * The agent dir pi will actually read, including its default (`<HOME>/.pi/
+   * agent`) when none is configured. Used for cache fingerprinting so config
+   * changes in the effective dir bust the cache. Honors an overridden child HOME
+   * (config.env/EnvOverrides/process.env) so the default tracks the directory pi
+   * resolves, not promptfoo's own home.
    */
   private resolveEffectiveAgentDir(config: PiProviderConfig): string {
-    return this.resolveConfiguredAgentDir(config) ?? path.join(os.homedir(), '.pi', 'agent');
+    const configured = this.resolveConfiguredAgentDir(config);
+    if (configured) {
+      return configured;
+    }
+    const home =
+      config.env?.HOME ??
+      (this.env as Record<string, string | undefined> | undefined)?.HOME ??
+      process.env.HOME ??
+      os.homedir();
+    return path.join(home, '.pi', 'agent');
   }
 
   /**
@@ -1181,7 +1225,7 @@ export class PiProvider implements ApiProvider {
     try {
       const { command, argsPrefix } = this.resolvePiCommand(config);
       const fullArgs = [...argsPrefix, ...args];
-      logger.debug(`[Pi] Running ${command}`, { args: fullArgs, cwd: runDir });
+      logger.debug(`[Pi] Running ${command}`, { args: redactArgsForLog(fullArgs), cwd: runDir });
 
       const runResult = await this.runPi(command, fullArgs, {
         cwd: runDir,

@@ -79,6 +79,12 @@ providers:
 
 With a working directory, pi gets the read-only tools `read`, `grep`, `find`, and `ls`. Relative `working_dir` values are resolved from the directory containing the config file.
 
+:::warning
+
+pi does not sandbox these tools to `working_dir` — `read`/`grep`/`find` accept parent and absolute paths, so an adversarial prompt could read files outside it (e.g. `~/.aws/credentials`, dotfiles) into the model output. For evals with untrusted prompts, run pi inside a container or set `working_dir` in an isolated environment. Pass `no_tools: true` (or an empty `tools: []`) to keep a working directory chat-only.
+
+:::
+
 ### With Side Effects
 
 Pi has no built-in permission or sandbox system, so write access is opt-in:

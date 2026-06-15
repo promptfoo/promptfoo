@@ -6,7 +6,12 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
-import { findPiCliScript, PI_READONLY_TOOLS, PiProvider } from '../../src/providers/pi';
+import {
+  findPiCliScript,
+  PI_READONLY_TOOLS,
+  PiProvider,
+  redactArgsForLog,
+} from '../../src/providers/pi';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 
 vi.mock('../../src/cliState', () => ({
@@ -1356,6 +1361,33 @@ describe('PiProvider', () => {
       }
     });
 
+    it('fingerprints the default agent dir under an overridden child HOME', async () => {
+      enableCache();
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-home-'));
+      const settingsPath = path.join(home, '.pi', 'agent', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      try {
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
+        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
+        mockPiRun(defaultEvents('first'));
+        mockPiRun(defaultEvents('second'));
+        // HOME overridden via env, no agent_dir: pi reads <HOME>/.pi/agent.
+        const provider = new PiProvider({ config: { env: { HOME: home } } });
+
+        const first = await provider.callApi('same prompt');
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
+        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
+        const second = await provider.callApi('same prompt');
+
+        expect(first.output).toBe('first');
+        expect(second.output).toBe('second');
+        expect(second.cached).toBeFalsy();
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      } finally {
+        fs.rmSync(home, { recursive: true, force: true });
+      }
+    });
+
     it('keeps distinct prompts and models on separate cache entries', async () => {
       enableCache();
       mockPiRun(defaultEvents('a'));
@@ -1473,6 +1505,27 @@ describe('PiProvider', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+  });
+
+  describe('redactArgsForLog', () => {
+    it('redacts the value after a credential-bearing flag (space form)', () => {
+      expect(
+        redactArgsForLog(['--mode', 'json', '--api-key', 'sk-secret', '--thinking', 'high']),
+      ).toEqual(['--mode', 'json', '--api-key', '[redacted]', '--thinking', 'high']);
+    });
+
+    it('redacts the value in --flag=value form', () => {
+      expect(redactArgsForLog(['--auth-token=tok-123', '--model', 'openai/gpt-4o-mini'])).toEqual([
+        '--auth-token=[redacted]',
+        '--model',
+        'openai/gpt-4o-mini',
+      ]);
+    });
+
+    it('leaves non-secret flags and their values intact', () => {
+      const args = ['--mode', 'json', '--no-approve', '--model', 'anthropic/claude-sonnet-4-5'];
+      expect(redactArgsForLog(args)).toEqual(args);
     });
   });
 });
