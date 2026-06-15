@@ -1448,60 +1448,55 @@ describe('PiProvider', () => {
   });
 
   describe('tracing', () => {
+    let spanSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      spanSpy = vi.spyOn(genaiTracer, 'withGenAISpan');
+    });
+
+    afterEach(() => {
+      spanSpy.mockRestore();
+    });
+
     it('wraps the run in a GenAI span with the resolved system, model, and traceparent', async () => {
-      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
-      try {
-        mockPiRun(defaultEvents('traced answer'));
-        const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
-        const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      mockPiRun(defaultEvents('traced answer'));
+      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+      const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
 
-        const result = await provider.callApi('test prompt', {
-          prompt: { raw: 'test prompt', label: 'pi-label' },
-          vars: {},
-          traceparent,
-        });
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'pi-label' },
+        vars: {},
+        traceparent,
+      });
 
-        expect(result.output).toBe('traced answer');
-        expect(spy).toHaveBeenCalledTimes(1);
-        expect(spy.mock.calls[0][0]).toMatchObject({
-          system: 'openai',
-          operationName: 'chat',
-          model: 'openai/gpt-4o-mini',
-          providerId: 'pi',
-          traceparent,
-          promptLabel: 'pi-label',
-        });
-      } finally {
-        spy.mockRestore();
-      }
+      expect(result.output).toBe('traced answer');
+      expect(spanSpy).toHaveBeenCalledTimes(1);
+      expect(spanSpy.mock.calls[0][0]).toMatchObject({
+        system: 'openai',
+        operationName: 'chat',
+        model: 'openai/gpt-4o-mini',
+        providerId: 'pi',
+        traceparent,
+        promptLabel: 'pi-label',
+      });
     });
 
     it('does not open a span for a cache hit', async () => {
       enableCache();
-      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
-      try {
-        mockPiRun(defaultEvents('once'));
-        const provider = new PiProvider();
+      mockPiRun(defaultEvents('once'));
+      const provider = new PiProvider();
 
-        await provider.callApi('cache me'); // spawns -> 1 span
-        await provider.callApi('cache me'); // cache hit -> no span
+      await provider.callApi('cache me'); // spawns -> 1 span
+      await provider.callApi('cache me'); // cache hit -> no span
 
-        expect(spy).toHaveBeenCalledTimes(1);
-        expect(mockSpawn).toHaveBeenCalledTimes(1);
-      } finally {
-        spy.mockRestore();
-      }
+      expect(spanSpy).toHaveBeenCalledTimes(1);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
     });
 
     it('uses the pi system label for a bare default-model run', async () => {
-      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
-      try {
-        mockPiRun(defaultEvents());
-        await new PiProvider().callApi('test prompt');
-        expect(spy.mock.calls[0][0]).toMatchObject({ system: 'pi', model: 'default' });
-      } finally {
-        spy.mockRestore();
-      }
+      mockPiRun(defaultEvents());
+      await new PiProvider().callApi('test prompt');
+      expect(spanSpy.mock.calls[0][0]).toMatchObject({ system: 'pi', model: 'default' });
     });
   });
 

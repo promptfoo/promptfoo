@@ -13,6 +13,7 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../tracing/genaiTracer';
+import { sanitizeUrl } from '../util/sanitizer';
 import {
   type CacheCheckResult,
   cacheResponse,
@@ -86,9 +87,6 @@ const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json', 'SYSTEM.md', 
 // not bust the cache, matching the apiKey-independence guarantee.
 const SECRET_ENV_NAME_PATTERN = /(?:key|token|secret|password|passwd|credential|auth|cookie)/i;
 
-// Query-param names that carry credentials in URL-shaped env values.
-const SECRET_QUERY_PARAM_PATTERN = /(?:key|token|secret|password|credential|auth|sig|signature)/i;
-
 // Flag names whose VALUE is a credential (only reachable via user extra_args;
 // the provider never puts secrets on argv). Used to redact the debug-log argv.
 const SECRET_ARG_FLAG_PATTERN = /^--?[a-z0-9-]*(?:key|token|secret|password|credential|auth)/i;
@@ -127,25 +125,13 @@ export function redactArgsForLog(args: string[]): string[] {
  * hashed into the cache key. A value like a gateway base URL can carry secrets
  * in its userinfo or query string (e.g. `https://user:pass@gw/v1` or
  * `?token=...`); hashing those raw would violate the cache-key hygiene rule even
- * though only the hash persists. Non-URL values are returned unchanged.
+ * though only the hash persists. Delegates to the shared sanitizeUrl (which
+ * redacts credentials consistently, so cred-only differences still share a cache
+ * entry); the URL-shape guard skips sanitizeUrl's warn-on-unparseable path for
+ * the common non-URL env values, which are returned unchanged.
  */
 function sanitizeCacheValue(value: string): string {
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
-    return value;
-  }
-  try {
-    const url = new URL(value);
-    url.username = '';
-    url.password = '';
-    for (const key of [...url.searchParams.keys()]) {
-      if (SECRET_QUERY_PARAM_PATTERN.test(key)) {
-        url.searchParams.set(key, '[redacted]');
-      }
-    }
-    return url.toString();
-  } catch {
-    return value;
-  }
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? sanitizeUrl(value) : value;
 }
 
 /**
