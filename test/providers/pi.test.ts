@@ -950,6 +950,45 @@ describe('PiProvider', () => {
       }
     });
 
+    it('kills the process group on the exit fallback so a descendant is not orphaned', async () => {
+      vi.useFakeTimers();
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      try {
+        const child = new FakeChildProcess();
+        (child as { pid?: number }).pid = 5151;
+        mockSpawn.mockImplementationOnce(() => {
+          process.nextTick(() => {
+            child.stdout.emit(
+              'data',
+              `${JSON.stringify({
+                type: 'agent_end',
+                messages: [assistantMessage('done, child still running')],
+                willRetry: false,
+              })}\n`,
+            );
+            child.exitCode = 0;
+            child.emit('exit', 0);
+            // 'close' never fires: a backgrounded grandchild holds the pipes.
+          });
+          return child as never;
+        });
+        const provider = new PiProvider();
+
+        const promise = provider.callApi('test prompt');
+        await vi.advanceTimersByTimeAsync(1_000);
+        const result = await promise;
+
+        expect(result.output).toBe('done, child still running');
+        if (process.platform !== 'win32') {
+          // The lingering group is force-killed before we settle.
+          expect(killSpy).toHaveBeenCalledWith(-5151, 'SIGKILL');
+        }
+      } finally {
+        killSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
     it('short-circuits when the abort signal is already aborted', async () => {
       const controller = new AbortController();
       controller.abort();

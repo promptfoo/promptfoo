@@ -380,6 +380,12 @@ Important limits:
 - Prompts are delivered via pi's piped stdin, which trims surrounding whitespace
   (an all-whitespace prompt becomes empty), so whitespace-exact prompts are not
   faithfully represented; stdin is used to keep large prompts off argv.
+- Caching fingerprints only the `working_dir` tree, so a tool-enabled run that
+  reads files outside it (pi has no sandbox) can return a stale cached result if
+  those external files change; use `--no-cache` for such runs.
+- On pi auto-retry, reported `tokenUsage`/`cost` reflect the final attempt; pi
+  drops the failed attempt's message from its terminal `agent_end`, so discarded
+  attempts' tokens are not counted.
 
 Docs and examples:
 

@@ -138,11 +138,13 @@ Pi reads the prompt from piped stdin and trims leading/trailing whitespace (an a
 The provider returns:
 
 - `output` - Final assistant message text
-- `tokenUsage` - Tokens summed across all assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`)
+- `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`)
 - `cost` - USD cost as reported by pi
 - `metadata.toolCalls` - Tools the agent invoked, with arguments and error status
 - `metadata.model` / `metadata.provider_id` - Model that actually served the run
 - `raw` - JSON of all assistant messages
+
+If pi auto-retries after a transient provider/runtime error, `tokenUsage` and `cost` reflect the final (successful) attempt; tokens spent on the discarded failed attempts are not included.
 
 ## Caching
 
@@ -153,6 +155,7 @@ A few inputs are intentionally **not** part of the cache key, so use `--no-cache
 - Behavior-affecting values exported only in the ambient shell rather than set via `env` (set them through `env` to have them tracked).
 - pi's per-run system-prompt additions such as the current date and the (temporary) working directory.
 - Secrets passed through `extra_args` (e.g. `--api-key`) — don't put secrets there; use `apiKey`/`env` instead.
+- Files the agent reads outside `working_dir`. Only the `working_dir` tree is fingerprinted; pi has no sandbox, so a tool-enabled run can read other paths (`../data.txt`, `/tmp/...`) whose changes won't bust the cache.
 
 Use `--no-cache` during development:
 

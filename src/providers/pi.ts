@@ -926,7 +926,16 @@ export class PiProvider implements ApiProvider {
       // short flush grace period so the call can't hang forever.
       child.on('exit', (code, signal) => {
         exitSignal = signal;
-        setTimeout(() => resolveRun(code), STDIO_FLUSH_GRACE_MS).unref();
+        setTimeout(() => {
+          // If 'close' still hasn't fired, pi exited while a descendant (e.g. a
+          // backgrounded bash child) is holding the inherited pipes open. Kill
+          // the process group before settling so we don't leak that orphan after
+          // returning. When 'close' already fired, this is a no-op (settled).
+          if (!settled) {
+            signalGroup('SIGKILL');
+          }
+          resolveRun(code);
+        }, STDIO_FLUSH_GRACE_MS).unref();
       });
       child.on('close', (code, signal) => {
         exitSignal = signal ?? exitSignal;
