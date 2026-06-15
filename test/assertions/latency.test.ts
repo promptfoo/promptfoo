@@ -25,6 +25,18 @@ describe('handleLatency', () => {
     expect(handleLatency(params({ latencyMs: 1500 })).pass).toBe(false);
   });
 
+  it('throws when threshold is missing', () => {
+    expect(() => handleLatency(params({ assertion: { type: 'latency' }, latencyMs: 100 }))).toThrow(
+      'Latency assertion must have a threshold',
+    );
+  });
+
+  it('throws when latencyMs is not provided', () => {
+    expect(() => handleLatency(params({ latencyMs: undefined }))).toThrow(
+      'does not support cached results',
+    );
+  });
+
   describe('inverse (not-latency)', () => {
     it('fails when latency is within threshold', () => {
       const result = handleLatency(params({ latencyMs: 500, inverse: true }));

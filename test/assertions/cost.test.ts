@@ -25,6 +25,18 @@ describe('handleCost', () => {
     expect(handleCost(params({ cost: 0.02 })).pass).toBe(false);
   });
 
+  it('throws when threshold is missing', () => {
+    expect(() => handleCost(params({ assertion: { type: 'cost' }, cost: 0.005 }))).toThrow(
+      'Cost assertion must have a threshold',
+    );
+  });
+
+  it('throws when cost is not provided', () => {
+    expect(() => handleCost(params({ cost: undefined }))).toThrow(
+      'does not support providers that do not return cost',
+    );
+  });
+
   describe('inverse (not-cost)', () => {
     it('fails when cost is within threshold', () => {
       const result = handleCost(params({ cost: 0.005, inverse: true }));
