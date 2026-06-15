@@ -2240,6 +2240,50 @@ describe('runAssertion', () => {
         reason: 'Latency 1ms is greater than threshold 0ms',
       });
     });
+
+    it('should fail (not-latency) when latency is within threshold', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
+        latencyMs: 50,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Latency 50ms is less than or equal to threshold 100ms',
+      });
+    });
+
+    it('should pass (not-latency) when latency exceeds threshold', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
+        latencyMs: 1000,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
   });
 
   describe('perplexity assertion', () => {
@@ -2328,6 +2372,50 @@ describe('runAssertion', () => {
       // Perplexity will be > 0, so with threshold=0, should fail
       expect(result.pass).toBe(false);
     });
+
+    it('should fail (not-perplexity) when perplexity is within threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-perplexity',
+          threshold: 2,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Perplexity 1.28 is less than or equal to threshold 2',
+      });
+    });
+
+    it('should pass (not-perplexity) when perplexity exceeds threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-perplexity',
+          threshold: 0.2,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
   });
 
   describe('perplexity-score assertion', () => {
@@ -2351,6 +2439,8 @@ describe('runAssertion', () => {
         pass: true,
         reason: 'Assertion passed',
       });
+      // Forward variant keeps the raw normalized perplexity as its score.
+      expect(result.score).toBeCloseTo(0.4378, 3);
     });
 
     it('should fail when the perplexity-score assertion fails', async () => {
@@ -2415,6 +2505,54 @@ describe('runAssertion', () => {
 
       // Perplexity score will be > 0, so should pass with threshold=0
       expect(result.pass).toBe(true);
+    });
+
+    it('should fail (not-perplexity-score) when score is at or above threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-perplexity-score',
+          threshold: 0.25,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Perplexity score 0.44 is greater than or equal to threshold 0.25',
+      });
+      // Score is inverted for the not- variant so it stays correlated with pass.
+      expect(result.score).toBeCloseTo(0.5622, 3);
+    });
+
+    it('should pass (not-perplexity-score) when score is below threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-perplexity-score',
+          threshold: 0.5,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+      // Passing not- assertion contributes a high (inverted) score, not the raw 0.44.
+      expect(result.score).toBeCloseTo(0.5622, 3);
     });
   });
 
@@ -2505,6 +2643,88 @@ describe('runAssertion', () => {
         pass: false,
         reason: 'Cost 0.010 is greater than threshold 0',
       });
+    });
+
+    it('should fail (not-cost) when the cost is within threshold', async () => {
+      const cost = 0.0005;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.001,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Cost 0.00050 is less than or equal to threshold 0.001',
+      });
+    });
+
+    it('should pass (not-cost) when the cost exceeds threshold', async () => {
+      const cost = 0.002;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.001,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw when no threshold is provided', async () => {
+      const cost = 0.0005;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'cost',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion must have a threshold');
+    });
+
+    it('should throw when the provider does not return cost', async () => {
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ output: 'Some output' }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output' };
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'cost',
+            threshold: 0.001,
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion does not support providers that do not return cost');
     });
   });
 

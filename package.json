@@ -86,7 +86,7 @@
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "tsx src/main.ts",
+    "local": "tsx src/localEntrypoint.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
@@ -115,12 +115,12 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
-      "esbuild": "0.27.7"
+      "esbuild": "0.28.1"
     },
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -128,7 +128,7 @@
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
-      "esbuild": "0.28.0",
+      "esbuild": "0.28.1",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
@@ -185,14 +185,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.107.2",
-    "dompurify": "3.4.7",
+    "dompurify": "3.4.8",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.7"
+      "dompurify": "3.4.8"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.158",
+    "@anthropic-ai/claude-agent-sdk": "0.3.165",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -251,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.158",
+    "@anthropic-ai/claude-agent-sdk": "0.3.165",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -272,7 +272,7 @@
     "@openai/codex-sdk": "^0.130.0",
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.60.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.61.0",
     "@slack/web-api": "^7.15.2",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.18",
@@ -281,7 +281,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.18",
     "@swc/core-linux-x64-musl": "^1.15.18",
     "@swc/core-win32-x64-msvc": "^1.15.18",
-    "google-auth-library": "^10.6.2",
+    "google-auth-library": "^10.7.0",
     "hono": "^4.12.5",
     "ibm-cloud-sdk-core": "^5.4.11",
     "jks-js": "^1.1.5",

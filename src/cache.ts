@@ -13,7 +13,11 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
-import { getCloudBearerToken } from './util/fetch/monkeyPatchFetch';
+import {
+  getCloudBearerToken,
+  getCloudTaskTeamId,
+  PROMPTFOO_TEAM_ID_HEADER,
+} from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -410,6 +414,11 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const cloudAuth = getCloudBearerToken(url);
   if (cloudAuth && !headers.has('Authorization')) {
     headers.set('Authorization', cloudAuth);
+  }
+
+  const cloudTaskTeamId = getCloudTaskTeamId(url);
+  if (cloudTaskTeamId && !headers.has(PROMPTFOO_TEAM_ID_HEADER)) {
+    headers.set(PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
   }
 
   return Array.from(headers.entries())

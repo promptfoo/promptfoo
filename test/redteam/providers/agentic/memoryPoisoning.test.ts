@@ -129,6 +129,29 @@ describe('MemoryPoisoningProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
   });
 
+  it('should include target context in scenario generation requests', async () => {
+    provider = new MemoryPoisoningProvider({ config: { targetId: 'cloud-target-123' } });
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ memory: 'memory text', followUp: 'follow up text' }), {
+        status: 200,
+      }),
+    );
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: { metadata: { purpose: 'test purpose' } },
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const request = mockFetch.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'agentic:memory-poisoning-scenario',
+    });
+  });
+
   it('should accumulate token usage from all target provider calls', async () => {
     const scenario = {
       memory: 'memory text',

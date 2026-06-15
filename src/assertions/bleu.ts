@@ -20,14 +20,36 @@ import type { AssertionParams, GradingResult } from '../types/index';
  *
  * @param candidateLength - Length of candidate translation
  * @param referenceLength - Length of reference translation
- * @returns Brevity penalty score between 0 and 1
+ * @returns Brevity penalty in (0, 1] (1 when the candidate is at least as long as the reference)
  * @internal
  */
 function calculateBrevityPenalty(candidateLength: number, referenceLength: number): number {
   if (candidateLength > referenceLength) {
     return 1;
   }
-  return Math.exp(1 - candidateLength / referenceLength);
+  return Math.exp(1 - referenceLength / candidateLength);
+}
+
+/**
+ * Tokenizes text into lowercased, whitespace-delimited words.
+ *
+ * @internal
+ */
+function tokenize(text: string): string[] {
+  return text.toLowerCase().trim().split(/\s+/);
+}
+
+/**
+ * Counts how many times each n-gram occurs.
+ *
+ * @internal
+ */
+function countNGrams(ngrams: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const gram of ngrams) {
+    counts.set(gram, (counts.get(gram) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /**
@@ -51,51 +73,41 @@ export function calculateBleuScore(
     throw new Error('Weights must sum to 1');
   }
 
-  const candidateWords = candidate.toLowerCase().trim().split(/\s+/);
+  const candidateWords = tokenize(candidate);
+  const referenceWordsList = references.map(tokenize);
 
-  // Find reference with closest length to candidate
-  const refLengths = references.map((ref) => ref.toLowerCase().trim().split(/\s+/).length);
-  const closestRefLength = refLengths.reduce((prev, curr) =>
-    Math.abs(curr - candidateWords.length) < Math.abs(prev - candidateWords.length) ? curr : prev,
-  );
+  // Find reference length closest to the candidate length for the brevity penalty.
+  // On ties, prefer the shorter reference (BLEU / NLTK `closest_ref_length`
+  // convention) so the score does not depend on the order references are provided in.
+  const refLengths = referenceWordsList.map((words) => words.length);
+  const closestRefLength = refLengths.reduce((prev, curr) => {
+    const distCurr = Math.abs(curr - candidateWords.length);
+    const distPrev = Math.abs(prev - candidateWords.length);
+    return distCurr < distPrev || (distCurr === distPrev && curr < prev) ? curr : prev;
+  });
 
   const maxN = 4;
   const precisions: number[] = [];
 
   for (let n = 1; n <= maxN; n++) {
     const candidateNGrams = getNGrams(candidateWords, n);
-    let maxClippedCount = 0;
+    const candidateNGramCounts = countNGrams(candidateNGrams);
     const totalCount = candidateNGrams.length;
 
-    // Calculate n-gram matches against each reference
-    for (const reference of references) {
-      const referenceWords = reference.toLowerCase().trim().split(/\s+/);
-      const referenceNGrams = getNGrams(referenceWords, n);
-
-      const candidateNGramCounts = new Map<string, number>();
-      const referenceNGramCounts = new Map<string, number>();
-
-      for (const gram of referenceNGrams) {
-        referenceNGramCounts.set(gram, (referenceNGramCounts.get(gram) || 0) + 1);
-      }
-
-      for (const gram of candidateNGrams) {
-        candidateNGramCounts.set(gram, (candidateNGramCounts.get(gram) || 0) + 1);
-      }
+    // Clipped n-gram count against the best-matching reference
+    let maxClippedCount = 0;
+    for (const referenceWords of referenceWordsList) {
+      const referenceNGramCounts = countNGrams(getNGrams(referenceWords, n));
 
       let clippedCount = 0;
-
-      for (const [gram, count] of candidateNGramCounts.entries()) {
-        const refCount = referenceNGramCounts.get(gram) || 0;
-        clippedCount += Math.min(count, refCount);
+      for (const [gram, count] of candidateNGramCounts) {
+        clippedCount += Math.min(count, referenceNGramCounts.get(gram) ?? 0);
       }
 
-      // Take the maximum clipped count across all references
       maxClippedCount = Math.max(maxClippedCount, clippedCount);
     }
 
-    const precision = totalCount > 0 ? maxClippedCount / totalCount : 0;
-    precisions.push(precision);
+    precisions.push(totalCount > 0 ? maxClippedCount / totalCount : 0);
   }
 
   const bp = calculateBrevityPenalty(candidateWords.length, closestRefLength);
