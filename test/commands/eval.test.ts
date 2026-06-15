@@ -1957,12 +1957,16 @@ describe('evalCommand', () => {
 
     await doEval({ table: true, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37, 25, {
+      showAssertions: undefined,
+    });
 
     vi.mocked(generateTable).mockClear();
     await doEval({ table: true, tableCellMaxLength: 42, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42, 25, {
+      showAssertions: undefined,
+    });
   });
 
   it('should use default tableCellMaxLength behavior when not provided in config or CLI', async () => {
@@ -1988,7 +1992,46 @@ describe('evalCommand', () => {
 
     await doEval({ table: true, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined, 25, {
+      showAssertions: undefined,
+    });
+  });
+
+  it('should honor showAssertions from config and allow the CLI to override it', async () => {
+    const config = {
+      commandLineOptions: {
+        showAssertions: true,
+      },
+    } as UnifiedConfig;
+
+    vi.spyOn(Eval.prototype, 'getTable').mockResolvedValue({
+      head: { prompts: [], vars: [] },
+      body: [],
+    } as any);
+    vi.mocked(generateTable).mockReturnValue({ toString: () => 'rendered table' } as any);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ table: true, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined, 25, {
+      showAssertions: true,
+    });
+
+    vi.mocked(generateTable).mockClear();
+    await doEval({ table: true, showAssertions: false, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined, 25, {
+      showAssertions: false,
+    });
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {

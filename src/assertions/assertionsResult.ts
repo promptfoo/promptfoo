@@ -95,7 +95,21 @@ export class AssertionsResult {
   }) {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
-    this.componentResults[index] = result;
+
+    // Attach metric to result if provided and result doesn't already have one
+    // This ensures assert-sets and other aggregated results have proper metric names
+    let resultToStore = result;
+    if (metric && !result.assertion?.metric) {
+      if (result.assertion) {
+        // Assertion exists but without metric - add the metric
+        resultToStore = { ...result, assertion: { ...result.assertion, metric } };
+      } else {
+        // No assertion (e.g., assert-set aggregate result) - store metric in metadata
+        resultToStore = { ...result, metadata: { ...result.metadata, assertSetMetric: metric } };
+      }
+    }
+
+    this.componentResults[index] = resultToStore;
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
@@ -151,7 +165,7 @@ export class AssertionsResult {
     let pass = !this.failedReason;
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
 
-    if (this.threshold) {
+    if (this.threshold !== undefined) {
       // Existence of a test threshold overrides the pass/fail status of individual assertions
       pass = score >= this.threshold;
 
@@ -167,20 +181,75 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, and copy the assertion into the child results.
-    const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
-        return [
-          result,
-          ...result.componentResults.map((subResult) => ({
-            ...subResult,
-            assertion: subResult.assertion || result.assertion,
-          })),
-        ];
-      } else {
-        return result;
+    // Flatten nested component results while preserving enough metadata for
+    // display layers to rebuild the hierarchy without re-running assertions.
+    const flattenedComponentResults: GradingResult[] = [];
+    const flattenComponentResult = (
+      result: GradingResult,
+      options: {
+        parentAssertSetIndex?: number;
+        inheritedAssertion?: GradingResult['assertion'];
+      } = {},
+    ) => {
+      const currentIndex = flattenedComponentResults.length;
+      const rawChildResults =
+        result.componentResults?.filter((childResult): childResult is GradingResult =>
+          Boolean(childResult),
+        ) ?? [];
+      const hasFlattenedHierarchy = rawChildResults.some(
+        (childResult) => childResult.metadata?.parentAssertSetIndex !== undefined,
+      );
+      const childResults = hasFlattenedHierarchy
+        ? rawChildResults.filter(
+            (childResult) => childResult.metadata?.parentAssertSetIndex === undefined,
+          )
+        : rawChildResults;
+      const assertion = result.assertion || options.inheritedAssertion;
+      const assertionSetMetadata = result.metadata?.assertionSet as
+        | { threshold?: number; weight?: number }
+        | undefined;
+      const weight = result.assertion?.weight ?? assertionSetMetadata?.weight;
+      const metadata = { ...result.metadata };
+
+      if (options.parentAssertSetIndex !== undefined) {
+        metadata.parentAssertSetIndex = options.parentAssertSetIndex;
       }
-    });
+
+      if (childResults.length > 0) {
+        metadata.isAssertSet = true;
+        metadata.childCount = childResults.length;
+        const assertSetThreshold =
+          result.assertion?.threshold ??
+          result.metadata?.assertSetThreshold ??
+          assertionSetMetadata?.threshold;
+        if (assertSetThreshold !== undefined) {
+          metadata.assertSetThreshold = assertSetThreshold;
+        }
+      }
+
+      if (weight !== undefined) {
+        metadata.assertSetWeight = weight;
+      }
+
+      flattenedComponentResults.push({
+        ...result,
+        ...(assertion && { assertion }),
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      });
+
+      for (const childResult of childResults) {
+        flattenComponentResult(childResult, {
+          parentAssertSetIndex: currentIndex,
+          inheritedAssertion: assertion,
+        });
+      }
+    };
+
+    for (const result of this.componentResults) {
+      if (result) {
+        flattenComponentResult(result);
+      }
+    }
 
     const normalizedNamedScores: Record<string, number> = {};
     for (const [key, value] of Object.entries(this.namedScores)) {

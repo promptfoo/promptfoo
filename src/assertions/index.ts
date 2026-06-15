@@ -27,6 +27,7 @@ import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  type AssertionSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -745,39 +746,53 @@ export async function runAssertions({
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
-  const subAssertResults: AssertionsResult[] = [];
   const asserts: {
     assertion: Assertion;
     assertResult: AssertionsResult;
     index: number;
-  }[] = test.assert
-    .map((assertion, i) => {
-      if (assertion.type === 'assert-set') {
-        const subAssertResult = new AssertionsResult({
-          threshold: assertion.threshold,
-          parentAssertionSet: {
-            assertionSet: assertion,
-            index: i,
-          },
-        });
+  }[] = [];
+  const subAssertResults: {
+    assertResult: AssertionsResult;
+    parentAssertResult: AssertionsResult;
+    assertionSet: AssertionSet;
+    index: number;
+  }[] = [];
 
-        subAssertResults.push(subAssertResult);
+  const enqueueAssertion = (
+    assertion: AssertionOrSet,
+    assertResult: AssertionsResult,
+    index: number,
+  ) => {
+    if (assertion.type !== 'assert-set') {
+      asserts.push({ assertion, assertResult, index });
+      return;
+    }
 
-        return assertion.assert.map((subAssert, j) => {
-          return {
-            assertion: subAssert,
-            assertResult: subAssertResult,
-            index: j,
-          };
-        });
-      }
+    const subAssertResult = new AssertionsResult({
+      threshold: assertion.threshold,
+      parentAssertionSet: {
+        assertionSet: assertion,
+        index,
+      },
+    });
 
-      return { assertion, assertResult: mainAssertResult, index: i };
-    })
-    .flat();
+    subAssertResults.push({
+      assertResult: subAssertResult,
+      parentAssertResult: assertResult,
+      assertionSet: assertion,
+      index,
+    });
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+    assertion.assert.forEach((subAssert, subIndex) => {
+      enqueueAssertion(subAssert, subAssertResult, subIndex);
+    });
+  };
+
+  test.assert.forEach((assertion, index) => {
+    enqueueAssertion(assertion, mainAssertResult, index);
+  });
+
+  const shouldPreloadTrace = !!traceId && hasTraceAwareAssertions(test.assert);
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
@@ -821,20 +836,18 @@ export async function runAssertions({
     });
   });
 
-  await async.forEach(subAssertResults, async (subAssertResult) => {
-    const result = await subAssertResult.testResult();
-    const {
-      index,
-      assertionSet: { metric, weight },
-    } = subAssertResult.parentAssertionSet!;
+  for (const { assertResult, parentAssertResult, assertionSet, index } of subAssertResults
+    .slice()
+    .reverse()) {
+    const result = await assertResult.testResult();
 
-    mainAssertResult.addResult({
+    parentAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(metric, vars || test.vars || {}),
-      weight,
+      metric: renderMetricName(assertionSet.metric, vars || test.vars || {}),
+      weight: assertionSet.weight,
     });
-  });
+  }
 
   return mainAssertResult.testResult(assertScoringFunction);
 }

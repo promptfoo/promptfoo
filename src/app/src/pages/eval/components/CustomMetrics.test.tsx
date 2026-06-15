@@ -10,6 +10,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
+import type { AssertionHierarchyResult } from './assertionHierarchy';
+
 // Mock the hooks that make API calls or use crypto
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -302,10 +304,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
   });
 
-  it('should include a comment to fix the missing key prop warning', () => {
-    expect(true).toBe(true);
-  });
-
   it('correctly handles undefined metric values in lookup', () => {
     const lookupWithUndefined: Record<string, number | undefined> = {
       metric1: 10,
@@ -366,5 +364,246 @@ describe('CustomMetrics', () => {
     renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
 
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
+  });
+
+  describe('buildMetricResultLookup integration', () => {
+    it('renders AssertionChip with color coding when componentResults provided', () => {
+      const lookup = { 'test-metric': 0.75 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 0.75,
+          reason: 'Passed',
+          assertion: { type: 'equals', metric: 'test-metric' },
+        },
+      ];
+
+      const { container } = renderWithProviders(
+        <CustomMetrics lookup={lookup} componentResults={componentResults} />,
+      );
+
+      expect(screen.getByText('test-metric')).toBeInTheDocument();
+      // Should use AssertionChip which has green styling for passed
+      expect(container.querySelector('.bg-emerald-50')).toBeInTheDocument();
+    });
+
+    it('renders AssertionChip with red styling for failed assertions', () => {
+      const lookup = { 'failed-metric': 0.3 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: false,
+          score: 0.3,
+          reason: 'Failed',
+          assertion: { type: 'equals', metric: 'failed-metric' },
+        },
+      ];
+
+      const { container } = renderWithProviders(
+        <CustomMetrics lookup={lookup} componentResults={componentResults} />,
+      );
+
+      expect(screen.getByText('failed-metric')).toBeInTheDocument();
+      // Should use AssertionChip which has red styling for failed
+      expect(container.querySelector('.bg-red-50')).toBeInTheDocument();
+    });
+
+    it('keeps aggregated duplicate metrics neutral instead of selecting one result', () => {
+      const lookup = { Accuracy: 0.5 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Passed',
+          assertion: { type: 'equals', metric: 'Accuracy' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Failed',
+          assertion: { type: 'equals', metric: 'Accuracy' },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByTestId('metric-name-Accuracy')).toHaveTextContent('Accuracy');
+      expect(screen.getByTestId('metric-value-Accuracy')).toHaveTextContent('0.50');
+      expect(screen.queryByTestId('assertion-chip-Accuracy')).not.toBeInTheDocument();
+    });
+
+    it('identifies assert-sets and renders with chevron', () => {
+      const lookup = { 'assert-set': 1 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'All passed',
+          assertion: { type: 'equals', metric: 'assert-set' },
+          metadata: { isAssertSet: true, assertSetThreshold: 1 },
+        },
+        {
+          pass: true,
+          score: 1,
+          reason: 'Child passed',
+          assertion: { type: 'equals', metric: 'child' },
+          metadata: { parentAssertSetIndex: 0 },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('assert-set')).toBeInTheDocument();
+      // Assert-sets should have a chevron button for expansion
+      expect(screen.getByLabelText('Show assert-set details')).toBeInTheDocument();
+    });
+
+    it('uses hierarchy result data for child metrics that are shown separately', () => {
+      const lookup = { parent: 1, child: 1 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Parent passed',
+          assertion: { type: 'equals', metric: 'parent' },
+          metadata: { isAssertSet: true },
+        },
+        {
+          pass: true,
+          score: 1,
+          reason: 'Child passed',
+          assertion: { type: 'equals', metric: 'child' },
+          metadata: { parentAssertSetIndex: 0 },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('parent')).toBeInTheDocument();
+      expect(screen.getByText('child')).toBeInTheDocument();
+      expect(screen.queryByTestId('metric-name-child')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assertion-chip-child')).toHaveClass('bg-emerald-50');
+    });
+
+    it('uses assertSetMetric from metadata as metric name', () => {
+      const lookup = { 'metadata-metric': 1 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Passed',
+          assertion: { type: 'equals' },
+          metadata: { assertSetMetric: 'metadata-metric', isAssertSet: true },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('metadata-metric')).toBeInTheDocument();
+    });
+
+    it('falls back to assertion type when metric not available', () => {
+      const lookup = { 'test-type': 0.5 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 0.5,
+          reason: 'Passed',
+          assertion: { type: 'equals' },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('test-type')).toBeInTheDocument();
+    });
+
+    it('handles empty componentResults gracefully', () => {
+      const lookup = { metric1: 10 };
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={[]} />);
+
+      // Should fall back to neutral styling
+      expect(screen.getByTestId('metric-name-metric1')).toHaveTextContent('metric1');
+    });
+
+    it('handles null/undefined results in componentResults', () => {
+      const lookup = { metric1: 10 };
+      const componentResults: AssertionHierarchyResult[] = [
+        null as unknown as AssertionHierarchyResult,
+        {
+          pass: true,
+          score: 10,
+          reason: 'Passed',
+          assertion: { type: 'equals', metric: 'metric1' },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('metric1')).toBeInTheDocument();
+    });
+
+    it('groups multiple children under same parent assert-set', () => {
+      const lookup = { parent: 0.67 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 0.67,
+          reason: 'Parent passed',
+          assertion: { type: 'equals', metric: 'parent' },
+          metadata: { isAssertSet: true, assertSetThreshold: 0.5 },
+        },
+        {
+          pass: true,
+          score: 1,
+          reason: 'Child 1 passed',
+          assertion: { type: 'equals', metric: 'child1' },
+          metadata: { parentAssertSetIndex: 0 },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Child 2 failed',
+          assertion: { type: 'equals', metric: 'child2' },
+          metadata: { parentAssertSetIndex: 0 },
+        },
+        {
+          pass: true,
+          score: 1,
+          reason: 'Child 3 passed',
+          assertion: { type: 'equals', metric: 'child3' },
+          metadata: { parentAssertSetIndex: 0 },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByText('parent')).toBeInTheDocument();
+      // All three children should be associated with the parent
+      // We can verify by checking the chevron exists for expansion
+      expect(screen.getByLabelText('Show parent details')).toBeInTheDocument();
+    });
+
+    it('falls back to neutral styling when metric not in componentResults', () => {
+      const lookup = { 'metric-not-in-results': 10, 'metric-in-results': 5 };
+      const componentResults: AssertionHierarchyResult[] = [
+        {
+          pass: true,
+          score: 5,
+          reason: 'Passed',
+          assertion: { type: 'equals', metric: 'metric-in-results' },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      // Metric in results should use AssertionChip
+      expect(screen.getByText('metric-in-results')).toBeInTheDocument();
+
+      // Metric not in results should use fallback neutral styling
+      const notInResults = screen.getByTestId('metric-name-metric-not-in-results');
+      expect(notInResults).toBeInTheDocument();
+      expect(notInResults.textContent).toBe('metric-not-in-results');
+    });
   });
 });

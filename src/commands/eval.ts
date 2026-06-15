@@ -146,6 +146,7 @@ export function evalCommand(
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
     .option('--table-cell-max-length <number>', 'Truncate console table cells to this length')
+    .option('--show-assertions', 'Show detailed assertion table for each result in CLI output')
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
     .option(

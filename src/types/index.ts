@@ -114,6 +114,7 @@ export const CommandLineOptionsSchema = z.object({
   write: z.boolean().optional(),
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
+  showAssertions: z.boolean().optional(),
   share: z.boolean().optional(),
   noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
@@ -563,6 +564,16 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Index of parent assert-set in componentResults, for hierarchy display
+    parentAssertSetIndex?: number;
+    // True when this result represents an assert-set aggregate
+    isAssertSet?: boolean;
+    // Number of immediate child assertions in this assert-set
+    childCount?: number;
+    // Threshold applied to this assert-set
+    assertSetThreshold?: number;
+    // Weight of this assertion or assert-set
+    assertSetWeight?: number;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
@@ -687,24 +698,6 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-export const AssertionSetSchema = z.object({
-  type: z.literal('assert-set'),
-  // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)),
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
-  // The required score for this assert set. If not provided, the test case is graded pass/fail.
-  threshold: z.number().optional(),
-
-  // An external mapping of arbitrary strings to values that is defined
-  // for every assertion in the set and passed into each assert
-  config: z.record(z.string(), z.any()).optional(),
-});
-
-export type AssertionSet = z.infer<typeof AssertionSetSchema>;
-
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
@@ -741,12 +734,41 @@ export const AssertionSchema = z.object({
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
+export interface AssertionSet {
+  type: 'assert-set';
+  assert: AssertionOrSet[];
+  weight?: number;
+  metric?: string;
+  threshold?: number;
+  config?: Record<string, any>;
+}
+
+export type AssertionOrSet = Assertion | AssertionSet;
+
+export const AssertionSetSchema: z.ZodType<AssertionSet> = z.object({
+  type: z.literal('assert-set'),
+  // Sub assertions to be run for this assertion set
+  assert: z.array(z.lazy(() => AssertionOrSetSchema)),
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight: z.number().optional(),
+  // Tag this assertion result as a named metric
+  metric: z.string().optional(),
+  // The required score for this assert set. If not provided, the test case is graded pass/fail.
+  threshold: z.number().optional(),
+
+  // An external mapping of arbitrary strings to values that is defined
+  // for every assertion in the set and passed into each assert
+  config: z.record(z.string(), z.any()).optional(),
+});
+
 /**
  * Schema for validating individual assertions (regular or assert-set).
  * Used for runtime validation of user-provided config.
  */
-export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
-export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
+export const AssertionOrSetSchema: z.ZodType<AssertionOrSet> = z.union([
+  AssertionSetSchema,
+  AssertionSchema,
+]);
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;

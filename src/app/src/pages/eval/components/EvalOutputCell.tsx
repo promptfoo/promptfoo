@@ -35,7 +35,7 @@ import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
-import FailReasonCarousel from './FailReasonCarousel';
+import FailReasonCarousel, { type FailReasonWithContext } from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -231,24 +231,48 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
 }
 
 function getFailAndPassReasons(output: EvaluateTableOutput): {
-  failReasons: string[];
+  failReasons: FailReasonWithContext[];
   passReasons: string[];
 } {
-  const failReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  const failReasons: FailReasonWithContext[] = [];
+  const componentResults = output.gradingResult?.componentResults ?? [];
+  const parentLookup = new Map<number, { metric?: string; pass: boolean }>();
+
+  componentResults.forEach((result, index) => {
+    if (result?.metadata?.isAssertSet) {
+      parentLookup.set(index, {
+        metric:
+          result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type,
+        pass: result.pass,
+      });
+    }
+  });
+
+  componentResults.forEach((result) => {
+    if (!result || result.pass || !result.reason) {
+      return;
+    }
+
+    const parentIndex = result.metadata?.parentAssertSetIndex;
+    const parent = parentIndex === undefined ? undefined : parentLookup.get(parentIndex);
+    failReasons.push({
+      reason: result.reason,
+      metric:
+        result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type,
+      parentMetric: parent?.metric,
+      parentPassed: parent?.pass,
+    });
+  });
 
   const passReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? result.pass : false))
+    componentResults
+      .filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
-      failReasons: [output.error, ...failReasons],
+      failReasons: [{ reason: output.error }, ...failReasons],
       passReasons,
     };
   }
@@ -936,6 +960,7 @@ function renderStatusBlock({
   showPassFail,
   statusClass,
   namedScores,
+  componentResults,
   passFailText,
   scoreString,
   providerOverride,
@@ -947,10 +972,11 @@ function renderStatusBlock({
   showPassFail: boolean;
   statusClass: string;
   namedScores: Record<string, number>;
+  componentResults?: GradingResult[];
   passFailText: React.ReactNode;
   scoreString: string;
   providerOverride: React.ReactNode;
-  failReasons: string[];
+  failReasons: FailReasonWithContext[];
   showMetricPills: boolean;
   showPassReasons: boolean;
   passReasons: string[];
@@ -968,7 +994,9 @@ function renderStatusBlock({
         </div>
         {providerOverride}
       </div>
-      {showMetricPills && <CustomMetrics lookup={namedScores} />}
+      {showMetricPills && (
+        <CustomMetrics lookup={namedScores} componentResults={componentResults} />
+      )}
       {failReasons.length > 0 && (
         <span className="fail-reason">
           <FailReasonCarousel failReasons={failReasons} />
@@ -1587,6 +1615,7 @@ function EvalOutputCell({
         showPassFail,
         statusClass,
         namedScores: output.namedScores ?? {},
+        componentResults: output.gradingResult?.componentResults,
         passFailText,
         scoreString,
         providerOverride,

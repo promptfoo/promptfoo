@@ -78,6 +78,10 @@ tests:
 
 In the above example if all assertions of the `assert-set` pass the entire `assert-set` passes.
 
+An `assert-set` can also contain another `assert-set`. Nested sets keep thresholds,
+weights, and named metrics local to each group while the result hierarchy shows
+how the nested checks contributed.
+
 There are cases where you may only need a certain number of assertions to pass. Here you can use `threshold`.
 
 Example - if one of two assertions need to pass or 50%:
@@ -99,13 +103,13 @@ tests:
 
 ## Assertion Set properties
 
-| Property  | Type             | Required | Description                                                                                                          |
-| --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| type      | string           | Yes      | Must be assert-set                                                                                                   |
-| assert    | array of asserts | Yes      | Assertions to be run for the set                                                                                     |
-| threshold | number           | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25 |
-| weight    | number           | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                       |
-| metric    | string           | No       | Metric name for this assertion set within the test                                                                   |
+| Property  | Type                            | Required | Description                                                                                                          |
+| --------- | ------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| type      | string                          | Yes      | Must be assert-set                                                                                                   |
+| assert    | array of asserts or assert-sets | Yes      | Assertions or nested assertion sets to be run for the set                                                            |
+| threshold | number                          | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25 |
+| weight    | number                          | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                       |
+| metric    | string                          | No       | Metric name for this assertion set within the test                                                                   |
 
 ## Assertion types
 

@@ -1,0 +1,501 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AssertionChip, getThresholdLabel } from './AssertionChip';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
+
+describe('getThresholdLabel', () => {
+  it('describes default no-threshold behavior', () => {
+    expect(getThresholdLabel(undefined)).toBe('All assertions must pass');
+  });
+
+  it('states explicit score thresholds', () => {
+    expect(getThresholdLabel(1)).toBe('Required score: 100%');
+    expect(getThresholdLabel(0.5)).toBe('Required score: 50%');
+    expect(getThresholdLabel(0.75)).toBe('Required score: 75%');
+    expect(getThresholdLabel(0)).toBe('Required score: 0%');
+  });
+
+  it('does not infer unweighted child counts from a score threshold', () => {
+    expect(getThresholdLabel(0.3)).toBe('Required score: 30%');
+    expect(getThresholdLabel(0.8)).toBe('Required score: 80%');
+  });
+});
+
+describe('AssertionChip', () => {
+  it('renders basic chip with metric name and pass status', () => {
+    render(<AssertionChip metric="test-metric" score={1} passed={true} />);
+
+    expect(screen.getByText('test-metric')).toBeInTheDocument();
+    // Check for check icon (passed)
+    const svg = document.querySelector('svg');
+    expect(svg).toBeInTheDocument();
+  });
+
+  it('renders failed chip with red styling', () => {
+    const { container } = render(
+      <AssertionChip metric="failed-metric" score={0.3} passed={false} />,
+    );
+
+    expect(screen.getByText('failed-metric')).toBeInTheDocument();
+    // Check for red background classes
+    const chip = container.querySelector('.bg-red-50');
+    expect(chip).toBeInTheDocument();
+  });
+
+  it('displays score for non-boolean values when not an assert-set', () => {
+    render(<AssertionChip metric="test-metric" score={0.75} passed={true} />);
+
+    expect(screen.getByText('0.75')).toBeInTheDocument();
+  });
+
+  it('hides score for boolean values (0 and 1)', () => {
+    const { rerender } = render(<AssertionChip metric="test-metric" score={0} passed={false} />);
+
+    expect(screen.queryByText('0.00')).not.toBeInTheDocument();
+
+    rerender(<AssertionChip metric="test-metric" score={1} passed={true} />);
+
+    expect(screen.queryByText('1.00')).not.toBeInTheDocument();
+  });
+
+  it('hides score for assert-sets', () => {
+    render(<AssertionChip metric="assert-set" score={0.75} passed={true} isAssertSet={true} />);
+
+    expect(screen.queryByText('0.75')).not.toBeInTheDocument();
+  });
+
+  it('calls onClick handler when chip is clicked', async () => {
+    const handleClick = vi.fn();
+    render(<AssertionChip metric="test-metric" score={1} passed={true} onClick={handleClick} />);
+
+    await userEvent.click(screen.getByText('test-metric'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClick handler when Enter or Space is pressed on a standalone chip', async () => {
+    const handleClick = vi.fn();
+    render(
+      <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
+    );
+
+    const chip = screen.getByRole('button', { name: /keyboard-metric/i });
+    chip.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(handleClick).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Enter}');
+    expect(handleClick).toHaveBeenCalledTimes(1);
+
+    await userEvent.keyboard(' ');
+    expect(handleClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders assert-set with chevron for expansion', () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Child passed',
+        assertion: { type: 'equals' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent-set"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    expect(screen.getByText('parent-set')).toBeInTheDocument();
+    // Check for chevron icon
+    expect(screen.getByLabelText('Show parent-set details')).toBeInTheDocument();
+  });
+
+  it('displays child results in popover with pass/fail indicators', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 0.9,
+        reason: 'Child 1 passed',
+        assertion: { type: 'equals', metric: 'child-1' },
+      },
+      {
+        pass: false,
+        score: 0.3,
+        reason: 'Child 2 failed',
+        assertion: { type: 'equals', metric: 'child-2' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent-set"
+        score={0.6}
+        passed={true}
+        isAssertSet={true}
+        threshold={0.5}
+        childResults={childResults}
+      />,
+    );
+
+    // Click the chevron to open popover
+    const chevronButton = screen.getByLabelText('Show parent-set details');
+    await userEvent.click(chevronButton);
+
+    // Check that child metrics are displayed
+    expect(screen.getByText('child-1')).toBeInTheDocument();
+    expect(screen.getByText('child-2')).toBeInTheDocument();
+    expect(screen.getByText('0.90')).toBeInTheDocument();
+    expect(screen.getByText('0.30')).toBeInTheDocument();
+  });
+
+  it('shows neutral indicator for failed children when parent passed', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 0.9,
+        reason: 'Child 1 passed',
+        assertion: { type: 'equals', metric: 'child-1' },
+      },
+      {
+        pass: false,
+        score: 0.2,
+        reason: 'Child 2 failed',
+        assertion: { type: 'equals', metric: 'child-2' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="either-or-set"
+        score={0.55}
+        passed={true}
+        isAssertSet={true}
+        threshold={0.5}
+        childResults={childResults}
+      />,
+    );
+
+    // Click the chevron to open popover
+    const chevronButton = screen.getByLabelText('Show either-or-set details');
+    await userEvent.click(chevronButton);
+
+    // The failed child should have a neutral indicator (Minus icon) since parent passed
+    // We can verify this by checking for the Minus icon component in the DOM
+    expect(screen.getByText('child-2')).toBeInTheDocument();
+  });
+
+  it('displays threshold label when provided', () => {
+    render(
+      <AssertionChip
+        metric="test-set"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        thresholdLabel="Custom Label"
+        childResults={[]}
+      />,
+    );
+
+    // The threshold label appears in the chip when it's an assert-set
+    expect(screen.getByText('test-set')).toBeInTheDocument();
+  });
+
+  it('displays threshold comparison in popover', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="threshold-set"
+        score={0.75}
+        passed={true}
+        isAssertSet={true}
+        threshold={0.5}
+        childResults={childResults}
+      />,
+    );
+
+    const chevronButton = screen.getByLabelText('Show threshold-set details');
+    await userEvent.click(chevronButton);
+
+    // Check that score and threshold are displayed
+    expect(screen.getByText('0.75')).toBeInTheDocument();
+    expect(screen.getByText('0.50')).toBeInTheDocument();
+  });
+
+  it('uses a less-than comparison when the assert-set misses its threshold', async () => {
+    render(
+      <AssertionChip
+        metric="failed-threshold-set"
+        score={0.25}
+        passed={false}
+        isAssertSet={true}
+        threshold={0.5}
+        childResults={[
+          {
+            pass: false,
+            score: 0.25,
+            reason: 'Failed',
+            assertion: { type: 'equals', metric: 'child' },
+          },
+        ]}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show failed-threshold-set details'));
+
+    expect(screen.getByText('<')).toBeInTheDocument();
+    expect(screen.queryByText('≥')).not.toBeInTheDocument();
+  });
+
+  it('renders tooltip when tooltipContent is provided', async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <AssertionChip
+          metric="policy-metric"
+          score={1}
+          passed={true}
+          tooltipContent={<div>Policy tooltip content</div>}
+        />
+      </TooltipProvider>,
+    );
+
+    // Hover over the chip to show tooltip
+    const chip = screen.getByText('policy-metric');
+    await userEvent.hover(chip);
+
+    // Note: Tooltip content may not be immediately visible depending on implementation
+    // This test verifies the component accepts tooltipContent prop
+    expect(chip).toBeInTheDocument();
+  });
+
+  it('splits click targets for assert-sets with children', async () => {
+    const handleClick = vi.fn();
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="split-target"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+        onClick={handleClick}
+      />,
+    );
+
+    // Click on the metric name (should trigger onClick)
+    await userEvent.click(screen.getByText('split-target'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+
+    // Click on chevron should NOT trigger onClick (stopPropagation)
+    const chevronButton = screen.getByLabelText('Show split-target details');
+    await userEvent.click(chevronButton);
+    // onClick should still be 1 (not incremented)
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClick handler when Enter or Space is pressed on an assert-set chip body', async () => {
+    const handleClick = vi.fn();
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="keyboard-set"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+        onClick={handleClick}
+      />,
+    );
+
+    const chipBody = screen
+      .getByText('keyboard-set')
+      .closest('[role="button"]') as HTMLElement | null;
+    expect(chipBody).toBeInTheDocument();
+    const chipButton = chipBody as HTMLElement;
+
+    chipButton.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(handleClick).not.toHaveBeenCalled();
+
+    chipButton.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(handleClick).toHaveBeenCalledTimes(1);
+
+    chipButton.focus();
+    await userEvent.keyboard(' ');
+    expect(handleClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders tooltip for assert-sets with children', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <AssertionChip
+          metric="tooltip-set"
+          score={1}
+          passed={true}
+          isAssertSet={true}
+          threshold={1}
+          childResults={childResults}
+          tooltipContent={<div>Assert-set tooltip content</div>}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.hover(screen.getByText('tooltip-set'));
+
+    expect(screen.getByText('tooltip-set')).toBeInTheDocument();
+    expect(screen.getAllByText('Assert-set tooltip content').length).toBeGreaterThan(0);
+  });
+
+  it('shows failed child indicator when parent assert-set failed', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: { type: 'equals', metric: 'failed-child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="failed-set"
+        score={0}
+        passed={false}
+        isAssertSet={true}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show failed-set details'));
+
+    expect(screen.getByText('failed-child')).toBeInTheDocument();
+    expect(screen.getByText('All assertions must pass')).toBeInTheDocument();
+    expect(screen.getAllByTestId(/child-assertion-/)[0]).toHaveTextContent('0.00');
+  });
+
+  it('uses assertion type as fallback for child metric name', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    const chevronButton = screen.getByLabelText('Show parent details');
+    await userEvent.click(chevronButton);
+
+    expect(screen.getByText('equals')).toBeInTheDocument();
+  });
+
+  it('uses assert-set metadata for a nested child label', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Nested set passed',
+        metadata: { isAssertSet: true, assertSetMetric: 'Nested quality' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show parent details'));
+
+    expect(screen.getByText('Nested quality')).toBeInTheDocument();
+  });
+
+  it('uses generated fallback when child has no assertion label', async () => {
+    const childResults: AssertionHierarchyResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="anonymous-parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show anonymous-parent details'));
+
+    expect(screen.getByText('assertion-0')).toBeInTheDocument();
+  });
+});

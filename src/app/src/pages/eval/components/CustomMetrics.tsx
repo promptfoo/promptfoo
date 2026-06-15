@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react';
+
 import {
   deserializePolicyIdFromMetric,
   determinePolicyTypeFromId,
@@ -7,19 +9,25 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
-import { useState } from 'react';
-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { ExternalLink } from 'lucide-react';
 import useCloudConfig from '../../../hooks/useCloudConfig';
+import AssertionChip, { getThresholdLabel } from './AssertionChip';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
+
+import type { AssertionHierarchyResult } from './assertionHierarchy';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
+  /**
+   * Component results from the grading result, provides hierarchy context for assert-sets.
+   * When provided, chips will be color-coded (pass/fail) and assert-sets will be expandable.
+   */
+  componentResults?: AssertionHierarchyResult[];
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -63,23 +71,101 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
+/**
+ * Build a lookup from metric names to their GradingResult data.
+ * This maps metrics to their pass/fail status, whether they're assert-sets, and child results.
+ */
+function buildMetricResultLookup(componentResults: AssertionHierarchyResult[] | undefined): Map<
+  string,
+  {
+    result: AssertionHierarchyResult;
+    isAssertSet: boolean;
+    childResults: AssertionHierarchyResult[];
+  }
+> {
+  const lookup = new Map<
+    string,
+    {
+      result: AssertionHierarchyResult;
+      isAssertSet: boolean;
+      childResults: AssertionHierarchyResult[];
+    }
+  >();
+  const ambiguousMetrics = new Set<string>();
+
+  if (!componentResults) {
+    return lookup;
+  }
+
+  const indexedResults = componentResults.map((result, index) => ({ result, index }));
+  const childResultsByParentIndex = new Map<number, AssertionHierarchyResult[]>();
+
+  for (const { result } of indexedResults) {
+    const parentIndex = result?.metadata?.parentAssertSetIndex;
+    if (parentIndex === undefined) {
+      continue;
+    }
+
+    const children = childResultsByParentIndex.get(parentIndex) ?? [];
+    children.push(result);
+    childResultsByParentIndex.set(parentIndex, children);
+  }
+
+  for (const { result, index } of indexedResults) {
+    if (!result) {
+      continue;
+    }
+
+    const metric =
+      result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type || '';
+
+    if (!metric) {
+      continue;
+    }
+
+    const isAssertSet = result.metadata?.isAssertSet === true;
+    const childResults = isAssertSet ? (childResultsByParentIndex.get(index) ?? []) : [];
+
+    // A named score may aggregate several results, so one row cannot supply its status.
+    if (ambiguousMetrics.has(metric)) {
+      continue;
+    }
+    if (lookup.has(metric)) {
+      lookup.delete(metric);
+      ambiguousMetrics.add(metric);
+      continue;
+    }
+
+    lookup.set(metric, { result, isAssertSet, childResults });
+  }
+
+  return lookup;
+}
+
 const CustomMetrics = ({
   lookup,
   counts,
   metricTotals,
+  componentResults,
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
-  // Validate props BEFORE hooks to comply with Rules of Hooks
-  if (!lookup || !Object.keys(lookup).length) {
-    return null;
-  }
-
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
+
+  // Memoize the metric result lookup to avoid rebuilding on every render
+  const metricResultLookup = useMemo(
+    () => buildMetricResultLookup(componentResults),
+    [componentResults],
+  );
+
+  // Early return AFTER hooks to comply with Rules of Hooks
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
 
   const metrics = Object.entries(lookup).sort(([metricA], [metricB]) =>
     metricA.localeCompare(metricB),
@@ -123,7 +209,38 @@ const CustomMetrics = ({
           }
         }
 
-        return metric && typeof score !== 'undefined' ? (
+        if (!metric || typeof score === 'undefined') {
+          return null;
+        }
+
+        // Check if we have result data for this metric
+        const resultData = metricResultLookup.get(metric);
+
+        // If we have result data, use the new AssertionChip with color coding
+        if (resultData) {
+          const { result, isAssertSet, childResults } = resultData;
+          const threshold = result.metadata?.assertSetThreshold;
+          const thresholdLabel = isAssertSet ? getThresholdLabel(threshold) : undefined;
+
+          return (
+            <div data-testid={`metric-${metric}`} key={`${metric}-${score}`}>
+              <AssertionChip
+                metric={displayLabel}
+                score={score}
+                passed={result.pass}
+                isAssertSet={isAssertSet}
+                threshold={threshold}
+                thresholdLabel={thresholdLabel}
+                childResults={childResults}
+                tooltipContent={tooltipContent}
+                onClick={() => handleClick(metric)}
+              />
+            </div>
+          );
+        }
+
+        // Fall back to neutral styling when no component results (backward compat)
+        return (
           <div
             data-testid={`metric-${metric}`}
             className="metric-chip filterable"
@@ -158,7 +275,7 @@ const CustomMetrics = ({
               </TooltipContent>
             </Tooltip>
           </div>
-        ) : null;
+        );
       })}
       {metrics.length > truncationCount && (
         <button

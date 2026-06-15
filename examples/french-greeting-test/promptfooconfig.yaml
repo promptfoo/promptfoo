@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "Require a friendly French greeting that includes 'Bonjour' and stays within budget (either cheap or fast)."
+prompts:
+  - 'Greet the user in French.'
+providers:
+  - openai:chat:gpt-5.4-mini
+
+tests:
+  - type: assert-set
+    threshold: 0.8
+    assert:
+      - type: contains
+        value: 'Bonjour'
+        weight: 2
+        metric: Correctness
+      - type: llm-rubric
+        value: 'Tone is friendly and the text is in French.'
+        weight: 1
+        metric: Tone
+      - type: answer-relevance
+        threshold: 0.5
+        weight: 1
+        metric: Topicality
+      - type: assert-set
+        threshold: 0.5
+        metric: Performance
+        assert:
+          - type: cost
+            threshold: 0.0008
+          - type: latency
+            threshold: 150

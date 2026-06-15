@@ -84,6 +84,7 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
+  showAssertions: z.boolean().optional(),
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -950,6 +951,8 @@ export async function doEval(
       const outputTable = generateTable(
         table,
         cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
+        25,
+        { showAssertions: cmdObj.showAssertions ?? commandLineOptions?.showAssertions },
       );
 
       logger.info('\n' + outputTable.toString());

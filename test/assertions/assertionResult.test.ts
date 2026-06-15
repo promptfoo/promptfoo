@@ -83,6 +83,12 @@ describe('AssertionsResult', () => {
       namedScoreWeights: {
         [metric]: 1,
       },
+      componentResults: [
+        {
+          ...succeedingResult,
+          metadata: { assertSetMetric: metric },
+        },
+      ],
     });
   });
 
@@ -139,6 +145,22 @@ describe('AssertionsResult', () => {
       pass: false,
       reason: 'Aggregate score 0.40 < 0.5 threshold',
       score: 0.4,
+      componentResults: [failingResult],
+    });
+  });
+
+  it('respects an explicit zero threshold', async () => {
+    assertionsResult = new AssertionsResult({ threshold: 0 });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: failingResult,
+    });
+
+    await expect(assertionsResult.testResult()).resolves.toEqual({
+      ...testResult,
+      reason: 'Aggregate score 0.00 ≥ 0 threshold',
+      score: 0,
       componentResults: [failingResult],
     });
   });
@@ -262,15 +284,66 @@ describe('AssertionsResult', () => {
 
     expect(result.componentResults).toBeDefined();
     expect(result.componentResults).toHaveLength(3);
-    expect(result.componentResults?.[0]).toEqual(nestedResult);
+    expect(result.componentResults?.[0]).toEqual({
+      ...nestedResult,
+      metadata: { isAssertSet: true, childCount: 2 },
+    });
     expect(result.componentResults?.[1]).toEqual({
       ...nestedResult.componentResults?.[0],
       assertion: nestedResult.componentResults?.[0].assertion || nestedResult.assertion,
+      metadata: { parentAssertSetIndex: 0 },
     });
     expect(result.componentResults?.[2]).toEqual({
       ...nestedResult.componentResults?.[1],
       assertion: nestedResult.componentResults?.[1].assertion || nestedResult.assertion,
+      metadata: { parentAssertSetIndex: 0 },
     });
+  });
+
+  it('recursively flattens nested componentResults with parent indexes', async () => {
+    const nestedResult: GradingResult = {
+      pass: false,
+      score: 0.5,
+      reason: 'Outer set failed',
+      assertion: { type: 'contains', metric: 'outer', threshold: 1 },
+      componentResults: [
+        {
+          pass: false,
+          score: 0.5,
+          reason: 'Inner set failed',
+          assertion: { type: 'contains', metric: 'inner', threshold: 1 },
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Leaf failed',
+              assertion: { type: 'contains', metric: 'leaf' },
+            },
+          ],
+        },
+      ],
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: nestedResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result.componentResults).toHaveLength(3);
+    expect(result.componentResults?.[0].metadata).toEqual({
+      isAssertSet: true,
+      childCount: 1,
+      assertSetThreshold: 1,
+    });
+    expect(result.componentResults?.[1].metadata).toEqual({
+      parentAssertSetIndex: 0,
+      isAssertSet: true,
+      childCount: 1,
+      assertSetThreshold: 1,
+    });
+    expect(result.componentResults?.[2].metadata).toEqual({ parentAssertSetIndex: 1 });
   });
 
   describe('noAssertsResult', () => {
