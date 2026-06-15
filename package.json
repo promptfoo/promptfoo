@@ -192,7 +192,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.161",
+    "@anthropic-ai/claude-agent-sdk": "0.3.165",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -251,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.161",
+    "@anthropic-ai/claude-agent-sdk": "0.3.165",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -281,7 +281,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.18",
     "@swc/core-linux-x64-musl": "^1.15.18",
     "@swc/core-win32-x64-msvc": "^1.15.18",
-    "google-auth-library": "^10.6.2",
+    "google-auth-library": "^10.7.0",
     "hono": "^4.12.5",
     "ibm-cloud-sdk-core": "^5.4.11",
     "jks-js": "^1.1.5",

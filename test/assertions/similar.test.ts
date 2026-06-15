@@ -209,6 +209,51 @@ describe('handleSimilar', () => {
     expect(result.reason).toBe('None of the provided values met the similarity threshold');
   });
 
+  it('should report the best (highest) score when no array values meet threshold', async () => {
+    // Neither value passes, but the output is closer to the second one.
+    vi.mocked(matchesSimilarity)
+      .mockResolvedValueOnce({ pass: false, score: 0.2 } as any)
+      .mockResolvedValueOnce({ pass: false, score: 0.6 } as any);
+
+    const result = await handleSimilar({
+      assertion: {
+        type: 'similar',
+        value: ['far value', 'closer value'],
+        threshold: 0.9,
+      },
+      baseType: 'similar' as any,
+      renderedValue: ['far value', 'closer value'],
+      outputString: 'some output',
+      inverse: false,
+      test: {
+        description: 'test',
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        // @ts-ignore
+        provider: createMockProvider({ response: {} }),
+        providerResponse: { output: 'some output' },
+      },
+      output: 'some output',
+      providerResponse: { output: 'some output' },
+    });
+
+    expect(result.pass).toBe(false);
+    // Report how close the output got to its closest value (0.6), not the worst (0.2).
+    expect(result.score).toBe(0.6);
+  });
+
   it('should throw error for invalid renderedValue type', async () => {
     await expect(
       handleSimilar({
@@ -244,6 +289,43 @@ describe('handleSimilar', () => {
         providerResponse: { output: 'test' },
       }),
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
+  });
+
+  it('should throw error for empty array value', async () => {
+    await expect(
+      handleSimilar({
+        assertion: {
+          type: 'similar',
+          value: [],
+        },
+        baseType: 'similar' as any,
+        renderedValue: [],
+        outputString: 'test',
+        inverse: false,
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        assertionValueContext: {
+          prompt: 'test prompt',
+          vars: {},
+          test: {
+            description: 'test',
+            vars: {},
+            assert: [],
+            options: {},
+          },
+          logProbs: undefined,
+          // @ts-ignore
+          provider: createMockProvider({ response: {} }),
+          providerResponse: { output: 'test' },
+        },
+        output: 'test',
+        providerResponse: { output: 'test' },
+      }),
+    ).rejects.toThrow('Similarity assertion must have at least one value to compare against');
   });
 
   it('should use dot_product metric when specified', async () => {
