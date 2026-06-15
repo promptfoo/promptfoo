@@ -59,7 +59,7 @@
     "jsdom": "^29.0.0",
     "lucide-react": "^1.0.0",
     "postcss": "^8.5.10",
-    "posthog-js": "1.379.3",
+    "posthog-js": "1.379.1",
     "prismjs": "^1.30.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
