@@ -139,7 +139,15 @@ The provider returns:
 
 ## Caching
 
-Responses are cached using the prompt, CLI arguments, a fingerprint of the working directory contents, the configured provider environment (`env` and provider overrides), and a fingerprint of the effective agent dir's `settings.json` / `models.json` (resolved from `agent_dir` or `PI_CODING_AGENT_DIR`). Changing a base URL, a behavior-affecting env value, or pi's default model therefore busts the cache, while changing only a credential does not (secret-named env vars are excluded so cached results stay portable). Only hashes are persisted — agent-dir files are fingerprinted by modification time and size, never by content — so no secret reaches the cache. Behavior-affecting values exported only in the ambient shell (rather than set via `env`) are not tracked; change them through `env` or pass `--no-cache`. Use `--no-cache` during development:
+Responses are cached using the prompt, CLI arguments, a fingerprint of the working directory contents, the configured provider environment (`env` and provider overrides), and a fingerprint of the effective agent dir's `settings.json`, `models.json`, `SYSTEM.md`, and `APPEND_SYSTEM.md` (resolved from `agent_dir` or `PI_CODING_AGENT_DIR`). Changing a base URL, a behavior-affecting env value, pi's default model, or a system-prompt override therefore busts the cache, while changing only a credential does not (secret-named env vars are excluded so cached results stay portable). Only hashes are persisted — agent-dir files are fingerprinted by modification time and size, never by content — so no secret reaches the cache.
+
+A few inputs are intentionally **not** part of the cache key, so use `--no-cache` when they matter to your eval:
+
+- Behavior-affecting values exported only in the ambient shell rather than set via `env` (set them through `env` to have them tracked).
+- pi's per-run system-prompt additions such as the current date and the (temporary) working directory.
+- Secrets passed through `extra_args` (e.g. `--api-key`) — don't put secrets there; use `apiKey`/`env` instead.
+
+Use `--no-cache` during development:
 
 ```bash
 promptfoo eval --no-cache

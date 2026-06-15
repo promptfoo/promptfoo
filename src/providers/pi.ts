@@ -67,9 +67,12 @@ const MAX_STDERR_BYTES = 256 * 1024;
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 // Pi config files in the agent dir that change run behavior and so participate
-// in the cache key. auth.json is intentionally excluded — it holds credentials
-// and must never enter a cache key.
-const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json'];
+// in the cache key: default model/provider (settings.json), custom model/
+// endpoint definitions (models.json), and system-prompt overrides (SYSTEM.md /
+// APPEND_SYSTEM.md). auth.json is intentionally excluded — it holds credentials
+// and must never enter a cache key. (Project-local copies live in the working
+// dir, which is fingerprinted separately.)
+const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json', 'SYSTEM.md', 'APPEND_SYSTEM.md'];
 
 // Env var names that look credential-bearing. Their values are kept out of the
 // cache key (only hashed key material is persisted, but per the repo's cache
@@ -667,12 +670,13 @@ export class PiProvider implements ApiProvider {
   }
 
   /**
-   * Fingerprint the pi config files that change run behavior — the default
-   * model/provider in settings.json and custom model/endpoint definitions in
-   * models.json — so editing them busts the cache. Uses mtime + size, NOT file
-   * contents: models.json can hold literal apiKeys and custom auth headers, and
-   * raw secrets must never be hashed into a cache key (auth.json is never read).
-   * Missing/unreadable files contribute a stable sentinel.
+   * Fingerprint the pi config files that change run behavior (default model in
+   * settings.json, custom model/endpoint defs in models.json, system-prompt
+   * overrides in SYSTEM.md/APPEND_SYSTEM.md) so editing them busts the cache.
+   * Uses mtime + size, NOT file contents: models.json can hold literal apiKeys
+   * and custom auth headers, and raw secrets must never be hashed into a cache
+   * key (auth.json is never read). Missing/unreadable files contribute a stable
+   * sentinel.
    */
   private agentDirFingerprint(agentDir: string): string {
     const parts: string[] = [];

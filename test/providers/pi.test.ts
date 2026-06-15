@@ -1154,6 +1154,31 @@ describe('PiProvider', () => {
       expect(mockSpawn).toHaveBeenCalledTimes(2);
     });
 
+    it('busts the cache when an agent_dir system prompt file changes', async () => {
+      enableCache();
+      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-sysprompt-'));
+      const systemPath = path.join(agentDir, 'SYSTEM.md');
+      try {
+        fs.writeFileSync(systemPath, 'You are terse.');
+        fs.utimesSync(systemPath, new Date(1000), new Date(1000));
+        mockPiRun(defaultEvents('first'));
+        mockPiRun(defaultEvents('second'));
+        const provider = new PiProvider({ config: { agent_dir: agentDir } });
+
+        const first = await provider.callApi('same prompt');
+        fs.writeFileSync(systemPath, 'You are a verbose and thorough assistant.');
+        fs.utimesSync(systemPath, new Date(2000), new Date(2000));
+        const second = await provider.callApi('same prompt');
+
+        expect(first.output).toBe('first');
+        expect(second.output).toBe('second');
+        expect(second.cached).toBeFalsy();
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      } finally {
+        fs.rmSync(agentDir, { recursive: true, force: true });
+      }
+    });
+
     it('fingerprints an agent dir supplied via env (not just agent_dir)', async () => {
       enableCache();
       const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-envagent-'));
