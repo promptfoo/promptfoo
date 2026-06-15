@@ -404,6 +404,25 @@ describe('PiProvider', () => {
       expect(env.CUSTOM_VAR).toBe('custom-value');
       expect(env.OPENAI_API_KEY).toBe('override-key');
     });
+
+    // Providers that pi supports beyond the original 11-entry map. Mirrors
+    // pi-ai's env-api-keys.js so config.apiKey routes without api_key_env.
+    it.each([
+      ['together', 'TOGETHER_API_KEY'],
+      ['nvidia', 'NVIDIA_API_KEY'],
+      ['minimax', 'MINIMAX_API_KEY'],
+      ['moonshotai', 'MOONSHOT_API_KEY'],
+      ['vercel-ai-gateway', 'AI_GATEWAY_API_KEY'],
+      ['azure-openai-responses', 'AZURE_OPENAI_API_KEY'],
+    ])('maps apiKey to the standard env var for %s', async (providerId, envVar) => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider({ config: { provider_id: providerId, apiKey: 'k' } });
+
+      await provider.callApi('test prompt');
+
+      expect(spawnedOptions().env[envVar]).toBe('k');
+      expect(spawnedArgs()).not.toContain('--api-key');
+    });
   });
 
   describe('response parsing', () => {
@@ -588,6 +607,79 @@ describe('PiProvider', () => {
       expect(child.stdout.setEncoding).toHaveBeenCalledWith('utf-8');
       expect(child.stderr.setEncoding).toHaveBeenCalledWith('utf-8');
     });
+
+    it('reports stopReason aborted as an error', async () => {
+      const message = assistantMessage('', { stopReason: 'aborted' });
+      mockPiRun([{ type: 'agent_end', messages: [message], willRetry: false }]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('Pi agent stopped with reason: aborted');
+      expect(result.output).toBeUndefined();
+    });
+
+    it('attaches usage, cost, and the transcript to stopReason error responses', async () => {
+      const message = assistantMessage('partial output before failing', {
+        usage: buildUsage(50, 5, 0.0002),
+        stopReason: 'error',
+        errorMessage: 'OpenAI API error (500): server error',
+      });
+      mockPiRun([{ type: 'agent_end', messages: [message], willRetry: false }]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('OpenAI API error (500): server error');
+      expect(result.tokenUsage).toEqual({
+        prompt: 50,
+        completion: 5,
+        total: 55,
+        cached: 0,
+        numRequests: 1,
+      });
+      expect(result.cost).toBeCloseTo(0.0002);
+      expect(result.raw).toContain('partial output before failing');
+    });
+
+    it('falls back to message_end when agent_end carries no assistant message', async () => {
+      // A terminal agent_end whose messages omit the assistant turn must not
+      // shadow the assistant text already seen via message_end.
+      const message = assistantMessage('answer from message_end');
+      mockPiRun([
+        { type: 'message_end', message },
+        { type: 'agent_end', messages: [{ role: 'user', content: [] }], willRetry: false },
+      ]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('answer from message_end');
+      expect(result.tokenUsage?.total).toBe(110);
+    });
+
+    it('preserves usage and cost on the message_end fallback path', async () => {
+      mockPiRun([
+        {
+          type: 'message_end',
+          message: assistantMessage('fallback', { usage: buildUsage(70, 7, 0.003) }),
+        },
+        { type: 'turn_end' },
+      ]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('fallback');
+      expect(result.tokenUsage).toEqual({
+        prompt: 70,
+        completion: 7,
+        total: 77,
+        cached: 0,
+        numRequests: 1,
+      });
+      expect(result.cost).toBeCloseTo(0.003);
+    });
   });
 
   describe('binary resolution', () => {
@@ -757,6 +849,85 @@ describe('PiProvider', () => {
       expect(result.error).toBe('Pi call aborted');
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     });
+
+    it('reports the terminating signal when pi exits with a null code', async () => {
+      const child = new FakeChildProcess();
+      mockSpawn.mockImplementationOnce(() => {
+        setImmediate(() => {
+          child.stderr.emit('data', 'segfault');
+          child.exitCode = null;
+          child.emit('close', null, 'SIGKILL');
+        });
+        return child as never;
+      });
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('terminated by signal SIGKILL');
+      expect(result.error).toContain('segfault');
+    });
+
+    it('spawns pi in its own process group on POSIX', async () => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider();
+
+      await provider.callApi('test prompt');
+
+      expect(spawnedOptions().detached).toBe(process.platform !== 'win32');
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'signals the whole process group when killing on POSIX',
+      async () => {
+        const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+        try {
+          const controller = new AbortController();
+          const child = new FakeChildProcess();
+          (child as { pid?: number }).pid = 4242;
+          child.kill.mockImplementation(() => {
+            child.emit('close', null, 'SIGTERM');
+            return true;
+          });
+          mockSpawn.mockImplementationOnce(() => {
+            setImmediate(() => controller.abort());
+            return child as never;
+          });
+          const provider = new PiProvider();
+
+          const result = await provider.callApi('test prompt', undefined, {
+            abortSignal: controller.signal,
+          });
+
+          expect(result.error).toBe('Pi call aborted');
+          // Negative pid signals pi AND its tool grandchildren (e.g. bash).
+          expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGTERM');
+        } finally {
+          killSpy.mockRestore();
+        }
+      },
+    );
+
+    it('aborts the run when stdout exceeds max_output_bytes', async () => {
+      const child = new FakeChildProcess();
+      child.kill.mockImplementation(() => {
+        child.emit('close', null, 'SIGTERM');
+        return true;
+      });
+      mockSpawn.mockImplementationOnce(() => {
+        setImmediate(() => {
+          child.stdout.emit('data', 'x'.repeat(1024));
+        });
+        return child as never;
+      });
+      const provider = new PiProvider({ config: { max_output_bytes: 100 } });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('more than 100 bytes');
+      expect(result.output).toBeUndefined();
+      expect(child.kill).toHaveBeenCalled();
+    });
   });
 
   describe('caching', () => {
@@ -818,6 +989,78 @@ describe('PiProvider', () => {
       // never incorporates the secret.
       expect(result.cached).toBe(true);
       expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('excludes the credential env var from the cache key even when set via config.env', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('shared answer'));
+      const first = new PiProvider({
+        config: { model: 'openai/gpt-4o-mini', env: { OPENAI_API_KEY: 'k1' } },
+      });
+      const second = new PiProvider({
+        config: { model: 'openai/gpt-4o-mini', env: { OPENAI_API_KEY: 'k2' } },
+      });
+
+      await first.callApi('same prompt');
+      const result = await second.callApi('same prompt');
+
+      expect(result.cached).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('busts the cache when a non-secret env value changes', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('answer-a'));
+      mockPiRun(defaultEvents('answer-b'));
+      const first = new PiProvider({ config: { env: { OPENAI_BASE_URL: 'http://proxy-a' } } });
+      const second = new PiProvider({ config: { env: { OPENAI_BASE_URL: 'http://proxy-b' } } });
+
+      const a = await first.callApi('same prompt');
+      const b = await second.callApi('same prompt');
+
+      // Different backends must not collide on one cache entry.
+      expect(a.output).toBe('answer-a');
+      expect(b.output).toBe('answer-b');
+      expect(b.cached).toBeFalsy();
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+    });
+
+    it('busts the cache when agent_dir config files change', async () => {
+      enableCache();
+      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agent-'));
+      try {
+        fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify({ model: 'one' }));
+        mockPiRun(defaultEvents('first'));
+        mockPiRun(defaultEvents('second'));
+        const provider = new PiProvider({ config: { agent_dir: agentDir } });
+
+        const first = await provider.callApi('same prompt');
+        fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify({ model: 'two' }));
+        const second = await provider.callApi('same prompt');
+
+        expect(first.output).toBe('first');
+        expect(second.output).toBe('second');
+        expect(second.cached).toBeFalsy();
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      } finally {
+        fs.rmSync(agentDir, { recursive: true, force: true });
+      }
+    });
+
+    it('keeps distinct prompts and models on separate cache entries', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('a'));
+      mockPiRun(defaultEvents('b'));
+      mockPiRun(defaultEvents('c'));
+      const openai = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+      const anthropic = new PiProvider({ config: { model: 'anthropic/claude-sonnet-4-5' } });
+
+      await openai.callApi('prompt one');
+      await openai.callApi('prompt two'); // different prompt
+      await anthropic.callApi('prompt one'); // different model
+
+      // No over-collapse: each distinct (prompt, model) spawned its own run.
+      expect(mockSpawn).toHaveBeenCalledTimes(3);
     });
   });
 });

@@ -122,6 +122,7 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 | `extra_args`            | `string[]` | -             | Additional CLI arguments (escape hatch; included in the cache key, so never put secrets here) |
 | `timeout`               | `number`   | `600000`      | Maximum run time per call in milliseconds                                                     |
 | `offline`               | `boolean`  | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
+| `max_output_bytes`      | `number`   | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
 Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. Re-enable them to evaluate your customized pi setup.
 
@@ -138,11 +139,17 @@ The provider returns:
 
 ## Caching
 
-Responses are cached using the prompt, CLI arguments, and a fingerprint of the working directory contents. Use `--no-cache` during development:
+Responses are cached using the prompt, CLI arguments, a fingerprint of the working directory contents, the configured provider environment (`env` and provider overrides), and a fingerprint of the agent dir's `settings.json` / `models.json`. Changing a base URL, a behavior-affecting env value, or pi's default model therefore busts the cache, while changing only the API key does not (the credential is excluded so cached results stay portable). Only hashes are persisted, so no secret or file content reaches the cache. Use `--no-cache` during development:
 
 ```bash
 promptfoo eval --no-cache
 ```
+
+:::note
+
+pi resolves credentials in the order `--api-key` flag > `~/.pi/agent/auth.json` > environment variables. This provider injects `apiKey` via the environment (never argv, to keep it out of process listings and the cache key), so a stored `auth.json` credential for the same provider takes precedence over `config.apiKey`. Set a dedicated `agent_dir` (or remove the stored credential) when you need `apiKey` to win.
+
+:::
 
 ## Comparing Models Through Pi
 

@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
@@ -56,23 +57,62 @@ const KILL_GRACE_MS = 5_000;
 // event open forever.
 const STDIO_FLUSH_GRACE_MS = 1_000;
 const MAX_STDERR_LENGTH = 16_384;
+// Hard cap on retained stderr bytes; prevents unbounded memory from a noisy
+// process (the display is trimmed separately by truncateStderr).
+const MAX_STDERR_BYTES = 256 * 1024;
+// Default cap on retained stdout (the JSONL event stream). A runaway or
+// adversarial agent — or a tool echoing a large file — could otherwise grow the
+// accumulator without bound and OOM the eval process. Overridable per provider
+// via `max_output_bytes`.
+const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
+
+// Pi config files in the agent dir that change run behavior and so participate
+// in the cache key. auth.json is intentionally excluded — it holds credentials
+// and must never enter a cache key.
+const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json'];
 
 /**
- * Env vars pi (via pi-ai) reads for each provider's API key.
- * Used to inject config.apiKey without putting it on the command line.
+ * Env vars pi (via pi-ai) reads for each provider's API key. Used to inject
+ * config.apiKey without putting it on the command line.
+ *
+ * Mirrors pi-ai's own `getApiKeyEnvVars` map (env-api-keys.js); keep in sync
+ * when pi adds providers. Providers with multi-source auth (github-copilot,
+ * amazon-bedrock, google-vertex ADC) are intentionally omitted — supply those
+ * via `api_key_env` or the inherited environment.
  */
 const PI_PROVIDER_ENV_KEYS: Record<string, string> = {
+  'ant-ling': 'ANT_LING_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  'azure-openai-responses': 'AZURE_OPENAI_API_KEY',
   cerebras: 'CEREBRAS_API_KEY',
+  'cloudflare-ai-gateway': 'CLOUDFLARE_API_KEY',
+  'cloudflare-workers-ai': 'CLOUDFLARE_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
   fireworks: 'FIREWORKS_API_KEY',
   google: 'GEMINI_API_KEY',
+  'google-vertex': 'GOOGLE_CLOUD_API_KEY',
   groq: 'GROQ_API_KEY',
+  huggingface: 'HF_TOKEN',
+  'kimi-coding': 'KIMI_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+  'minimax-cn': 'MINIMAX_CN_API_KEY',
   mistral: 'MISTRAL_API_KEY',
+  moonshotai: 'MOONSHOT_API_KEY',
+  'moonshotai-cn': 'MOONSHOT_API_KEY',
+  nvidia: 'NVIDIA_API_KEY',
   openai: 'OPENAI_API_KEY',
+  opencode: 'OPENCODE_API_KEY',
+  'opencode-go': 'OPENCODE_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  'vercel-ai-gateway': 'AI_GATEWAY_API_KEY',
   xai: 'XAI_API_KEY',
+  xiaomi: 'XIAOMI_API_KEY',
+  'xiaomi-token-plan-ams': 'XIAOMI_TOKEN_PLAN_AMS_API_KEY',
+  'xiaomi-token-plan-cn': 'XIAOMI_TOKEN_PLAN_CN_API_KEY',
+  'xiaomi-token-plan-sgp': 'XIAOMI_TOKEN_PLAN_SGP_API_KEY',
   zai: 'ZAI_API_KEY',
+  'zai-coding-cn': 'ZAI_CODING_CN_API_KEY',
 };
 
 export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -194,6 +234,14 @@ export interface PiProviderConfig {
    * @default true
    */
   offline?: boolean;
+
+  /**
+   * Maximum bytes of stdout (pi's JSON event stream) to retain before the run
+   * is aborted. Guards against unbounded memory use from a runaway or
+   * adversarial agent, or a tool echoing a very large file.
+   * @default 33554432 (32 MiB)
+   */
+  max_output_bytes?: number;
 }
 
 interface PiUsage {
@@ -242,8 +290,12 @@ interface PiRunResult {
   stdout: string;
   stderr: string;
   exitCode: number | null;
+  /** Signal that terminated the process, when exitCode is null. */
+  signal: NodeJS.Signals | null;
   timedOut: boolean;
   aborted: boolean;
+  /** True when stdout exceeded the configured cap and the run was aborted. */
+  stdoutOverflow: boolean;
 }
 
 interface PiPreparedCall {
@@ -512,10 +564,9 @@ export class PiProvider implements ApiProvider {
       }
     }
 
-    if (config.agent_dir) {
-      env.PI_CODING_AGENT_DIR = path.isAbsolute(config.agent_dir)
-        ? config.agent_dir
-        : path.resolve(resolveBasePath(), config.agent_dir);
+    const configuredAgentDir = this.resolveConfiguredAgentDir(config);
+    if (configuredAgentDir) {
+      env.PI_CODING_AGENT_DIR = configuredAgentDir;
     }
 
     if (config.apiKey) {
@@ -526,6 +577,77 @@ export class PiProvider implements ApiProvider {
     }
 
     return env;
+  }
+
+  /** Resolve an explicitly configured agent_dir to an absolute path, or undefined. */
+  private resolveConfiguredAgentDir(config: PiProviderConfig): string | undefined {
+    if (!config.agent_dir) {
+      return undefined;
+    }
+    return path.isAbsolute(config.agent_dir)
+      ? config.agent_dir
+      : path.resolve(resolveBasePath(), config.agent_dir);
+  }
+
+  /**
+   * The agent dir pi will actually read, including its default (~/.pi/agent)
+   * when none is configured. Used for cache fingerprinting so config changes in
+   * the default dir bust the cache too.
+   */
+  private resolveEffectiveAgentDir(config: PiProviderConfig): string {
+    return this.resolveConfiguredAgentDir(config) ?? path.join(os.homedir(), '.pi', 'agent');
+  }
+
+  /**
+   * Behavior-affecting environment that should participate in the cache key:
+   * the explicitly-configured provider env (EnvOverrides + config.env), minus
+   * the resolved credential var so that changing only the API key still hits
+   * the same cache entry. The ambient process.env is deliberately excluded — it
+   * carries volatile, non-deterministic vars that would thrash the cache.
+   */
+  private cacheEnv(config: PiProviderConfig): Record<string, string> {
+    const merged: Record<string, string> = {};
+    if (this.env) {
+      for (const [key, value] of Object.entries(this.env as Record<string, string | undefined>)) {
+        if (value !== undefined) {
+          merged[key] = value;
+        }
+      }
+    }
+    if (config.env) {
+      for (const [key, value] of Object.entries(config.env)) {
+        merged[key] = String(value);
+      }
+    }
+    const credentialVar = this.getApiKeyEnvVar(config);
+    if (credentialVar) {
+      delete merged[credentialVar];
+    }
+    // Canonicalize: sort keys so semantically identical envs hash identically.
+    const sorted: Record<string, string> = {};
+    for (const key of Object.keys(merged).sort()) {
+      sorted[key] = merged[key];
+    }
+    return sorted;
+  }
+
+  /**
+   * Fingerprint the pi config files that change run behavior — the default
+   * model/provider in settings.json and custom model/endpoint definitions in
+   * models.json — so editing them busts the cache. Only the hash is keyed, and
+   * auth.json is never read, so no credential or file content reaches the cache.
+   * Missing/unreadable files contribute a stable sentinel.
+   */
+  private agentDirFingerprint(agentDir: string): string {
+    const parts: string[] = [];
+    for (const file of PI_AGENT_DIR_CONFIG_FILES) {
+      try {
+        parts.push(`${file}:${fs.readFileSync(path.join(agentDir, file), 'utf-8')}`);
+      } catch {
+        parts.push(`${file}:absent`);
+      }
+    }
+    return crypto.createHash('sha256').update(parts.join('\n')).digest('hex');
   }
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
@@ -568,6 +690,7 @@ export class PiProvider implements ApiProvider {
       env: Record<string, string>;
       prompt: string;
       timeoutMs: number;
+      maxOutputBytes: number;
       abortSignal?: AbortSignal;
     },
   ): Promise<PiRunResult> {
@@ -577,27 +700,46 @@ export class PiProvider implements ApiProvider {
         env: options.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
+        // Run pi in its own process group on POSIX so we can signal pi AND any
+        // tool grandchildren it spawned (e.g. bash) on timeout/abort/overflow,
+        // instead of orphaning them. Windows has no equivalent here.
+        detached: process.platform !== 'win32',
       });
 
       let stdout = '';
       let stderr = '';
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let stdoutOverflow = false;
       let timedOut = false;
       let aborted = false;
       let settled = false;
+      let exitSignal: NodeJS.Signals | null = null;
+
+      // Signal pi directly (so the mockable child.kill path stays exercised) and,
+      // on POSIX, the whole process group via the negative pid so descendant
+      // tool processes are terminated too.
+      const signalGroup = (signal: NodeJS.Signals) => {
+        try {
+          child.kill(signal);
+        } catch (err) {
+          logger.debug(`[Pi] Failed to send ${signal}: ${err}`);
+        }
+        if (process.platform !== 'win32' && typeof child.pid === 'number') {
+          try {
+            process.kill(-child.pid, signal);
+          } catch (err) {
+            // ESRCH when the group is already gone; nothing to do.
+            logger.debug(`[Pi] Failed to signal process group: ${err}`);
+          }
+        }
+      };
 
       const killChild = () => {
-        try {
-          child.kill('SIGTERM');
-        } catch (err) {
-          logger.debug(`[Pi] Failed to send SIGTERM: ${err}`);
-        }
+        signalGroup('SIGTERM');
         setTimeout(() => {
-          try {
-            if (child.exitCode === null && child.signalCode === null) {
-              child.kill('SIGKILL');
-            }
-          } catch (err) {
-            logger.debug(`[Pi] Failed to send SIGKILL: ${err}`);
+          if (child.exitCode === null && child.signalCode === null) {
+            signalGroup('SIGKILL');
           }
         }, KILL_GRACE_MS).unref();
       };
@@ -629,9 +771,24 @@ export class PiProvider implements ApiProvider {
       child.stdout.setEncoding('utf-8');
       child.stderr.setEncoding('utf-8');
       child.stdout.on('data', (chunk: string) => {
+        if (stdoutOverflow) {
+          return;
+        }
+        stdoutBytes += Buffer.byteLength(chunk, 'utf-8');
+        if (stdoutBytes > options.maxOutputBytes) {
+          // Truncating JSONL would corrupt the final agent_end event, so abort
+          // the run rather than parse a partial transcript.
+          stdoutOverflow = true;
+          killChild();
+          return;
+        }
         stdout += chunk;
       });
       child.stderr.on('data', (chunk: string) => {
+        if (stderrBytes >= MAX_STDERR_BYTES) {
+          return;
+        }
+        stderrBytes += Buffer.byteLength(chunk, 'utf-8');
         stderr += chunk;
       });
 
@@ -653,16 +810,28 @@ export class PiProvider implements ApiProvider {
       });
 
       const resolveRun = (code: number | null) => {
-        finish(() => resolve({ stdout, stderr, exitCode: code, timedOut, aborted }));
+        finish(() =>
+          resolve({
+            stdout,
+            stderr,
+            exitCode: code,
+            signal: exitSignal,
+            timedOut,
+            aborted,
+            stdoutOverflow,
+          }),
+        );
       };
 
       // 'close' waits for all stdio to end; a descendant process holding the
       // inherited pipes can delay it indefinitely. Settle from 'exit' after a
       // short flush grace period so the call can't hang forever.
-      child.on('exit', (code) => {
+      child.on('exit', (code, signal) => {
+        exitSignal = signal;
         setTimeout(() => resolveRun(code), STDIO_FLUSH_GRACE_MS).unref();
       });
-      child.on('close', (code) => {
+      child.on('close', (code, signal) => {
+        exitSignal = signal ?? exitSignal;
         resolveRun(code);
       });
     });
@@ -696,15 +865,22 @@ export class PiProvider implements ApiProvider {
 
   private collectAssistantMessages(events: PiEvent[]): PiMessage[] {
     // agent_end carries the authoritative final message list; scan backwards
-    // for the last one.
+    // for the last one that actually contains an assistant turn.
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       if (event.type === 'agent_end' && event.messages) {
-        return event.messages.filter((message) => message.role === 'assistant');
+        const assistant = event.messages.filter((message) => message.role === 'assistant');
+        if (assistant.length > 0) {
+          return assistant;
+        }
+        // agent_end carried no assistant turn (e.g. the assistant text only
+        // arrived via message_end). Stop scanning and use the fallback below.
+        break;
       }
     }
 
-    // Fall back to message_end events when the run ended without agent_end.
+    // Fall back to message_end events when the run ended without an agent_end
+    // that carried assistant messages.
     return events
       .filter((event) => event.type === 'message_end' && event.message?.role === 'assistant')
       .map((event) => event.message!);
@@ -786,6 +962,9 @@ export class PiProvider implements ApiProvider {
           finalMessage.errorMessage ?? `Pi agent stopped with reason: ${finalMessage.stopReason}`,
         ...(tokenUsage ? { tokenUsage } : {}),
         ...(cost === undefined ? {} : { cost }),
+        // Preserve the transcript (including any partial output the model
+        // produced before failing) so the error row is still inspectable.
+        raw: JSON.stringify(assistantMessages),
       };
     }
 
@@ -827,11 +1006,15 @@ export class PiProvider implements ApiProvider {
       {
         prompt,
         // args capture model, provider, thinking, tools, prompts, and flags.
-        // config.apiKey never reaches args (env-var injection only) and env
-        // values are deliberately excluded from the key; only names are keyed.
+        // config.apiKey never reaches args (env-var injection only). The cache
+        // env includes behavior-affecting provider env VALUES (so changing e.g.
+        // a base URL busts the cache) but excludes the resolved credential var
+        // (so swapping only the API key still hits the same entry). The agent
+        // dir fingerprint busts the cache when pi's settings.json/models.json
+        // change. Only hashes are persisted, so no secret reaches disk.
         args,
-        envKeys: Object.keys(config.env ?? {}).sort(),
-        agentDir: config.agent_dir,
+        env: this.cacheEnv(config),
+        agentDirFingerprint: this.agentDirFingerprint(this.resolveEffectiveAgentDir(config)),
       },
     );
 
@@ -856,6 +1039,7 @@ export class PiProvider implements ApiProvider {
         env: this.buildEnv(config),
         prompt,
         timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
+        maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
         abortSignal: callOptions?.abortSignal,
       });
 
@@ -867,6 +1051,11 @@ export class PiProvider implements ApiProvider {
           error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
         };
       }
+      if (runResult.stdoutOverflow) {
+        return {
+          error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+        };
+      }
 
       // Pi exits 0 in JSON mode even when the agent run fails (failures show
       // up as stopReason on the final message). A nonzero or signal exit means
@@ -874,8 +1063,12 @@ export class PiProvider implements ApiProvider {
       // never report them as a successful (and cacheable) response.
       if (runResult.exitCode !== 0) {
         const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
+        const reason =
+          runResult.exitCode === null && runResult.signal
+            ? `was terminated by signal ${runResult.signal}`
+            : `exited with code ${runResult.exitCode}`;
         return {
-          error: `Pi exited with code ${runResult.exitCode}.${stderrSuffix}`,
+          error: `Pi ${reason}.${stderrSuffix}`,
         };
       }
 
