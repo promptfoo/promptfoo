@@ -877,36 +877,39 @@ describe('PiProvider', () => {
       expect(spawnedOptions().detached).toBe(process.platform !== 'win32');
     });
 
-    it.skipIf(process.platform === 'win32')(
-      'signals the whole process group when killing on POSIX',
-      async () => {
-        const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-        try {
-          const controller = new AbortController();
-          const child = new FakeChildProcess();
-          (child as { pid?: number }).pid = 4242;
-          child.kill.mockImplementation(() => {
-            child.emit('close', null, 'SIGTERM');
-            return true;
-          });
-          mockSpawn.mockImplementationOnce(() => {
-            setImmediate(() => controller.abort());
-            return child as never;
-          });
-          const provider = new PiProvider();
+    it('signals the child and, on POSIX, its whole process group when killing', async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      try {
+        const controller = new AbortController();
+        const child = new FakeChildProcess();
+        (child as { pid?: number }).pid = 4242;
+        child.kill.mockImplementation(() => {
+          child.emit('close', null, 'SIGTERM');
+          return true;
+        });
+        mockSpawn.mockImplementationOnce(() => {
+          setImmediate(() => controller.abort());
+          return child as never;
+        });
+        const provider = new PiProvider();
 
-          const result = await provider.callApi('test prompt', undefined, {
-            abortSignal: controller.signal,
-          });
+        const result = await provider.callApi('test prompt', undefined, {
+          abortSignal: controller.signal,
+        });
 
-          expect(result.error).toBe('Pi call aborted');
+        expect(result.error).toBe('Pi call aborted');
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        if (process.platform === 'win32') {
+          // Windows has no POSIX process group; only the direct child is signaled.
+          expect(killSpy).not.toHaveBeenCalledWith(-4242, 'SIGTERM');
+        } else {
           // Negative pid signals pi AND its tool grandchildren (e.g. bash).
           expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGTERM');
-        } finally {
-          killSpy.mockRestore();
         }
-      },
-    );
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
 
     it('aborts the run when stdout exceeds max_output_bytes', async () => {
       const child = new FakeChildProcess();
