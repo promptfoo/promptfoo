@@ -170,6 +170,56 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
     });
 
+    it('should honor an assert-set threshold of 0 (override + threshold survives in metadata)', async () => {
+      // The assert-set path (index.ts) builds an AssertionsResult with a parentAssertionSet,
+      // and flows through the same `if (this.threshold !== undefined)` gate. A threshold of 0
+      // must still engage the override here, and `0` must round-trip into the assert-set metadata
+      // (buildAssertionSetMetadata uses `!== undefined`, not a truthy check).
+      const assertionsResult = new AssertionsResult({
+        threshold: 0,
+        parentAssertionSet: {
+          index: 0,
+          assertionSet: {
+            type: 'assert-set',
+            threshold: 0,
+            assert: [
+              { type: 'equals', value: 'Hello world' },
+              { type: 'contains', value: 'world' },
+            ],
+          } as AssertionSet,
+        },
+      });
+
+      // A failing assertion — under the default all-pass logic this fails the assert-set.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'equals failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'contains passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+      expect(result.metadata?.assertionSet?.threshold).toBe(0);
+    });
+
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockResolvedValue({
