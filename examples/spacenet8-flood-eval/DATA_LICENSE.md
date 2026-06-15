@@ -1,8 +1,9 @@
 # Data license and attribution
 
-This example uses a 50-tile sample from the **SpaceNet 8 Flood Detection Challenge** training
-dataset. All source URLs are under the official `spacenet/SN8_floods/` prefix, which the SpaceNet
-bucket licenses under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+This example uses a configurable sample from the **SpaceNet 8 Flood Detection Challenge** training
+dataset, up to all pairs listed in the official Germany and Louisiana-East mapping files. All source
+URLs are under the official `spacenet/SN8_floods/` prefix, which the SpaceNet bucket licenses under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 - Official license notice: <https://spacenet-dataset.s3.amazonaws.com/LICENSE.md>
 - Dataset files: <https://spacenet-dataset.s3.amazonaws.com/?list-type=2&prefix=spacenet/SN8_floods/>
@@ -14,7 +15,8 @@ Attribution: SpaceNet 8 Flood Detection Challenge dataset and its contributors.
 
 This example:
 
-- selects 50 labeled tiles from the Germany and Louisiana-East public training collections;
+- selects the requested mapped pairs from the Germany and Louisiana-East public training
+  collections, including optional second post-event images when building the complete dataset;
 - records the official pre-event image, post-event image, and GeoJSON label URL and SHA-256 for
   each tile in the generated `dataset.json`;
 - computes coarse flooded-building and flooded-road count ranges from the GeoJSON labels; and

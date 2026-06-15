@@ -1,4 +1,4 @@
-"""Generate the 100-image SpaceNet 8 demo dataset and quicklooks."""
+"""Build a local SpaceNet 8 evaluation dataset and image quicklooks."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET_PATH = ROOT / "dataset.json"
-TESTS_PATH = ROOT / "tests.generated.json"
 CACHE_DIR = ROOT / ".cache"
 ASSETS_DIR = ROOT / "assets"
 DATASET_ROOT = "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods"
@@ -36,66 +35,12 @@ COLLECTIONS = (
         "slug": "germany",
         "geography": "Germany",
         "event": "July 2021 heavy-rain flood",
-        "tiles": (
-            "0_15_63",
-            "0_15_68",
-            "0_16_66",
-            "0_19_66",
-            "0_19_67",
-            "0_22_62",
-            "0_22_70",
-            "0_23_70",
-            "0_24_67",
-            "0_24_70",
-            "0_25_70",
-            "0_26_67",
-            "0_27_67",
-            "0_27_68",
-            "0_28_64",
-            "0_28_68",
-            "0_31_63",
-            "0_32_61",
-            "0_34_61",
-            "0_35_61",
-            "0_36_62",
-            "0_37_61",
-            "0_41_58",
-            "0_41_59",
-            "0_42_58",
-        ),
     },
     {
         "name": "Louisiana-East_Training_Public",
         "slug": "louisiana-east",
         "geography": "Louisiana",
         "event": "August 2021 Hurricane Ida flood",
-        "tiles": (
-            "0_11_15",
-            "0_11_4",
-            "0_14_4",
-            "0_15_2",
-            "0_16_8",
-            "0_17_13",
-            "0_18_15",
-            "0_18_19",
-            "0_21_19",
-            "0_24_18",
-            "0_24_21",
-            "2_13_45",
-            "2_14_46",
-            "2_14_48",
-            "2_15_44",
-            "2_15_46",
-            "2_16_49",
-            "2_17_49",
-            "2_18_44",
-            "2_19_44",
-            "2_19_56",
-            "2_19_57",
-            "2_19_60",
-            "2_19_62",
-            "2_20_44",
-        ),
     },
 )
 
@@ -171,15 +116,14 @@ def download(url: str, destination: Path) -> bytes:
     raise AssertionError("unreachable")
 
 
-def load_mapping(collection: str) -> dict[str, dict[str, str]]:
+def load_mapping(collection: str) -> list[dict[str, str]]:
     filename = f"{collection}_label_image_mapping.csv"
     url = f"{DATASET_ROOT}/{collection}/{filename}"
     data = download(url, CACHE_DIR / "mappings" / filename)
     rows = list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
-    mapping = {row["label"]: row for row in rows}
-    if len(mapping) != len(rows):
+    if len({row["label"] for row in rows}) != len(rows):
         raise ValueError(f"Duplicate labels in {filename}")
-    return mapping
+    return rows
 
 
 def validate_mapped_filename(filename: str, tile: str, suffix: str) -> None:
@@ -190,31 +134,64 @@ def validate_mapped_filename(filename: str, tile: str, suffix: str) -> None:
         raise ValueError(f"Unexpected mapped filename for {tile}: {filename}")
 
 
+def make_spec(
+    collection: dict[str, str], row: dict[str, str], post_image_index: int
+) -> dict[str, Any]:
+    label_file = row["label"].strip()
+    tile = Path(label_file).stem
+    tile_parts = tile.split("_")
+    if (
+        label_file != f"{tile}.geojson"
+        or len(tile_parts) != 3
+        or not all(part.isdigit() for part in tile_parts)
+    ):
+        raise ValueError(f"Unexpected mapped label: {label_file}")
+
+    pre_file = row["pre-event image"].strip()
+    post_file = row[f"post-event image {post_image_index}"].strip()
+    validate_mapped_filename(pre_file, tile, ".tif")
+    validate_mapped_filename(post_file, tile, ".tif")
+
+    base_tile_id = f"{collection['slug']}-{tile.replace('_', '-')}"
+    tile_id = (
+        base_tile_id
+        if post_image_index == 1
+        else f"{base_tile_id}-post-{post_image_index}"
+    )
+    return {
+        "tileId": tile_id,
+        "baseTileId": base_tile_id,
+        "collection": collection["name"],
+        "geography": collection["geography"],
+        "event": collection["event"],
+        "postImageIndex": post_image_index,
+        "files": {"label": label_file, "pre": pre_file, "post": post_file},
+    }
+
+
+def interleave(groups: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    result = []
+    for index in range(max(len(group) for group in groups)):
+        for group in groups:
+            if index < len(group):
+                result.append(group[index])
+    return result
+
+
 def make_specs() -> list[dict[str, Any]]:
-    specs = []
+    primary_groups = []
+    alternates = []
     for collection in COLLECTIONS:
-        name = collection["name"]
-        mapping = load_mapping(name)
-        for tile in collection["tiles"]:
-            label_file = f"{tile}.geojson"
-            row = mapping.get(label_file)
-            if row is None:
-                raise ValueError(f"Missing {label_file} in the official {name} mapping")
-            pre_file = row["pre-event image"]
-            post_file = row["post-event image 1"]
-            validate_mapped_filename(pre_file, tile, ".tif")
-            validate_mapped_filename(post_file, tile, ".tif")
-            specs.append(
-                {
-                    "tileId": f"{collection['slug']}-{tile.replace('_', '-')}",
-                    "collection": name,
-                    "geography": collection["geography"],
-                    "event": collection["event"],
-                    "files": {"label": label_file, "pre": pre_file, "post": post_file},
-                }
-            )
-    if len(specs) != 50 or len({spec["tileId"] for spec in specs}) != 50:
-        raise ValueError("The frozen sample must contain exactly 50 unique pairs")
+        primary = []
+        for row in load_mapping(collection["name"]):
+            primary.append(make_spec(collection, row, 1))
+            if row.get("post-event image 2", "").strip():
+                alternates.append(make_spec(collection, row, 2))
+        primary_groups.append(primary)
+
+    specs = interleave(primary_groups) + alternates
+    if len({spec["tileId"] for spec in specs}) != len(specs):
+        raise ValueError("Official mappings produced duplicate pair IDs")
     return specs
 
 
@@ -244,7 +221,12 @@ def build_tile(spec: dict[str, Any]) -> dict[str, Any]:
     sources = {}
     for kind, suffix in (("label", ".geojson"), ("pre", ".tif"), ("post", ".tif")):
         url = source_url(spec, kind)
-        data = download(url, CACHE_DIR / spec["tileId"] / f"{kind}{suffix}")
+        cache_name = (
+            f"post-{spec['postImageIndex']}{suffix}"
+            if kind == "post" and spec["postImageIndex"] > 1
+            else f"{kind}{suffix}"
+        )
+        data = download(url, CACHE_DIR / spec["baseTileId"] / cache_name)
         downloaded[kind] = data
         sources[kind] = {"sha256": sha256(data), "url": url}
 
@@ -261,29 +243,25 @@ def build_tile(spec: dict[str, Any]) -> dict[str, Any]:
         "geography": spec["geography"],
         "event": spec["event"],
         "labelFile": spec["files"]["label"],
+        "postImageIndex": spec["postImageIndex"],
         "counts": counts,
         "referenceRanges": ranges,
         "source": sources,
     }
 
 
-def write_json(path: Path, value: Any) -> None:
-    temporary = path.with_suffix(f"{path.suffix}.tmp")
-    temporary.write_text(f"{json.dumps(value, indent=2)}\n", encoding="utf-8")
-    temporary.replace(path)
-
-
-def write_outputs(tiles: list[dict[str, Any]]) -> None:
+def write_dataset(tiles: list[dict[str, Any]]) -> None:
     dataset = {
         "version": 1,
         "dataset": "SpaceNet 8 Flood Detection Challenge",
         "sample": {
             "pairs": len(tiles),
             "images": len(tiles) * 2,
-            "design": (
-                "Evenly-spaced mapping candidates followed by round-robin "
-                "count-range-signature stratification"
+            "uniqueLabels": len(
+                {(tile["collection"], tile["labelFile"]) for tile in tiles}
             ),
+            "alternatePostPairs": sum(tile["postImageIndex"] > 1 for tile in tiles),
+            "design": "Primary pairs round-robin by collection; alternate post pairs follow",
             "collections": list(dict.fromkeys(tile["collection"] for tile in tiles)),
         },
         "image": {
@@ -295,39 +273,41 @@ def write_outputs(tiles: list[dict[str, Any]]) -> None:
         "license": "CC-BY-SA-4.0",
         "tiles": tiles,
     }
-    tests = [
-        {
-            "description": f"{tile['geography']} labeled pair {index} ({tile['tileId']})",
-            "metadata": {
-                "collection": tile["collection"],
-                "event": tile["event"],
-                "geography": tile["geography"],
-            },
-            "vars": {
-                "tile_id": tile["tileId"],
-                "pre_image": f"file://assets/{tile['tileId']}/pre.jpg",
-                "post_image": f"file://assets/{tile['tileId']}/post.jpg",
-            },
-        }
-        for index, tile in enumerate(tiles, start=1)
-    ]
-    write_json(DATASET_PATH, dataset)
-    write_json(TESTS_PATH, tests)
+    temporary = DATASET_PATH.with_suffix(".json.tmp")
+    temporary.write_text(f"{json.dumps(dataset, indent=2)}\n", encoding="utf-8")
+    temporary.replace(DATASET_PATH)
+
+
+def parse_limit(value: str) -> int | None:
+    if value.lower() == "all":
+        return None
+    try:
+        limit = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "must be a positive integer or 'all'"
+        ) from error
+    if limit < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'all'")
+    return limit
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--limit", type=int, default=50, help="number of pairs to build (1-50)"
+        "--limit",
+        type=parse_limit,
+        default=50,
+        metavar="N|all",
+        help="number of mapped pairs to build (default: 50)",
     )
     parser.add_argument("--workers", type=int, default=12)
     args = parser.parse_args()
-    if not 1 <= args.limit <= 50:
-        parser.error("--limit must be between 1 and 50")
-
-    specs = make_specs()[: args.limit]
+    all_specs = make_specs()
+    if args.limit is not None and args.limit > len(all_specs):
+        parser.error(f"--limit cannot exceed {len(all_specs)}")
+    specs = all_specs if args.limit is None else all_specs[: args.limit]
     DATASET_PATH.unlink(missing_ok=True)
-    TESTS_PATH.unlink(missing_ok=True)
     if ASSETS_DIR.exists():
         shutil.rmtree(ASSETS_DIR)
     ASSETS_DIR.mkdir()
@@ -339,7 +319,7 @@ def main() -> None:
             if completed % 10 == 0 or completed == len(specs):
                 print(f"Built {completed}/{len(specs)} image pairs")
 
-    write_outputs(tiles)
+    write_dataset(tiles)
     pair_label = "pair" if len(tiles) == 1 else "pairs"
     print(f"Ready: {len(tiles)} {pair_label} / {len(tiles) * 2} images")
 

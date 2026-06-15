@@ -34,6 +34,6 @@ tests:
     metadata:
       geography: Germany
     vars:
-      tile_id: germany-0-15-63
-      pre_image: file://assets/germany-0-15-63/pre.jpg
-      post_image: file://assets/germany-0-15-63/post.jpg
+      tile_id: germany-0-41-59
+      pre_image: file://assets/germany-0-41-59/pre.jpg
+      post_image: file://assets/germany-0-41-59/post.jpg

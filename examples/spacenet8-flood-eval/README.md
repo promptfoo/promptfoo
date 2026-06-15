@@ -1,8 +1,8 @@
 # spacenet8-flood-eval (SpaceNet 8 Multimodal Flood Evaluation)
 
-Start with one satellite-image pair and a built-in assertion, then scale the same prompt to a
-50-pair labeled accuracy evaluation. The example keeps data preparation separate from Promptfoo so
-the first config stays small and each added layer has a clear purpose.
+Start with one satellite-image pair, scale the same prompt to a labeled evaluation, and then compare
+two models. The example keeps data preparation separate from Promptfoo so the first config stays
+small and each added layer introduces one concept.
 
 ## Dataset
 
@@ -10,9 +10,13 @@ the first config stays small and each added layer has a clear purpose.
 road annotations from two 2021 public training events: flooding after heavy rain in Germany and
 Hurricane Ida in Louisiana.
 
-The Python builder owns a fixed, stratified sample of 50 tiles. It resolves image filenames through
-the official SpaceNet mapping CSVs, downloads the source files, creates 640 x 640 JPEG quicklooks,
-and generates the local labels and test cases used by Promptfoo. Generated files are gitignored.
+The Python builder reads the official SpaceNet mapping CSVs, downloads the requested source files,
+and creates 640 x 640 JPEG quicklooks. The current mappings contain 801 primary pre/post pairs (202
+Germany and 599 Louisiana) plus 80 Germany pairs with a second post-event image, for 881 evaluable
+pairs total.
+
+Numeric limits select primary pairs in deterministic round-robin collection order. Alternate
+post-event pairs are added only after all 801 primary pairs. Generated data is gitignored.
 
 ## Level 1: One-pair smoke test
 
@@ -45,16 +49,17 @@ custom grader in this level.
 
 ## Level 2: Labeled accuracy evaluation
 
-Build all 50 pairs. The cache preserves files downloaded by Level 1:
+Build the default 50-pair development sample. The cache preserves files downloaded by Level 1:
 
 ```bash
 python scripts/build_dataset.py
 ```
 
-This downloads approximately 360 MB, generates approximately 11 MB of quicklooks, and writes:
+This downloads approximately 360 MB, generates approximately 11 MB of quicklooks, and writes
+`dataset.json` with source URLs, SHA-256 values, and hidden label counts.
 
-- `dataset.json`: source URLs, SHA-256 values, and hidden label counts
-- `tests.generated.json`: 50 Promptfoo tests with local image references
+`scripts/generate_tests.py` turns that manifest into Promptfoo tests when the config loads. There is
+no generated test file to keep in sync.
 
 Run the accuracy config with high concurrency:
 
@@ -74,12 +79,40 @@ the generated GeoJSON-derived labels and reports:
 - `road_count_accuracy`
 - `non_abstention`
 
-## Level 3: Hill climb
+## Level 3: Compare models
+
+The comparison config runs the same prompt and tests against GPT-5.5 and GPT-5.4 Mini:
+
+```bash
+umask 077
+promptfoo eval -c promptfooconfig.compare.yaml \
+  --no-cache --no-share -n 5 -j 10 -o results/model-comparison.json
+promptfoo view
+```
+
+Start with `-n 5` because this makes two paid model calls per pair. Remove the filter when you are
+ready to compare the full generated sample. Promptfoo records each model's labeled accuracy,
+latency, token use, and cost.
+
+## Level 4: Scale the dataset
+
+Use any positive pair count up to 881, or extract every mapped pair:
+
+```bash
+python scripts/build_dataset.py --limit 250
+python scripts/build_dataset.py --limit all
+```
+
+The full build creates 881 tests and 1,762 model-input quicklooks. It downloads several gigabytes,
+so use the default sample while developing prompts and reserve the full set for final comparisons.
+
+## Level 5: Hill climb
 
 Treat the 50 pairs as a development set and change one axis at a time:
 
 1. Add a second prompt to compare baseline and candidate instructions on identical images.
-2. Add another vision provider to compare quality, latency, token use, and cost.
+2. Change or add a provider in `promptfooconfig.compare.yaml` to compare quality, latency, token
+   use, and cost.
 3. Filter or group by `geography` and `event` metadata to find where a candidate improves or
    regresses.
 4. Add robustness cases such as cloud cover, image corruption, or registration offsets only after
