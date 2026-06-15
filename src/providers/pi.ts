@@ -14,6 +14,7 @@ import {
   withGenAISpan,
 } from '../tracing/genaiTracer';
 import {
+  type CacheCheckResult,
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
@@ -84,6 +85,35 @@ const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json', 'SYSTEM.md', 
 // hygiene rules raw secrets must never be hashed). Changing a secret also must
 // not bust the cache, matching the apiKey-independence guarantee.
 const SECRET_ENV_NAME_PATTERN = /(?:key|token|secret|password|passwd|credential|auth|cookie)/i;
+
+// Query-param names that carry credentials in URL-shaped env values.
+const SECRET_QUERY_PARAM_PATTERN = /(?:key|token|secret|password|credential|auth|sig|signature)/i;
+
+/**
+ * Strip embedded credentials from a (non-secret-named) env value before it is
+ * hashed into the cache key. A value like a gateway base URL can carry secrets
+ * in its userinfo or query string (e.g. `https://user:pass@gw/v1` or
+ * `?token=...`); hashing those raw would violate the cache-key hygiene rule even
+ * though only the hash persists. Non-URL values are returned unchanged.
+ */
+function sanitizeCacheValue(value: string): string {
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    return value;
+  }
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (SECRET_QUERY_PARAM_PATTERN.test(key)) {
+        url.searchParams.set(key, '[redacted]');
+      }
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
 
 /**
  * Env vars pi (via pi-ai) reads for each provider's API key. Used to inject
@@ -214,9 +244,20 @@ export interface PiProviderConfig {
 
   /**
    * Load AGENTS.md / CLAUDE.md context files from the working directory.
-   * Disabled by default for reproducible evals.
+   * Disabled by default for reproducible evals. Does not require
+   * `trust_project_files` — pi loads context files independently of trust.
    */
   load_context_files?: boolean;
+
+  /**
+   * Trust project-local pi files in the working directory (`--approve`):
+   * `.pi/settings.json`, project extensions/skills/prompt-templates, and a
+   * project `.pi/SYSTEM.md`. Off by default (`--no-approve`) so a trusted
+   * working_dir cannot alter an otherwise-hermetic run. Enable this when you
+   * deliberately want a project's pi configuration to take effect. Note pi's
+   * trust is all-or-nothing: enabling it trusts every project-local pi file.
+   */
+  trust_project_files?: boolean;
 
   /**
    * Pi config directory (sessions, settings.json, auth.json, models.json).
@@ -528,19 +569,14 @@ export class PiProvider implements ApiProvider {
       args.push('--no-context-files');
     }
 
-    // Project trust governs whether pi loads project-local files (.pi/settings
-    // .json, project extensions/skills/templates). Default to --no-approve so a
-    // trusted working_dir cannot alter a hermetic run and a non-interactive run
-    // cannot hang on a trust prompt. When the user opts into loading project
-    // resources, pass --approve so those resources load deterministically on
-    // every machine (pi's default trust would otherwise skip them on untrusted
-    // checkouts and load them only where a trust decision was saved).
-    const loadsProjectResources =
-      config.load_extensions === true ||
-      config.load_skills === true ||
-      config.load_prompt_templates === true ||
-      config.load_context_files === true;
-    args.push(loadsProjectResources ? '--approve' : '--no-approve');
+    // Project trust is a separate axis from resource discovery: --approve trusts
+    // every project-local pi file (.pi/settings.json, project extensions/skills/
+    // templates, .pi/SYSTEM.md), which can change the model or behavior. Default
+    // to --no-approve so a trusted working_dir cannot alter a hermetic run and a
+    // non-interactive run cannot hang on a trust prompt. Context files
+    // (AGENTS.md/CLAUDE.md) load via discovery without trust, so load_* does NOT
+    // imply --approve; opt in explicitly with trust_project_files.
+    args.push(config.trust_project_files ? '--approve' : '--no-approve');
 
     if (config.extra_args?.length) {
       args.push(...config.extra_args);
@@ -676,12 +712,13 @@ export class PiProvider implements ApiProvider {
     const credentialVar = this.getApiKeyEnvVar(config);
     // Canonicalize (sort keys) and drop the credential var plus any secret-named
     // var so semantically identical, credential-independent envs hash the same.
+    // Surviving values are sanitized to strip credentials embedded in URLs.
     const sorted: Record<string, string> = {};
     for (const key of Object.keys(merged).sort()) {
       if (key === credentialVar || SECRET_ENV_NAME_PATTERN.test(key)) {
         continue;
       }
-      sorted[key] = merged[key];
+      sorted[key] = sanitizeCacheValue(merged[key]);
     }
     return sorted;
   }
@@ -1107,79 +1144,91 @@ export class PiProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      async () => {
-        const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
-
-        try {
-          const { command, argsPrefix } = this.resolvePiCommand(config);
-          const fullArgs = [...argsPrefix, ...args];
-          logger.debug(`[Pi] Running ${command}`, { args: fullArgs, cwd: runDir });
-
-          const runResult = await this.runPi(command, fullArgs, {
-            cwd: runDir,
-            env: this.buildEnv(config),
-            prompt,
-            timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
-            maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-            abortSignal: callOptions?.abortSignal,
-          });
-
-          if (runResult.aborted) {
-            return { error: 'Pi call aborted' };
-          }
-          if (runResult.timedOut) {
-            return {
-              error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-            };
-          }
-          if (runResult.stdoutOverflow) {
-            return {
-              error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
-            };
-          }
-
-          // Pi exits 0 in JSON mode even when the agent run fails (failures show
-          // up as stopReason on the final message). A nonzero or signal exit means
-          // the CLI itself crashed, so any parsed events may be truncated mid-run;
-          // never report them as a successful (and cacheable) response.
-          if (runResult.exitCode !== 0) {
-            const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
-            const reason =
-              runResult.exitCode === null && runResult.signal
-                ? `was terminated by signal ${runResult.signal}`
-                : `exited with code ${runResult.exitCode}`;
-            return {
-              error: `Pi ${reason}.${stderrSuffix}`,
-            };
-          }
-
-          const events = this.parseEvents(runResult.stdout);
-          const providerResponse = this.buildProviderResponse(events, runResult.stderr);
-
-          if (!providerResponse.error) {
-            await cacheResponse(cacheResult, providerResponse, 'Pi');
-          }
-
-          return providerResponse;
-        } catch (error) {
-          if (
-            (error instanceof Error && error.name === 'AbortError') ||
-            callOptions?.abortSignal?.aborted
-          ) {
-            return { error: 'Pi call aborted' };
-          }
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.error('Error calling Pi', { error });
-          return { error: `Error calling Pi: ${errorMessage}` };
-        } finally {
-          if (!workingDir) {
-            await fsPromises.rm(runDir, { recursive: true, force: true }).catch((err) => {
-              logger.debug(`[Pi] Failed to remove temp dir ${runDir}: ${err}`);
-            });
-          }
-        }
-      },
+      () => this.executeRun({ args, workingDir, config, cacheResult, prompt, callOptions }),
       extractProviderResponseAttributes,
     );
+  }
+
+  /**
+   * Spawn pi, map the result to a ProviderResponse, and cache successes. Runs
+   * inside the GenAI span opened by callApi. The temp dir (when there is no
+   * working_dir) is created here — after the cache/abort checks — so cache hits
+   * don't leave empty directories behind, and removed in the finally block.
+   */
+  private async executeRun(opts: {
+    args: string[];
+    workingDir: string | undefined;
+    config: PiProviderConfig;
+    cacheResult: CacheCheckResult;
+    prompt: string;
+    callOptions?: CallApiOptionsParams;
+  }): Promise<ProviderResponse> {
+    const { args, workingDir, config, cacheResult, prompt, callOptions } = opts;
+    const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
+
+    try {
+      const { command, argsPrefix } = this.resolvePiCommand(config);
+      const fullArgs = [...argsPrefix, ...args];
+      logger.debug(`[Pi] Running ${command}`, { args: fullArgs, cwd: runDir });
+
+      const runResult = await this.runPi(command, fullArgs, {
+        cwd: runDir,
+        env: this.buildEnv(config),
+        prompt,
+        timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
+        maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+        abortSignal: callOptions?.abortSignal,
+      });
+
+      if (runResult.aborted) {
+        return { error: 'Pi call aborted' };
+      }
+      if (runResult.timedOut) {
+        return { error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms` };
+      }
+      if (runResult.stdoutOverflow) {
+        return {
+          error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+        };
+      }
+
+      // Pi exits 0 in JSON mode even when the agent run fails (failures show up
+      // as stopReason on the final message). A nonzero or signal exit means the
+      // CLI itself crashed, so any parsed events may be truncated mid-run; never
+      // report them as a successful (and cacheable) response.
+      if (runResult.exitCode !== 0) {
+        const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
+        const reason =
+          runResult.exitCode === null && runResult.signal
+            ? `was terminated by signal ${runResult.signal}`
+            : `exited with code ${runResult.exitCode}`;
+        return { error: `Pi ${reason}.${stderrSuffix}` };
+      }
+
+      const events = this.parseEvents(runResult.stdout);
+      const providerResponse = this.buildProviderResponse(events, runResult.stderr);
+
+      if (!providerResponse.error) {
+        await cacheResponse(cacheResult, providerResponse, 'Pi');
+      }
+
+      return providerResponse;
+    } catch (error) {
+      if (
+        (error instanceof Error && error.name === 'AbortError') ||
+        callOptions?.abortSignal?.aborted
+      ) {
+        return { error: 'Pi call aborted' };
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error calling Pi', { error });
+      return { error: `Error calling Pi: ${errorMessage}` };
+    } finally {
+      if (!workingDir) {
+        await fsPromises.rm(runDir, { recursive: true, force: true }).catch((err) => {
+          logger.debug(`[Pi] Failed to remove temp dir ${runDir}: ${err}`);
+        });
+      }
+    }
   }
 }

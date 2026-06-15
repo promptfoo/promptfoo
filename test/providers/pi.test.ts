@@ -269,9 +269,9 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--no-prompt-templates');
       expect(args).not.toContain('--no-context-files');
       expect(args).not.toContain('--offline');
-      // Loading project resources trusts project-local files via --approve.
-      expect(args).toContain('--approve');
-      expect(args).not.toContain('--no-approve');
+      // Trust is a separate axis: enabling discovery does NOT imply --approve.
+      expect(args).toContain('--no-approve');
+      expect(args).not.toContain('--approve');
     });
 
     it('appends extra_args verbatim', async () => {
@@ -297,9 +297,20 @@ describe('PiProvider', () => {
       }
     });
 
-    it('passes --approve when a project resource is loaded', async () => {
+    it('keeps --no-approve for context-file loading (context files do not need trust)', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider({ config: { load_context_files: true } });
+
+      await provider.callApi('test prompt');
+
+      const args = spawnedArgs();
+      expect(args).toContain('--no-approve');
+      expect(args).not.toContain('--approve');
+    });
+
+    it('passes --approve only when trust_project_files is set', async () => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider({ config: { trust_project_files: true } });
 
       await provider.callApi('test prompt');
 
@@ -1168,6 +1179,25 @@ describe('PiProvider', () => {
       expect(b.output).toBe('answer-b');
       expect(b.cached).toBeFalsy();
       expect(mockSpawn).toHaveBeenCalledTimes(2);
+    });
+
+    it('strips credentials embedded in URL env values from the cache key', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('shared'));
+      // Same host/path, only the embedded userinfo credential differs.
+      const first = new PiProvider({
+        config: { env: { OPENAI_BASE_URL: 'https://user:secret-a@gw.example/v1?token=aaa' } },
+      });
+      const second = new PiProvider({
+        config: { env: { OPENAI_BASE_URL: 'https://user:secret-b@gw.example/v1?token=bbb' } },
+      });
+
+      await first.callApi('same prompt');
+      const result = await second.callApi('same prompt');
+
+      // The raw secret must not reach the key, so the two runs share an entry.
+      expect(result.cached).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
     });
 
     it('busts the cache when agent_dir config files change', async () => {

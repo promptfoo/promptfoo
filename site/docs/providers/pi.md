@@ -116,6 +116,7 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 | `load_skills`           | `boolean`  | `false`       | Load pi skills                                                                                |
 | `load_prompt_templates` | `boolean`  | `false`       | Expand pi prompt templates in prompts                                                         |
 | `load_context_files`    | `boolean`  | `false`       | Load AGENTS.md / CLAUDE.md from the working directory                                         |
+| `trust_project_files`   | `boolean`  | `false`       | Trust project-local pi files (`--approve`): `.pi/settings.json`, project extensions/SYSTEM.md |
 | `agent_dir`             | `string`   | `~/.pi/agent` | Pi config directory (sets `PI_CODING_AGENT_DIR`)                                              |
 | `pi_path`               | `string`   | auto          | Path to the pi executable                                                                     |
 | `env`                   | `object`   | -             | Extra environment variables for the pi process                                                |
@@ -124,7 +125,13 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 | `offline`               | `boolean`  | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
 | `max_output_bytes`      | `number`   | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
-Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json` or project extensions in the `working_dir`) are ignored even if the project is trusted. Enabling any of the `load_*` options instead passes `--approve`, trusting project-local files so the opted-in resources load the same way on every machine.
+Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). pi's trust is all-or-nothing — enabling it trusts every project-local pi file, including a `settings.json` that can change the model.
+
+:::warning
+
+Pi reads the prompt from piped stdin and trims leading/trailing whitespace (an all-whitespace prompt becomes empty). Evals whose prompts depend on exact surrounding whitespace are not faithfully represented.
+
+:::
 
 ## Response Format
 

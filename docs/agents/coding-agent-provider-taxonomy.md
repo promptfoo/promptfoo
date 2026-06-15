@@ -373,6 +373,13 @@ Important limits:
 - Pi has no native OpenTelemetry support, so there is no deep tracing into the pi
   runtime (no OTEL env injection); the provider-level `callApi` span is the trace
   boundary. Pi's own install telemetry is disabled by the default `--offline`.
+- Project-local file trust (`.pi/settings.json`, project extensions/skills/
+  templates, `.pi/SYSTEM.md`) is off by default (`--no-approve`) and is a
+  separate axis from `load_*` discovery; opt in with `trust_project_files`
+  (`--approve`), which is all-or-nothing.
+- Prompts are delivered via pi's piped stdin, which trims surrounding whitespace
+  (an all-whitespace prompt becomes empty), so whitespace-exact prompts are not
+  faithfully represented; stdin is used to keep large prompts off argv.
 
 Docs and examples:
 
