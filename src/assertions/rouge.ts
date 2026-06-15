@@ -13,7 +13,10 @@ export function handleRougeScore({
   invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
-  const score = rougeMethod(outputString, renderedValue, {});
+  // Score case-insensitively, matching the other text-overlap metrics
+  // (bleu/gleu/meteor all lowercase their inputs). js-rouge defaults to
+  // caseSensitive: true, which would score e.g. "The CAT" vs "the cat" as 0.
+  const score = rougeMethod(outputString, renderedValue, { caseSensitive: false });
   const threshold = assertion.threshold ?? 0.75;
   const pass = score >= threshold !== inverse;
   return {

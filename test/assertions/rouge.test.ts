@@ -59,7 +59,7 @@ describe('handleRougeScore', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.8);
     expect(result.reason).toBe('ROUGE-N score 0.80 is greater than or equal to threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
   });
 
   it('should fail when score is below default threshold', () => {
@@ -70,7 +70,7 @@ describe('handleRougeScore', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.7);
     expect(result.reason).toBe('ROUGE-N score 0.70 is less than threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
   });
 
   it('should use custom threshold when provided', () => {
@@ -84,7 +84,7 @@ describe('handleRougeScore', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.6);
     expect(result.reason).toBe('ROUGE-N score 0.60 is greater than or equal to threshold 0.5');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
   });
 
   it('should fail inverse scoring when score is above threshold', () => {
@@ -98,7 +98,7 @@ describe('handleRougeScore', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBeCloseTo(0.2, 5);
     expect(result.reason).toBe('ROUGE-N score 0.80 is greater than or equal to threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
   });
 
   it('should pass inverse scoring when score is below threshold', () => {
@@ -112,7 +112,7 @@ describe('handleRougeScore', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBeCloseTo(0.3, 5);
     expect(result.reason).toBe('ROUGE-N score 0.70 is less than threshold 0.75');
-    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
   });
 
   it('should use ROUGE-L method', () => {
@@ -123,7 +123,7 @@ describe('handleRougeScore', () => {
       baseType: 'rouge-l' as any,
     });
 
-    expect(rouge.l).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.l).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('ROUGE-L score 0.80 is greater than or equal to threshold 0.75');
   });
@@ -136,7 +136,7 @@ describe('handleRougeScore', () => {
       baseType: 'rouge-s' as any,
     });
 
-    expect(rouge.s).toHaveBeenCalledWith('actual text', 'expected text', {});
+    expect(rouge.s).toHaveBeenCalledWith('actual text', 'expected text', { caseSensitive: false });
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('ROUGE-S score 0.80 is greater than or equal to threshold 0.75');
   });
