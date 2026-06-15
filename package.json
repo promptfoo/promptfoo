@@ -115,12 +115,12 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
-      "esbuild": "0.27.7"
+      "esbuild": "0.28.1"
     },
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -128,7 +128,7 @@
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
-      "esbuild": "0.28.0",
+      "esbuild": "0.28.1",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
@@ -185,14 +185,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.107.2",
-    "dompurify": "3.4.7",
+    "dompurify": "3.4.8",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.7"
+      "dompurify": "3.4.8"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.160",
+    "@anthropic-ai/claude-agent-sdk": "0.3.161",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -251,7 +251,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.160",
+    "@anthropic-ai/claude-agent-sdk": "0.3.161",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
