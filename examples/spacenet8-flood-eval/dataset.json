@@ -1,0 +1,1869 @@
+{
+  "version": 1,
+  "dataset": "SpaceNet 8 Flood Detection Challenge",
+  "license": "CC-BY-SA-4.0",
+  "sample": {
+    "pairs": 50,
+    "images": 100,
+    "design": "Evenly-spaced mapping candidates followed by round-robin count-range-signature stratification",
+    "collections": ["Germany_Training_Public", "Louisiana-East_Training_Public"]
+  },
+  "image": {
+    "format": "JPEG",
+    "quality": 88,
+    "resampling": "Lanczos",
+    "size": [640, 640]
+  },
+  "tiles": [
+    {
+      "tileId": "germany-0-15-63",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_15_63.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 13,
+          "total": 13
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 7,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "36abd47c4599b34ab9763fd0602039a583769c830c00835ac8365eaaca804a83",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_15_63.geojson"
+        },
+        "post": {
+          "sha256": "ae44702d3a366e32a9d6f16e5b6fe258634585f60ded8380346d272d1e379fa0",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_15_63.tif"
+        },
+        "pre": {
+          "sha256": "d9aaf050709a9e97d522faeb86fb4f53580c5aca8d435636ba12e89f2a22c4a5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_15_63.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-15-68",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_15_68.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 4,
+          "total": 4
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 3,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "83dea4bc7c2c712c7d54c1bf83c75c16109ea8beb8546ba6b31815e5834277ac",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_15_68.geojson"
+        },
+        "post": {
+          "sha256": "1d5a80f85ad17e1d84f012ed4432ae903cc20e11f0c867c1400e841395eea23e",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_15_68.tif"
+        },
+        "pre": {
+          "sha256": "25f9e8bfe60e11a0e7e375eb795a8a616f304f9b7ac809aaaefa4d2b86068ffd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_15_68.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-16-66",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_16_66.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 6,
+          "total": 6
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 3,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "3df847d3f0ff8387b7536c6694db8b9c8df172a2f4ec4ebc1b3bde4c629b8e92",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_16_66.geojson"
+        },
+        "post": {
+          "sha256": "5b52055d394eb80a5810535773ef7419b314b2960b199b9ff83de00aeded32d5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_16_66.tif"
+        },
+        "pre": {
+          "sha256": "1a8cd35950423bd85bad3d2835a79cfa0675a5707a64bcd80a26646a37e6a20f",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_16_66.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-19-66",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_19_66.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 10,
+          "total": 10
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 20,
+          "total": 20
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "a4155cee23bf6fc39ce8845ab11aa81b465be58865e933858399cb6a9ea436b5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_19_66.geojson"
+        },
+        "post": {
+          "sha256": "23d33773a0511a29e9d9c9cc6e207706c331d88b32495596be9b2af5741b9d92",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_19_66.tif"
+        },
+        "pre": {
+          "sha256": "5f3af1913aa486a2833422120ed6ba356cf15a03b46c7248184e62a20b02105b",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_19_66.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-19-67",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_19_67.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 5,
+          "total": 5
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 7,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "6c1c3644b7c2c3df78c62309363f1e827b51d5ac4a3103ef2c8d0b5d7425cfb1",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_19_67.geojson"
+        },
+        "post": {
+          "sha256": "c2a4a36f742355303a210c7b07f602cbf750e8e4646a298d57048c0abe178dba",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_19_67.tif"
+        },
+        "pre": {
+          "sha256": "5d737682485132589b4a27d2409858380e33edea66f7b1985143f67e5eb255cb",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_19_67.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-22-62",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_22_62.geojson",
+      "counts": {
+        "building": {
+          "flooded": 12,
+          "notFlooded": 0,
+          "total": 12
+        },
+        "road": {
+          "flooded": 3,
+          "notFlooded": 0,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "b4384544884aa1d5872f1388a85b24f262c68875c3668d440b3ea647e3827426",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_22_62.geojson"
+        },
+        "post": {
+          "sha256": "6a976a35fc32cd030dd7840b64f474dd9bd2c9bec264d9cd12d18711fa29919b",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_22_62.tif"
+        },
+        "pre": {
+          "sha256": "28803a14592661ce369da5eef7091302fee9bb655694e30038111583f6d17833",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_22_62.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-22-70",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_22_70.geojson",
+      "counts": {
+        "building": {
+          "flooded": 4,
+          "notFlooded": 3,
+          "total": 7
+        },
+        "road": {
+          "flooded": 2,
+          "notFlooded": 2,
+          "total": 4
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "b0c77d1f33a97254bfac855fbc4fc63e45399b517c07a8c22af43cb0e3604653",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_22_70.geojson"
+        },
+        "post": {
+          "sha256": "cd8f0c6a9831e5b6f5883e6555d1f43c5dd5f95ebb2eab7233cdbc977f4cacdd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_22_70.tif"
+        },
+        "pre": {
+          "sha256": "c5071d67362335bde538ff2bd77250b11cadaecad2291afff3ba635058bd14c0",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_22_70.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-23-70",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_23_70.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 5,
+          "total": 5
+        },
+        "road": {
+          "flooded": 6,
+          "notFlooded": 3,
+          "total": 9
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "ce460d7463d4702e44d5226c440f0846d728e92a2b42e72abf321e3f42a53db2",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_23_70.geojson"
+        },
+        "post": {
+          "sha256": "1da4361f8e5e3e40571d40d1f4544574ec40f7aa07bee6971356164dace05d66",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_23_70.tif"
+        },
+        "pre": {
+          "sha256": "a5a7f670f27a6a84e9450fe507257c6211ced801dcc78ae74a68c4075c8a28d1",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_23_70.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-24-67",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_24_67.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 6,
+          "total": 6
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 2,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "775aee4afa08a54b1e355935fca0d3746f3917a25673a00c073b71b1e65c4dce",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_24_67.geojson"
+        },
+        "post": {
+          "sha256": "0edcb9a93bd2f0758e160791e3f112326dd53ad86116d5765922fcd969759724",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_24_67.tif"
+        },
+        "pre": {
+          "sha256": "8fc751fdcfdf6791925b5a9f92a21a6bb059ced429721f08709ef97fb8069742",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_24_67.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-24-70",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_24_70.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 15,
+          "total": 15
+        },
+        "road": {
+          "flooded": 2,
+          "notFlooded": 10,
+          "total": 12
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "3384f86d3041ea6f0f9fd14edfb592113785d0d143b46f78ae327405462a021c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_24_70.geojson"
+        },
+        "post": {
+          "sha256": "8812fa0e3d93a58e987504707ee606159cded7132da3622d5f0e94afab8bbc4a",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_24_70.tif"
+        },
+        "pre": {
+          "sha256": "aee514fb6aa9dfe65aab59db5c2897d200f470938f69f99cdd59667a7ebd8121",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_24_70.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-25-70",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_25_70.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 21,
+          "total": 21
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 6,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "1fa5503ef66196c72ac1d14122a325a0ce44b67ea81e478579a3cbae612bd2f8",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_25_70.geojson"
+        },
+        "post": {
+          "sha256": "759ef5d7402d5875b424fe2f66b122b75ccbba66f46780525aabaa87552dae79",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_25_70.tif"
+        },
+        "pre": {
+          "sha256": "0ff52d8f269f5b8c4a7bc7d3ce176778874d381540baf1ad36c417d0708fef41",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_25_70.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-26-67",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_26_67.geojson",
+      "counts": {
+        "building": {
+          "flooded": 7,
+          "notFlooded": 0,
+          "total": 7
+        },
+        "road": {
+          "flooded": 4,
+          "notFlooded": 0,
+          "total": 4
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "0bf168051f2616711370c7e293aeb6447d3fdba31e98e04e5312fd0d37b294e4",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_26_67.geojson"
+        },
+        "post": {
+          "sha256": "4b0c34d8503ec26fc67744aac08ba278951a90abb48bdc4426ab2cca8b0fd058",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_26_67.tif"
+        },
+        "pre": {
+          "sha256": "aa82760ce0f0253a2d0d85e9109a9a78816c4c02bd1c51be2aeb00c7f9f858df",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_26_67.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-27-67",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_27_67.geojson",
+      "counts": {
+        "building": {
+          "flooded": 43,
+          "notFlooded": 0,
+          "total": 43
+        },
+        "road": {
+          "flooded": 3,
+          "notFlooded": 1,
+          "total": 4
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "b49acd1735f398afe3fb6411adfbd1237498f80704cabddd0711f9b7fe700501",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_27_67.geojson"
+        },
+        "post": {
+          "sha256": "c3fed44308c0ad794cfa7c76cf759be4aa11343765c0d8b4f11316de41c4456b",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/1040050035DC3B00_0_27_67.tif"
+        },
+        "pre": {
+          "sha256": "0aac57cb8fbfcdd2d8a27209970fbf1fcb06f6be3b9de4a32bb0fa73ad90d8f3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_27_67.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-27-68",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_27_68.geojson",
+      "counts": {
+        "building": {
+          "flooded": 80,
+          "notFlooded": 21,
+          "total": 101
+        },
+        "road": {
+          "flooded": 6,
+          "notFlooded": 6,
+          "total": 12
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "51-100",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "ae2b7002e2717e803eba930511efa21d90073105bdb4bb5c9e09f76d8a9d46b5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_27_68.geojson"
+        },
+        "post": {
+          "sha256": "64ffaa3fc725f22f979346ce07c21c02c87d0fae98713f654bca76a95ebc0ea8",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_27_68.tif"
+        },
+        "pre": {
+          "sha256": "4c01c15e1d4ea0cb87053aba7817da5f665b3709067f98d0f207f2cdb175cf10",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_27_68.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-28-64",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_28_64.geojson",
+      "counts": {
+        "building": {
+          "flooded": 71,
+          "notFlooded": 3,
+          "total": 74
+        },
+        "road": {
+          "flooded": 10,
+          "notFlooded": 3,
+          "total": 13
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "51-100",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "9c16a230d38bd298374751f3e4c43aadc5892bd48e0cca25e5df0e10563ac78e",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_28_64.geojson"
+        },
+        "post": {
+          "sha256": "9f4e2dd7a20fec83e1da9d41f3cb96f48dfe88767179c6db8acd6ada839eefbb",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_28_64.tif"
+        },
+        "pre": {
+          "sha256": "7b40dedd0d4a4503dd2fe38d449d6f3ddbe57f7f7e74dc36fd1c021f475b0472",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_28_64.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-28-68",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_28_68.geojson",
+      "counts": {
+        "building": {
+          "flooded": 1,
+          "notFlooded": 42,
+          "total": 43
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 5,
+          "total": 5
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "8f4d541ae1df59205dde29cbac0cf1127908800594424eaa1a76ed61fae5348b",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_28_68.geojson"
+        },
+        "post": {
+          "sha256": "25de4fb0e60364462d681ef71fbca704329871f0b18591fea186b5695d565d0d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_28_68.tif"
+        },
+        "pre": {
+          "sha256": "fb6ce0f50a5576dc8917a8d81a69b822588f2ab3947d97e154d63580325fdc1a",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_28_68.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-31-63",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_31_63.geojson",
+      "counts": {
+        "building": {
+          "flooded": 2,
+          "notFlooded": 5,
+          "total": 7
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 1,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "53d85514142370538e79c5d0f063034d30adb87e46ec60f1102166b8515519b3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_31_63.geojson"
+        },
+        "post": {
+          "sha256": "e7a6b6ee08f09850fd0da9dcc0f18de5f15ff6a4823267e97d49e3ef0efdbb84",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_31_63.tif"
+        },
+        "pre": {
+          "sha256": "0f759574433c83f4254293e855f2e31c0d75a684d07d0bfe338fd328cf94d017",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_31_63.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-32-61",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_32_61.geojson",
+      "counts": {
+        "building": {
+          "flooded": 1,
+          "notFlooded": 14,
+          "total": 15
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 2,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "ed247feb5ac6b3fb4453b080bac8bba4d44f71a198d20ab71aa7243bf7ba4be2",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_32_61.geojson"
+        },
+        "post": {
+          "sha256": "7ed97af44dc3a002ea466a316b7433a7cd300b30677d7f73e6515679248a37e4",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_32_61.tif"
+        },
+        "pre": {
+          "sha256": "7fe9c661ca1d5068a7b2e5815c10bcd204bcafca8af221ed564f8605ca7cca05",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_32_61.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-34-61",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_34_61.geojson",
+      "counts": {
+        "building": {
+          "flooded": 16,
+          "notFlooded": 0,
+          "total": 16
+        },
+        "road": {
+          "flooded": 4,
+          "notFlooded": 2,
+          "total": 6
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "f5b4b4d5b6e7eae557c5f5eb345c45d7bbe050ef29531e6a85fc8704d4a4f06f",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_34_61.geojson"
+        },
+        "post": {
+          "sha256": "6dafbe0469bb6fbf998d298afac8ee775ddc5e0aa6d000fcfb03ef9310c45d34",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_34_61.tif"
+        },
+        "pre": {
+          "sha256": "0a371deea719f6cfa544ccd15a5b8eeef3fcccb8bb47152c6120c7c1536729f3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_34_61.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-35-61",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_35_61.geojson",
+      "counts": {
+        "building": {
+          "flooded": 13,
+          "notFlooded": 20,
+          "total": 33
+        },
+        "road": {
+          "flooded": 2,
+          "notFlooded": 4,
+          "total": 6
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "7ed539792b54a519e462a7a135f5039b1a86ecc68182aa240a1e1e76c7d968fd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_35_61.geojson"
+        },
+        "post": {
+          "sha256": "425bfe95a2fc7127b393b483b8f8362a98cbfd62c13ba00a8dd4e11cd316f78e",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_35_61.tif"
+        },
+        "pre": {
+          "sha256": "a07df064a9879e4d15c41aad369f3a9ad49bdf4f924c5f2fcf1e5985ffe5fb41",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_35_61.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-36-62",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_36_62.geojson",
+      "counts": {
+        "building": {
+          "flooded": 1,
+          "notFlooded": 2,
+          "total": 3
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 5,
+          "total": 5
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "fb9db4a10ef22ced0b61864ee5a9f1cb926abeb567c49000a77e226bbfab0f3c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_36_62.geojson"
+        },
+        "post": {
+          "sha256": "06c913b961c59c1923a4ac1b6feea9b4f938d320e8d30c9be9599da75fcb7634",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_36_62.tif"
+        },
+        "pre": {
+          "sha256": "404ca64c3bc8f8fd8fae9c1430a233d88e023f74b9f3fd779e0d780312397602",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_36_62.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-37-61",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_37_61.geojson",
+      "counts": {
+        "building": {
+          "flooded": 25,
+          "notFlooded": 11,
+          "total": 36
+        },
+        "road": {
+          "flooded": 4,
+          "notFlooded": 5,
+          "total": 9
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "e634eb6905cd1af49e054d6a2200a6ca35716bc0fd7108d60da80e750a394140",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_37_61.geojson"
+        },
+        "post": {
+          "sha256": "04edb38e4f9a531ac80c9f12bced14aa9d3923ac3254b6d22d00eea3e2c44911",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_37_61.tif"
+        },
+        "pre": {
+          "sha256": "1aee7e8b2dbedafcaac524b9ca44c71dd7592b52de37310b613f5b532144435d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_37_61.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-41-58",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_41_58.geojson",
+      "counts": {
+        "building": {
+          "flooded": 169,
+          "notFlooded": 66,
+          "total": 235
+        },
+        "road": {
+          "flooded": 12,
+          "notFlooded": 9,
+          "total": 21
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": ">100",
+        "floodedRoads": "11-20"
+      },
+      "source": {
+        "label": {
+          "sha256": "cc92d8ba56ddb19c68aecad5ec4c3cdc276ec3bffc1398087e1fd9167b07c127",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_41_58.geojson"
+        },
+        "post": {
+          "sha256": "4eaf4db3906bbd67e97023792cf6f390a40c52ffc7a472c1bc6d675118e529c7",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_41_58.tif"
+        },
+        "pre": {
+          "sha256": "ec5d1a88c57b96460125f83759b38f90682c5a63aac94481245509d248a95583",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_41_58.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-41-59",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_41_59.geojson",
+      "counts": {
+        "building": {
+          "flooded": 76,
+          "notFlooded": 6,
+          "total": 82
+        },
+        "road": {
+          "flooded": 14,
+          "notFlooded": 6,
+          "total": 20
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "51-100",
+        "floodedRoads": "11-20"
+      },
+      "source": {
+        "label": {
+          "sha256": "a27d29217366973e87c07b975f36d22f3ab2916446495fed493e8305673195d3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_41_59.geojson"
+        },
+        "post": {
+          "sha256": "eb97355275d2001694beb86c7906da1c2656e491c12b10a4da9a459e74320c17",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_41_59.tif"
+        },
+        "pre": {
+          "sha256": "17eede22b841dc0f0e61fd0ce4bc9d9c940cf5d80b4f524ddc6158c9acbf8c16",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_41_59.tif"
+        }
+      }
+    },
+    {
+      "tileId": "germany-0-42-58",
+      "collection": "Germany_Training_Public",
+      "geography": "Germany",
+      "event": "July 2021 heavy-rain flood",
+      "labelFile": "0_42_58.geojson",
+      "counts": {
+        "building": {
+          "flooded": 38,
+          "notFlooded": 1,
+          "total": 39
+        },
+        "road": {
+          "flooded": 10,
+          "notFlooded": 1,
+          "total": 11
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "32aaaf953d84df091ea0d71a11d8ec60fab9d74f77d9c35c389c15f3a560b93d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/annotations/0_42_58.geojson"
+        },
+        "post": {
+          "sha256": "4a94956951cf0fc9753cad752f1dd0775738f24fc73add06a96cb2bf325cfe99",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/POST-event/10500500E6DD3C00_0_42_58.tif"
+        },
+        "pre": {
+          "sha256": "4d318e6de0e069384970c688bde5a14727f063b2353d4f631ab7a0fac2a2fc09",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Germany_Training_Public/PRE-event/10500500C4DD7000_0_42_58.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-11-15",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_11_15.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 6,
+          "total": 6
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 0,
+          "total": 1
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "c8a67ff381a135bad331b06137cf04f8ab4f25aa978bd51d74365aea4490ee89",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_11_15.geojson"
+        },
+        "post": {
+          "sha256": "59e7baab7f97ba09ee93d2c8000a073278d4832ef6b922d6ae69e5e87f8c342e",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_11_15.tif"
+        },
+        "pre": {
+          "sha256": "978cdf1ce69b634ab4a61d00745a7a5b9138f71aeb336cdf6be813f73cda6dfd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_11_15.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-11-4",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_11_4.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 32,
+          "total": 32
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 3,
+          "total": 3
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "e4c6939191f1da6ac6beb08d1c2eed2712ba48eafdf2f2498fa72564680ce684",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_11_4.geojson"
+        },
+        "post": {
+          "sha256": "594f7e0414992a54d0bfc7964f29c175bd0a5da904c4745dd6a6bd9d70496bd3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_11_4.tif"
+        },
+        "pre": {
+          "sha256": "cbb222cbceaba40ace3a585007f82297cbd31b98c795f98a7ec3ea881b8c36fb",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_11_4.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-14-4",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_14_4.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 4,
+          "total": 4
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 2,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "d8e208d1ad0bbd6df9455622993e7beb8f6419a79241b17291528e8a0fa78d2f",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_14_4.geojson"
+        },
+        "post": {
+          "sha256": "247c9a0ec0b58e23d4a15f02048e8d5c077607c95bdd2a562d6486dd035b081d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_14_4.tif"
+        },
+        "pre": {
+          "sha256": "b2f34ca12e81d20f7a685113840962d34ff17c68d33d29cda5e9deb684ab4fa9",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_14_4.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-15-2",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_15_2.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 1,
+          "total": 1
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 1,
+          "total": 1
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "4091c833ce78bb011211a623aa9c5d0ab12d32b65d933bcd86757b2b4c816a0a",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_15_2.geojson"
+        },
+        "post": {
+          "sha256": "b4e7df89d375c304d9809c7b39f088ae85cf0f0bc7c16d3a7bbb6b799279c6dd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_15_2.tif"
+        },
+        "pre": {
+          "sha256": "1243fda5a1fa3fdee109a0988ac9e005d7a8e8deafb0e0ccdd7908a10c59f82b",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_15_2.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-16-8",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_16_8.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 1,
+          "total": 1
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 1,
+          "total": 1
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "2848bd9ad3674f4861c23d2553e0f83fddeafc2fa493018890b26e3438ac0715",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_16_8.geojson"
+        },
+        "post": {
+          "sha256": "c1afb876e01b78c97d5cd2d71070e119fce97cdc1bd07e6c24611f0613c1b9b8",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_16_8.tif"
+        },
+        "pre": {
+          "sha256": "d77b306fdc3baca1caf559e8a5e1defb4161ce3cd63787cdae85afa1e17f118d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_16_8.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-17-13",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_17_13.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 3,
+          "total": 3
+        },
+        "road": {
+          "flooded": 5,
+          "notFlooded": 14,
+          "total": 19
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "73ab8862380106bc4f976361a319ce2a90f06a29a3bf3207d28e3cae2a7ba54d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_17_13.geojson"
+        },
+        "post": {
+          "sha256": "8d441792915fb8683b7f6213d1bc5e48286f3340c197d80414e03968dac8e321",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_17_13.tif"
+        },
+        "pre": {
+          "sha256": "41ffc97406e66cc5219ad673c2bb78ed4b672e9b1e5fa3fad2f58a87b15c40e5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_17_13.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-18-15",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_18_15.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 1,
+          "total": 1
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 2,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "1831fbb85268b23f03789a0abfa3d58fd9d28b5fe2d99b2d77f0ecf46b212224",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_18_15.geojson"
+        },
+        "post": {
+          "sha256": "8b0159cd8e3dd05e2316a494c55c6719cd6f4c0e53ae0ed728af525e6e712142",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_18_15.tif"
+        },
+        "pre": {
+          "sha256": "14adb0b0c1354b27202b69dc3be13f7ea737762f04c3bb396348789d50a19517",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_18_15.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-18-19",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_18_19.geojson",
+      "counts": {
+        "building": {
+          "flooded": 2,
+          "notFlooded": 0,
+          "total": 2
+        },
+        "road": {
+          "flooded": 5,
+          "notFlooded": 0,
+          "total": 5
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "822ac7ec02981e1c2a38dd6f7f10b3516d2cff0fe497e918f0cbabe5e49f84f7",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_18_19.geojson"
+        },
+        "post": {
+          "sha256": "9626bbaebf5b54f961ed8f8aee6feb1aca2db40a9ae50333aceb6f984d91599c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_18_19.tif"
+        },
+        "pre": {
+          "sha256": "ca5b38eeb5c5d081acc9d7c9511e59f47e208b34ee467ce08dcbb84ba07fbd88",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_18_19.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-21-19",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_21_19.geojson",
+      "counts": {
+        "building": {
+          "flooded": 14,
+          "notFlooded": 0,
+          "total": 14
+        },
+        "road": {
+          "flooded": 13,
+          "notFlooded": 4,
+          "total": 17
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "11-20"
+      },
+      "source": {
+        "label": {
+          "sha256": "edbbefadf911fec23d202a1712cddb2d27350c5f8b45687f67f3366c0f24f0ad",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_21_19.geojson"
+        },
+        "post": {
+          "sha256": "de6d1a04be6954cbf46b6075a0928f53085da0764f5a35db770c264d28cd0ec3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_21_19.tif"
+        },
+        "pre": {
+          "sha256": "946748b066b5fe2326eadbbc24b2f9e4c4265b9a34ed310d21f22e4e66393b09",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_21_19.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-24-18",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_24_18.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 22,
+          "total": 22
+        },
+        "road": {
+          "flooded": 0,
+          "notFlooded": 6,
+          "total": 6
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "0"
+      },
+      "source": {
+        "label": {
+          "sha256": "cb163a373d0c912b1d23638979c74e62b6821d11ec51b9ef5f281e39e4e63b22",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_24_18.geojson"
+        },
+        "post": {
+          "sha256": "9c505b0bb7daa0f8d2fcad4eb77439888b186ae00483d3cd57c23e14f3cd1d59",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_24_18.tif"
+        },
+        "pre": {
+          "sha256": "838f71d22a33bac1d4c858e056e5f1e15f5d317e92ae2aa051ade4ec2a0ed1ad",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_24_18.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-0-24-21",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "0_24_21.geojson",
+      "counts": {
+        "building": {
+          "flooded": 3,
+          "notFlooded": 0,
+          "total": 3
+        },
+        "road": {
+          "flooded": 2,
+          "notFlooded": 0,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "61c18e8f9c003ac2fe94246820d61510b396ef32981cac240a8510349a2ffe9a",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/0_24_21.geojson"
+        },
+        "post": {
+          "sha256": "9880f0830d96ddbafd2d646274be5f531505246b9f4f6ca89700e5a3ee15ff5e",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_0_24_21.tif"
+        },
+        "pre": {
+          "sha256": "c2942bf7ba1c3c9c919b3556982b21a5ef5168b39eea90b486803c5ca3a93ff9",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/105001001A0FFC00_0_24_21.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-13-45",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_13_45.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 36,
+          "total": 36
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 3,
+          "total": 4
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "261fd78ab00cedea3e83c7c6a531aeacf5c152472bd8875c9a95c4e8da4198c5",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_13_45.geojson"
+        },
+        "post": {
+          "sha256": "b9ec0c88a5c36a44109c347be2d206a2e31348d64b20e43668c0d1f7131be084",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_13_45.tif"
+        },
+        "pre": {
+          "sha256": "be65ece32c6f9f34978cde58ec1ddce1b50ffa7d25c265af4f9d1e7bf8be5022",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_13_45.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-14-46",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_14_46.geojson",
+      "counts": {
+        "building": {
+          "flooded": 17,
+          "notFlooded": 148,
+          "total": 165
+        },
+        "road": {
+          "flooded": 12,
+          "notFlooded": 2,
+          "total": 14
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "11-20"
+      },
+      "source": {
+        "label": {
+          "sha256": "0058ffe73f1e8fe4778ec295bc300a7bb5513eb07834a6fb7b82ebd814e36521",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_14_46.geojson"
+        },
+        "post": {
+          "sha256": "7cc35259de68473f105e2380a2ec073572176014ba1d8f744daccb2e29ed9983",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_14_46.tif"
+        },
+        "pre": {
+          "sha256": "7168d643ca6ce863a407025e517c45584805845a00c9843c9cc9dbb9347a5684",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_14_46.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-14-48",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_14_48.geojson",
+      "counts": {
+        "building": {
+          "flooded": 88,
+          "notFlooded": 37,
+          "total": 125
+        },
+        "road": {
+          "flooded": 9,
+          "notFlooded": 0,
+          "total": 9
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "51-100",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "b87c64592f8224d33db113573a41c7ddb0d916fce9b621b78d39977717ce0b0c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_14_48.geojson"
+        },
+        "post": {
+          "sha256": "c4c0efef3466ab2badaa5cbf4e2a4a97391d853aa82da979fa5c880e60718b67",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_14_48.tif"
+        },
+        "pre": {
+          "sha256": "8e604114456cc27c498d7a174ad438a944db4ba0769ac772d39c8ae2ce0404e9",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_14_48.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-15-44",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_15_44.geojson",
+      "counts": {
+        "building": {
+          "flooded": 0,
+          "notFlooded": 4,
+          "total": 4
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 1,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "0",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "ec5642d83925231d0df7f4432f0e0ce5a96049c7b768931525990c1e6da683f9",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_15_44.geojson"
+        },
+        "post": {
+          "sha256": "19a6b29f35349e8093d487d4274bbe6a60f0e7b554b1a622043fb6c8b70a6dbe",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_15_44.tif"
+        },
+        "pre": {
+          "sha256": "d5fb4b85ac2acd4a6fab7c624edf0687ecf6cf7037ba70991d5d33fd7f96449f",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_15_44.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-15-46",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_15_46.geojson",
+      "counts": {
+        "building": {
+          "flooded": 20,
+          "notFlooded": 0,
+          "total": 20
+        },
+        "road": {
+          "flooded": 2,
+          "notFlooded": 0,
+          "total": 2
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "6dabfed51ff6a190fed6af8ee6d523bbc140406ac994bff00f089dea44e71cda",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_15_46.geojson"
+        },
+        "post": {
+          "sha256": "cedfb41408c866b5b23f1ad75f873ab1669a360ab5e402ffc342cde98c02b129",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_15_46.tif"
+        },
+        "pre": {
+          "sha256": "622c2561c0b450691670cafa55e0d134941bad95c7c12396300084f7b04818b2",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_15_46.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-16-49",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_16_49.geojson",
+      "counts": {
+        "building": {
+          "flooded": 161,
+          "notFlooded": 0,
+          "total": 161
+        },
+        "road": {
+          "flooded": 7,
+          "notFlooded": 0,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": ">100",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "21bab155482798af22017ec95943f15cbc385d44879df894a1b70b682108c565",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_16_49.geojson"
+        },
+        "post": {
+          "sha256": "7efcadc80b976c2723f4a4ce98cec4f2ad69ca4890d946bee232d416651e4f54",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_16_49.tif"
+        },
+        "pre": {
+          "sha256": "eab3bd94494389567bd7cf7776f8d02f100b9dea8cfc15fc88c91d828260f6bd",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_16_49.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-17-49",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_17_49.geojson",
+      "counts": {
+        "building": {
+          "flooded": 30,
+          "notFlooded": 0,
+          "total": 30
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 0,
+          "total": 1
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "3c81d5f7428f697e2b4961845d880646f39f0733623f50af11bf1977b95d6b8c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_17_49.geojson"
+        },
+        "post": {
+          "sha256": "86ece3b81fce2a83dcc92f9006a98a0e70bba182eee832bee7f1e058f02f41b7",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_17_49.tif"
+        },
+        "pre": {
+          "sha256": "26c0d3c78a7629d488c5f4154185350e067f8bcaffb18d0c01fdf96f9e89d395",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_17_49.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-18-44",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_18_44.geojson",
+      "counts": {
+        "building": {
+          "flooded": 5,
+          "notFlooded": 38,
+          "total": 43
+        },
+        "road": {
+          "flooded": 1,
+          "notFlooded": 7,
+          "total": 8
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "465ea2da611f69e048b0bcf82e8c90e79b0ac3fde93b9ca5889207b8cad4b1ec",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_18_44.geojson"
+        },
+        "post": {
+          "sha256": "edecaf39a016032acaca7dcefd2e792a89b6e06e543b83f91fbb07961a204145",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_18_44.tif"
+        },
+        "pre": {
+          "sha256": "809e6b74ee2e384338ea27522ea825903760cb537e190847a9c1e05137ce5f63",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_18_44.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-19-44",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_19_44.geojson",
+      "counts": {
+        "building": {
+          "flooded": 41,
+          "notFlooded": 24,
+          "total": 65
+        },
+        "road": {
+          "flooded": 5,
+          "notFlooded": 4,
+          "total": 9
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "6b9add4d5b6685bbfcb71ad3b70fb116cb76642130834cde1f6ebf085cf05c54",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_19_44.geojson"
+        },
+        "post": {
+          "sha256": "431180a00fb8490e7eb0e7c9ec2f7fba6e40ba12401a014730d14b22af3c2c97",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_19_44.tif"
+        },
+        "pre": {
+          "sha256": "76cd9c1ac8b0ecd05ee4d85e9937ea96d6f11d9bf923df4032fcbda05fa07e02",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_19_44.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-19-56",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_19_56.geojson",
+      "counts": {
+        "building": {
+          "flooded": 25,
+          "notFlooded": 0,
+          "total": 25
+        },
+        "road": {
+          "flooded": 7,
+          "notFlooded": 0,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "efacb058c83cc957c95ab47ade63e9d46c2f312a1fef06d38a2cfa1b527813a3",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_19_56.geojson"
+        },
+        "post": {
+          "sha256": "d18a710227d37e6dbda565118e9e852519a5ae9fd31b9d75c7c997703276389d",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_19_56.tif"
+        },
+        "pre": {
+          "sha256": "62bef9d46aec03be47afec7cf480e630c8f8ceb24e68eb47b11fe691ac07ba54",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_19_56.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-19-57",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_19_57.geojson",
+      "counts": {
+        "building": {
+          "flooded": 25,
+          "notFlooded": 26,
+          "total": 51
+        },
+        "road": {
+          "flooded": 8,
+          "notFlooded": 0,
+          "total": 8
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "21-50",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "f1fc6c2775e1e74064f5de37d2ca0df9b4567cc08b99b3b5397911b6af2286ca",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_19_57.geojson"
+        },
+        "post": {
+          "sha256": "a2d1898b34c4a6b4046176d4a2beefb5ab915ce7690723055dc6ce0a35bc322a",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_19_57.tif"
+        },
+        "pre": {
+          "sha256": "2aa2851e428c55cdd1bd86a090a943ffb968ad88b21680f9e899ee2d419153d2",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_19_57.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-19-60",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_19_60.geojson",
+      "counts": {
+        "building": {
+          "flooded": 58,
+          "notFlooded": 0,
+          "total": 58
+        },
+        "road": {
+          "flooded": 10,
+          "notFlooded": 0,
+          "total": 10
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "51-100",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "57feb35906f60c168a33e6fa04f5c8e66c54366c5a26cc200f47ae05df72e84c",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_19_60.geojson"
+        },
+        "post": {
+          "sha256": "0476a5ad13c41178e2b61d9871ae9b68c89941a86c306a4b2933a5e7a4cc3781",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_19_60.tif"
+        },
+        "pre": {
+          "sha256": "c27e03f272f28947412d827f4c196e191e8686536c2657f96d41b27c06a1e4e0",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_19_60.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-19-62",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_19_62.geojson",
+      "counts": {
+        "building": {
+          "flooded": 10,
+          "notFlooded": 0,
+          "total": 10
+        },
+        "road": {
+          "flooded": 5,
+          "notFlooded": 2,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "1-10",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "491509bd0e8cc4b44da46c1060dd4a84c5dd6efedcdfd5231b35653516c7a1b6",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_19_62.geojson"
+        },
+        "post": {
+          "sha256": "87392f771b5f134c74f19f687389069dc6415f1b3e4dc2b93ff3a1c5c53ea8e6",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_19_62.tif"
+        },
+        "pre": {
+          "sha256": "bb487ee9d1d6414c3764d1d701285eeb97affd3e231920709115c3854e752d78",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_19_62.tif"
+        }
+      }
+    },
+    {
+      "tileId": "louisiana-east-2-20-44",
+      "collection": "Louisiana-East_Training_Public",
+      "geography": "Louisiana",
+      "event": "August 2021 Hurricane Ida flood",
+      "labelFile": "2_20_44.geojson",
+      "counts": {
+        "building": {
+          "flooded": 17,
+          "notFlooded": 1,
+          "total": 18
+        },
+        "road": {
+          "flooded": 4,
+          "notFlooded": 3,
+          "total": 7
+        }
+      },
+      "referenceRanges": {
+        "floodedBuildings": "11-20",
+        "floodedRoads": "1-10"
+      },
+      "source": {
+        "label": {
+          "sha256": "9c22911b639ed2a2d1f015ad8ed0d24ea402d24601a8d8848781634a8e530345",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/annotations/2_20_44.geojson"
+        },
+        "post": {
+          "sha256": "491327f855846603debc2c876ea9a412523ce1113beb0ca60c260e7875074028",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/POST-event/10300100C46F5900_2_20_44.tif"
+        },
+        "pre": {
+          "sha256": "196c1931fffce6f278c5d6250e9e791852bc7480e4ccfb3504419740cfcf9cec",
+          "url": "https://spacenet-dataset.s3.amazonaws.com/spacenet/SN8_floods/Louisiana-East_Training_Public/PRE-event/10300100AF395C00_2_20_44.tif"
+        }
+      }
+    }
+  ]
+}

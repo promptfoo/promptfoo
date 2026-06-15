@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "building_flooded": {
+      "type": "string",
+      "enum": ["yes", "no", "unknown"]
+    },
+    "road_flooded": {
+      "type": "string",
+      "enum": ["yes", "no", "unknown"]
+    },
+    "flooded_building_count_range": {
+      "type": "string",
+      "enum": ["0", "1-10", "11-20", "21-50", "51-100", ">100", "unknown"]
+    },
+    "flooded_road_count_range": {
+      "type": "string",
+      "enum": ["0", "1-10", "11-20", "21-50", "51-100", ">100", "unknown"]
+    },
+    "abstain": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "building_flooded",
+    "road_flooded",
+    "flooded_building_count_range",
+    "flooded_road_count_range",
+    "abstain"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SpaceNet 8 100-image multimodal flood assessment
+sharing: false
+tags:
+  dataset: spacenet8
+  domain: geospatial
+  modality: paired-imagery
+  suite: 100-image-labeled-sample
+
+prompts:
+  - label: Paired flood assessment
+    raw: file://prompt.json
+
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    label: OpenAI gpt-5.4-mini vision
+    config:
+      max_completion_tokens: 600
+      response_format:
+        type: json_schema
+        json_schema:
+          name: flood_assessment
+          strict: true
+          schema: file://response-schema.json
+
+defaultTest:
+  assert:
+    - type: is-json
+      value: file://response-schema.json
+      metric: schema_contract
+    - type: javascript
+      value: file://grader.cjs:gradeFloodAssessment
+      threshold: 1
+      metric: labeled_accuracy
+
+tests: file://tests.cjs
