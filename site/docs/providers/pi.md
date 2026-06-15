@@ -6,16 +6,16 @@ description: 'Run evals through Pi, a minimal terminal coding agent with multi-p
 
 # Pi Coding Agent
 
-This provider integrates [Pi](https://pi.dev/), a minimal terminal coding agent that supports Anthropic, OpenAI, Google, Groq, OpenRouter, and many other LLM providers.
+This provider integrates [Pi](https://pi.dev/), a minimal terminal coding agent that can run against the model providers configured in Pi.
 
 Promptfoo runs the `pi` CLI in one-shot JSON mode for each test case, so evals exercise the same agent runtime users get in their terminal.
 
 ## Provider IDs
 
 - `pi` - Uses pi's configured default model
-- `pi:<provider>/<model>` - Explicit model (e.g. `pi:anthropic/claude-sonnet-4-6`, `pi:openai/gpt-5.5`)
+- `pi:<provider>/<model>` - Explicit model (for example `pi:anthropic/claude-sonnet-4-6` or `pi:openai/gpt-5.5`)
 
-The model segment accepts pi's model patterns, including an optional thinking-level suffix such as `pi:openai/gpt-5.5:high`.
+The model segment follows Pi's model pattern syntax, including an optional thinking-level suffix such as `pi:openai/gpt-5.5:high`. Run `pi --list-models` to see the models available in your Pi install.
 
 ## Installation
 
@@ -45,26 +45,27 @@ On Windows, use the project-local install (or set `pi_path` to the package's `di
 
 ## Setup
 
-Configure credentials for your LLM provider. Pi reads the standard environment variables:
+Configure credentials for the Pi provider you select. For API-key providers, Pi reads standard environment variables:
 
 ```bash
-export ANTHROPIC_API_KEY=your_api_key_here
-# or OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, ...
+export OPENAI_API_KEY=your_api_key_here
+# or ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, ...
 ```
 
-Subscription auth (such as Claude Pro/Max via `pi /login`) also works because the provider uses your pi config directory (`~/.pi/agent`) by default.
+Subscription-backed providers configured through Pi's login flow also work because the provider uses your Pi config directory (`~/.pi/agent`) by default.
 
 ## Quick Start
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  # Replace with any model returned by `pi --list-models`.
   - pi:openai/gpt-5.5
 
 prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-If you use Pi's OpenAI Codex subscription auth (`pi /login`), select the Codex provider explicitly:
+If you use Pi's OpenAI Codex provider, authenticate through Pi's login flow and select the Codex provider explicitly:
 
 ```yaml
 providers:
@@ -151,7 +152,7 @@ Pi reads the prompt from piped stdin and trims leading/trailing whitespace (an a
 The provider returns:
 
 - `output` - Final assistant message text
-- `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`, plus cache read/write details when pi reports them)
+- `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`); cache reads/writes are exposed as `completionDetails.cacheReadInputTokens` and `completionDetails.cacheCreationInputTokens` when pi reports them
 - `cost` - USD cost as reported by pi
 - `metadata.toolCalls` - Tools the agent invoked, with arguments and error status
 - `metadata.model` / `metadata.provider_id` - Model that actually served the run
@@ -161,7 +162,9 @@ If pi auto-retries after a transient provider/runtime error, `tokenUsage` and `c
 
 ## Caching
 
-Responses are cached using the prompt, CLI arguments, a fingerprint of the working directory contents, the configured provider environment (`env` and provider overrides), and a fingerprint of the effective agent dir's `settings.json`, `models.json`, `SYSTEM.md`, and `APPEND_SYSTEM.md` (resolved from `agent_dir` or `PI_CODING_AGENT_DIR`). Changing a base URL, a behavior-affecting env value, pi's default model, or a system-prompt override therefore busts the cache, while changing only a credential does not (secret-named env vars are excluded so cached results stay portable). Only hashes are persisted — agent-dir files are fingerprinted by modification time and size, never by content — so no secret reaches the cache.
+Responses are cached using the prompt, CLI arguments, working directory fingerprint, configured provider environment (`env` and provider overrides), and effective agent dir fingerprint. The agent dir fingerprint covers `settings.json`, `models.json`, `SYSTEM.md`, and `APPEND_SYSTEM.md` from `agent_dir` or `PI_CODING_AGENT_DIR`.
+
+Changing a base URL, behavior-affecting env value, pi default model, or system-prompt override busts the cache. Changing only a credential does not, because secret-named env vars are excluded so cached results stay portable. Only hashes are persisted; agent-dir files are fingerprinted by modification time and size, not by content.
 
 A few inputs are intentionally **not** part of the cache key, so use `--no-cache` when they matter to your eval:
 
@@ -192,6 +195,7 @@ Because pi is multi-provider, one config can compare how the same agent harness 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  # Replace these IDs with models returned by `pi --list-models`.
   - pi:openai/gpt-5.5
   - pi:anthropic/claude-sonnet-4-6
   - pi:google/gemini-2.5-flash
