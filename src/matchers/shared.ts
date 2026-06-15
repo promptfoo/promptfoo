@@ -92,3 +92,28 @@ export function tryParse(content: string) {
 export function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
+
+/**
+ * Segments text into units for sentence-level metrics (e.g. RAGAS context
+ * relevance).
+ *
+ * If the text already uses newlines as separators — line-formatted LLM grader
+ * output, or a context passed one chunk/sentence per line — each line is treated
+ * as a unit. This preserves existing behavior and avoids mis-splitting
+ * abbreviations (e.g. "i.e.", "U.S.").
+ *
+ * Otherwise the text is a single prose block (the common shape of a retrieved
+ * RAG passage), so it is segmented on sentence boundaries (`.`, `!`, `?`
+ * followed by whitespace). This is the important case: {@link splitIntoSentences}
+ * splits on newlines only, so a prose passage with no newlines collapses to a
+ * single unit, forcing sentence-level denominators to 1.
+ *
+ * Note: the sentence split is a lightweight heuristic and does not handle every
+ * edge case (e.g. decimals like "3.14"); full segmentation would need an NLP
+ * tokenizer. It is a substantial improvement over newline-only splitting for the
+ * common prose case.
+ */
+export function splitTextIntoSentences(text: string): string[] {
+  const segments = /\n/.test(text) ? text.split('\n') : text.split(/(?<=[.!?])\s+/);
+  return segments.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0);
+}

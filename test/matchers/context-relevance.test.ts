@@ -43,6 +43,37 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.relevantSentenceCount).toBe(1);
   });
 
+  it('should segment a single-paragraph prose context into sentences', async () => {
+    // Regression: a retrieved context is usually one prose paragraph with no
+    // newlines. Splitting it on newlines alone yields a single context unit, so
+    // the denominator is 1 and the score is forced to ~1.0 regardless of how
+    // little of the context is actually relevant. Segmenting on sentence
+    // boundaries restores a meaningful denominator.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.3;
+
+    // Mock LLM extracting 1 relevant sentence out of the 3 in the context.
+    const mockCallApi = vi.fn().mockImplementation(() => {
+      return Promise.resolve({
+        output: 'Paris is the capital of France.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 3 sentences in the context, 1 relevant → score = 1/3 ≈ 0.33.
+    // Before the fix this returned 1.0 (the whole paragraph counted as one unit).
+    expect(result.score).toBeCloseTo(0.33, 2);
+    expect(result.pass).toBe(true); // 0.33 >= 0.3
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
   it('should handle insufficient information responses', async () => {
     const input = 'What is quantum computing?';
     const context =

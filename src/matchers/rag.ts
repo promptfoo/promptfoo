@@ -19,6 +19,7 @@ import {
   fail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
+  splitTextIntoSentences,
   tryParse,
 } from './shared';
 
@@ -262,13 +263,22 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Split context into units: use chunks if provided, otherwise split into sentences
-  const contextUnits = Array.isArray(context)
+  // Split context into units: use chunks if provided, otherwise segment the
+  // prose context into sentences. We must split on sentence boundaries (not just
+  // newlines) — a retrieved context is typically a single prose paragraph with
+  // no newlines, and splitting on newlines alone would yield one unit, making
+  // the denominator 1 and forcing the score to ~1.0 regardless of relevance.
+  const isArrayContext = Array.isArray(context);
+  const contextUnits = isArrayContext
     ? context.filter((chunk) => chunk.trim().length > 0)
-    : splitIntoSentences(context);
+    : splitTextIntoSentences(context);
   const totalContextUnits = contextUnits.length;
 
-  const extractedSentences = splitIntoSentences(resp.output);
+  // Segment the grader's extracted sentences the same way the context was
+  // segmented so the numerator and denominator use consistent units.
+  const extractedSentences = isArrayContext
+    ? splitIntoSentences(resp.output)
+    : splitTextIntoSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
 
