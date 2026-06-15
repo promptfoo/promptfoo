@@ -356,6 +356,9 @@ Implemented capabilities:
   activity in `metadata.toolCalls`.
 - Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
   JSON mode even when the run fails.
+- Emits a top-level GenAI `callApi` span (system, model, token usage, cost,
+  cache-hit) linked to the eval trace via `traceparent`, matching the other
+  agentic providers.
 
 Important limits:
 
@@ -367,6 +370,9 @@ Important limits:
 - Sessions are always ephemeral (`--no-session`); there is no resume support.
 - Uses the user's `~/.pi/agent` config dir by default so subscription auth and
   custom models work; set `agent_dir` to isolate.
+- Pi has no native OpenTelemetry support, so there is no deep tracing into the pi
+  runtime (no OTEL env injection); the provider-level `callApi` span is the trace
+  boundary. Pi's own install telemetry is disabled by the default `--offline`.
 
 Docs and examples:
 

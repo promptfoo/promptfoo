@@ -9,6 +9,11 @@ import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
 import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../tracing/genaiTracer';
+import {
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
@@ -565,6 +570,18 @@ export class PiProvider implements ApiProvider {
     return PI_PROVIDER_ENV_KEYS[provider];
   }
 
+  /**
+   * The `gen_ai.system` value for tracing: the underlying model provider pi
+   * routes to (from provider_id or the model prefix), or 'pi' when unknown
+   * (e.g. a bare `pi` run using pi's configured default).
+   */
+  private resolveGenAiSystem(config: PiProviderConfig): string {
+    const provider =
+      config.provider_id?.toLowerCase() ??
+      (config.model?.includes('/') ? config.model.split('/')[0].toLowerCase() : undefined);
+    return provider || 'pi';
+  }
+
   private buildEnv(config: PiProviderConfig): Record<string, string> {
     const env: Record<string, string> = {};
 
@@ -779,9 +796,12 @@ export class PiProvider implements ApiProvider {
       const killChild = () => {
         signalGroup('SIGTERM');
         setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null) {
-            signalGroup('SIGKILL');
-          }
+          // Force-kill the whole group, not gated on pi's own liveness: pi may
+          // have exited cleanly from SIGTERM while a tool grandchild (e.g. a
+          // bash that ignores SIGTERM) is still alive in the group. child.kill
+          // on an already-exited child is a safe no-op, and process.kill(-pid)
+          // throws ESRCH (caught) once the group is gone.
+          signalGroup('SIGKILL');
         }, KILL_GRACE_MS).unref();
       };
 
@@ -1071,75 +1091,95 @@ export class PiProvider implements ApiProvider {
       return { error: 'Pi call aborted before it started' };
     }
 
-    const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
+    // Emit a GenAI span for the run so it joins the eval's trace (linked via
+    // context.traceparent) with model, token usage, cost, and cache-hit
+    // attributes — matching the other agentic providers. Cache hits return
+    // above without spawning, so they are not traced. Note: pi has no native
+    // OpenTelemetry support, so unlike the SDK-based providers we do not
+    // propagate TRACEPARENT into the child process (it would be inert).
+    const spanContext = buildChatSpanContext({
+      system: this.resolveGenAiSystem(config),
+      model: config.model ?? 'default',
+      providerId: this.providerId,
+      prompt,
+      context,
+    });
 
-    try {
-      const { command, argsPrefix } = this.resolvePiCommand(config);
-      const fullArgs = [...argsPrefix, ...args];
-      logger.debug(`[Pi] Running ${command}`, { args: fullArgs, cwd: runDir });
+    return withGenAISpan(
+      spanContext,
+      async () => {
+        const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
 
-      const runResult = await this.runPi(command, fullArgs, {
-        cwd: runDir,
-        env: this.buildEnv(config),
-        prompt,
-        timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
-        maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-        abortSignal: callOptions?.abortSignal,
-      });
+        try {
+          const { command, argsPrefix } = this.resolvePiCommand(config);
+          const fullArgs = [...argsPrefix, ...args];
+          logger.debug(`[Pi] Running ${command}`, { args: fullArgs, cwd: runDir });
 
-      if (runResult.aborted) {
-        return { error: 'Pi call aborted' };
-      }
-      if (runResult.timedOut) {
-        return {
-          error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
-        };
-      }
-      if (runResult.stdoutOverflow) {
-        return {
-          error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
-        };
-      }
+          const runResult = await this.runPi(command, fullArgs, {
+            cwd: runDir,
+            env: this.buildEnv(config),
+            prompt,
+            timeoutMs: config.timeout ?? DEFAULT_TIMEOUT_MS,
+            maxOutputBytes: config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+            abortSignal: callOptions?.abortSignal,
+          });
 
-      // Pi exits 0 in JSON mode even when the agent run fails (failures show
-      // up as stopReason on the final message). A nonzero or signal exit means
-      // the CLI itself crashed, so any parsed events may be truncated mid-run;
-      // never report them as a successful (and cacheable) response.
-      if (runResult.exitCode !== 0) {
-        const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
-        const reason =
-          runResult.exitCode === null && runResult.signal
-            ? `was terminated by signal ${runResult.signal}`
-            : `exited with code ${runResult.exitCode}`;
-        return {
-          error: `Pi ${reason}.${stderrSuffix}`,
-        };
-      }
+          if (runResult.aborted) {
+            return { error: 'Pi call aborted' };
+          }
+          if (runResult.timedOut) {
+            return {
+              error: `Pi call timed out after ${config.timeout ?? DEFAULT_TIMEOUT_MS}ms`,
+            };
+          }
+          if (runResult.stdoutOverflow) {
+            return {
+              error: `Pi produced more than ${config.max_output_bytes ?? DEFAULT_MAX_OUTPUT_BYTES} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+            };
+          }
 
-      const events = this.parseEvents(runResult.stdout);
-      const providerResponse = this.buildProviderResponse(events, runResult.stderr);
+          // Pi exits 0 in JSON mode even when the agent run fails (failures show
+          // up as stopReason on the final message). A nonzero or signal exit means
+          // the CLI itself crashed, so any parsed events may be truncated mid-run;
+          // never report them as a successful (and cacheable) response.
+          if (runResult.exitCode !== 0) {
+            const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
+            const reason =
+              runResult.exitCode === null && runResult.signal
+                ? `was terminated by signal ${runResult.signal}`
+                : `exited with code ${runResult.exitCode}`;
+            return {
+              error: `Pi ${reason}.${stderrSuffix}`,
+            };
+          }
 
-      if (!providerResponse.error) {
-        await cacheResponse(cacheResult, providerResponse, 'Pi');
-      }
+          const events = this.parseEvents(runResult.stdout);
+          const providerResponse = this.buildProviderResponse(events, runResult.stderr);
 
-      return providerResponse;
-    } catch (error) {
-      if (
-        (error instanceof Error && error.name === 'AbortError') ||
-        callOptions?.abortSignal?.aborted
-      ) {
-        return { error: 'Pi call aborted' };
-      }
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error calling Pi', { error });
-      return { error: `Error calling Pi: ${errorMessage}` };
-    } finally {
-      if (!workingDir) {
-        await fsPromises.rm(runDir, { recursive: true, force: true }).catch((err) => {
-          logger.debug(`[Pi] Failed to remove temp dir ${runDir}: ${err}`);
-        });
-      }
-    }
+          if (!providerResponse.error) {
+            await cacheResponse(cacheResult, providerResponse, 'Pi');
+          }
+
+          return providerResponse;
+        } catch (error) {
+          if (
+            (error instanceof Error && error.name === 'AbortError') ||
+            callOptions?.abortSignal?.aborted
+          ) {
+            return { error: 'Pi call aborted' };
+          }
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error('Error calling Pi', { error });
+          return { error: `Error calling Pi: ${errorMessage}` };
+        } finally {
+          if (!workingDir) {
+            await fsPromises.rm(runDir, { recursive: true, force: true }).catch((err) => {
+              logger.debug(`[Pi] Failed to remove temp dir ${runDir}: ${err}`);
+            });
+          }
+        }
+      },
+      extractProviderResponseAttributes,
+    );
   }
 }

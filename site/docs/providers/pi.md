@@ -159,6 +159,10 @@ pi resolves credentials in the order `--api-key` flag > `~/.pi/agent/auth.json` 
 
 :::
 
+## Tracing
+
+When [tracing](/docs/tracing/) is enabled, the provider emits a GenAI span for each pi run — with the model, token usage, cost, and cache-hit status — linked to the evaluation's trace via `traceparent`, like the other built-in providers. Cache hits are served without spawning pi and are not traced. Pi has no native OpenTelemetry support, so there is no deep tracing into the pi process itself; the provider-level span is the boundary.
+
 ## Comparing Models Through Pi
 
 Because pi is multi-provider, one config can compare how the same agent harness performs across models:

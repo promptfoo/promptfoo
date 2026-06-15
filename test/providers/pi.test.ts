@@ -7,10 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { findPiCliScript, PI_READONLY_TOOLS, PiProvider } from '../../src/providers/pi';
+import * as genaiTracer from '../../src/tracing/genaiTracer';
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
   basePath: '/test/basePath',
+}));
+
+// Keep the real genaiTracer implementation (spans no-op without an OTEL SDK),
+// but allow spying on withGenAISpan to assert the provider's tracing wiring.
+vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
 }));
 
 vi.mock('child_process', () => ({
@@ -703,6 +710,30 @@ describe('PiProvider', () => {
       expect(result.raw).toContain('partial output before failing');
     });
 
+    it('returns the last agent_end assistant turn across a retried (multi-agent_end) stream', async () => {
+      // A retry stream emits an early agent_end for the failed attempt and a
+      // terminal agent_end for the successful one. The backwards scan must
+      // return the final turn, not the first attempt's transcript/usage.
+      const failed = assistantMessage('first attempt failed', {
+        usage: buildUsage(10, 0, 0.0001),
+        stopReason: 'error',
+        errorMessage: 'transient',
+      });
+      const ok = assistantMessage('final answer', { usage: buildUsage(100, 10, 0.002) });
+      mockPiRun([
+        { type: 'agent_end', messages: [{ role: 'user', content: [] }, failed], willRetry: true },
+        { type: 'agent_end', messages: [{ role: 'user', content: [] }, ok], willRetry: false },
+      ]);
+      const provider = new PiProvider();
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('final answer');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage?.total).toBe(110);
+      expect(result.cost).toBeCloseTo(0.002);
+    });
+
     it('falls back to message_end when agent_end carries no assistant message', async () => {
       // A terminal agent_end whose messages omit the assistant turn must not
       // shadow the assistant text already seen via message_end.
@@ -835,6 +866,38 @@ describe('PiProvider', () => {
         await vi.advanceTimersByTimeAsync(5_000);
         expect(child.kill).toHaveBeenCalledWith('SIGKILL');
 
+        const result = await promise;
+        expect(result.error).toContain('timed out after 20ms');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('still force-kills the group when pi exits from SIGTERM but a child survives', async () => {
+      // pi can exit cleanly on SIGTERM while a tool grandchild keeps running.
+      // The SIGKILL escalation must fire regardless of pi's own exit state.
+      vi.useFakeTimers();
+      try {
+        const child = new FakeChildProcess();
+        child.kill.mockImplementation((signal: NodeJS.Signals) => {
+          if (signal === 'SIGTERM') {
+            // pi exits, but 'close' never fires (a grandchild holds stdout).
+            child.exitCode = 0;
+            child.emit('exit', 0);
+          }
+          return true;
+        });
+        mockSpawn.mockImplementationOnce(() => child as never);
+        const provider = new PiProvider({ config: { timeout: 20 } });
+
+        const promise = provider.callApi('test prompt');
+        await vi.advanceTimersByTimeAsync(20); // timeout -> SIGTERM -> pi exits
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        await vi.advanceTimersByTimeAsync(5_000); // grace -> escalation
+        // Escalation is no longer gated on pi's liveness, so SIGKILL still fires.
+        expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+
+        await vi.advanceTimersByTimeAsync(1_000); // exit flush grace -> settle
         const result = await promise;
         expect(result.error).toContain('timed out after 20ms');
       } finally {
@@ -1218,6 +1281,109 @@ describe('PiProvider', () => {
 
       // No over-collapse: each distinct (prompt, model) spawned its own run.
       expect(mockSpawn).toHaveBeenCalledTimes(3);
+    });
+
+    it('excludes a custom non-secret-named credential var via the credentialEnvVar check', async () => {
+      // LLM_GATEWAY does NOT match SECRET_ENV_NAME_PATTERN, so the only thing
+      // keeping its value out of the cache key is the `key === credentialVar`
+      // exclusion. Two different secret values must still share a cache entry.
+      enableCache();
+      mockPiRun(defaultEvents('shared'));
+      const first = new PiProvider({
+        config: {
+          provider_id: 'custom',
+          api_key_env: 'LLM_GATEWAY',
+          env: { LLM_GATEWAY: 'secret-1' },
+        },
+      });
+      const second = new PiProvider({
+        config: {
+          provider_id: 'custom',
+          api_key_env: 'LLM_GATEWAY',
+          env: { LLM_GATEWAY: 'secret-2' },
+        },
+      });
+
+      await first.callApi('same prompt');
+      const result = await second.callApi('same prompt');
+
+      expect(result.cached).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not bust the cache when only an ambient process.env value changes', async () => {
+      // Ambient process.env is deliberately excluded from the cache key (only
+      // configured env participates), so a shell-set value change does not bust.
+      enableCache();
+      mockPiRun(defaultEvents('ambient'));
+      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+
+      vi.stubEnv('PROMPTFOO_PI_AMBIENT', 'one');
+      await provider.callApi('same prompt');
+      vi.stubEnv('PROMPTFOO_PI_AMBIENT', 'two');
+      const result = await provider.callApi('same prompt');
+      vi.unstubAllEnvs();
+
+      expect(result.cached).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('tracing', () => {
+    it('wraps the run in a GenAI span with the resolved system, model, and traceparent', async () => {
+      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
+      try {
+        mockPiRun(defaultEvents('traced answer'));
+        const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+        const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+
+        const result = await provider.callApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'pi-label' },
+          vars: {},
+          traceparent,
+        });
+
+        expect(result.output).toBe('traced answer');
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({
+          system: 'openai',
+          operationName: 'chat',
+          model: 'openai/gpt-4o-mini',
+          providerId: 'pi',
+          traceparent,
+          promptLabel: 'pi-label',
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('does not open a span for a cache hit', async () => {
+      enableCache();
+      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
+      try {
+        mockPiRun(defaultEvents('once'));
+        const provider = new PiProvider();
+
+        await provider.callApi('cache me'); // spawns -> 1 span
+        await provider.callApi('cache me'); // cache hit -> no span
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('uses the pi system label for a bare default-model run', async () => {
+      const spy = vi.spyOn(genaiTracer, 'withGenAISpan');
+      try {
+        mockPiRun(defaultEvents());
+        await new PiProvider().callApi('test prompt');
+        expect(spy.mock.calls[0][0]).toMatchObject({ system: 'pi', model: 'default' });
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });

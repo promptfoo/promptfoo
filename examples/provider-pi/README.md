@@ -7,7 +7,12 @@ npx promptfoo@latest init --example provider-pi
 cd provider-pi/basic
 ```
 
-This downloads the basic example. To get all three examples (basic, working-dir, model-comparison), clone the repo and use the `examples/provider-pi/` directory.
+This downloads the basic example into `provider-pi/basic`. The other examples can be fetched the same way, no clone required:
+
+```bash
+npx promptfoo@latest init --example provider-pi/working-dir
+npx promptfoo@latest init --example provider-pi/model-comparison
+```
 
 ## Setup
 
