@@ -50,26 +50,51 @@ describe('handlePerplexity', () => {
     it('passes when perplexity exceeds threshold', () => {
       expect(handlePerplexity(params({ logProbs: [-2], inverse: true })).pass).toBe(true);
     });
+
+    it('fails at the threshold boundary (perplexity === threshold is "within")', () => {
+      // logProbs [-ln(5)] => perplexity = exp(ln(5)) = 5, exactly the threshold
+      const result = handlePerplexity(params({ logProbs: [-Math.log(5)], inverse: true }));
+      expect(result.pass).toBe(false);
+    });
   });
 });
 
 describe('handlePerplexityScore inverse (not-perplexity-score)', () => {
-  it('inverts the pass decision while keeping the normalized score', () => {
-    // perplexity 1 => perplexityNorm = 1 / (1 + 1) = 0.5, threshold 0.4 => base passes
+  // Use an asymmetric input so the score inversion is actually exercised: logProbs [-2] =>
+  // perplexity = exp(2) ≈ 7.39 => perplexityNorm = 1 / (1 + 7.39) ≈ 0.1192, and 1 - 0.1192 ≈
+  // 0.8808. A symmetric input like logProbs [0, 0] (norm 0.5, its own complement) would yield the
+  // same value whether or not the score is inverted, so it cannot catch a regression here.
+  it('inverts the normalized score under not- (1 - perplexityNorm)', () => {
     const base = handlePerplexityScore(
-      params({ assertion: { type: 'perplexity-score', threshold: 0.4 }, logProbs: [0, 0] }),
+      params({ assertion: { type: 'perplexity-score', threshold: 0.5 }, logProbs: [-2] }),
     );
-    expect(base.pass).toBe(true);
+    expect(base.score).toBeCloseTo(0.1192, 4);
 
     const inverted = handlePerplexityScore(
       params({
-        assertion: { type: 'perplexity-score', threshold: 0.4 },
-        logProbs: [0, 0],
+        assertion: { type: 'perplexity-score', threshold: 0.5 },
+        logProbs: [-2],
         inverse: true,
       }),
     );
-    expect(inverted.pass).toBe(false);
-    expect(inverted.score).toBeCloseTo(0.5);
+    // Inverting the graded score keeps perplexity-score aggregate-friendly ("higher is better")
+    // under negation: high perplexity (low norm) yields a high score for not-perplexity-score.
+    // This matters because assertionsResult overrides pass/fail with the aggregate score when a
+    // test/assertion-set threshold is configured.
+    expect(inverted.score).toBeCloseTo(0.8808, 4);
+  });
+
+  it('passes and contributes a high score when perplexity exceeds the normalized threshold', () => {
+    // norm ≈ 0.1192 < threshold 0.5 => base fails, so not- passes; inverted score ≈ 0.8808
+    const inverted = handlePerplexityScore(
+      params({
+        assertion: { type: 'perplexity-score', threshold: 0.5 },
+        logProbs: [-2],
+        inverse: true,
+      }),
+    );
+    expect(inverted.pass).toBe(true);
+    expect(inverted.score).toBeCloseTo(0.8808, 4);
   });
 
   it('fails when score is below threshold', () => {

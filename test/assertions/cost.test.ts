@@ -48,5 +48,10 @@ describe('handleCost', () => {
       const result = handleCost(params({ cost: 0.02, inverse: true }));
       expect(result.pass).toBe(true);
     });
+
+    it('fails at the threshold boundary (cost === threshold is "within")', () => {
+      const result = handleCost(params({ cost: 0.01, inverse: true }));
+      expect(result.pass).toBe(false);
+    });
   });
 });

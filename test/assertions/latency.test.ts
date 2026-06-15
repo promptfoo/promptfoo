@@ -48,5 +48,10 @@ describe('handleLatency', () => {
       const result = handleLatency(params({ latencyMs: 1500, inverse: true }));
       expect(result.pass).toBe(true);
     });
+
+    it('fails at the threshold boundary (latency === threshold is "within")', () => {
+      const result = handleLatency(params({ latencyMs: 1000, inverse: true }));
+      expect(result.pass).toBe(false);
+    });
   });
 });

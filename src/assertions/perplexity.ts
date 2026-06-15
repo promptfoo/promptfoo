@@ -41,7 +41,10 @@ export function handlePerplexityScore({
     assertion.threshold === undefined ? true : perplexityNorm >= assertion.threshold !== inverse;
   return {
     pass,
-    score: perplexityNorm,
+    // Invert the graded score under `not-` so a passing inverse assertion contributes a high
+    // score and a failing one a low score, matching the sibling graded assertions (bleu/gleu/
+    // rouge/similarity) and keeping `perplexity-score` aggregate-friendly ("higher is better").
+    score: inverse ? 1 - perplexityNorm : perplexityNorm,
     reason: pass
       ? 'Assertion passed'
       : `Perplexity score ${perplexityNorm.toFixed(2)} is ${
