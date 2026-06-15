@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import * as evalMutation from '../../src/models/evalMutation';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { getTraceStore } from '../../src/tracing/store';
@@ -282,6 +283,29 @@ describe('eval routes', () => {
       const stored = await getTraceStore().getTrace(traceId, { sanitizeAttributes: false });
       expect(stored?.spans).toHaveLength(1);
       expect(stored?.spans[0]).toMatchObject({ spanId: 'span-1', name: 'provider call' });
+    });
+
+    it('notifies watchers after a successful append so live viewers refetch traces', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      const notifySpy = vi.spyOn(evalMutation, 'notifyEvaluationChanged');
+
+      await expect(eval_.appendTraces([trace(traceId)])).resolves.toBe(true);
+      expect(notifySpy).toHaveBeenCalledWith(eval_.id);
+    });
+
+    it('does not notify watchers when an append is rejected as cross-eval', async () => {
+      const firstEval = await EvalFactory.create();
+      const secondEval = await EvalFactory.create();
+      testEvalIds.add(firstEval.id);
+      testEvalIds.add(secondEval.id);
+      const traceId = randomUUID().replaceAll('-', '');
+      await firstEval.appendTraces([trace(traceId)]);
+
+      const notifySpy = vi.spyOn(evalMutation, 'notifyEvaluationChanged');
+      await expect(secondEval.appendTraces([trace(traceId)])).resolves.toBe(false);
+      expect(notifySpy).not.toHaveBeenCalledWith(secondEval.id);
     });
   });
 
