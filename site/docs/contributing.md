@@ -238,9 +238,25 @@ tests:
 
 ## Adding a New Provider
 
-Providers are defined in TypeScript. We also provide language bindings for Python and Go. To contribute a new provider:
+Providers are defined in TypeScript. We also provide language bindings for Python and Go.
 
-1. Ensure your provider doesn't already exist in promptfoo and fits its scope. For OpenAI-compatible providers, you may be able to re-use the openai provider and override the base URL and other settings. If your provider is OpenAI compatible, feel free to skip to step 4.
+Before writing any code: **any OpenAI-compatible endpoint already works without a dedicated provider** — point the `openai` provider at it with `apiBaseUrl` (or set `OPENAI_BASE_URL`). We're glad to document a service this way, and for many integrations that's all that's needed.
+
+A _dedicated, named provider_ (its own `id:` prefix, docs page, and registry entry) is different: we maintain it, and listing it signals a baseline of trust to our users. We welcome new ones, but to keep the registry useful and trustworthy we ask that a dedicated provider meet the following before we merge it.
+
+### Provider eligibility
+
+- **Legitimate access to the models it serves.** The service must run its own models or have authorized access to the ones it offers (a first-party API, or a partner / reseller agreement). We don't accept integrations that resell or proxy another provider's models in violation of that provider's terms — for example "relay" gateways that resell Anthropic, OpenAI, or Google models below cost without authorization. If you resell third-party models, be ready to confirm you're permitted to.
+- **An accountable operator.** A real, identifiable company or an established open-source project, reachable for maintenance questions, with its own terms of service and privacy policy. Anonymous services with no identifiable owner aren't a good fit.
+- **Evidence it will last.** Some signal that the service is durable and will be maintained — for instance funding, paying customers, an established track record, or substantial _organic_ adoption (real usage, not inflated stars or followers). Brand-new services with no track record may be asked to wait, or to start with the generic `openai`-compatible path above.
+- **Clear data handling.** Because evals send prompts and outputs through the provider, your docs or terms should state whether request and response content is logged, how long it's retained, and whether it's used for training.
+- **Real value over the generic path.** A dedicated provider should add something beyond a base URL — its own API-key handling, non-OpenAI auth or headers, custom model routing, embeddings, or extra parameters. Pure pass-throughs are better served by the `openai` + `apiBaseUrl` route above.
+
+We review aggregators, gateways, and resellers case by case against this same bar. Meeting these criteria doesn't guarantee a merge, and we may decline or later remove a provider that stops meeting them.
+
+To contribute a new provider:
+
+1. Confirm it meets the eligibility criteria above and doesn't already exist in promptfoo. For OpenAI-compatible providers you may be able to re-use the `openai` provider and override the base URL rather than write a new one — if so, skip to step 4 and contribute docs and an example instead.
 
 2. Implement the provider in `src/providers/yourProviderName.ts` following our [Custom API Provider Docs](/docs/providers/custom-api/). Please use our cache `src/cache.ts` to store responses. If your provider requires a new dependency, please add it as an optional dependency.
 
