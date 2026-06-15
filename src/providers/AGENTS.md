@@ -118,6 +118,8 @@ Every provider needs tests in `test/providers/`:
 
 ## Adding a Provider
 
+First confirm the service clears the eligibility bar in `site/docs/contributing.md` ("Provider eligibility"): legitimate model access (no ToS-violating resale), an accountable operator, durability, clear data handling, and real value over `openai` + `apiBaseUrl`. A pure pass-through is better documented under the `openai` provider than added as a new prefix.
+
 **All seven items are required** before a provider is complete:
 
 1. Implement `ApiProvider` interface
