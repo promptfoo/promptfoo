@@ -92,6 +92,18 @@ describe('BLEU score calculation', () => {
     expect(score).toBeCloseTo(Math.exp(1 - 7 / 5), 10);
   });
 
+  it('should not penalize a candidate at least as long as the reference (brevity penalty = 1 at c == r)', () => {
+    // candidateLength === referenceLength is the boundary of the brevity-penalty
+    // branch: exp(1 - referenceLength/candidateLength) = exp(0) = 1, so a perfect,
+    // equal-length match must score exactly 1.0 — never penalized, never above 1.0.
+    const candidate = 'a b c d e'; // 5 tokens
+    const reference = 'a b c d e'; // 5 tokens, identical length and content
+
+    const score = calculateBleuScore(candidate, [reference]);
+
+    expect(score).toBe(1);
+  });
+
   it('should throw error for empty reference array', () => {
     expect(() => {
       calculateBleuScore('test', []);
@@ -187,6 +199,26 @@ describe('handleBleuScore', () => {
       reason: 'Assertion passed',
       assertion: expect.any(Object),
     });
+  });
+
+  it('should report a bounded [0, 1] score for inverse assertions on short candidates', () => {
+    // Regression for the brevity-penalty bug: a short candidate with perfect n-gram
+    // precision previously scored above 1.0 (~1.33), so the inverse path (1 - score)
+    // reported a NEGATIVE score. With the score correctly bounded to [0, 1], the
+    // inverse score stays in [0, 1] too.
+    const params = {
+      assertion: { type: 'bleu', value: 'a b c d e f g' },
+      renderedValue: 'a b c d e f g', // 7 tokens
+      outputString: 'a b c d e', // 5 tokens, shorter with perfect n-gram precision
+      inverse: true,
+    } as AssertionParams;
+
+    const result = handleBleuScore(params);
+
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(1);
+    // BLEU score is exp(1 - 7/5) ≈ 0.6703, so the inverse score is 1 - that.
+    expect(result.score).toBeCloseTo(1 - Math.exp(1 - 7 / 5), 10);
   });
 
   it('should use default threshold of 0.5', () => {

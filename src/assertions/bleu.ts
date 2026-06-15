@@ -20,7 +20,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
  *
  * @param candidateLength - Length of candidate translation
  * @param referenceLength - Length of reference translation
- * @returns Brevity penalty score between 0 and 1
+ * @returns Brevity penalty in (0, 1] (1 when the candidate is at least as long as the reference)
  * @internal
  */
 function calculateBrevityPenalty(candidateLength: number, referenceLength: number): number {
