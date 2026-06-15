@@ -1101,6 +1101,13 @@ export class PiProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Honor an already-aborted signal before any cache fingerprint work or read,
+    // so a cancelled/timed-out row reports the abort rather than a cached
+    // success when its prompt happens to be cached.
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: 'Pi call aborted before it started' };
+    }
+
     const { config, workingDir } = this.prepareCall(context);
     const args = this.buildArgs(config);
 
@@ -1131,10 +1138,6 @@ export class PiProvider implements ApiProvider {
     const cachedResponse = await getCachedResponse(cacheResult, 'Pi');
     if (cachedResponse) {
       return cachedResponse;
-    }
-
-    if (callOptions?.abortSignal?.aborted) {
-      return { error: 'Pi call aborted before it started' };
     }
 
     // Emit a GenAI span for the run so it joins the eval's trace (linked via

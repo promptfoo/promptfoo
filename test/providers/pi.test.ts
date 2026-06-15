@@ -1002,6 +1002,26 @@ describe('PiProvider', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
+    it('reports the abort before serving a cache hit when already aborted', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('cached answer'));
+      const provider = new PiProvider();
+
+      // Populate the cache for this prompt.
+      await provider.callApi('abort me');
+
+      const controller = new AbortController();
+      controller.abort();
+      const result = await provider.callApi('abort me', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      // The aborted row must not report a (cached) success.
+      expect(result.error).toBe('Pi call aborted before it started');
+      expect(result.cached).toBeUndefined();
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
     it('kills the process when aborted mid-run', async () => {
       const controller = new AbortController();
       const child = new FakeChildProcess();
