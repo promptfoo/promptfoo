@@ -256,11 +256,15 @@ describe('handleSimilar', () => {
 
   it('should FAIL not-similar with an array when the output is similar to ANY value', async () => {
     // not-similar means "dissimilar to ALL". The output is too similar to the
-    // first value (inverse check fails there) but dissimilar to the second.
-    // It must fail — not pass on the strength of the second value.
-    vi.mocked(matchesSimilarity)
-      .mockResolvedValueOnce({ pass: false, score: 0.05, reason: 'too similar' } as any)
-      .mockResolvedValueOnce({ pass: true, score: 0.9, reason: 'dissimilar' } as any);
+    // first value, so the inverse check fails there and the assertion returns
+    // immediately — it must fail rather than continue and pass on a later value.
+    // Only the first value is evaluated, so we queue a single result (queuing a
+    // second would leak into the next test, which runs in random order).
+    vi.mocked(matchesSimilarity).mockResolvedValueOnce({
+      pass: false,
+      score: 0.05,
+      reason: 'too similar',
+    } as any);
 
     const result = await handleSimilar({
       assertion: {
