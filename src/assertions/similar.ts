@@ -14,6 +14,10 @@ export const handleSimilar = async ({
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
     'Similarity assertion type must have a string or array of strings value',
   );
+  invariant(
+    !Array.isArray(renderedValue) || renderedValue.length > 0,
+    'Similarity assertion must have at least one value to compare against',
+  );
   const threshold = assertion.threshold ?? 0.75;
 
   // Parse metric from assertion type (e.g., 'similar:dot' -> 'dot_product')

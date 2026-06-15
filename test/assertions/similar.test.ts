@@ -291,6 +291,43 @@ describe('handleSimilar', () => {
     ).rejects.toThrow('Similarity assertion type must have a string or array of strings value');
   });
 
+  it('should throw error for empty array value', async () => {
+    await expect(
+      handleSimilar({
+        assertion: {
+          type: 'similar',
+          value: [],
+        },
+        baseType: 'similar' as any,
+        renderedValue: [],
+        outputString: 'test',
+        inverse: false,
+        test: {
+          description: 'test',
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        assertionValueContext: {
+          prompt: 'test prompt',
+          vars: {},
+          test: {
+            description: 'test',
+            vars: {},
+            assert: [],
+            options: {},
+          },
+          logProbs: undefined,
+          // @ts-ignore
+          provider: createMockProvider({ response: {} }),
+          providerResponse: { output: 'test' },
+        },
+        output: 'test',
+        providerResponse: { output: 'test' },
+      }),
+    ).rejects.toThrow('Similarity assertion must have at least one value to compare against');
+  });
+
   it('should use dot_product metric when specified', async () => {
     const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
 
