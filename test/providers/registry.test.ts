@@ -1305,5 +1305,23 @@ describe('Provider Registry', () => {
       expect(factory!.test('pinecone:index')).toBe(false);
       expect(factory!.test('pipeline')).toBe(false);
     });
+
+    it('preserves provider-level env over suite-level context env', async () => {
+      const providerPath = 'pi:openai/gpt-4o-mini';
+      const optionsWithEnv: ProviderOptions = {
+        config: {},
+        env: { OPENAI_BASE_URL: 'http://provider-proxy' } as any,
+      };
+      const contextWithEnv: LoadApiProviderContext = {
+        basePath: '/test',
+        options: optionsWithEnv,
+        env: { OPENAI_BASE_URL: 'http://suite-proxy', SUITE_ONLY: 'x' } as any,
+      };
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, optionsWithEnv, contextWithEnv);
+      // Provider-level env wins; suite-level keys are still merged in.
+      expect((provider as any).env.OPENAI_BASE_URL).toBe('http://provider-proxy');
+      expect((provider as any).env.SUITE_ONLY).toBe('x');
+    });
   });
 });

@@ -613,10 +613,23 @@ export class PiProvider implements ApiProvider {
   /**
    * The agent dir pi will actually read, including its default (~/.pi/agent)
    * when none is configured. Used for cache fingerprinting so config changes in
-   * the default dir bust the cache too.
+   * the effective dir bust the cache. PI_CODING_AGENT_DIR may be supplied via
+   * env (config.env, EnvOverrides, or the inherited process env) rather than
+   * agent_dir, so honor that here too — matching what buildEnv passes to pi.
    */
   private resolveEffectiveAgentDir(config: PiProviderConfig): string {
-    return this.resolveConfiguredAgentDir(config) ?? path.join(os.homedir(), '.pi', 'agent');
+    const configured = this.resolveConfiguredAgentDir(config);
+    if (configured) {
+      return configured;
+    }
+    const fromEnv =
+      config.env?.PI_CODING_AGENT_DIR ??
+      (this.env as Record<string, string | undefined> | undefined)?.PI_CODING_AGENT_DIR ??
+      process.env.PI_CODING_AGENT_DIR;
+    if (fromEnv) {
+      return path.isAbsolute(fromEnv) ? fromEnv : path.resolve(resolveBasePath(), fromEnv);
+    }
+    return path.join(os.homedir(), '.pi', 'agent');
   }
 
   /**
@@ -1040,6 +1053,9 @@ export class PiProvider implements ApiProvider {
         // change. Only hashes are persisted, so no secret reaches disk.
         args,
         env: this.cacheEnv(config),
+        // The credential env var NAME (not its secret value) — so two custom
+        // configs that differ only in api_key_env/provider do not collide.
+        credentialEnvVar: this.getApiKeyEnvVar(config) ?? null,
         agentDirFingerprint: this.agentDirFingerprint(this.resolveEffectiveAgentDir(config)),
       },
     );

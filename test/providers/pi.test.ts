@@ -1117,6 +1117,51 @@ describe('PiProvider', () => {
       }
     });
 
+    it('keeps configs with a different api_key_env on separate cache entries', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('a'));
+      mockPiRun(defaultEvents('b'));
+      const first = new PiProvider({
+        config: { provider_id: 'custom', apiKey: 'k', api_key_env: 'VAR_A' },
+      });
+      const second = new PiProvider({
+        config: { provider_id: 'custom', apiKey: 'k', api_key_env: 'VAR_B' },
+      });
+
+      await first.callApi('same prompt');
+      const result = await second.callApi('same prompt');
+
+      // The credential value is redacted, but the resolved env var NAME differs,
+      // so the configs must not collide on one cache entry.
+      expect(result.cached).toBeFalsy();
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+    });
+
+    it('fingerprints an agent dir supplied via env (not just agent_dir)', async () => {
+      enableCache();
+      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-envagent-'));
+      const settingsPath = path.join(agentDir, 'settings.json');
+      try {
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
+        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
+        mockPiRun(defaultEvents('first'));
+        mockPiRun(defaultEvents('second'));
+        const provider = new PiProvider({ config: { env: { PI_CODING_AGENT_DIR: agentDir } } });
+
+        const first = await provider.callApi('same prompt');
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
+        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
+        const second = await provider.callApi('same prompt');
+
+        expect(first.output).toBe('first');
+        expect(second.output).toBe('second');
+        expect(second.cached).toBeFalsy();
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      } finally {
+        fs.rmSync(agentDir, { recursive: true, force: true });
+      }
+    });
+
     it('keeps distinct prompts and models on separate cache entries', async () => {
       enableCache();
       mockPiRun(defaultEvents('a'));

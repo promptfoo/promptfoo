@@ -2,15 +2,17 @@
 description: 'Pi coding agent working_dir with default read-only tools'
 
 prompts:
-  - 'Read the local promptfooconfig.yaml in the working directory and report the configured provider id in one sentence.'
+  - 'Read sample.py in the working directory and name the function it defines, in one sentence.'
 
 providers:
   - id: pi:openai/gpt-5.4-mini
     config:
-      working_dir: ../basic
+      # The working directory is this example folder, which ships with sample.py,
+      # so the example is self-contained when initialized on its own.
+      working_dir: .
 
 tests:
   - vars: {}
     assert:
-      - type: contains
-        value: 'gpt-5.4-mini'
+      - type: icontains
+        value: 'greet'
