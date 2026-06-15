@@ -57,9 +57,10 @@ function countNGrams(ngrams: string[]): Map<string, number> {
  *
  * @param candidate - The string to evaluate
  * @param references - Array of reference strings to compare against
- * @param weights - Weights for each n-gram precision (1-gram to 4-gram)
+ * @param weights - Weights for each n-gram precision (1-gram to 4-gram). Must be
+ *   non-negative and sum to 1 (BLEU weights are non-negative by definition).
  * @returns BLEU score between 0 and 1
- * @throws When inputs are invalid or weights don't sum to 1
+ * @throws When inputs are invalid, weights are negative, or weights don't sum to 1
  */
 export function calculateBleuScore(
   candidate: string,
@@ -68,6 +69,14 @@ export function calculateBleuScore(
 ): number {
   if (!candidate || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
+  }
+  // BLEU weights are non-negative by definition. Rejecting negatives keeps the
+  // score within the documented [0, 1] range (a negative weight on a smoothed
+  // zero-precision order would otherwise blow the geometric mean far above 1)
+  // and prevents the renormalization below from dividing by a usable-weight sum
+  // that cancels to zero.
+  if (weights.some((w) => w < 0)) {
+    throw new Error('Weights must be non-negative');
   }
   if (Math.abs(weights.reduce((a, b) => a + b) - 1) > 1e-4) {
     throw new Error('Weights must sum to 1');
@@ -87,8 +96,10 @@ export function calculateBleuScore(
   });
 
   const maxN = 4;
-  const precisions: number[] = [];
-  const usableWeights: number[] = [];
+  // One entry per scorable n-gram order, pairing its modified precision with its
+  // weight. Kept as a single array (rather than two parallel ones) so a precision
+  // can never become misaligned with its weight.
+  const usableOrders: { precision: number; weight: number }[] = [];
 
   for (let n = 1; n <= maxN; n++) {
     const candidateNGrams = getNGrams(candidateWords, n);
@@ -123,20 +134,25 @@ export function calculateBleuScore(
       maxClippedCount = Math.max(maxClippedCount, clippedCount);
     }
 
-    precisions.push(maxClippedCount / totalCount);
-    usableWeights.push(weights[n - 1]);
+    usableOrders.push({ precision: maxClippedCount / totalCount, weight: weights[n - 1] });
   }
 
   const bp = calculateBrevityPenalty(candidateWords.length, closestRefLength);
 
   // Renormalize the usable weights to sum to 1 so dropping unavailable higher
-  // orders does not shrink the geometric mean.
-  const weightSum = usableWeights.reduce((acc, w) => acc + w, 0);
+  // orders does not shrink the geometric mean. If every weighted order was
+  // dropped — all weight sits on orders the candidate is too short to contain,
+  // e.g. weights [0, 0, 0, 1] on a 3-word candidate — there is no scorable
+  // signal, so the score is 0.
+  const weightSum = usableOrders.reduce((acc, o) => acc + o.weight, 0);
+  if (weightSum === 0) {
+    return 0;
+  }
 
   // Apply weights and calculate final score
-  const weightedScore = precisions.reduce((acc, p, i) => {
-    const smoothedP = p === 0 ? 1e-7 : p; // smoothing
-    return acc + (usableWeights[i] / weightSum) * Math.log(smoothedP);
+  const weightedScore = usableOrders.reduce((acc, { precision, weight }) => {
+    const smoothedP = precision === 0 ? 1e-7 : precision; // smoothing
+    return acc + (weight / weightSum) * Math.log(smoothedP);
   }, 0);
 
   return bp * Math.exp(weightedScore);
