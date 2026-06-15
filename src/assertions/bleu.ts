@@ -88,11 +88,24 @@ export function calculateBleuScore(
 
   const maxN = 4;
   const precisions: number[] = [];
+  const usableWeights: number[] = [];
 
   for (let n = 1; n <= maxN; n++) {
     const candidateNGrams = getNGrams(candidateWords, n);
-    const candidateNGramCounts = countNGrams(candidateNGrams);
     const totalCount = candidateNGrams.length;
+
+    // If the candidate is shorter than n tokens, no n-grams of this order can
+    // exist. Skip the order and renormalize the weights over the remaining
+    // orders, rather than recording precision 0 — that would be smoothed to a
+    // tiny value and collapse the whole score (e.g. a perfect 1-3 word match
+    // scoring ~0). This matches NLTK, which reweights when higher orders are
+    // unavailable. A genuine zero-overlap precision (n-grams exist but none
+    // match) is still kept and smoothed below.
+    if (totalCount === 0) {
+      continue;
+    }
+
+    const candidateNGramCounts = countNGrams(candidateNGrams);
 
     // Clipped n-gram count against the best-matching reference
     let maxClippedCount = 0;
@@ -107,15 +120,20 @@ export function calculateBleuScore(
       maxClippedCount = Math.max(maxClippedCount, clippedCount);
     }
 
-    precisions.push(totalCount > 0 ? maxClippedCount / totalCount : 0);
+    precisions.push(maxClippedCount / totalCount);
+    usableWeights.push(weights[n - 1]);
   }
 
   const bp = calculateBrevityPenalty(candidateWords.length, closestRefLength);
 
+  // Renormalize the usable weights to sum to 1 so dropping unavailable higher
+  // orders does not shrink the geometric mean.
+  const weightSum = usableWeights.reduce((acc, w) => acc + w, 0);
+
   // Apply weights and calculate final score
   const weightedScore = precisions.reduce((acc, p, i) => {
     const smoothedP = p === 0 ? 1e-7 : p; // smoothing
-    return acc + weights[i] * Math.log(smoothedP);
+    return acc + (usableWeights[i] / weightSum) * Math.log(smoothedP);
   }, 0);
 
   return bp * Math.exp(weightedScore);

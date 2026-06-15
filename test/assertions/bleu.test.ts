@@ -47,6 +47,26 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.0);
   });
 
+  it('should score a perfect short match ~1.0 regardless of token count', () => {
+    // A candidate shorter than the 4-gram order has no 4-grams (and a 1-2 word
+    // candidate has no 3-/2-grams). Those unavailable orders must be dropped and
+    // the weights renormalized, not treated as zero-precision. Before the fix an
+    // exact 1-word match scored ~0.00001 and a 3-word match ~0.018, failing the
+    // default 0.5 threshold; only candidates of >= 4 tokens could ever pass.
+    expect(calculateBleuScore('cat', ['cat'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('good dog', ['good dog'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('the good dog', ['the good dog'])).toBeCloseTo(1, 5);
+  });
+
+  it('should still penalize an imperfect short match', () => {
+    // 2-token candidate, one of two unigrams matches; only orders 1-2 exist.
+    // The score should be well below 1 but non-zero (not collapsed by missing
+    // higher orders).
+    const score = calculateBleuScore('good cat', ['good dog']);
+    expect(score).toBeGreaterThan(0.0);
+    expect(score).toBeLessThan(1.0);
+  });
+
   it('should handle sentences with different lengths', () => {
     const references = ['The cat sat on the mat.'];
     const candidate = 'The cat sat.';
