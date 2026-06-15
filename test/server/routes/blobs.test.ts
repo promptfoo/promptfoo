@@ -117,9 +117,50 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(200);
       // A stored text/html blob would be a same-origin stored-XSS vector when served back.
+      // kind is derived from the sanitized MIME ('other'), never trusted from the client, so the
+      // media-library response (which only permits image/video/audio/other) can't 500 on it.
       expect(mockedStoreBlob).toHaveBeenCalledWith(expect.any(Buffer), 'application/octet-stream', {
         evalId,
+        kind: 'other',
       });
+    });
+
+    it('derives kind from the sanitized MIME, ignoring a client-supplied kind', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'image/png',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        // A bogus client kind ('application', from a MIME prefix) must not be persisted.
+        context: { evalId, kind: 'application' },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'image/png',
+        expect.objectContaining({ evalId, kind: 'image' }),
+      );
+    });
+
+    it('rejects an upload that is not associated with an eval', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'context.evalId is required' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
     });
 
     it('downgrades image/svg+xml to octet-stream before storage', async () => {

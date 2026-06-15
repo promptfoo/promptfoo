@@ -59,25 +59,35 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { context } = bodyResult.data;
+  const evalId = context?.evalId;
+  if (!evalId) {
+    // Uploads must be associated with an eval. Without a reference row the returned URI is
+    // unretrievable (GET requires a reference and 403s), leaving an orphaned blob asset.
+    res.status(400).json({ error: 'context.evalId is required' });
+    return;
+  }
+
   // Blobs are served back from this server's own origin, so a client-supplied MIME like
   // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
   // everything else is downgraded to application/octet-stream (same gate as portable imports).
   const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
+  // Derive kind from the sanitized MIME rather than trusting the client: the media-library
+  // response only permits image/video/audio/other, so a client kind like "application" (from a
+  // non-media MIME prefix) would otherwise fail response validation and 500 the listing.
+  const refContext = { ...context, kind: getKindFromMimeType(mimeType) };
   try {
-    if (context?.evalId) {
-      const db = await getDb();
-      const evalExists = await db
-        .select({ id: evalsTable.id })
-        .from(evalsTable)
-        .where(eq(evalsTable.id, context.evalId))
-        .get();
-      if (!evalExists) {
-        res.status(404).json({ error: 'Eval not found' });
-        return;
-      }
+    const db = await getDb();
+    const evalExists = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evalExists) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
     }
 
-    const result = await storeBlob(data, mimeType, context);
+    const result = await storeBlob(data, mimeType, refContext);
     res.json(BlobsSchemas.Upload.Response.parse(result));
   } catch (error) {
     sendError(res, 500, 'Failed to store blob', error);
