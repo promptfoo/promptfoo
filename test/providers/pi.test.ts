@@ -5,6 +5,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { findPiCliScript, PI_READONLY_TOOLS, PiProvider } from '../../src/providers/pi';
 
 vi.mock('../../src/cliState', () => ({
@@ -152,6 +153,7 @@ describe('PiProvider', () => {
         '--no-skills',
         '--no-prompt-templates',
         '--no-context-files',
+        '--no-approve',
       ]);
     });
 
@@ -260,6 +262,8 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--no-prompt-templates');
       expect(args).not.toContain('--no-context-files');
       expect(args).not.toContain('--offline');
+      // Loading project resources implies trusting project-local files.
+      expect(args).not.toContain('--no-approve');
     });
 
     it('appends extra_args verbatim', async () => {
@@ -269,6 +273,29 @@ describe('PiProvider', () => {
       await provider.callApi('test prompt');
 
       expect(spawnedArgs()).toContain('--approve');
+    });
+
+    it('keeps --no-approve when working_dir enables read-only tools', async () => {
+      const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-test-'));
+      try {
+        mockPiRun(defaultEvents());
+        const provider = new PiProvider({ config: { working_dir: workingDir } });
+
+        await provider.callApi('test prompt');
+
+        expect(spawnedArgs()).toContain('--no-approve');
+      } finally {
+        fs.rmSync(workingDir, { recursive: true, force: true });
+      }
+    });
+
+    it('drops --no-approve when a project resource is loaded', async () => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider({ config: { load_context_files: true } });
+
+      await provider.callApi('test prompt');
+
+      expect(spawnedArgs()).not.toContain('--no-approve');
     });
 
     it('merges prompt-level config over provider config', async () => {
@@ -329,6 +356,23 @@ describe('PiProvider', () => {
       await provider.callApi('test prompt');
 
       expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe('/tmp/pi-agent-dir');
+    });
+
+    it('resolves a relative agent_dir from a relative config base path', async () => {
+      const original = cliState.basePath;
+      cliState.basePath = 'rel/config/dir';
+      try {
+        mockPiRun(defaultEvents());
+        const provider = new PiProvider({ config: { agent_dir: './agent' } });
+
+        await provider.callApi('test prompt');
+
+        // Must resolve against the config dir (cwd + relative basePath), not bare cwd.
+        const expected = path.resolve(process.cwd(), 'rel/config/dir', 'agent');
+        expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(expected);
+      } finally {
+        cliState.basePath = original;
+      }
     });
 
     it('injects apiKey via the provider env var instead of argv', async () => {
@@ -1011,6 +1055,24 @@ describe('PiProvider', () => {
       expect(mockSpawn).toHaveBeenCalledTimes(1);
     });
 
+    it('does not bust the cache when only a secret-named env value changes', async () => {
+      enableCache();
+      mockPiRun(defaultEvents('shared answer'));
+      // CUSTOM_TOKEN is secret-named (redacted); OPENAI_BASE_URL is identical.
+      const first = new PiProvider({
+        config: { env: { CUSTOM_TOKEN: 'tok-1', OPENAI_BASE_URL: 'http://proxy' } },
+      });
+      const second = new PiProvider({
+        config: { env: { CUSTOM_TOKEN: 'tok-2', OPENAI_BASE_URL: 'http://proxy' } },
+      });
+
+      await first.callApi('same prompt');
+      const result = await second.callApi('same prompt');
+
+      expect(result.cached).toBe(true);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+
     it('busts the cache when a non-secret env value changes', async () => {
       enableCache();
       mockPiRun(defaultEvents('answer-a'));
@@ -1031,14 +1093,19 @@ describe('PiProvider', () => {
     it('busts the cache when agent_dir config files change', async () => {
       enableCache();
       const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agent-'));
+      const settingsPath = path.join(agentDir, 'settings.json');
       try {
-        fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify({ model: 'one' }));
+        // Different size + explicit older mtime so the mtime/size fingerprint
+        // changes deterministically regardless of write timing resolution.
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'one' }));
+        fs.utimesSync(settingsPath, new Date(1000), new Date(1000));
         mockPiRun(defaultEvents('first'));
         mockPiRun(defaultEvents('second'));
         const provider = new PiProvider({ config: { agent_dir: agentDir } });
 
         const first = await provider.callApi('same prompt');
-        fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify({ model: 'two' }));
+        fs.writeFileSync(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }));
+        fs.utimesSync(settingsPath, new Date(2000), new Date(2000));
         const second = await provider.callApi('same prompt');
 
         expect(first.output).toBe('first');

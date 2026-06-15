@@ -71,6 +71,12 @@ const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 // and must never enter a cache key.
 const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json'];
 
+// Env var names that look credential-bearing. Their values are kept out of the
+// cache key (only hashed key material is persisted, but per the repo's cache
+// hygiene rules raw secrets must never be hashed). Changing a secret also must
+// not bust the cache, matching the apiKey-independence guarantee.
+const SECRET_ENV_NAME_PATTERN = /(?:key|token|secret|password|passwd|credential|auth|cookie)/i;
+
 /**
  * Env vars pi (via pi-ai) reads for each provider's API key. Used to inject
  * config.apiKey without putting it on the command line.
@@ -305,9 +311,11 @@ interface PiPreparedCall {
 }
 
 function resolveBasePath(): string {
-  return cliState.basePath && path.isAbsolute(cliState.basePath)
-    ? cliState.basePath
-    : process.cwd();
+  // path.resolve handles a relative basePath (e.g. when the config is passed by
+  // a relative path, cliState.basePath is path.dirname of it) by resolving it
+  // against cwd, matching resolveAgenticWorkingDir. An empty basePath falls
+  // back to cwd.
+  return cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
 }
 
 function truncateStderr(stderr: string): string {
@@ -512,6 +520,19 @@ export class PiProvider implements ApiProvider {
       args.push('--no-context-files');
     }
 
+    // Unless the user opts into loading project resources, ignore project-local
+    // pi files (.pi/settings.json, project extensions/skills) for the run. This
+    // keeps hermetic runs reproducible even against a trusted working_dir, and
+    // avoids a possible interactive trust prompt hanging a non-interactive run.
+    const loadsProjectResources =
+      config.load_extensions === true ||
+      config.load_skills === true ||
+      config.load_prompt_templates === true ||
+      config.load_context_files === true;
+    if (!loadsProjectResources) {
+      args.push('--no-approve');
+    }
+
     if (config.extra_args?.length) {
       args.push(...config.extra_args);
     }
@@ -601,9 +622,11 @@ export class PiProvider implements ApiProvider {
   /**
    * Behavior-affecting environment that should participate in the cache key:
    * the explicitly-configured provider env (EnvOverrides + config.env), minus
-   * the resolved credential var so that changing only the API key still hits
-   * the same cache entry. The ambient process.env is deliberately excluded — it
-   * carries volatile, non-deterministic vars that would thrash the cache.
+   * the resolved credential var and any secret-looking vars so that changing a
+   * credential still hits the same cache entry and no raw secret is ever hashed.
+   * The ambient process.env is deliberately excluded — it carries volatile,
+   * non-deterministic vars that would thrash the cache. Non-secret behavior vars
+   * (e.g. a base URL or region) are kept so changing them busts the cache.
    */
   private cacheEnv(config: PiProviderConfig): Record<string, string> {
     const merged: Record<string, string> = {};
@@ -620,12 +643,13 @@ export class PiProvider implements ApiProvider {
       }
     }
     const credentialVar = this.getApiKeyEnvVar(config);
-    if (credentialVar) {
-      delete merged[credentialVar];
-    }
-    // Canonicalize: sort keys so semantically identical envs hash identically.
+    // Canonicalize (sort keys) and drop the credential var plus any secret-named
+    // var so semantically identical, credential-independent envs hash the same.
     const sorted: Record<string, string> = {};
     for (const key of Object.keys(merged).sort()) {
+      if (key === credentialVar || SECRET_ENV_NAME_PATTERN.test(key)) {
+        continue;
+      }
       sorted[key] = merged[key];
     }
     return sorted;
@@ -634,15 +658,17 @@ export class PiProvider implements ApiProvider {
   /**
    * Fingerprint the pi config files that change run behavior — the default
    * model/provider in settings.json and custom model/endpoint definitions in
-   * models.json — so editing them busts the cache. Only the hash is keyed, and
-   * auth.json is never read, so no credential or file content reaches the cache.
+   * models.json — so editing them busts the cache. Uses mtime + size, NOT file
+   * contents: models.json can hold literal apiKeys and custom auth headers, and
+   * raw secrets must never be hashed into a cache key (auth.json is never read).
    * Missing/unreadable files contribute a stable sentinel.
    */
   private agentDirFingerprint(agentDir: string): string {
     const parts: string[] = [];
     for (const file of PI_AGENT_DIR_CONFIG_FILES) {
       try {
-        parts.push(`${file}:${fs.readFileSync(path.join(agentDir, file), 'utf-8')}`);
+        const stats = fs.statSync(path.join(agentDir, file));
+        parts.push(`${file}:${stats.mtimeMs}:${stats.size}`);
       } catch {
         parts.push(`${file}:absent`);
       }
