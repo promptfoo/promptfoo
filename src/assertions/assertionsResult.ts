@@ -149,19 +149,15 @@ export class AssertionsResult {
     const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
 
     let pass = !this.failedReason;
-    let reason = this.failedReason ? this.failedReason : 'All assertions passed';
+    let reason = this.failedReason || 'All assertions passed';
 
     if (this.threshold !== undefined) {
       // Existence of a test threshold overrides the pass/fail status of individual assertions.
       // Use `!== undefined` (not a truthy check) so a threshold of 0 is honored — `score >= 0`
       // is always true, i.e. "collect assertion scores but never fail on an individual failure".
       pass = score >= this.threshold;
-
-      if (pass) {
-        reason = `Aggregate score ${score.toFixed(2)} ≥ ${this.threshold} threshold`;
-      } else {
-        reason = `Aggregate score ${score.toFixed(2)} < ${this.threshold} threshold`;
-      }
+      const comparator = pass ? '≥' : '<';
+      reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }
 
     if (this.failedContentSafetyChecks) {
@@ -197,7 +193,7 @@ export class AssertionsResult {
       score,
       reason,
       namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
+      ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
       ...(this._parentAssertionSet && {
