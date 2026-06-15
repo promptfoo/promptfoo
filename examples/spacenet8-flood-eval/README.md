@@ -86,13 +86,25 @@ The comparison config runs the same prompt and tests against GPT-5.5 and GPT-5.4
 ```bash
 umask 077
 promptfoo eval -c promptfooconfig.compare.yaml \
-  --no-cache --no-share -n 5 -j 10 -o results/model-comparison.json
+  --no-cache --no-share -n 5 -j 50 -o results/model-comparison.json
 promptfoo view
 ```
 
 Start with `-n 5` because this makes two paid model calls per pair. Remove the filter when you are
 ready to compare the full generated sample. Promptfoo records each model's labeled accuracy,
 latency, token use, and cost.
+
+To compare the same models through your local Codex login, use the app-server config:
+
+```bash
+promptfoo eval -c promptfooconfig.codex-app-server.yaml \
+  --no-cache --no-share -n 5 -j 50 -o results/codex-app-server.json
+```
+
+Each provider starts and reuses its own `codex app-server` process. It sends the quicklooks as image
+input items and records Codex thread, turn, token, cost, and trajectory metadata. It does not attach
+to the running Codex Desktop process. If `codex` on `PATH` is not the binary you want to evaluate,
+set `CODEX_PATH` to the desired executable before running the command.
 
 ## Level 4: Scale the dataset
 

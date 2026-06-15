@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare GPT-5.5 and GPT-5.4 Mini through Codex app-server
+sharing: false
+tags:
+  dataset: spacenet8
+  domain: geospatial
+  modality: paired-imagery
+  suite: codex-app-server-model-comparison
+
+prompts:
+  - label: Codex paired flood assessment
+    raw: file://prompt.codex-app-server.json
+
+providers:
+  - id: openai:codex-app-server:gpt-5.5
+    label: Codex app-server (GPT-5.5)
+    config: &codexAppServerConfig
+      codex_path_override: '{{ env.CODEX_PATH | default("codex") }}'
+      working_dir: .
+      skip_git_repo_check: true
+      sandbox_mode: read-only
+      approval_policy: never
+      model_reasoning_effort: low
+      reuse_server: true
+      thread_cleanup: unsubscribe
+      request_timeout_ms: 300000
+      turn_timeout_ms: 300000
+      output_schema:
+        type: object
+        properties:
+          building_flooded:
+            type: string
+            enum: ['yes', 'no', 'unknown']
+          road_flooded:
+            type: string
+            enum: ['yes', 'no', 'unknown']
+          flooded_building_count_range:
+            type: string
+            enum: ['0', 1-10, 11-20, 21-50, 51-100, '>100', unknown]
+          flooded_road_count_range:
+            type: string
+            enum: ['0', 1-10, 11-20, 21-50, 51-100, '>100', unknown]
+          abstain:
+            type: boolean
+        required:
+          - building_flooded
+          - road_flooded
+          - flooded_building_count_range
+          - flooded_road_count_range
+          - abstain
+        additionalProperties: false
+  - id: openai:codex-app-server:gpt-5.4-mini
+    label: Codex app-server (GPT-5.4 Mini)
+    config: *codexAppServerConfig
+
+defaultTest:
+  assert:
+    - type: is-json
+      value: file://response-schema.json
+      metric: schema_contract
+    - type: javascript
+      value: file://grader.cjs:gradeFloodAssessment
+      threshold: 1
+      metric: labeled_accuracy
+
+tests: file://scripts/generate_tests.py:generate_tests
