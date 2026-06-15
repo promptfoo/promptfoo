@@ -520,18 +520,19 @@ export class PiProvider implements ApiProvider {
       args.push('--no-context-files');
     }
 
-    // Unless the user opts into loading project resources, ignore project-local
-    // pi files (.pi/settings.json, project extensions/skills) for the run. This
-    // keeps hermetic runs reproducible even against a trusted working_dir, and
-    // avoids a possible interactive trust prompt hanging a non-interactive run.
+    // Project trust governs whether pi loads project-local files (.pi/settings
+    // .json, project extensions/skills/templates). Default to --no-approve so a
+    // trusted working_dir cannot alter a hermetic run and a non-interactive run
+    // cannot hang on a trust prompt. When the user opts into loading project
+    // resources, pass --approve so those resources load deterministically on
+    // every machine (pi's default trust would otherwise skip them on untrusted
+    // checkouts and load them only where a trust decision was saved).
     const loadsProjectResources =
       config.load_extensions === true ||
       config.load_skills === true ||
       config.load_prompt_templates === true ||
       config.load_context_files === true;
-    if (!loadsProjectResources) {
-      args.push('--no-approve');
-    }
+    args.push(loadsProjectResources ? '--approve' : '--no-approve');
 
     if (config.extra_args?.length) {
       args.push(...config.extra_args);
@@ -600,36 +601,33 @@ export class PiProvider implements ApiProvider {
     return env;
   }
 
-  /** Resolve an explicitly configured agent_dir to an absolute path, or undefined. */
+  /**
+   * Resolve the explicitly configured agent dir to an absolute path, or
+   * undefined. PI_CODING_AGENT_DIR may be set via agent_dir or env (config.env,
+   * EnvOverrides, or the inherited process env); a relative value is resolved
+   * against the config base path. buildEnv writes this resolved value into the
+   * child env so pi reads exactly the directory the cache fingerprint covers
+   * (pi would otherwise resolve a relative value from its own temp/working cwd).
+   */
   private resolveConfiguredAgentDir(config: PiProviderConfig): string | undefined {
-    if (!config.agent_dir) {
+    const raw =
+      config.agent_dir ??
+      config.env?.PI_CODING_AGENT_DIR ??
+      (this.env as Record<string, string | undefined> | undefined)?.PI_CODING_AGENT_DIR ??
+      process.env.PI_CODING_AGENT_DIR;
+    if (!raw) {
       return undefined;
     }
-    return path.isAbsolute(config.agent_dir)
-      ? config.agent_dir
-      : path.resolve(resolveBasePath(), config.agent_dir);
+    return path.isAbsolute(raw) ? raw : path.resolve(resolveBasePath(), raw);
   }
 
   /**
    * The agent dir pi will actually read, including its default (~/.pi/agent)
    * when none is configured. Used for cache fingerprinting so config changes in
-   * the effective dir bust the cache. PI_CODING_AGENT_DIR may be supplied via
-   * env (config.env, EnvOverrides, or the inherited process env) rather than
-   * agent_dir, so honor that here too — matching what buildEnv passes to pi.
+   * the effective dir bust the cache.
    */
   private resolveEffectiveAgentDir(config: PiProviderConfig): string {
-    const configured = this.resolveConfiguredAgentDir(config);
-    if (configured) {
-      return configured;
-    }
-    const fromEnv =
-      config.env?.PI_CODING_AGENT_DIR ??
-      (this.env as Record<string, string | undefined> | undefined)?.PI_CODING_AGENT_DIR ??
-      process.env.PI_CODING_AGENT_DIR;
-    if (fromEnv) {
-      return path.isAbsolute(fromEnv) ? fromEnv : path.resolve(resolveBasePath(), fromEnv);
-    }
-    return path.join(os.homedir(), '.pi', 'agent');
+    return this.resolveConfiguredAgentDir(config) ?? path.join(os.homedir(), '.pi', 'agent');
   }
 
   /**

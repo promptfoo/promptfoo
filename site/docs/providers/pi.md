@@ -124,7 +124,7 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 | `offline`               | `boolean`  | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
 | `max_output_bytes`      | `number`   | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
-Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json` or project extensions in the `working_dir`) are ignored even if the project is trusted. Enabling any of the `load_*` options re-enables project resources and drops `--no-approve`.
+Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json` or project extensions in the `working_dir`) are ignored even if the project is trusted. Enabling any of the `load_*` options instead passes `--approve`, trusting project-local files so the opted-in resources load the same way on every machine.
 
 ## Response Format
 

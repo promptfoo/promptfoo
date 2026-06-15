@@ -4,8 +4,10 @@ The Pi provider runs agentic evals through [Pi](https://pi.dev/), a minimal term
 
 ```bash
 npx promptfoo@latest init --example provider-pi
-cd provider-pi
+cd provider-pi/basic
 ```
+
+This downloads the basic example. To get all three examples (basic, working-dir, model-comparison), clone the repo and use the `examples/provider-pi/` directory.
 
 ## Setup
 

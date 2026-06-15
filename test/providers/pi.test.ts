@@ -262,7 +262,8 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--no-prompt-templates');
       expect(args).not.toContain('--no-context-files');
       expect(args).not.toContain('--offline');
-      // Loading project resources implies trusting project-local files.
+      // Loading project resources trusts project-local files via --approve.
+      expect(args).toContain('--approve');
       expect(args).not.toContain('--no-approve');
     });
 
@@ -289,13 +290,15 @@ describe('PiProvider', () => {
       }
     });
 
-    it('drops --no-approve when a project resource is loaded', async () => {
+    it('passes --approve when a project resource is loaded', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider({ config: { load_context_files: true } });
 
       await provider.callApi('test prompt');
 
-      expect(spawnedArgs()).not.toContain('--no-approve');
+      const args = spawnedArgs();
+      expect(args).toContain('--approve');
+      expect(args).not.toContain('--no-approve');
     });
 
     it('merges prompt-level config over provider config', async () => {
@@ -356,6 +359,20 @@ describe('PiProvider', () => {
       await provider.callApi('test prompt');
 
       expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe('/tmp/pi-agent-dir');
+    });
+
+    it('resolves a relative PI_CODING_AGENT_DIR from env to an absolute child env value', async () => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider({ config: { env: { PI_CODING_AGENT_DIR: './rel-agent' } } });
+
+      await provider.callApi('test prompt');
+
+      // pi resolves a relative value from its temp/working cwd, so the provider
+      // must hand it an absolute path (resolved from the config base path) that
+      // matches the directory the cache fingerprint covers.
+      expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(
+        path.resolve('/test/basePath', 'rel-agent'),
+      );
     });
 
     it('resolves a relative agent_dir from a relative config base path', async () => {
