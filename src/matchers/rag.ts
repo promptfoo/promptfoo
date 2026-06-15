@@ -16,7 +16,6 @@ import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
-  detectSentenceSegmentMode,
   fail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
@@ -264,42 +263,26 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Split context into units, then segment the grader's extracted sentences the
-  // SAME way so the numerator and denominator use consistent units.
-  const isArrayContext = Array.isArray(context);
-  let contextUnits: string[];
-  let extractedSentences: string[];
-  if (isArrayContext) {
-    // Each chunk is already a unit; the grader echoes back relevant chunks one per line.
-    contextUnits = context.filter((chunk) => chunk.trim().length > 0);
-    extractedSentences = splitIntoSentences(resp.output);
-  } else {
-    // A retrieved context is typically a single prose paragraph with no newlines.
-    // Splitting on newlines alone would yield one unit, making the denominator 1
-    // and forcing the score to ~1.0 regardless of relevance, so we segment on
-    // sentence boundaries. The mode is derived once from the context and reused
-    // for the grader output: the grading prompt does not constrain its output
-    // format, so segmenting both independently could measure them in different
-    // units (e.g. a multi-line context vs. a single-line prose response) and
-    // inflate the numerator above the true relevant count.
-    const mode = detectSentenceSegmentMode(context);
-    contextUnits = splitTextIntoSentences(context, mode);
-    extractedSentences = splitTextIntoSentences(resp.output, mode);
-  }
+  // Denominator (total context units): chunks if provided, otherwise the prose
+  // context segmented into sentences. A retrieved context is typically a single
+  // paragraph with no newlines; splitting on newlines alone would yield one unit,
+  // forcing the score to ~1.0 regardless of relevance.
+  const contextUnits = Array.isArray(context)
+    ? context.filter((chunk) => chunk.trim().length > 0)
+    : splitTextIntoSentences(context);
   const totalContextUnits = contextUnits.length;
-  const relevantSentences: string[] = [];
-  const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
 
-  let numerator = 0;
-  if (insufficientInformation) {
-    // If the entire response is "Insufficient Information", no sentences are relevant
-    numerator = 0;
-  } else {
-    // Count the extracted sentences as relevant
-    const uniqueRelevantSentences = [...new Set(extractedSentences)];
-    numerator = Math.min(uniqueRelevantSentences.length, totalContextUnits);
-    relevantSentences.push(...uniqueRelevantSentences);
-  }
+  // Numerator (relevant units): the grader lists the relevant sentences/chunks one
+  // per line, so count its non-empty lines. We intentionally do NOT sentence-split
+  // the grader output — the prompt does not constrain its format, and an LLM often
+  // returns a numbered list ("1. ...\n2. ..."), where sentence-splitting would
+  // count each "1." marker as its own unit and inflate the score.
+  const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
+  const relevantSentences = insufficientInformation
+    ? []
+    : [...new Set(splitIntoSentences(resp.output))];
+  // Cap at the total so the score never exceeds 1.
+  const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
   // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
   const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
@@ -312,7 +295,7 @@ export async function matchesContextRelevance(
     extractedSentences: relevantSentences,
     totalContextUnits,
     totalContextSentences: totalContextUnits, // Backward compatibility
-    contextUnits: contextUnits,
+    contextUnits,
     relevantSentenceCount: numerator,
     insufficientInformation,
     score,

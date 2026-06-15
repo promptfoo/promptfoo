@@ -98,11 +98,35 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.relevantSentenceCount).toBe(1);
   });
 
-  it('should segment grader output with the same mode as the context', async () => {
+  it('should not inflate the score when the grader returns a numbered list', async () => {
+    // Regression: the grading prompt does not constrain output format, and an LLM
+    // commonly returns the relevant sentences as a numbered list. Sentence-splitting
+    // the grader output would count each "1."/"2." marker as its own unit, inflating
+    // the numerator. The grader output must be counted by line instead.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.5;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '1. Paris is the capital of France.\n2. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 2 relevant lines out of 3 context sentences → 2/3 ≈ 0.67 (not 1.0).
+    expect(result.score).toBeCloseTo(0.67, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+  });
+
+  it('should count the grader output by line, not sentence, against a multi-line context', async () => {
     // Regression: for a multi-line (pre-segmented) string context, a prose grader
-    // response (no newlines) was split on sentence boundaries while the context was
-    // split on newlines. The mismatched units inflated the numerator and forced the
-    // score to 1.0. Both must be segmented in the context's mode.
+    // response (no newlines) was sentence-split while the context was line-split.
+    // The mismatched units inflated the numerator and forced the score to 1.0. The
+    // grader output is now counted by non-empty line, matching the context units.
     const input = 'What is the capital of France?';
     const context =
       'Paris is the capital of France. France is in Europe.\nBerlin is the capital of Germany. Germany is in Europe.';
@@ -117,7 +141,8 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
     const result = await matchesContextRelevance(input, context, threshold);
 
-    // Context is 2 lines; 1 line relevant → 1/2 = 0.5 (was 1.0 before the fix).
+    // Context is 2 lines; the grader's single line is 1 relevant unit → 1/2 = 0.5
+    // (was 1.0 before the fix, when the grader's two sentences were counted).
     expect(result.score).toBe(0.5);
     expect(result.metadata?.totalContextUnits).toBe(2);
     expect(result.metadata?.relevantSentenceCount).toBe(1);

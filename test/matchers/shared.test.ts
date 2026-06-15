@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  detectSentenceSegmentMode,
-  splitIntoSentences,
-  splitTextIntoSentences,
-} from '../../src/matchers/shared';
+import { splitIntoSentences, splitTextIntoSentences } from '../../src/matchers/shared';
 
 describe('splitIntoSentences', () => {
   it('splits on newlines and drops blank lines', () => {
@@ -13,27 +9,12 @@ describe('splitIntoSentences', () => {
   it('treats a single prose paragraph as one unit (newline-only behavior)', () => {
     expect(splitIntoSentences('One. Two. Three.')).toEqual(['One. Two. Three.']);
   });
-});
 
-describe('detectSentenceSegmentMode', () => {
-  it('treats a single prose line as prose', () => {
-    expect(detectSentenceSegmentMode('One. Two. Three.')).toBe('prose');
-  });
-
-  it('treats prose with only an incidental trailing newline as prose', () => {
-    expect(detectSentenceSegmentMode('One. Two. Three.\n')).toBe('prose');
-    expect(detectSentenceSegmentMode('\nOne. Two. Three.')).toBe('prose');
-    expect(detectSentenceSegmentMode('One. Two. Three.\r\n')).toBe('prose');
-  });
-
-  it('treats text with two or more non-empty lines as pre-segmented', () => {
-    expect(detectSentenceSegmentMode('Line one.\nLine two.')).toBe('lines');
-    expect(detectSentenceSegmentMode('Line one.\n\n\nLine two.')).toBe('lines');
-  });
-
-  it('treats empty/whitespace-only text as prose', () => {
-    expect(detectSentenceSegmentMode('')).toBe('prose');
-    expect(detectSentenceSegmentMode('   \n  ')).toBe('prose');
+  it('does not sentence-split a numbered list (markers stay attached to their line)', () => {
+    expect(splitIntoSentences('1. Paris is the capital.\n2. France is in Europe.')).toEqual([
+      '1. Paris is the capital.',
+      '2. France is in Europe.',
+    ]);
   });
 });
 
@@ -72,22 +53,17 @@ describe('splitTextIntoSentences', () => {
     ]);
   });
 
-  it('treats multi-line text as pre-segmented (one unit per line, no abbreviation mis-splits)', () => {
+  it('treats text with two or more non-empty lines as pre-segmented (one unit per line)', () => {
+    // No abbreviation mis-splits ("i.e.") and no collapsing of multi-sentence lines.
     expect(splitTextIntoSentences('All employees i.e. engineers.\nThey get leave.')).toEqual([
       'All employees i.e. engineers.',
       'They get leave.',
     ]);
+    expect(splitTextIntoSentences('Line one.\n\n\nLine two.')).toEqual(['Line one.', 'Line two.']);
   });
 
   it('returns an empty array for empty or whitespace-only text', () => {
     expect(splitTextIntoSentences('')).toEqual([]);
     expect(splitTextIntoSentences('   \n  \n ')).toEqual([]);
-  });
-
-  it('honors an explicit mode override', () => {
-    // Forcing prose mode on multi-line text splits each line on sentence boundaries.
-    expect(splitTextIntoSentences('A. B.\nC. D.', 'prose')).toEqual(['A.', 'B.', 'C.', 'D.']);
-    // Forcing lines mode on a single prose block keeps it as one unit.
-    expect(splitTextIntoSentences('A. B. C.', 'lines')).toEqual(['A. B. C.']);
   });
 });

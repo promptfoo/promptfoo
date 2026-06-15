@@ -94,61 +94,31 @@ export function splitIntoSentences(text: string) {
 }
 
 /**
- * How {@link splitTextIntoSentences} should segment text.
+ * Segments text into units for sentence-level metrics (e.g. the RAGAS context
+ * relevance denominator).
  *
- * - `lines`: split on newlines. The text is already segmented one unit per line.
- * - `prose`: split on sentence boundaries (`.`, `!`, `?` followed by whitespace).
- */
-export type SentenceSegmentMode = 'lines' | 'prose';
-
-/**
- * Decide how to segment text for sentence-level metrics.
+ * Text that spans **two or more** non-empty lines is treated as already segmented
+ * (one unit per line) — a context passed one chunk/sentence per line. This also
+ * avoids mis-splitting abbreviations (e.g. "i.e.", "U.S.") in pre-formatted text.
  *
- * Text that spans **two or more** non-empty lines is treated as already
- * segmented (`lines`) — line-formatted LLM grader output, or a context passed one
- * chunk/sentence per line. Anything else (a single line, possibly carrying an
- * incidental leading/trailing newline) is a single prose block (`prose`).
+ * Otherwise the text is a single prose block (the common shape of a retrieved RAG
+ * passage) and is segmented on sentence boundaries (`.`, `!`, `?` followed by
+ * whitespace). This is the important case: {@link splitIntoSentences} splits on
+ * newlines only, so a prose passage with no newlines collapses to a single unit,
+ * forcing the denominator to 1 and the score to ~1.0 regardless of relevance.
  *
- * The "two or more lines" threshold is deliberate: keying off the mere *presence*
- * of a newline would misclassify a prose paragraph with a single trailing newline
- * (extremely common when a context is loaded from a file, a template, or a YAML
- * block scalar) as pre-segmented, collapsing it to one unit.
- */
-export function detectSentenceSegmentMode(text: string): SentenceSegmentMode {
-  let nonEmptyLines = 0;
-  for (const line of text.split('\n')) {
-    if (line.trim() !== '' && ++nonEmptyLines > 1) {
-      return 'lines';
-    }
-  }
-  return 'prose';
-}
-
-/**
- * Segments text into units for sentence-level metrics (e.g. RAGAS context
- * relevance).
- *
- * `mode` defaults to {@link detectSentenceSegmentMode}. Pass an explicit mode to
- * segment two related texts (e.g. a context and the grader's extracted sentences)
- * the same way, so a ratio between them uses consistent units.
- *
- * - `lines` preserves pre-segmented input and avoids mis-splitting abbreviations
- *   (e.g. "i.e.", "U.S.") in already-formatted text.
- * - `prose` segments a single block on sentence boundaries. This is the important
- *   case: {@link splitIntoSentences} splits on newlines only, so a prose passage
- *   with no newlines collapses to a single unit, forcing sentence-level
- *   denominators to 1. Incidental leading/trailing newlines are tolerated — the
- *   sentence boundary regex consumes them and the trim/filter drops the remnants.
+ * The "two or more lines" threshold (rather than the mere presence of a newline)
+ * is deliberate: it keeps a prose paragraph carrying an incidental leading/trailing
+ * newline — common when a context is loaded from a file, a template, or a YAML
+ * block scalar — in the prose branch instead of collapsing it to one unit.
  *
  * Note: the sentence split is a lightweight heuristic and does not handle every
  * edge case (e.g. decimals like "3.14", abbreviations); full segmentation would
  * need an NLP tokenizer. It is a substantial improvement over newline-only
  * splitting for the common prose case.
  */
-export function splitTextIntoSentences(
-  text: string,
-  mode: SentenceSegmentMode = detectSentenceSegmentMode(text),
-): string[] {
-  const segments = mode === 'lines' ? text.split('\n') : text.split(/(?<=[.!?])\s+/);
+export function splitTextIntoSentences(text: string): string[] {
+  const lines = text.split('\n').filter((line) => line.trim() !== '');
+  const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
   return segments.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0);
 }
