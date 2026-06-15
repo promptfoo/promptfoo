@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: SpaceNet 8 one-pair multimodal smoke test
+description: SpaceNet 8 labeled multimodal accuracy evaluation
 sharing: false
 tags:
   dataset: spacenet8
   domain: geospatial
   modality: paired-imagery
-  suite: one-pair-smoke-test
+  suite: 100-image-labeled-sample
 
 prompts:
   - label: Paired flood assessment
@@ -28,12 +28,9 @@ defaultTest:
     - type: is-json
       value: file://response-schema.json
       metric: schema_contract
+    - type: javascript
+      value: file://grader.cjs:gradeFloodAssessment
+      threshold: 1
+      metric: labeled_accuracy
 
-tests:
-  - description: Germany pre/post image pair
-    metadata:
-      geography: Germany
-    vars:
-      tile_id: germany-0-15-63
-      pre_image: file://assets/germany-0-15-63/pre.jpg
-      post_image: file://assets/germany-0-15-63/post.jpg
+tests: file://tests.generated.json

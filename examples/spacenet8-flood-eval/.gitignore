@@ -1,3 +1,5 @@
 .cache/
 assets/
+dataset.json
 results/
+tests.generated.json

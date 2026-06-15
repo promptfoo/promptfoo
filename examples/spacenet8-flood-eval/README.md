@@ -1,16 +1,8 @@
 # spacenet8-flood-eval (SpaceNet 8 Multimodal Flood Evaluation)
 
-Evaluate a vision model on 50 labeled pre/post satellite-image pairs from the public SpaceNet 8
-training set. The model returns structured JSON; Promptfoo measures flood-status and count-range
-accuracy against hidden GeoJSON-derived labels while tracking latency, tokens, and cost.
-
-## What this demonstrates
-
-- Paired image inputs in an OpenAI chat prompt
-- Strict JSON-schema output
-- A custom JavaScript grader with named accuracy metrics
-- Images rendered directly in the Promptfoo results table
-- A reproducible public dataset download with source hashes
+Start with one satellite-image pair and a built-in assertion, then scale the same prompt to a
+50-pair labeled accuracy evaluation. The example keeps data preparation separate from Promptfoo so
+the first config stays small and each added layer has a clear purpose.
 
 ## Dataset
 
@@ -18,41 +10,83 @@ accuracy against hidden GeoJSON-derived labels while tracking latency, tokens, a
 road annotations from two 2021 public training events: flooding after heavy rain in Germany and
 Hurricane Ida in Louisiana.
 
-This example freezes a stratified sample of 50 independent tiles, or 100 images. It includes dry,
-low-, medium-, and high-flood label ranges from both geographies. The sample is intentionally
-balanced for evaluation coverage, so it is not a prevalence-weighted estimate of the full dataset.
+The Python builder owns a fixed, stratified sample of 50 tiles. It resolves image filenames through
+the official SpaceNet mapping CSVs, downloads the source files, creates 640 x 640 JPEG quicklooks,
+and generates the local labels and test cases used by Promptfoo. Generated files are gitignored.
 
-For each tile, the model sees only:
+## Level 1: One-pair smoke test
 
-- A 640 x 640 pre-event image
-- A 640 x 640 post-event image
-
-The grader privately reads official GeoJSON-derived building and road flood counts from
-`dataset.json`. Flood labels are never rendered into the prompt.
-
-## Setup
+Initialize the example and build only its first image pair:
 
 ```bash
 npx promptfoo@latest init --example spacenet8-flood-eval
 cd spacenet8-flood-eval
 python -m pip install -r requirements.txt
-python scripts/build_dataset.py
+python scripts/build_dataset.py --limit 1
 ```
 
-The build downloads approximately 360 MB of selected source GeoTIFFs and labels, verifies every
-SHA-256, recomputes the hidden counts, and generates approximately 11 MB of JPEG quicklooks.
-Downloaded and generated images are gitignored.
-
-Set `OPENAI_API_KEY`, then run:
+Set `OPENAI_API_KEY`, then run the default config:
 
 ```bash
-umask 077
-promptfoo eval --no-cache --no-share -j 50 -o results/openai.json
+promptfoo eval --no-cache --no-share
 promptfoo view
 ```
 
-Promptfoo reports the labeled metrics below alongside latency, token usage, and provider cost. If
-your provider rate limits do not support 50 concurrent requests, reduce `-j 50`.
+`promptfooconfig.yaml` intentionally uses only Promptfoo fundamentals:
+
+- One static chat prompt
+- One OpenAI provider
+- One inline test with `file://` image variables
+- One built-in `is-json` assertion
+
+Promptfoo loads the local JPEGs as data URLs, sends the paired images, validates the structured
+response, and records the output, latency, tokens, and cost. There is no custom test loader or
+custom grader in this level.
+
+## Level 2: Labeled accuracy evaluation
+
+Build all 50 pairs. The cache preserves files downloaded by Level 1:
+
+```bash
+python scripts/build_dataset.py
+```
+
+This downloads approximately 360 MB, generates approximately 11 MB of quicklooks, and writes:
+
+- `dataset.json`: source URLs, SHA-256 values, and hidden label counts
+- `tests.generated.json`: 50 Promptfoo tests with local image references
+
+Run the accuracy config with high concurrency:
+
+```bash
+umask 077
+promptfoo eval -c promptfooconfig.accuracy.yaml \
+  --no-cache --no-share -j 50 -o results/openai.json
+promptfoo view
+```
+
+`promptfooconfig.accuracy.yaml` adds one advanced concept: `grader.cjs` compares model output with
+the generated GeoJSON-derived labels and reports:
+
+- `building_status_accuracy`
+- `road_status_accuracy`
+- `building_count_accuracy`
+- `road_count_accuracy`
+- `non_abstention`
+
+## Level 3: Hill climb
+
+Treat the 50 pairs as a development set and change one axis at a time:
+
+1. Add a second prompt to compare baseline and candidate instructions on identical images.
+2. Add another vision provider to compare quality, latency, token use, and cost.
+3. Filter or group by `geography` and `event` metadata to find where a candidate improves or
+   regresses.
+4. Add robustness cases such as cloud cover, image corruption, or registration offsets only after
+   the labeled baseline is stable.
+
+Do not repeatedly optimize on this sample and then claim generalization. Once prompt or model
+selection begins, keep a separate event or tile set as a final holdout evaluation.
 
 ## Output contract
 
@@ -60,21 +94,15 @@ The model returns:
 
 ```json
 {
-  "building_flooded": "yes | no | unknown",
-  "road_flooded": "yes | no | unknown",
-  "flooded_building_count_range": "0 | 1-10 | 11-20 | 21-50 | 51-100 | >100 | unknown",
-  "flooded_road_count_range": "0 | 1-10 | 11-20 | 21-50 | 51-100 | >100 | unknown",
+  "building_flooded": "yes",
+  "road_flooded": "no",
+  "flooded_building_count_range": "1-10",
+  "flooded_road_count_range": "0",
   "abstain": false
 }
 ```
 
-Promptfoo reports these named metrics:
-
-- `building_status_accuracy`
-- `road_status_accuracy`
-- `building_count_accuracy`
-- `road_count_accuracy`
-- `non_abstention`
+See `response-schema.json` for all allowed status and count-range values.
 
 ## Limits
 

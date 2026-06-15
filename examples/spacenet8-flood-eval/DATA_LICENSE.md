@@ -16,7 +16,7 @@ This example:
 
 - selects 50 labeled tiles from the Germany and Louisiana-East public training collections;
 - records the official pre-event image, post-event image, and GeoJSON label URL and SHA-256 for
-  each tile in `dataset.json`;
+  each tile in the generated `dataset.json`;
 - computes coarse flooded-building and flooded-road count ranges from the GeoJSON labels; and
 - resizes the source GeoTIFFs to deterministic 640 x 640 JPEG quicklooks during local setup.
 
