@@ -269,5 +269,55 @@ describe('handleLevenshtein', () => {
       expect(result.score).toBe(1);
       expect(result.reason).toBe('Assertion passed');
     });
+
+    it('should fail at the exact boundary (distance === threshold)', () => {
+      const result = handleLevenshtein({
+        assertion: { type: 'levenshtein', threshold: 2 },
+        renderedValue: 'test',
+        outputString: 'toast', // Distance of exactly 2, equal to threshold
+        test: {},
+        providerResponse: { output: 'toast', tokenUsage: {} },
+        baseType: 'contains' as any,
+        assertionValueContext: {
+          prompt: '',
+          vars: {},
+          test: {},
+          logProbs: undefined,
+          provider: {} as any,
+          providerResponse: { output: 'toast', tokenUsage: {} },
+        },
+        inverse: true,
+        output: 'toast',
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Levenshtein distance 2 is less than or equal to threshold 2');
+    });
+
+    it('should honor inverse with the default threshold (no threshold specified)', () => {
+      const result = handleLevenshtein({
+        assertion: { type: 'levenshtein' }, // Default threshold of 5
+        renderedValue: 'test',
+        outputString: 'tast', // Distance of 1, within default threshold
+        test: {},
+        providerResponse: { output: 'tast', tokenUsage: {} },
+        baseType: 'contains' as any,
+        assertionValueContext: {
+          prompt: '',
+          vars: {},
+          test: {},
+          logProbs: undefined,
+          provider: {} as any,
+          providerResponse: { output: 'tast', tokenUsage: {} },
+        },
+        inverse: true,
+        output: 'tast',
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Levenshtein distance 1 is less than or equal to threshold 5');
+    });
   });
 });
