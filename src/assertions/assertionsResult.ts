@@ -151,8 +151,10 @@ export class AssertionsResult {
     let pass = !this.failedReason;
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
 
-    if (this.threshold) {
-      // Existence of a test threshold overrides the pass/fail status of individual assertions
+    if (this.threshold !== undefined) {
+      // Existence of a test threshold overrides the pass/fail status of individual assertions.
+      // Use `!== undefined` (not a truthy check) so a threshold of 0 is honored — `score >= 0`
+      // is always true, i.e. "collect assertion scores but never fail on an individual failure".
       pass = score >= this.threshold;
 
       if (pass) {

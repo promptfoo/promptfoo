@@ -133,6 +133,43 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
     });
 
+    it('should honor a threshold of 0 as an override (never fail on individual assertion failures)', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+
+      // A failing assertion — under the default all-pass logic this fails the test.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Test 1 failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      // A passing assertion.
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Test 2 passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // Aggregate score 0.5 ≥ 0 → the threshold override passes the test. Before the fix
+      // `if (this.threshold)` was falsy for 0, so the override was skipped and the failing
+      // assertion failed the whole test.
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+    });
+
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockResolvedValue({
