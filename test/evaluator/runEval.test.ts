@@ -193,14 +193,14 @@ describe('runEval', () => {
       ...defaultOptions,
       provider: mockProvider,
       prompt: promptWithFunction,
-      test: { options: { temperature: 0.9 } },
+      test: { options: { repeat: 3, temperature: 0.9 } },
       conversations: {},
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(true);
 
-    // test.options should override dynamic config
+    // Provider options should override dynamic config, while evaluator-only options stay internal.
     const callApiMock = vi.mocked(mockProvider.callApi);
     const callApiArgs = callApiMock.mock.calls[0];
     expect(callApiArgs).toBeDefined();
