@@ -30,6 +30,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getGoogleTokenUsageCompletionDetails,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
   loadCredentials,
@@ -512,10 +513,14 @@ export class GoogleProvider extends GoogleGenericProvider {
             datum.promptFeedback.blockReasonMessage ||
             `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
 
+          const completionDetails = cached
+            ? undefined
+            : getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
           const tokenUsage = {
             total: datum.usageMetadata?.totalTokenCount || 0,
             prompt: datum.usageMetadata?.promptTokenCount || 0,
             completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            ...(completionDetails && { completionDetails }),
           };
 
           const guardrails: GuardrailResponse = {
@@ -558,10 +563,14 @@ export class GoogleProvider extends GoogleGenericProvider {
 
         if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
           const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
+          const completionDetails = cached
+            ? undefined
+            : getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
           const tokenUsage = {
             total: datum.usageMetadata?.totalTokenCount || 0,
             prompt: datum.usageMetadata?.promptTokenCount || 0,
             completion: datum.usageMetadata?.candidatesTokenCount || 0,
+            ...(completionDetails && { completionDetails }),
           };
           const guardrails: GuardrailResponse = {
             flagged: true,
@@ -601,6 +610,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
+      const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
       const tokenUsage: TokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
@@ -619,13 +629,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(completionDetails && { completionDetails }),
           };
 
       let guardrails: GuardrailResponse | undefined;
@@ -655,8 +659,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             tokenUsage.prompt,
             completionForCost,
             this.isVertexMode,
-            lastData.usageMetadata?.cachedContentTokenCount,
-            lastData.usageMetadata?.cacheTokensDetails,
+            lastData.usageMetadata,
           );
 
       const response: ProviderResponse = {

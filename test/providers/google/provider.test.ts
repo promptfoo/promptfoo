@@ -725,7 +725,13 @@ describe('GoogleProvider', () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 0,
+            totalTokenCount: 10,
+            cachedContentTokenCount: 4,
+            cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 4 }],
+          },
         },
         cached: false,
         status: 200,
@@ -740,9 +746,16 @@ describe('GoogleProvider', () => {
       );
       expect(result.guardrails?.flagged).toBe(true);
       expect(result.cached).toBe(false);
+      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(4);
       expect(result.raw).toEqual({
         candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
-        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 0,
+          totalTokenCount: 10,
+          cachedContentTokenCount: 4,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 4 }],
+        },
       });
     });
 
@@ -836,6 +849,8 @@ describe('GoogleProvider', () => {
             candidatesTokenCount: 20,
             totalTokenCount: 30,
             thoughtsTokenCount: 100,
+            cachedContentTokenCount: 5,
+            cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 5 }],
           },
         },
         cached: false,
@@ -845,7 +860,12 @@ describe('GoogleProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(100);
+      expect(result.tokenUsage?.completionDetails).toEqual({
+        reasoning: 100,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+        cacheReadInputTokens: 5,
+      });
     });
   });
 

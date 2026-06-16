@@ -22,7 +22,7 @@ export interface GoogleModel {
   vertexCost?: GoogleModelCost;
 }
 
-const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6 };
+const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6, cacheRead: 0.2 / 1e6 };
 const GEMINI_3_PRO_TIERED_COST = {
   threshold: 200_000,
   above: { input: 4.0 / 1e6, output: 18.0 / 1e6, cacheRead: 0.4 / 1e6 },
@@ -62,7 +62,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.0 models (Preview)
   {
     id: 'gemini-3-flash-preview',
-    cost: { input: 0.5 / 1e6, output: 3.0 / 1e6 },
+    cost: {
+      input: 0.5 / 1e6,
+      output: 3.0 / 1e6,
+      cacheRead: { textImageVideo: 0.05 / 1e6 },
+    },
   },
   {
     id: 'gemini-3-pro-preview',
@@ -91,7 +95,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: { textImageVideo: 0.025 / 1e6 } },
-    vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
+    vertexCost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      cacheRead: { textImageVideo: 0.0375 / 1e6 },
+    },
   })),
   ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
     id,

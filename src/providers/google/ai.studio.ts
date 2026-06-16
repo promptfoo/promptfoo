@@ -14,6 +14,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleTokenUsageCompletionDetails,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
@@ -273,9 +274,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             config,
             data.usageMetadata?.promptTokenCount,
             completionForCost,
-            false,
-            data.usageMetadata?.cachedContentTokenCount,
-            data.usageMetadata?.cacheTokensDetails,
           );
 
       return {
@@ -413,8 +411,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);
       }
     } catch (err) {
+      const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
+      const tokenUsage =
+        !cached && lastData.usageMetadata
+          ? {
+              prompt: lastData.usageMetadata.promptTokenCount,
+              completion: lastData.usageMetadata.candidatesTokenCount,
+              total: lastData.usageMetadata.totalTokenCount,
+              numRequests: 1,
+              ...(completionDetails && { completionDetails }),
+            }
+          : undefined;
       return {
         error: `${String(err)}`,
+        ...(tokenUsage && { tokenUsage }),
       };
     }
     const finalCandidate = candidate;
@@ -438,6 +448,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
 
       const tokenUsage = cached
         ? {
@@ -457,13 +468,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(completionDetails && { completionDetails }),
           };
 
       // Calculate cost (only for non-cached responses)
@@ -481,8 +486,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             false,
-            lastData.usageMetadata?.cachedContentTokenCount,
-            lastData.usageMetadata?.cacheTokensDetails,
+            lastData.usageMetadata,
           );
 
       return {

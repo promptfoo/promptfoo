@@ -223,6 +223,7 @@ export function stripExecutableToolFileReferences(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param cacheUsage - Cached input token count and modality breakdown
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 interface GeminiTokenDetails {
@@ -230,35 +231,91 @@ interface GeminiTokenDetails {
   tokenCount?: number;
 }
 
-function getGoogleCacheReadCost(
+export interface GeminiCacheUsageMetadata {
+  cachedContentTokenCount?: number;
+  cacheTokensDetails?: GeminiTokenDetails[];
+}
+
+interface GoogleCacheReadUsage {
+  cost: number;
+  tokenCount: number;
+}
+
+function getGoogleCacheReadUsage(
   cost: GoogleModelCost | undefined,
-  cacheTokensDetails: GeminiTokenDetails[] | undefined,
-): number | undefined {
-  if (!cost?.cacheRead || !cacheTokensDetails?.length) {
+  promptTokens: number,
+  cacheUsage: GeminiCacheUsageMetadata | undefined,
+): GoogleCacheReadUsage | undefined {
+  const cachedTokens = cacheUsage?.cachedContentTokenCount;
+  const cacheTokensDetails = cacheUsage?.cacheTokensDetails;
+  if (
+    !cost?.cacheRead ||
+    !Number.isFinite(promptTokens) ||
+    promptTokens <= 0 ||
+    !Number.isFinite(cachedTokens) ||
+    cachedTokens == null ||
+    cachedTokens <= 0
+  ) {
+    return undefined;
+  }
+
+  const cachedTokenLimit = Math.min(promptTokens, cachedTokens);
+  if (typeof cost.cacheRead === 'number') {
+    return {
+      cost: cachedTokenLimit * cost.cacheRead,
+      tokenCount: cachedTokenLimit,
+    };
+  }
+  if (!cacheTokensDetails?.length) {
     return undefined;
   }
 
   let cacheReadCost = 0;
+  let detailTokenCount = 0;
+  let pricedTokenCount = 0;
+  let hasUnpricedTokens = false;
+
   for (const detail of cacheTokensDetails) {
-    const tokenCount = detail.tokenCount ?? 0;
-    if (tokenCount <= 0) {
-      continue;
-    }
-
-    const cacheReadRate =
-      typeof cost.cacheRead === 'number'
-        ? cost.cacheRead
-        : ['text', 'image', 'video'].includes(detail.modality?.toLowerCase() ?? '')
-          ? cost.cacheRead.textImageVideo
-          : undefined;
-
-    if (cacheReadRate == null) {
+    if (!Number.isFinite(detail.tokenCount) || detail.tokenCount == null || detail.tokenCount < 0) {
       return undefined;
     }
+
+    const tokenCount = detail.tokenCount;
+    if (tokenCount === 0) {
+      continue;
+    }
+    detailTokenCount += tokenCount;
+
+    const cacheReadRate = ['text', 'image', 'video'].includes(detail.modality?.toLowerCase() ?? '')
+      ? cost.cacheRead.textImageVideo
+      : undefined;
+
+    if (cacheReadRate == null) {
+      hasUnpricedTokens = true;
+      continue;
+    }
+    pricedTokenCount += tokenCount;
     cacheReadCost += tokenCount * cacheReadRate;
   }
 
-  return cacheReadCost;
+  if (detailTokenCount === 0 || pricedTokenCount === 0) {
+    return undefined;
+  }
+
+  if (detailTokenCount > cachedTokenLimit) {
+    // If the aggregate and mixed-modality detail disagree, there is no safe way
+    // to know which modality counts fit within the reported cached-token total.
+    if (hasUnpricedTokens) {
+      return undefined;
+    }
+
+    // Every detailed token has the same known rate for this model cost entry, so
+    // the priced count can be safely capped to the aggregate/prompt limit.
+    const scale = cachedTokenLimit / detailTokenCount;
+    return { cost: cacheReadCost * scale, tokenCount: cachedTokenLimit };
+  }
+
+  return { cost: cacheReadCost, tokenCount: pricedTokenCount };
 }
 
 export function calculateGoogleCost(
@@ -267,15 +324,13 @@ export function calculateGoogleCost(
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
-  cachedTokens?: number,
-  cacheTokensDetails?: GeminiTokenDetails[],
+  cacheUsage?: GeminiCacheUsageMetadata,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
   let baseCost: number | undefined;
   let inputCost: number | undefined;
-  const hasExplicitCostOverride =
-    config.cost != null || config.inputCost != null || config.outputCost != null;
+  const hasExplicitInputCostOverride = config.cost != null || config.inputCost != null;
 
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
@@ -303,18 +358,18 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  // Re-price cached text/image/video tokens only when Google returns modality detail and
-  // built-in model pricing has an explicit cache-read rate. Keep user overrides authoritative.
-  if (cachedTokens && inputCost != null && !hasExplicitCostOverride) {
-    const modelCost =
+  // Re-price only cached tokens with known modality rates. Keep user input-cost overrides
+  // authoritative; an output-only override does not affect cache-read pricing.
+  if (promptTokens != null && inputCost != null && !hasExplicitInputCostOverride) {
+    const cacheReadCostSource =
       model?.tieredCost && promptTokens != null && promptTokens > model.tieredCost.threshold
         ? model.tieredCost.above
-        : isVertexMode
-          ? model?.vertexCost
+        : isVertexMode && model?.vertexCost?.cacheRead
+          ? model.vertexCost
           : model?.cost;
-    const cacheReadCost = getGoogleCacheReadCost(modelCost, cacheTokensDetails);
-    if (cacheReadCost !== undefined) {
-      return baseCost - cachedTokens * inputCost + cacheReadCost;
+    const cacheReadUsage = getGoogleCacheReadUsage(cacheReadCostSource, promptTokens, cacheUsage);
+    if (cacheReadUsage !== undefined) {
+      return baseCost - cacheReadUsage.tokenCount * inputCost + cacheReadUsage.cost;
     }
   }
 
@@ -359,15 +414,39 @@ interface Candidate {
   webSearchQueries?: string[];
 }
 
-interface GeminiUsageMetadata {
+interface GeminiUsageMetadata extends GeminiCacheUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
-  /** Subset of promptTokenCount served from context cache (billed at the reduced rate). */
-  cachedContentTokenCount?: number;
-  /** Modality breakdown for cachedContentTokenCount. Required for safe cache repricing. */
-  cacheTokensDetails?: GeminiTokenDetails[];
+}
+
+export function getGoogleTokenUsageCompletionDetails(
+  usageMetadata:
+    | {
+        thoughtsTokenCount?: number;
+        cachedContentTokenCount?: number;
+      }
+    | undefined,
+) {
+  const reasoningTokens = usageMetadata?.thoughtsTokenCount;
+  const cacheReadInputTokens = usageMetadata?.cachedContentTokenCount;
+  const hasReasoningTokens = reasoningTokens !== undefined;
+  const hasCacheReadTokens = cacheReadInputTokens !== undefined;
+  if (!hasReasoningTokens && !hasCacheReadTokens) {
+    return undefined;
+  }
+
+  return {
+    ...(hasReasoningTokens && {
+      reasoning: reasoningTokens,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    }),
+    ...(hasCacheReadTokens && {
+      cacheReadInputTokens,
+    }),
+  };
 }
 
 export interface GeminiErrorResponse {

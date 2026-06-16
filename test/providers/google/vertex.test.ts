@@ -1160,6 +1160,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
               candidatesTokenCount: 20,
               totalTokenCount: 30,
               thoughtsTokenCount: 50, // Thinking tokens
+              cachedContentTokenCount: 6,
+              cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 6 }],
             },
           },
         ],
@@ -1184,6 +1186,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           reasoning: 50,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 6,
         },
       });
     });
@@ -1480,6 +1483,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               totalTokenCount: 5,
               promptTokenCount: 5,
               candidatesTokenCount: 0,
+              cachedContentTokenCount: 3,
             },
           },
         ],
@@ -1516,6 +1520,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(response.metadata?.modelArmor).toEqual({
         blockReason: 'MODEL_ARMOR',
         blockReasonMessage: 'Prompt was blocked by Model Armor: Prompt Injection detected',
+      });
+      expect(response.tokenUsage).toEqual({
+        total: 5,
+        prompt: 5,
+        completion: 0,
+        completionDetails: { cacheReadInputTokens: 3 },
       });
     });
 
@@ -1683,6 +1693,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               totalTokenCount: 10,
               promptTokenCount: 5,
               candidatesTokenCount: 5,
+              cachedContentTokenCount: 4,
             },
           },
         ],
@@ -1715,6 +1726,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
         flaggedInput: false,
         flaggedOutput: true,
         reason: 'Content was blocked due to safety settings with finish reason: SAFETY.',
+      });
+      expect(response.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        completionDetails: { cacheReadInputTokens: 4 },
       });
     });
 

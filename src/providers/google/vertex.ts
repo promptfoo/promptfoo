@@ -32,6 +32,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getGoogleTokenUsageCompletionDetails,
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
@@ -676,10 +677,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
               datum.promptFeedback.blockReasonMessage ||
               `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
 
+            const completionDetails = getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
               completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              ...(completionDetails && { completionDetails }),
             };
 
             // Build guardrails response with Model Armor details
@@ -722,10 +725,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ];
           if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
             const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
+            const completionDetails = getGoogleTokenUsageCompletionDetails(datum.usageMetadata);
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
               completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              ...(completionDetails && { completionDetails }),
             };
             // Build guardrails response for safety blocks
             const guardrails: GuardrailResponse = {
@@ -738,7 +743,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
               // Refusals are not errors during redteams, they're actually successes.
               return { output: finishReason, tokenUsage, guardrails };
             }
-            return { error: finishReason, guardrails };
+            return { error: finishReason, tokenUsage, guardrails };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
@@ -770,17 +775,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
+        const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: promptTokenCount || 0,
           completion: completionTokenCount || 0,
-          ...(thoughtsTokenCount !== undefined && {
-            completionDetails: {
-              reasoning: thoughtsTokenCount,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          }),
+          ...(completionDetails && { completionDetails }),
         };
         // Include thinking tokens in output cost - Google bills them as output tokens
         const completionForCost =
@@ -793,8 +793,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           promptTokenCount,
           completionForCost,
           true,
-          lastData.usageMetadata?.cachedContentTokenCount,
-          lastData.usageMetadata?.cacheTokensDetails,
+          lastData.usageMetadata,
         );
 
         response = {
