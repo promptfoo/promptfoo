@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import {
+  IDENTITY_URL_TRANSFORM,
+  IMAGE_DATA_URL_TRANSFORM,
+  REMARK_PLUGINS,
+} from './markdown-config';
 
 describe('markdown-config', () => {
   describe('REMARK_PLUGINS', () => {
@@ -54,6 +58,40 @@ describe('markdown-config', () => {
       const fn1 = IDENTITY_URL_TRANSFORM;
       const fn2 = IDENTITY_URL_TRANSFORM;
       expect(fn1).toBe(fn2);
+    });
+  });
+
+  describe('IMAGE_DATA_URL_TRANSFORM', () => {
+    const imageNode = {
+      type: 'element' as const,
+      tagName: 'img',
+      properties: {},
+      children: [],
+    };
+    const linkNode = {
+      type: 'element' as const,
+      tagName: 'a',
+      properties: {},
+      children: [],
+    };
+
+    it('should allow image data URLs only for image sources', () => {
+      const dataUri = 'data:image/png;base64,encodedImage';
+
+      expect(IMAGE_DATA_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe(dataUri);
+      expect(IMAGE_DATA_URL_TRANSFORM(dataUri, 'href', linkNode)).toBe('');
+    });
+
+    it('should preserve safe web URLs', () => {
+      const url = 'https://example.com/image.png';
+      expect(IMAGE_DATA_URL_TRANSFORM(url, 'src', imageNode)).toBe(url);
+    });
+
+    it('should reject executable and non-image data URLs', () => {
+      expect(IMAGE_DATA_URL_TRANSFORM('javascript:alert(1)', 'src', imageNode)).toBe('');
+      expect(
+        IMAGE_DATA_URL_TRANSFORM('data:text/html,<script>alert(1)</script>', 'src', imageNode),
+      ).toBe('');
     });
   });
 });
