@@ -511,4 +511,25 @@ describeEvaluator('evaluator basic flows', () => {
     expect(summary.results[0].prompt.label).toBe('Test prompt');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
+  it('allows test case repeat to override global repeat option', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          options: {
+            repeat: 3,
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, {
+      id: randomUUID(),
+    });
+
+    await evaluate(testSuite, evalRecord, { repeat: 1 });
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
+  });
 });

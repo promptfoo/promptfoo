@@ -907,6 +907,9 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+
+      // Number of times to repeat this specific test case.
+      repeat: z.number().int().positive().optional(),
     })
     .catchall(z.any())
     .optional(),
