@@ -1,4 +1,5 @@
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { XMLParser } from 'fast-xml-parser';
+import { SaxesParser } from 'saxes';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -66,6 +67,63 @@ function readXmlName(input: string, start: number): { name: string; end: number 
   }
 
   return { name: input.slice(start, end), end };
+}
+
+function isXmlWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\n' || char === '\r';
+}
+
+function getDoctypeIgnoredSectionEnd(doctype: string, index: number): number | undefined {
+  const char = doctype[index];
+  if (char === '"' || char === "'") {
+    const quoteEnd = doctype.indexOf(char, index + 1);
+    return quoteEnd === -1 ? doctype.length : quoteEnd;
+  }
+
+  const delimiters = doctype.startsWith('<!--', index)
+    ? { end: '-->', offset: 2 }
+    : doctype.startsWith('<?', index)
+      ? { end: '?>', offset: 1 }
+      : undefined;
+  if (!delimiters) {
+    return undefined;
+  }
+
+  const sectionEnd = doctype.indexOf(delimiters.end, index + 2);
+  return sectionEnd === -1 ? doctype.length : sectionEnd + delimiters.offset;
+}
+
+function registerDeclaredEntities(parser: SaxesParser, doctype: string): void {
+  const marker = '<!ENTITY';
+  for (let index = 0; index < doctype.length; index++) {
+    const ignoredSectionEnd = getDoctypeIgnoredSectionEnd(doctype, index);
+    if (ignoredSectionEnd !== undefined) {
+      index = ignoredSectionEnd;
+      continue;
+    }
+
+    if (!doctype.startsWith(marker, index)) {
+      continue;
+    }
+
+    let nameStart = index + marker.length;
+    if (isXmlWhitespace(doctype[nameStart])) {
+      while (isXmlWhitespace(doctype[nameStart])) {
+        nameStart++;
+      }
+
+      // Parameter entities cannot be referenced from document content.
+      if (doctype[nameStart] !== '%') {
+        const name = readXmlName(doctype, nameStart);
+        if (name && isXmlWhitespace(doctype[name.end])) {
+          // Saxes validates well-formedness but intentionally does not parse DTD
+          // entity declarations. Register the name without expanding its value;
+          // XMLParser performs the existing value expansion after validation.
+          parser.ENTITIES[name.name] = '';
+        }
+      }
+    }
+  }
 }
 
 function findTagEnd(input: string, start: number): number {
@@ -375,16 +433,17 @@ export function validateXml(
   xmlString: string,
   requiredElements?: string[],
 ): { isValid: boolean; reason: string } {
-  // `is-xml` asserts the whole output is valid XML, so require XML 1.0
-  // well-formedness. XMLParser.parse() (used by validateXmlCandidate) is a
-  // lenient data extractor that does not reject mismatched/unclosed tags,
-  // multiple root elements, or unquoted attribute values, so gate on the
-  // dedicated validator first. (contains-xml stays lenient — it extracts XML
-  // fragments from possibly-noisy output and may legitimately span multiple
-  // fragments.)
-  const validation = XMLValidator.validate(xmlString);
-  if (validation !== true) {
-    return { isValid: false, reason: `XML parsing failed: ${validation.err.msg}` };
+  // XMLParser.parse() is a lenient data extractor, so validate the entire
+  // document with a well-formedness parser before extracting its values.
+  // contains-xml intentionally remains lenient because it accepts fragments
+  // embedded in otherwise non-XML output.
+  try {
+    const parser = new SaxesParser();
+    parser.on('doctype', (doctype) => registerDeclaredEntities(parser, doctype));
+    parser.write(xmlString).close();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { isValid: false, reason: `XML parsing failed: ${message}` };
   }
   const result = validateXmlCandidate(xmlString, requiredElements);
   return { isValid: result.isValid, reason: result.reason };

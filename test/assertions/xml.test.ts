@@ -22,14 +22,37 @@ describe('validateXml', () => {
     });
   });
 
-  it('should invalidate non-well-formed XML the lenient parser used to accept', () => {
-    // XMLParser.parse() accepts all of these; only the well-formedness validator
-    // rejects them. Before the fix, is-xml passed every one.
+  it('should validate well-formed XML edge cases', () => {
+    for (const valid of [
+      '<root/>',
+      '<!-- before --><root/><!-- after -->',
+      '<𐀀>astral name</𐀀>',
+      '<!DOCTYPE root [<!ENTITY writer "Donald">]><root>&writer;</root>',
+    ]) {
+      expect(validateXml(valid)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should invalidate non-well-formed XML the lenient parser accepts', () => {
     for (const malformed of [
       '<a></b>', // mismatched tags
       '<a><b></a></b>', // improperly nested
       '<a>text</a><b>more</b>', // multiple root elements
       '<a attr=unquoted>x</a>', // unquoted attribute value
+      '<a/><b/>', // multiple self-closing root elements
+      '<a/>trailing', // text outside the root element
+      '<root><!-- bad -- comment --></root>', // invalid comment body
+      '<root attr="1" attr="2"/>', // duplicate attributes
+      '<root>&undefined;</root>', // undeclared entity
+      '<!DOCTYPE root [<!-- <!ENTITY undefined "x"> -->]><root>&undefined;</root>',
+      '<!DOCTYPE root [<?pi <!ENTITY undefined "x">?>]><root>&undefined;</root>',
+      '<root>\u0001</root>', // disallowed XML character
+      '', // missing root element
+      '"<a/>"', // quoted XML output
+      '```xml\n<a/>\n```', // fenced XML output
     ]) {
       expect(validateXml(malformed)).toEqual({
         isValid: false,

@@ -59,7 +59,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is valid xml                                                |
+| [is-xml](#is-xml)                                               | output is a well-formed XML document                               |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
@@ -397,8 +397,8 @@ This checks if the XML is valid and contains the specified elements. The element
 
 #### How it works
 
-1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
-2. If parsing succeeds, it's considered valid XML.
+1. The assertion validates that the entire output is one well-formed XML document, then parses it with fast-xml-parser.
+2. If validation and parsing succeed, it's considered valid XML.
 3. If `value` is specified:
    - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
