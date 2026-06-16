@@ -1,18 +1,18 @@
-import { type EnvVarKey, getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 const EVOLINK_API_BASE_URL = 'https://direct.evolink.ai/v1';
 const EVOLINK_API_KEY_ENV_VAR = 'EVOLINK_API_KEY';
 const EVOLINK_DEFAULT_MODEL = 'evolink/auto';
 
+type EvoLinkProviderOptions = NonNullable<
+  ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]
+>;
+
 /**
  * EvoLink provider for its OpenAI-compatible chat completions endpoint.
  */
 export class EvoLinkProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: ProviderOptions = {}) {
+  constructor(modelName: string, providerOptions: EvoLinkProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,
       config: {
@@ -44,11 +44,8 @@ export class EvoLinkProvider extends OpenAiChatCompletionProvider {
 
   getApiKey(): string | undefined {
     const envar = this.config?.apiKeyEnvar || EVOLINK_API_KEY_ENV_VAR;
-    return (
-      this.config.apiKey ||
-      this.env?.[envar as keyof EnvOverrides] ||
-      getEnvString(envar as EnvVarKey)
-    );
+    const env = this.env as Record<string, string | undefined> | undefined;
+    return this.config.apiKey || env?.[envar] || process.env[envar];
   }
 
   getOrganization(): undefined {
@@ -71,17 +68,17 @@ export class EvoLinkProvider extends OpenAiChatCompletionProvider {
 export function createEvoLinkProvider(
   providerPath: string,
   options: {
-    config?: ProviderOptions;
+    config?: EvoLinkProviderOptions;
     id?: string;
-    env?: EnvOverrides;
+    env?: EvoLinkProviderOptions['env'];
   } = {},
-): ApiProvider {
+) {
   const splits = providerPath.split(':');
   const modelName =
     (splits[1] === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':')) ||
     EVOLINK_DEFAULT_MODEL;
 
-  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  const providerOptions: EvoLinkProviderOptions = options.config ? { ...options.config } : {};
   if (options.env && !providerOptions.env) {
     providerOptions.env = options.env;
   }
