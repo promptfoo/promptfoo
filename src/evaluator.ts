@@ -2170,6 +2170,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
+      ...data.options,
       ...test.options,
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
