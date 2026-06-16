@@ -464,8 +464,7 @@ describe('assertionFromString', () => {
     });
 
     const result = testCaseFromCsvRow(row);
-    expect(result.assert?.[0]?.type).toBe(type);
-    expect(result.assert?.[0]?.value).toEqual(['hello, world', 'foo']);
+    expect(result.assert).toEqual([{ type, value: ['hello, world', 'foo'] }]);
   });
 
   it('should preserve escaped and doubled quotes in contains assertion values', () => {
