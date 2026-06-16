@@ -370,9 +370,11 @@ describe('WatsonXProvider', () => {
         error: undefined,
         output: 'Test response from WatsonX',
         tokenUsage: {
-          total: 10,
+          // generated_token_count=10 (completion), input_token_count=5 (prompt),
+          // total = prompt + completion = 15.
+          total: 15,
           prompt: 5,
-          completion: 5,
+          completion: 10,
         },
         cost: undefined,
         cached: undefined,
@@ -882,11 +884,10 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
       // For class_c1 tier ($0.106 per 1M tokens)
-      // Input: 50 tokens * $0.106/1M = 0.0000053
-      // Output: (generated_token_count - input_token_count) = (100 - 50) = 50 tokens
-      // Output cost: 50 tokens * $0.106/1M = 0.0000053
-      // Total expected: 0.0000106
-      expect(response.cost).toBeCloseTo(0.0000106, 10);
+      // Input: input_token_count = 50 tokens * $0.106/1M = 0.0000053
+      // Output: generated_token_count = 100 tokens * $0.106/1M = 0.0000106
+      // Total expected: 0.0000159
+      expect(response.cost).toBeCloseTo(0.0000159, 10);
     });
 
     it('should calculate cost correctly for class_9 tier', async () => {
@@ -961,12 +962,11 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
       // For class_9 tier ($0.371 per 1M tokens):
-      // input_token_count = 50
-      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
+      // input_token_count = 50 (prompt), generated_token_count = 100 (completion)
       // Input: 50 tokens * $0.371/1M = 0.00001855
-      // Output: 50 tokens * $0.371/1M = 0.00001855
-      // Total expected: 0.0000371
-      expect(response.cost).toBeCloseTo(0.0000371, 10);
+      // Output: 100 tokens * $0.371/1M = 0.0000371
+      // Total expected: 0.00005565
+      expect(response.cost).toBeCloseTo(0.00005565, 10);
     });
 
     it('should calculate cost correctly for Granite 4 models with mixed pricing tiers', async () => {
@@ -1040,10 +1040,10 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // Input: 50 tokens * $0.0636/1M = 0.00000318
-      // Output: 50 tokens * $0.265/1M = 0.00001325
-      // Total expected: 0.00001643
-      expect(response.cost).toBeCloseTo(0.00001643, 10);
+      // Input: input_token_count = 50 tokens * $0.0636/1M = 0.00000318
+      // Output: generated_token_count = 100 tokens * $0.265/1M = 0.0000265
+      // Total expected: 0.00002968
+      expect(response.cost).toBeCloseTo(0.00002968, 10);
     });
 
     it('should calculate cost correctly for special Mistral pricing tiers', async () => {
@@ -1117,12 +1117,11 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // input_token_count = 50
-      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
+      // input_token_count = 50 (prompt), generated_token_count = 100 (completion)
       // Input: 50 tokens * $3.37/1M = 0.0001685
-      // Output: 50 tokens * $10.07/1M = 0.0005035
-      // Total expected: 0.000672
-      expect(response.cost).toBeCloseTo(0.000672, 10);
+      // Output: 100 tokens * $10.07/1M = 0.001007
+      // Total expected: 0.0011755
+      expect(response.cost).toBeCloseTo(0.0011755, 10);
     });
   });
 

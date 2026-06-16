@@ -123,14 +123,16 @@ function convertResponse(response: z.infer<typeof TextGenResponseSchema>): Provi
     throw new Error('No results returned from text generation API.');
   }
 
-  const totalGeneratedTokens = firstResult.generated_token_count || 0;
+  // watsonx reports input (prompt) and generated (completion) token counts
+  // separately; the total is their sum. See IBM docs:
+  // https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-tokens
   const promptTokens = firstResult.input_token_count || 0;
-  const completionTokens = totalGeneratedTokens - promptTokens;
+  const completionTokens = firstResult.generated_token_count || 0;
 
   const tokenUsage: Partial<TokenUsage> = {
-    total: totalGeneratedTokens,
+    total: promptTokens + completionTokens,
     prompt: promptTokens,
-    completion: completionTokens >= 0 ? completionTokens : totalGeneratedTokens,
+    completion: completionTokens,
   };
 
   const providerResponse: ProviderResponse = {
