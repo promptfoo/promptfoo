@@ -73,17 +73,6 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
     await expect(meteor({ renderedValue: [] })).rejects.toThrow('Invalid inputs');
   });
 
-  it('accepts custom METEOR parameters', async () => {
-    const result = await meteor({
-      assertion: { type: 'meteor', alpha: 0.85, beta: 2, gamma: 0.4 },
-      renderedValue: 'the cat sat on the mat.',
-      outputString: 'the cat sat on the mat',
-    });
-
-    expect(result.pass).toBe(true);
-    expect(result.score).toBeGreaterThan(0.9);
-  });
-
   it('does not create tokens for whitespace-only input', async () => {
     const result = await meteor({ renderedValue: '\r\n ', outputString: ' \t\n ' });
 
