@@ -115,6 +115,43 @@ describe('share-time blob upload', () => {
     });
   });
 
+  it('keeps a zero-index result row distinct from a coordinate-less reference', async () => {
+    // Pins the `?? null` (not `||`) choice in getUploadCacheKey: promptIdx/testIdx
+    // of 0 is the first row of every eval and must not collapse into a reference
+    // that carries no coordinates. A regression to `|| null` would dedupe these two
+    // into a single upload, dropping the (0, 0) row's provenance.
+    const hash = '0'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-zero',
+      remoteEvalId: 'remote-eval-zero',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-zero',
+      remoteEvalId: 'remote-eval-zero',
+    });
+
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-zero',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-zero',
+      kind: 'image',
+      location: 'share',
+      promptIdx: undefined,
+      testIdx: undefined,
+    });
+  });
+
   it('does not upload a copied blob URI that is not share-authorized for the eval', async () => {
     const hash = 'd'.repeat(64);
     vi.mocked(getShareAuthorizedBlob).mockResolvedValue(null);

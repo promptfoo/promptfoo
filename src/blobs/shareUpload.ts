@@ -16,6 +16,12 @@ export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
   return new Map();
 }
 
+// Key uploads by result-row coordinates, not just by hash: the remote records the
+// (promptIdx, testIdx) of each upload, so a blob referenced from multiple rows must
+// upload once per row to preserve each row's provenance. Re-uploading the same bytes
+// per row is intentional — the remote dedupes storage by content. Use `?? null` (not
+// `||`) so a falsy index 0 (the first row of every eval) stays distinct from a
+// coordinate-less reference.
 function getUploadCacheKey(hash: string, context: ShareBlobUploadContext): string {
   return JSON.stringify({
     hash,
@@ -73,8 +79,8 @@ function uploadBlobForShare(
   let pending = cache.get(cacheKey);
   if (!pending) {
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
-    // repeated references to the same blob within one result row share one
-    // authorization check and one upload without collapsing distinct row provenance.
+    // repeated references that share a cache key (same blob, same row coordinates)
+    // reuse one authorization check and one upload without collapsing row provenance.
     pending = uploadAuthorizedBlob(hash, context);
     cache.set(cacheKey, pending);
   }
