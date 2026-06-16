@@ -5,10 +5,15 @@ coverage:
   status:
     project:
       default:
-        # Require overall project coverage to not decrease
+        # Overall coverage is gated in-repo by the coverage ratchet
+        # (`npm run test:coverage:ratchet`, run in CI as the "Check Backend/
+        # Frontend Coverage Ratchets" steps), not by Codecov. Keep this status
+        # informational so Codecov measurement noise — carryforward flags,
+        # sharded/partial uploads — can't fail PRs that don't change source
+        # (e.g. a dependency bump reporting a spurious -0.01%).
         target: auto
         threshold: 0%
-        informational: false
+        informational: true
     patch:
       default:
         # Require new code in PRs to have reasonable coverage
@@ -39,9 +44,13 @@ flag_management:
   default_rules:
     carryforward: true
     statuses:
+      # Per-flag project status is informational for the same reason as the
+      # default project status above: overall coverage is gated by the in-repo
+      # ratchet, so this status only needs to surface info, not block merges.
       - type: project
         target: auto
         threshold: 0%
+        informational: true
       - type: patch
         target: 50%
 
