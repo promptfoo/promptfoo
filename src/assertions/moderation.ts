@@ -1,3 +1,4 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesModeration } from '../matchers/moderation';
 import { parseChatPrompt } from '../providers/shared';
 import invariant from '../util/invariant';
@@ -86,6 +87,13 @@ export const handleModeration = async ({
     },
     test.options,
   );
+
+  // A moderation provider/transport error is not evidence about the content, so
+  // never flip it into a pass for `not-moderation` — propagate it verbatim
+  // (mirrors the inverse-aware llm-rubric/g-eval handlers).
+  if (isGraderFailure(moderationResult)) {
+    return { ...moderationResult, assertion };
+  }
 
   let { pass, score } = moderationResult;
   // `not-moderation` asserts the opposite outcome (e.g. that the output WAS
