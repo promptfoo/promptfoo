@@ -1347,6 +1347,33 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should surface URL and HTTP context when body read fails for non-idempotent requests', async () => {
+      // Simulate a Cloudflare-style 403 where the response body stream is already
+      // terminated before it can be read. The raw error "TypeError: terminated"
+      // alone gives no clue about the endpoint or HTTP status.
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: () => Promise.reject(new TypeError('terminated')),
+        headers: new Headers({ 'content-type': 'text/html' }),
+      } as unknown as Response);
+
+      const error = await fetchWithCache(url, { method: 'POST', body: '{}' }, 1000).catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(`Error reading response body from ${url}:`);
+      expect((error as Error).message).toContain('terminated');
+      expect((error as Error).message).toContain('HTTP 403 Forbidden');
+      // Preserve the original error as cause for downstream inspection
+      expect((error as Error).cause).toBeInstanceOf(TypeError);
+      expect(((error as Error).cause as Error).message).toBe('terminated');
+      // Only 1 fetch — no body retry for non-idempotent methods
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
     it('should not catch fetchWithRetries errors in body retry loop', async () => {
       // fetchWithRetries itself throws — should propagate directly, not retry
       mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));
