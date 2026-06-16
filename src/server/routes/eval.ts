@@ -561,6 +561,47 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
   }
 });
 
+evalRouter.post('/:id/traces', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.AddTraces.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const bodyResult = EvalSchemas.AddTraces.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    replyValidationError(res, bodyResult.error);
+    return;
+  }
+
+  const { id } = paramsResult.data;
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  const traces = bodyResult.data;
+  const seenTraceIds = new Set<string>();
+  for (const trace of traces) {
+    if (seenTraceIds.has(trace.traceId)) {
+      res.status(400).json({ error: 'Duplicate trace ID in request' });
+      return;
+    }
+    seenTraceIds.add(trace.traceId);
+  }
+
+  try {
+    if (!(await eval_.appendTraces(traces))) {
+      res.status(409).json({ error: 'Trace ID already exists' });
+      return;
+    }
+    res.status(204).send();
+  } catch (error) {
+    sendError(res, 500, 'Failed to add traces to eval', error);
+  }
+});
+
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   const paramsResult = EvalSchemas.AddResults.Params.safeParse(req.params);
   if (!paramsResult.success) {

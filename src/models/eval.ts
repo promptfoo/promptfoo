@@ -1448,6 +1448,17 @@ export default class Eval {
     };
   }
 
+  async appendTraces(traces: TraceData[]): Promise<boolean> {
+    // The trace store normalizes each span's status into statusCode/statusMessage on write.
+    const imported = await getTraceStore().importTraces(this.id, traces);
+    if (imported) {
+      // Notify watchers (e.g. an open `promptfoo view`) so late-arriving shared traces — posted
+      // after the result chunks during a share — are refetched instead of staying missing until reload.
+      notifyEvaluationChanged(this.id);
+    }
+    return imported;
+  }
+
   async getTraces(): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();

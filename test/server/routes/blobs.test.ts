@@ -10,7 +10,7 @@ vi.mock('../../../src/blobs');
 vi.mock('../../../src/database');
 
 // Import after mocking
-import { getBlobByHash, getBlobUrl } from '../../../src/blobs';
+import { getBlobByHash, getBlobUrl, storeBlob } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { getDb } from '../../../src/database';
 
@@ -19,6 +19,7 @@ const mockedGetBlobUrl = vi.mocked(getBlobUrl);
 const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
 
+const mockedStoreBlob = vi.mocked(storeBlob);
 describe('Blobs Routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
@@ -38,6 +39,216 @@ describe('Blobs Routes', () => {
     }
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
+  describe('POST /api/blobs', () => {
+    const evalId = 'eval-share-target';
+    const hash = 'f'.repeat(64);
+
+    function createEvalLookupDb(result?: { id: string }) {
+      return {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(result),
+      } as any;
+    }
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+    });
+
+    it('stores a validated blob for an existing eval', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/vnd.promptfoo.trace+json',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        context: {
+          evalId,
+          kind: 'image',
+          location: 'share',
+          promptIdx: 2,
+          testIdx: 1,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.ref.uri).toBe(`promptfoo://blob/${hash}`);
+      expect(mockedStoreBlob).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
+        evalId,
+        kind: 'image',
+        location: 'share',
+        promptIdx: 2,
+        testIdx: 1,
+      });
+    });
+
+    it('downgrades a non-media (text/html) MIME to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('<script>alert(1)</script>').toString('base64'),
+        mimeType: 'text/html',
+        context: { evalId },
+      });
+
+      expect(response.status).toBe(200);
+      // A stored text/html blob would be a same-origin stored-XSS vector when served back.
+      // kind is derived from the sanitized MIME ('other'), never trusted from the client, so the
+      // media-library response (which only permits image/video/audio/other) can't 500 on it.
+      expect(mockedStoreBlob).toHaveBeenCalledWith(expect.any(Buffer), 'application/octet-stream', {
+        evalId,
+        kind: 'other',
+      });
+    });
+
+    it('derives kind from the sanitized MIME, ignoring a client-supplied kind', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'image/png',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        // A bogus client kind ('application', from a MIME prefix) must not be persisted.
+        context: { evalId, kind: 'application' },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'image/png',
+        expect.objectContaining({ evalId, kind: 'image' }),
+      );
+    });
+
+    it('rejects an upload that is not associated with an eval', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'context.evalId is required' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('downgrades image/svg+xml to octet-stream before storage', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb({ id: evalId }));
+      mockedStoreBlob.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          hash,
+          mimeType: 'application/octet-stream',
+          provider: 'filesystem',
+          sizeBytes: 11,
+          uri: `promptfoo://blob/${hash}`,
+        },
+      });
+
+      await api.post('/api/blobs').send({
+        data: Buffer.from('<svg onload="alert(1)"></svg>').toString('base64'),
+        mimeType: 'image/svg+xml',
+        context: { evalId },
+      });
+
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'application/octet-stream',
+        expect.anything(),
+      );
+    });
+
+    it('rejects non-canonical base64 that passes the charset check', async () => {
+      // "QR==" passes the charset regex and decodes, but is not the canonical encoding of its
+      // bytes ("QQ=="), so the round-trip guard rejects it to prevent hash/content confusion.
+      const response = await api.post('/api/blobs').send({
+        data: 'QR==',
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects pad-only base64 that would store an empty blob', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: '==',
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed base64 before storage', async () => {
+      const response = await api.post('/api/blobs').send({
+        data: 'not=valid=base64',
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid base64 data' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects an upload for an eval that does not exist', async () => {
+      mockedGetDb.mockReturnValue(createEvalLookupDb());
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+        context: { evalId: 'missing-eval' },
+      });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval not found' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
+    });
+
+    it('rejects uploads when blob storage is disabled', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(false);
+
+      const response = await api.post('/api/blobs').send({
+        data: Buffer.from('image-bytes').toString('base64'),
+        mimeType: 'image/png',
+      });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Blob storage disabled' });
+      expect(mockedStoreBlob).not.toHaveBeenCalled();
     });
   });
 
@@ -170,6 +381,7 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
+      expect(response.header['x-content-type-options']).toBe('nosniff');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
       // Content-Length may be absent if response is gzipped (Express uses transfer-encoding: chunked)

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from '../../src/blobs/remoteUpload';
+import {
+  shouldAttemptRemoteBlobUpload,
+  uploadBlobRemote,
+  uploadBlobToRemoteTarget,
+} from '../../src/blobs/remoteUpload';
 import { getEnvBool } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -94,5 +98,36 @@ describe('remote blob upload', () => {
     );
     expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
     expect(cloudConfig.getApiKey).toHaveBeenCalledTimes(1);
+  });
+  it('posts blobs to an explicit self-hosted target without Cloud configuration', async () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+
+    await uploadBlobToRemoteTarget(
+      Buffer.from('trace-image'),
+      'image/png',
+      {
+        evalId: 'remote-eval',
+        location: 'share',
+        promptIdx: 3,
+        testIdx: 2,
+      },
+      {
+        url: 'https://self-hosted.example/api/blobs',
+        headers: { 'X-Share-Token': 'secret' },
+      },
+    );
+
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://self-hosted.example/api/blobs',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Share-Token': 'secret',
+        },
+        body: expect.stringContaining('dHJhY2UtaW1hZ2U='),
+      }),
+    );
+    expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
   });
 });

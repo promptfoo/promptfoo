@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobByHash, getBlobUrl } from '../../blobs';
+import { BLOB_MAX_SIZE, getBlobByHash, getBlobUrl, storeBlob } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { sanitizeBlobMimeType } from '../../blobs/mimeTypes';
 import { getDb } from '../../database';
 import {
   blobAssetsTable,
@@ -20,6 +21,78 @@ export const blobsRouter = express.Router();
 // Only allow: type/subtype where both are alphanumeric with dash/underscore/plus
 // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
 const SAFE_MIME_TYPE_REGEX = /^[a-z]+\/[a-z0-9_+-]+$/i;
+
+function decodeBase64(value: string): Buffer | null {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
+    return null;
+  }
+  const data = Buffer.from(value, 'base64');
+  if (data.length === 0) {
+    // Pad-only input (e.g. "=") passes the charset check but decodes to nothing.
+    return null;
+  }
+  const normalizedInput = value.replace(/=+$/, '');
+  const normalizedOutput = data.toString('base64').replace(/=+$/, '');
+  return normalizedInput === normalizedOutput ? data : null;
+}
+
+blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+  if (!isBlobStorageEnabled()) {
+    res.status(404).json({ error: 'Blob storage disabled' });
+    return;
+  }
+
+  const bodyResult = BlobsSchemas.Upload.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    replyValidationError(res, bodyResult.error);
+    return;
+  }
+
+  const data = decodeBase64(bodyResult.data.data);
+  if (!data) {
+    res.status(400).json({ error: 'Invalid base64 data' });
+    return;
+  }
+  if (data.length > BLOB_MAX_SIZE) {
+    res.status(413).json({ error: 'Blob exceeds maximum size' });
+    return;
+  }
+
+  const { context } = bodyResult.data;
+  const evalId = context?.evalId;
+  if (!evalId) {
+    // Uploads must be associated with an eval. Without a reference row the returned URI is
+    // unretrievable (GET requires a reference and 403s), leaving an orphaned blob asset.
+    res.status(400).json({ error: 'context.evalId is required' });
+    return;
+  }
+
+  // Blobs are served back from this server's own origin, so a client-supplied MIME like
+  // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
+  // everything else is downgraded to application/octet-stream (same gate as portable imports).
+  const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
+  // Derive kind from the sanitized MIME rather than trusting the client: the media-library
+  // response only permits image/video/audio/other, so a client kind like "application" (from a
+  // non-media MIME prefix) would otherwise fail response validation and 500 the listing.
+  const refContext = { ...context, kind: getKindFromMimeType(mimeType) };
+  try {
+    const db = await getDb();
+    const evalExists = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evalExists) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const result = await storeBlob(data, mimeType, refContext);
+    res.json(BlobsSchemas.Upload.Response.parse(result));
+  } catch (error) {
+    sendError(res, 500, 'Failed to store blob', error);
+  }
+});
 
 /**
  * Determine media kind from mime type
@@ -493,6 +566,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
     res.setHeader('Content-Type', 'application/octet-stream');
   }
+  // Defense in depth: never let the browser MIME-sniff stored bytes into active content.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Accept-Ranges', 'none');

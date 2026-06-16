@@ -7,7 +7,7 @@
   "app -> redteam": 115,
   "cli -> core": 5,
   "cli -> legacy-contracts": 24,
-  "cli -> legacy-runtime": 83,
+  "cli -> legacy-runtime": 84,
   "cli -> node": 121,
   "cli -> providers": 3,
   "cli -> redteam": 10,
@@ -45,7 +45,7 @@
   "redteam -> providers": 43,
   "view-server -> core": 1,
   "view-server -> legacy-contracts": 21,
-  "view-server -> legacy-runtime": 35,
+  "view-server -> legacy-runtime": 36,
   "view-server -> node": 43,
   "view-server -> providers": 3,
   "view-server -> redteam": 13

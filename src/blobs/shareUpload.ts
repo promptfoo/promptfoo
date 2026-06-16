@@ -1,15 +1,28 @@
 import logger from '../logger';
 import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
-import { uploadBlobRemote } from './remoteUpload';
+import {
+  type RemoteBlobUploadTarget,
+  uploadBlobRemote,
+  uploadBlobToRemoteTarget,
+} from './remoteUpload';
 
 export type RemoteBlobUploadCache = Map<string, Promise<boolean>>;
+export type ShareBlobUploader = (
+  buffer: Buffer,
+  mimeType: string,
+  context?: Parameters<typeof uploadBlobRemote>[2],
+) => ReturnType<typeof uploadBlobRemote>;
 
 interface ShareBlobUploadContext {
   localEvalId: string;
   remoteEvalId: string;
   promptIdx?: number;
   testIdx?: number;
+}
+
+export function createShareBlobUploader(target: RemoteBlobUploadTarget): ShareBlobUploader {
+  return (buffer, mimeType, context) => uploadBlobToRemoteTarget(buffer, mimeType, context, target);
 }
 
 export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
@@ -19,6 +32,7 @@ export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
 async function uploadAuthorizedBlob(
   hash: string,
   context: ShareBlobUploadContext,
+  uploader: ShareBlobUploader,
 ): Promise<boolean> {
   try {
     const blob = await getShareAuthorizedBlob(hash, context.localEvalId);
@@ -26,7 +40,7 @@ async function uploadAuthorizedBlob(
       return false;
     }
 
-    const result = await uploadBlobRemote(blob.data, blob.metadata.mimeType, {
+    const result = await uploader(blob.data, blob.metadata.mimeType, {
       evalId: context.remoteEvalId,
       promptIdx: context.promptIdx,
       testIdx: context.testIdx,
@@ -59,12 +73,13 @@ function uploadBlobForShare(
   hash: string,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  uploader: ShareBlobUploader,
 ): Promise<boolean> {
   let pending = cache.get(hash);
   if (!pending) {
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
     // repeated references to the same hash share one authorization check and one upload.
-    pending = uploadAuthorizedBlob(hash, context);
+    pending = uploadAuthorizedBlob(hash, context, uploader);
     cache.set(hash, pending);
   }
   return pending;
@@ -74,10 +89,13 @@ export async function uploadBlobRefsForShare(
   value: unknown,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  uploader: ShareBlobUploader = uploadBlobRemote,
 ): Promise<void> {
   const hashes = collectBlobHashes(value, {
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  await Promise.all(Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context)));
+  await Promise.all(
+    Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context, uploader)),
+  );
 }

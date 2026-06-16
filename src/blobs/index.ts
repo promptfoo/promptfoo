@@ -179,6 +179,8 @@ export async function recordBlobReference(
       id: blobReferencesTable.id,
       kind: blobReferencesTable.kind,
       location: blobReferencesTable.location,
+      promptIdx: blobReferencesTable.promptIdx,
+      testIdx: blobReferencesTable.testIdx,
     })
     .from(blobReferencesTable)
     .where(
@@ -190,10 +192,19 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
-    const strongerReference: { kind?: string; location?: string } = {
+    const strongerReference: {
+      kind?: string;
+      location?: string;
+      promptIdx?: number;
+      testIdx?: number;
+    } = {
       ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
       ...(refContext.location === 'import' &&
         existing.location !== 'import' && { location: 'import' }),
+      ...(refContext.promptIdx !== undefined &&
+        existing.promptIdx == null && { promptIdx: refContext.promptIdx }),
+      ...(refContext.testIdx !== undefined &&
+        existing.testIdx == null && { testIdx: refContext.testIdx }),
     };
     if (Object.keys(strongerReference).length > 0) {
       await db

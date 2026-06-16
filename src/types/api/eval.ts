@@ -232,6 +232,44 @@ export const AddResultsRequestSchema = z.array(
 export type AddResultsParams = z.infer<typeof AddResultsParamsSchema>;
 export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;
 
+// POST /api/eval/:id/traces
+
+export const AddTracesParamsSchema = EvalIdParamSchema;
+
+const TraceSpanRequestSchema = z
+  .object({
+    spanId: z.string().min(1),
+    parentSpanId: z.string().optional(),
+    name: z.string().min(1),
+    startTime: z.number().finite(),
+    endTime: z.number().finite().optional(),
+    attributes: z.record(z.string(), z.unknown()).optional(),
+    status: z
+      .object({
+        code: z.union([z.enum(['unset', 'ok', 'error']), z.number().int().min(0).max(2)]),
+        message: z.string().optional(),
+      })
+      .optional(),
+    statusCode: z.number().int().min(0).max(2).optional(),
+    statusMessage: z.string().optional(),
+  })
+  .passthrough();
+
+export const AddTracesRequestSchema = z.array(
+  z
+    .object({
+      traceId: z.string().min(1),
+      evaluationId: z.string().min(1),
+      testCaseId: z.string().min(1),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+      spans: z.array(TraceSpanRequestSchema),
+    })
+    .passthrough(),
+);
+
+export type AddTracesParams = z.infer<typeof AddTracesParamsSchema>;
+export type AddTracesRequest = z.infer<typeof AddTracesRequestSchema>;
+
 // POST /api/eval/replay
 
 export const ReplayRequestSchema = z.object({
@@ -375,6 +413,10 @@ export const EvalSchemas = {
   AddResults: {
     Params: AddResultsParamsSchema,
     Request: AddResultsRequestSchema,
+  },
+  AddTraces: {
+    Params: AddTracesParamsSchema,
+    Request: AddTracesRequestSchema,
   },
   Replay: {
     Request: ReplayRequestSchema,

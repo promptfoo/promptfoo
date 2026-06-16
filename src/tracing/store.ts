@@ -200,6 +200,65 @@ function deriveSpanKind(span: SpanData): string {
   return 'internal';
 }
 
+/** A span as accepted on write paths: OTLP-ingested spans plus imported spans that may carry a
+ * nested OTel `status` (string or numeric code) instead of a flat statusCode. */
+type WritableSpan = SpanData & {
+  status?: { code?: number | 'unset' | 'ok' | 'error'; message?: string };
+};
+
+/** Resolve a span's status into the flat statusCode/statusMessage columns, mapping the canonical
+ * OTel string codes (unset=0, ok=1, error=2). A pre-set flat statusCode always wins. */
+function normalizeSpanStatus(span: WritableSpan): {
+  statusCode?: number;
+  statusMessage?: string;
+} {
+  const importedCode = span.status?.code;
+  const statusCode =
+    span.statusCode ??
+    (typeof importedCode === 'number'
+      ? importedCode
+      : importedCode === 'ok'
+        ? 1
+        : importedCode === 'error'
+          ? 2
+          : importedCode === 'unset'
+            ? 0
+            : undefined);
+  return { statusCode, statusMessage: span.statusMessage ?? span.status?.message };
+}
+
+function buildSpanRecord(traceId: string, span: WritableSpan) {
+  const { statusCode, statusMessage } = normalizeSpanStatus(span);
+  return {
+    id: crypto.randomUUID(),
+    traceId,
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId,
+    name: span.name,
+    startTime: span.startTime,
+    endTime: span.endTime,
+    attributes: span.attributes,
+    statusCode,
+    statusMessage,
+  };
+}
+
+function buildTraceRecord(
+  traceId: string,
+  evaluationId: string,
+  testCaseId: string,
+  metadata?: Record<string, any>,
+) {
+  return {
+    id: crypto.randomUUID(),
+    traceId,
+    evaluationId,
+    testCaseId,
+    createdAt: Date.now(),
+    metadata,
+  };
+}
+
 export class TraceStore {
   private db: Awaited<ReturnType<typeof getDb>> | null = null;
 
@@ -219,14 +278,9 @@ export class TraceStore {
       const db = await this.getDatabase();
       await db
         .insert(tracesTable)
-        .values({
-          id: crypto.randomUUID(),
-          traceId: trace.traceId,
-          evaluationId: trace.evaluationId,
-          testCaseId: trace.testCaseId,
-          createdAt: Date.now(),
-          metadata: trace.metadata,
-        })
+        .values(
+          buildTraceRecord(trace.traceId, trace.evaluationId, trace.testCaseId, trace.metadata),
+        )
         .onConflictDoNothing({ target: tracesTable.traceId })
         .run();
       logger.debug(`[TraceStore] Successfully created or found existing trace ${trace.traceId}`);
@@ -234,6 +288,62 @@ export class TraceStore {
       logger.error(`[TraceStore] Failed to create trace: ${error}`);
       throw error;
     }
+  }
+
+  async importTraces(evaluationId: string, traces: TraceData[]): Promise<boolean> {
+    const db = await this.getDatabase();
+
+    return db.transaction(async (tx) => {
+      const existingSpanIdsByTrace = new Map<string, Set<string>>();
+
+      for (const trace of traces) {
+        const existing = await tx
+          .select({ evaluationId: tracesTable.evaluationId })
+          .from(tracesTable)
+          .where(eq(tracesTable.traceId, trace.traceId))
+          .limit(1);
+
+        if (existing.length > 0) {
+          if (existing[0].evaluationId !== evaluationId) {
+            return false;
+          }
+
+          const spans = await tx
+            .select({ spanId: spansTable.spanId })
+            .from(spansTable)
+            .where(eq(spansTable.traceId, trace.traceId));
+          existingSpanIdsByTrace.set(trace.traceId, new Set(spans.map((span) => span.spanId)));
+        }
+      }
+
+      for (const trace of traces) {
+        const existingSpanIds = existingSpanIdsByTrace.get(trace.traceId);
+        if (!existingSpanIds) {
+          await tx
+            .insert(tracesTable)
+            .values(buildTraceRecord(trace.traceId, evaluationId, trace.testCaseId, trace.metadata))
+            .run();
+        }
+
+        const seenSpanIds = new Set(existingSpanIds);
+        const spansToAdd = trace.spans.filter((span) => {
+          if (seenSpanIds.has(span.spanId)) {
+            return false;
+          }
+          seenSpanIds.add(span.spanId);
+          return true;
+        });
+
+        if (spansToAdd.length > 0) {
+          await tx
+            .insert(spansTable)
+            .values(spansToAdd.map((span) => buildSpanRecord(trace.traceId, span)))
+            .run();
+        }
+      }
+
+      return true;
+    });
   }
 
   async addSpans(
@@ -273,18 +383,7 @@ export class TraceStore {
       // Insert spans
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
-        return {
-          id: crypto.randomUUID(),
-          traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.name,
-          startTime: span.startTime,
-          endTime: span.endTime,
-          attributes: span.attributes,
-          statusCode: span.statusCode,
-          statusMessage: span.statusMessage,
-        };
+        return buildSpanRecord(traceId, span);
       });
 
       if (spanRecords.length === 0) {
