@@ -22,6 +22,22 @@ describe('validateXml', () => {
     });
   });
 
+  it('should invalidate non-well-formed XML the lenient parser used to accept', () => {
+    // XMLParser.parse() accepts all of these; only the well-formedness validator
+    // rejects them. Before the fix, is-xml passed every one.
+    for (const malformed of [
+      '<a></b>', // mismatched tags
+      '<a><b></a></b>', // improperly nested
+      '<a>text</a><b>more</b>', // multiple root elements
+      '<a attr=unquoted>x</a>', // unquoted attribute value
+    ]) {
+      expect(validateXml(malformed)).toEqual({
+        isValid: false,
+        reason: expect.stringContaining('XML parsing failed'),
+      });
+    }
+  });
+
   it('should validate XML with attributes', () => {
     expect(validateXml('<root><child id="1">Content</child></root>')).toEqual({
       isValid: true,

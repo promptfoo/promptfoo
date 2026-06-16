@@ -1,4 +1,4 @@
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -375,6 +375,17 @@ export function validateXml(
   xmlString: string,
   requiredElements?: string[],
 ): { isValid: boolean; reason: string } {
+  // `is-xml` asserts the whole output is valid XML, so require XML 1.0
+  // well-formedness. XMLParser.parse() (used by validateXmlCandidate) is a
+  // lenient data extractor that does not reject mismatched/unclosed tags,
+  // multiple root elements, or unquoted attribute values, so gate on the
+  // dedicated validator first. (contains-xml stays lenient — it extracts XML
+  // fragments from possibly-noisy output and may legitimately span multiple
+  // fragments.)
+  const validation = XMLValidator.validate(xmlString);
+  if (validation !== true) {
+    return { isValid: false, reason: `XML parsing failed: ${validation.err.msg}` };
+  }
   const result = validateXmlCandidate(xmlString, requiredElements);
   return { isValid: result.isValid, reason: result.reason };
 }
