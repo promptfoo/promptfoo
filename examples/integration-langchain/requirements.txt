@@ -1,4 +1,5 @@
 langchain==1.3.9
+langchain-classic==1.0.7
 langchain-community==0.3.31
 langchain-openai==1.1.14
 numexpr==2.13.1
