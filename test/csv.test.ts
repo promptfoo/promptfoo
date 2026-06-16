@@ -360,6 +360,18 @@ describe('testCaseFromCsvRow', () => {
       );
     });
   });
+  it('should preserve zero __threshold in the test case', () => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: '0',
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // threshold: 0 is a valid value (e.g. "always pass regardless of score").
+    // A falsy guard like `threshold ? { threshold } : {}` silently drops it.
+    expect(result.threshold).toBe(0);
+  });
 });
 
 describe('assertionFromString', () => {
