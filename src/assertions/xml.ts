@@ -69,61 +69,24 @@ function readXmlName(input: string, start: number): { name: string; end: number 
   return { name: input.slice(start, end), end };
 }
 
-function isXmlWhitespace(char: string | undefined): boolean {
-  return char === ' ' || char === '\t' || char === '\n' || char === '\r';
-}
-
-function getDoctypeIgnoredSectionEnd(doctype: string, index: number): number | undefined {
-  const char = doctype[index];
-  if (char === '"' || char === "'") {
-    const quoteEnd = doctype.indexOf(char, index + 1);
-    return quoteEnd === -1 ? doctype.length : quoteEnd;
-  }
-
-  const delimiters = doctype.startsWith('<!--', index)
-    ? { end: '-->', offset: 2 }
-    : doctype.startsWith('<?', index)
-      ? { end: '?>', offset: 1 }
-      : undefined;
-  if (!delimiters) {
-    return undefined;
-  }
-
-  const sectionEnd = doctype.indexOf(delimiters.end, index + 2);
-  return sectionEnd === -1 ? doctype.length : sectionEnd + delimiters.offset;
-}
-
-function registerDeclaredEntities(parser: SaxesParser, doctype: string): void {
-  const marker = '<!ENTITY';
+function hasDoctypeInternalSubset(doctype: string): boolean {
+  let quote: string | undefined;
   for (let index = 0; index < doctype.length; index++) {
-    const ignoredSectionEnd = getDoctypeIgnoredSectionEnd(doctype, index);
-    if (ignoredSectionEnd !== undefined) {
-      index = ignoredSectionEnd;
+    const char = doctype[index];
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      }
       continue;
     }
-
-    if (!doctype.startsWith(marker, index)) {
-      continue;
-    }
-
-    let nameStart = index + marker.length;
-    if (isXmlWhitespace(doctype[nameStart])) {
-      while (isXmlWhitespace(doctype[nameStart])) {
-        nameStart++;
-      }
-
-      // Parameter entities cannot be referenced from document content.
-      if (doctype[nameStart] !== '%') {
-        const name = readXmlName(doctype, nameStart);
-        if (name && isXmlWhitespace(doctype[name.end])) {
-          // Saxes validates well-formedness but intentionally does not parse DTD
-          // entity declarations. Register the name without expanding its value;
-          // XMLParser performs the existing value expansion after validation.
-          parser.ENTITIES[name.name] = '';
-        }
-      }
+    if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '[') {
+      return true;
     }
   }
+
+  return false;
 }
 
 function findTagEnd(input: string, start: number): number {
@@ -439,7 +402,11 @@ export function validateXml(
   // embedded in otherwise non-XML output.
   try {
     const parser = new SaxesParser();
-    parser.on('doctype', (doctype) => registerDeclaredEntities(parser, doctype));
+    parser.on('doctype', (doctype) => {
+      if (hasDoctypeInternalSubset(doctype)) {
+        throw new Error('DTD internal subsets are not supported by is-xml validation');
+      }
+    });
     parser.write(xmlString).close();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

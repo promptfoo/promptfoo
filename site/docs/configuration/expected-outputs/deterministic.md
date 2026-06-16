@@ -457,6 +457,8 @@ This will pass for non-XML content and fail for valid XML content.
 
 Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
 
+`is-xml` rejects documents with a DTD internal subset because Promptfoo cannot safely validate the subset's declarations and entity replacement text. External resources are not loaded during validation.
+
 ### Contains-XML
 
 The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.

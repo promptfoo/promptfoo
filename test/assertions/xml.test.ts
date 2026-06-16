@@ -27,7 +27,7 @@ describe('validateXml', () => {
       '<root/>',
       '<!-- before --><root/><!-- after -->',
       '<𐀀>astral name</𐀀>',
-      '<!DOCTYPE root [<!ENTITY writer "Donald">]><root>&writer;</root>',
+      '<!DOCTYPE root><root/>',
     ]) {
       expect(validateXml(valid)).toEqual({
         isValid: true,
@@ -47,8 +47,6 @@ describe('validateXml', () => {
       '<root><!-- bad -- comment --></root>', // invalid comment body
       '<root attr="1" attr="2"/>', // duplicate attributes
       '<root>&undefined;</root>', // undeclared entity
-      '<!DOCTYPE root [<!-- <!ENTITY undefined "x"> -->]><root>&undefined;</root>',
-      '<!DOCTYPE root [<?pi <!ENTITY undefined "x">?>]><root>&undefined;</root>',
       '<root>\u0001</root>', // disallowed XML character
       '', // missing root element
       '"<a/>"', // quoted XML output
@@ -57,6 +55,20 @@ describe('validateXml', () => {
       expect(validateXml(malformed)).toEqual({
         isValid: false,
         reason: expect.stringContaining('XML parsing failed'),
+      });
+    }
+  });
+
+  it('should reject DTD internal subsets that cannot be fully validated', () => {
+    for (const xml of [
+      '<!DOCTYPE root [<!ENTITY writer "Donald">]><root>&writer;</root>',
+      '<!DOCTYPE root [<!ENTITY logo SYSTEM "logo.png" NDATA png>]><root>&logo;</root>',
+      '<!DOCTYPE root [<!ENTITY bad "<a>">]><root>&bad;</root>',
+      '<!DOCTYPE root [<!ELEMENT root (child>]><root/>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: false,
+        reason: expect.stringContaining('DTD internal subsets are not supported'),
       });
     }
   });
