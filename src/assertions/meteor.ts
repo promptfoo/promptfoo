@@ -247,8 +247,16 @@ async function calculateMeteorScore(
   const scores = await Promise.all(
     references.map((reference) =>
       calculateSingleMeteorScore(
-        reference.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        candidate.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
+        reference
+          .trim()
+          .split(/\s+/)
+          .map((word) => word.replace(/\.+$/, ''))
+          .filter((word) => word.length > 0),
+        candidate
+          .trim()
+          .split(/\s+/)
+          .map((word) => word.replace(/\.+$/, ''))
+          .filter((word) => word.length > 0),
         alpha,
         beta,
         gamma,
