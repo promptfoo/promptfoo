@@ -62,6 +62,23 @@ tests:
       difficulty: easy
 ```
 
+### Repeating an Individual Test
+
+Set `options.repeat` to a positive integer to run one test case multiple times:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - description: 'Sample a nondeterministic response'
+    vars:
+      question: 'Write a short greeting'
+    options:
+      repeat: 3
+```
+
+The per-test value overrides `--repeat`, `commandLineOptions.repeat`, or
+`evaluateOptions.repeat` for that test. Other tests continue to use the global repeat count.
+Repeat indexes use separate cache entries; add `--no-cache` when every run must call the provider.
+
 ### Filtering Tests by Provider
 
 Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
