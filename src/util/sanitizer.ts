@@ -45,7 +45,7 @@ function hasUrlUserinfoPassword(url: string): boolean {
  * value or a secret-named key. Splits on every URL pair delimiter (`? & ; #`),
  * so it catches credentials the WHATWG URL parser does not isolate: values under
  * a benign name in a malformed URL, and `;`-separated query pairs (URLSearchParams
- * only splits on `&`). Linear: a single split plus per-segment substring checks.
+ * only splits on `&`). Linear: a single split plus per-segment checks.
  */
 function hasSecretFormSegment(text: string): boolean {
   for (const segment of text.split(/[?&;#]/)) {
@@ -65,13 +65,9 @@ function hasSecretFormSegment(text: string): boolean {
       return true;
     }
     const rawKey = segment.slice(0, equalsIndex);
-    const decodedKey = decodeFormComponent(rawKey);
-    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    if (
-      SENSITIVE_URL_PARAM_NAMES.test(rawKey) ||
-      (decodedKey !== undefined &&
-        (SENSITIVE_URL_PARAM_NAMES.test(decodedKey) || keyParts.some(isSecretField)))
-    ) {
+    const key = decodeFormComponent(rawKey) ?? rawKey;
+    const keyParts = key.split(/[._\-\[\]]+/).filter(Boolean);
+    if (isSecretField(key) || keyParts.some(isSecretField)) {
       return true;
     }
   }

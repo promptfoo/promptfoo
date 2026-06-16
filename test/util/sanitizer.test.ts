@@ -1435,10 +1435,9 @@ describe('sanitizeUrl', () => {
       // Secret-named key (`api_key`) carrying any value: the `key=value` form scan
       // fails closed even though the value itself is not secret-looking.
       expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
-      // Param names that contain a sensitive token are also redacted, matching
-      // sanitizeUrl's parseable-URL path instead of leaking malformed URLs.
+      // Compound param names with an exact sensitive segment are also redacted.
       expect(sanitizeUrl('ht!tp://x?private_token=abc123')).toBe('[REDACTED]');
-      expect(sanitizeUrl('http://[bad]/?github_token=abc123')).toBe('[REDACTED]');
+      expect(sanitizeUrl('http://[bad]/?github%5Ftoken=abc123')).toBe('[REDACTED]');
       // `ht!tp://...` fails new URL(); the `token=sk-...` form segment forces
       // fail-closed (a secret-named key with a secret-looking value).
       expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
@@ -1456,6 +1455,13 @@ describe('sanitizeUrl', () => {
         'design-system',
         'authentication-guide',
         'signature-pad-component',
+      ]) {
+        expect(sanitizeUrl(benign)).toBe(benign);
+      }
+      for (const benign of [
+        'ht!tp://x?design-system=ok',
+        'ht!tp://x?access-tokenizer=ok',
+        'ht!tp://x?authentication-guide=ok',
       ]) {
         expect(sanitizeUrl(benign)).toBe(benign);
       }
