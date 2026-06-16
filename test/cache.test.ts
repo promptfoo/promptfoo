@@ -1374,6 +1374,56 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should preserve AbortError when the body read is aborted (no wrapping)', async () => {
+      // A signal that fires after headers but before the body is consumed rejects
+      // resp.text() with an AbortError. evaluator.ts suppresses expected cancellation
+      // via `err.name === 'AbortError'`, so the name must survive — wrapping it in a
+      // plain Error would turn a cancelled eval into an ordinary provider failure.
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.reject(abortError),
+        headers: new Headers(),
+      } as unknown as Response);
+
+      const error = await fetchWithCache(url, { method: 'POST', body: '{}' }, 1000).catch(
+        (err: unknown) => err,
+      );
+
+      // Rethrown unchanged — same instance, name intact (not collapsed to 'Error').
+      expect(error).toBe(abortError);
+      expect((error as Error).name).toBe('AbortError');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should sanitize credential-bearing URLs in body-read failure messages', async () => {
+      // The error message is logged/surfaced, so secrets in the URL (query tokens,
+      // userinfo) must be redacted via sanitizeUrl rather than echoed verbatim.
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: () => Promise.reject(new TypeError('terminated')),
+        headers: new Headers({ 'content-type': 'text/html' }),
+      } as unknown as Response);
+
+      const secretUrl = 'https://api.example.com/task?api_key=SUPER_SECRET_TOKEN';
+      const error = await fetchWithCache(secretUrl, { method: 'POST', body: '{}' }, 1000).catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Error reading response body from');
+      expect((error as Error).message).toContain('HTTP 403 Forbidden');
+      // The secret must not leak into the (logged) error message.
+      expect((error as Error).message).not.toContain('SUPER_SECRET_TOKEN');
+      // Original error preserved as cause.
+      expect((error as Error).cause).toBeInstanceOf(TypeError);
+    });
+
     it('should not catch fetchWithRetries errors in body retry loop', async () => {
       // fetchWithRetries itself throws — should propagate directly, not retry
       mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));

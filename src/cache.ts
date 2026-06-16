@@ -11,14 +11,15 @@ import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import { isTransientConnectionError } from './util/fetch/errors';
+import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudBearerToken,
   getCloudTaskTeamId,
+  getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
-import { isSecretField, looksLikeSecret } from './util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -622,11 +623,19 @@ async function fetchAndReadBody(
         await sleep(backoffMs);
         continue;
       }
+      // Preserve cancellation: an aborted body read rejects with an AbortError, and
+      // callers (e.g. evaluator.ts) suppress expected cancellation by checking
+      // `err.name === 'AbortError'`. Wrapping it would reset the name to 'Error' and
+      // turn cancelled evals into ordinary provider failures, so rethrow aborts as-is.
+      if (isAbortError(err)) {
+        throw err;
+      }
       // Surface the URL and HTTP response context so opaque body-read failures
       // (e.g. "TypeError: terminated" from a Cloudflare-originated 403) include
-      // actionable diagnostics instead of a bare platform error.
+      // actionable diagnostics instead of a bare platform error. Sanitize the URL so
+      // credential-bearing userinfo / query params are not leaked into logs.
       const wrappedError = new Error(
-        `Error reading response body from ${url}: ${
+        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}`,
       ) as Error & { cause?: unknown };
