@@ -341,6 +341,28 @@ describe('handleSimilar', () => {
     expect(result.score).toBe(0.8);
   });
 
+  it('should report the closest (lowest) score across 3+ values when dissimilar to ALL (not-similar)', async () => {
+    // Dissimilar to all three; the lowest score is in the MIDDLE, proving the
+    // min-selection picks the tightest margin regardless of position (not just
+    // first/last). The full closest result (score + reason) is propagated.
+    vi.mocked(matchesSimilarity)
+      .mockResolvedValueOnce({ pass: true, score: 0.9, reason: 'dissimilar to A' } as any)
+      .mockResolvedValueOnce({ pass: true, score: 0.78, reason: 'closest to B' } as any)
+      .mockResolvedValueOnce({ pass: true, score: 0.95, reason: 'dissimilar to C' } as any);
+
+    const result = await handleSimilar({
+      assertion: { type: 'similar', value: ['A', 'B', 'C'], threshold: 0.75 },
+      renderedValue: ['A', 'B', 'C'],
+      outputString: 'a totally different response',
+      inverse: true,
+      test: { description: 'test', vars: {}, assert: [], options: {} },
+    } as any);
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.78);
+    expect(result.reason).toBe('closest to B');
+  });
+
   it('should throw error for invalid renderedValue type', async () => {
     await expect(
       handleSimilar({
