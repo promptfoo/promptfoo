@@ -1,3 +1,4 @@
+import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
@@ -531,12 +532,35 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['substring1', 'substring2']);
   });
 
-  it('should preserve quoted commas in a contains-any assertion', () => {
-    const expected = 'contains-any:"hello, world",foo';
+  it.each([
+    'contains-any',
+    'contains-all',
+    'icontains-any',
+    'icontains-all',
+  ])('should preserve quoted commas in a %s assertion read from a CSV row', (type) => {
+    const [row] = parseCsv<CsvRow>(`__expected\n"${type}:""hello, world"",foo"`, {
+      columns: true,
+    });
+
+    const result = testCaseFromCsvRow(row);
+    expect(result.assert?.[0]?.type).toBe(type);
+    expect(result.assert?.[0]?.value).toEqual(['hello, world', 'foo']);
+  });
+
+  it('should preserve escaped and doubled quotes in contains assertion values', () => {
+    const expected = String.raw`contains-all:"say \"hello, world\"","a ""quoted"" value", plain`;
 
     const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('contains-any');
-    expect(result.value).toEqual(['hello, world', 'foo']);
+    expect(result.value).toEqual(['say "hello, world"', 'a "quoted" value', 'plain']);
+  });
+
+  it('should reject malformed quoted contains assertion values', () => {
+    expect(() => assertionFromString('icontains-any:"unterminated')).toThrow(
+      'Unterminated quoted field in contains assertion value',
+    );
+    expect(() => assertionFromString('contains-all:"hello"world')).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
   });
 
   it('should create a contains-all assertion', () => {
