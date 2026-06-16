@@ -133,28 +133,28 @@
       "react-dom": "^19.2.4"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.7.1"
+      "@opentelemetry/core": "2.8.0"
     },
     "serialize-javascript": ">=7.0.4",
     "gaxios": "^7.1.4",
@@ -331,7 +331,7 @@
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.7.1",
+    "@opentelemetry/core": "2.8.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
