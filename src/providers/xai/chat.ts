@@ -505,9 +505,10 @@ export function calculateXAICost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const inputCostOverride = config.inputCost ?? config.cost;
+  const inputCost = inputCostOverride ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  const cacheReadCost = config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read;
 
   const billableCachedTokens = Number.isFinite(cachedTokens)
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens)

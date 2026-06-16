@@ -322,6 +322,7 @@ export class XAIResponsesProvider implements ApiProvider {
           usage?.output_tokens ?? usage?.completion_tokens,
           usage?.output_tokens_details?.reasoning_tokens ??
             usage?.completion_tokens_details?.reasoning_tokens,
+          usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
         ) ??
         0,
     });

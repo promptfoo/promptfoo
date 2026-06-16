@@ -708,6 +708,13 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
+    it('does not mix model cache pricing with custom input cost overrides', () => {
+      expect(calculateXAICost('grok-4-0709', { cost: 0.001 }, 1000, 500, 0, 800)).toBe(1.5);
+      expect(
+        calculateXAICost('grok-4-0709', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500, 0, 800),
+      ).toBe(2.5);
+    });
+
     it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
