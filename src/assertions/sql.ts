@@ -46,7 +46,15 @@ export const handleIsSql = async ({
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
   }
-  if (/select\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(normalizedSql)) {
+  // Heuristic for a missing comma between columns (e.g. `SELECT a b FROM t`),
+  // which node-sql-parser silently accepts as implicit aliasing. Exclude leading
+  // SELECT modifiers (DISTINCT, ALL, etc.) from the first identifier slot so that
+  // valid statements like `SELECT DISTINCT name FROM users` are not flagged.
+  if (
+    /select\s+(?!(?:distinct|distinctrow|all|high_priority|straight_join|sql_no_cache|sql_cache|sql_calc_found_rows|sql_small_result|sql_big_result|sql_buffer_result)\b)[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(
+      normalizedSql,
+    )
+  ) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );

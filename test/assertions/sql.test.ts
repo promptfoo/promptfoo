@@ -27,6 +27,38 @@ describe('is-sql assertion', () => {
       });
     });
 
+    it('should pass for valid SELECT DISTINCT (not flagged as a missing-comma typo)', async () => {
+      // Before the fix, the missing-comma heuristic treated "DISTINCT name" as
+      // two identifiers and forced a failure for this valid statement.
+      for (const outputString of [
+        'SELECT DISTINCT name FROM users',
+        'select distinct id from users',
+      ]) {
+        const result: GradingResult = await handleIsSql({
+          assertion,
+          renderedValue: undefined,
+          outputString,
+          inverse: false,
+        } as AssertionParams);
+        expect(result).toEqual({
+          assertion,
+          pass: true,
+          reason: 'Assertion passed',
+          score: 1,
+        });
+      }
+    });
+
+    it('should still fail a likely missing comma between columns (SELECT a b FROM t)', async () => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT a b FROM t',
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(false);
+    });
+
     it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
       const renderedValue = undefined;
       const outputString = 'SELECT * FROM orders ORDERY BY order_date';
