@@ -2,6 +2,15 @@ const dataset = require('./dataset.json');
 
 const references = new Map(dataset.tiles.map((tile) => [tile.tileId, tile]));
 const countRanges = ['0', '1-10', '11-20', '21-50', '51-100', '>100'];
+const assessmentFields = [
+  'building_flooded',
+  'road_flooded',
+  'flooded_building_count_range',
+  'flooded_road_count_range',
+];
+const responseFields = new Set([...assessmentFields, 'abstain']);
+const statuses = new Set(['yes', 'no', 'unknown']);
+const countAnswers = new Set([...countRanges, 'unknown']);
 
 function parseOutput(output) {
   if (output && typeof output === 'object' && !Array.isArray(output)) {
@@ -25,6 +34,19 @@ function countRangeScore(predicted, expected) {
     return 1;
   }
   return distance === 1 ? 0.5 : 0;
+}
+
+function hasValidFields(output) {
+  const fields = Object.keys(output);
+  return (
+    fields.length === responseFields.size &&
+    fields.every((field) => responseFields.has(field)) &&
+    statuses.has(output.building_flooded) &&
+    statuses.has(output.road_flooded) &&
+    countAnswers.has(output.flooded_building_count_range) &&
+    countAnswers.has(output.flooded_road_count_range) &&
+    typeof output.abstain === 'boolean'
+  );
 }
 
 function classScores(expectedBuilding, expectedRoad, buildingScore, roadScore) {
@@ -73,12 +95,11 @@ function gradeFloodAssessment(output, context) {
     );
   }
 
-  const answers = [
-    parsed.building_flooded,
-    parsed.road_flooded,
-    parsed.flooded_building_count_range,
-    parsed.flooded_road_count_range,
-  ];
+  if (!hasValidFields(parsed)) {
+    return invalidDecision('Output does not match the response schema', expectedBuilding, expectedRoad);
+  }
+
+  const answers = assessmentFields.map((field) => parsed[field]);
   const hasUnknown = answers.includes('unknown');
   const allUnknown = answers.every((answer) => answer === 'unknown');
 

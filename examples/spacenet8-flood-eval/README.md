@@ -73,7 +73,7 @@ promptfoo view
 `promptfooconfig.accuracy.yaml` adds one advanced concept: `grader.cjs` compares model output with
 the generated GeoJSON-derived labels and reports:
 
-- `coverage`: fraction of pairs receiving a complete answer
+- `coverage`: fraction of pairs receiving a schema-valid, complete answer
 - `selective_accuracy`: average accuracy on completely answered pairs only
 - `exact_match_answered`: strict four-field accuracy on answered pairs
 - `building_status_accuracy`
@@ -162,9 +162,9 @@ See `response-schema.json` for all allowed status and count-range values.
 
 This is a coarse image-level LLM evaluation, not the official SpaceNet 8 segmentation benchmark.
 It does not measure polygon IoU, road-network APLS, flood depth, structural safety, routing safety,
-or generalization to held-out events. The images are public training data, and the sample was
-selected using labels. Selective accuracy must always be read alongside coverage. Treat this as a
-multimodal evaluation demo, not operational validation.
+or generalization to held-out events. The images and labels come from public training data.
+Selective accuracy must always be read alongside coverage. Treat this as a multimodal evaluation
+demo, not operational validation.
 
 The SpaceNet 8 data is distributed under CC BY-SA 4.0. See `DATA_LICENSE.md` for attribution and
 change notices.

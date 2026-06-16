@@ -14,7 +14,7 @@ prompts:
 providers:
   - id: openai:chat:gpt-5.5
     label: GPT-5.5
-    config:
+    config: &modelConfig
       max_completion_tokens: 600
       response_format:
         type: json_schema
@@ -24,14 +24,7 @@ providers:
           schema: file://response-schema.json
   - id: openai:chat:gpt-5.4-mini
     label: GPT-5.4 Mini
-    config:
-      max_completion_tokens: 600
-      response_format:
-        type: json_schema
-        json_schema:
-          name: flood_assessment
-          strict: true
-          schema: file://response-schema.json
+    config: *modelConfig
 
 defaultTest:
   assert:

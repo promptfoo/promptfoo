@@ -21,8 +21,6 @@ providers:
       sandbox_mode: read-only
       approval_policy: never
       model_reasoning_effort: low
-      reuse_server: true
-      thread_cleanup: unsubscribe
       request_timeout_ms: 300000
       turn_timeout_ms: 300000
       output_schema:

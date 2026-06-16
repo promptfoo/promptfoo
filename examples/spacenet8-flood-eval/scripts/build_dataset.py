@@ -45,10 +45,6 @@ COLLECTIONS = (
 )
 
 
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def count_range(count: int) -> str:
     if count == 0:
         return "0"
@@ -228,7 +224,7 @@ def build_tile(spec: dict[str, Any]) -> dict[str, Any]:
         )
         data = download(url, CACHE_DIR / spec["baseTileId"] / cache_name)
         downloaded[kind] = data
-        sources[kind] = {"sha256": sha256(data), "url": url}
+        sources[kind] = {"sha256": hashlib.sha256(data).hexdigest(), "url": url}
 
     counts = counts_from_label(json.loads(downloaded["label"]))
     ranges = {
