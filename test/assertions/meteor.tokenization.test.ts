@@ -83,4 +83,24 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBeGreaterThan(0.9);
   });
+
+  it('does not create tokens for whitespace-only input', async () => {
+    const result = await meteor({ renderedValue: '\r\n ', outputString: ' \t\n ' });
+
+    expect(result.score).toBe(0);
+  });
+
+  it('preserves punctuation-only token scoring', async () => {
+    const threeTokenScore = (
+      await meteor({ renderedValue: 'one token two', outputString: 'one token two' })
+    ).score;
+    const punctuationTokenScore = (
+      await meteor({ renderedValue: 'one . two', outputString: 'one . two' })
+    ).score;
+
+    expect(punctuationTokenScore).toBeCloseTo(threeTokenScore, 10);
+    expect(
+      (await meteor({ renderedValue: '\none . two\r\n', outputString: ' one\t.  two ' })).score,
+    ).toBeCloseTo(punctuationTokenScore, 10);
+  });
 });

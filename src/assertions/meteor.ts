@@ -47,6 +47,13 @@ function preprocessWord(word: string): string {
   return word.toLowerCase();
 }
 
+function tokenize(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .map((word) => word.replace(/\.+$/, ''));
+}
+
 function generateEnums(
   candidate: string[],
   reference: string[],
@@ -246,21 +253,7 @@ async function calculateMeteorScore(
 
   const scores = await Promise.all(
     references.map((reference) =>
-      calculateSingleMeteorScore(
-        reference
-          .trim()
-          .split(/\s+/)
-          .map((word) => word.replace(/\.+$/, ''))
-          .filter((word) => word.length > 0),
-        candidate
-          .trim()
-          .split(/\s+/)
-          .map((word) => word.replace(/\.+$/, ''))
-          .filter((word) => word.length > 0),
-        alpha,
-        beta,
-        gamma,
-      ),
+      calculateSingleMeteorScore(tokenize(reference), tokenize(candidate), alpha, beta, gamma),
     ),
   );
 
