@@ -2608,13 +2608,15 @@ describe('util', () => {
 
     it('should discount cached prompt tokens at the cache-read rate (standard pricing)', () => {
       // gemini-2.0-flash: input=0.1/1M, output=0.4/1M. 10000 prompt tokens of which
-      // 8000 were served from context cache (0.1x input rate), 5000 output.
+      // 8000 text tokens were served from context cache at 0.025/1M, 5000 output.
       const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
-      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, 8000);
+      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, 8000, [
+        { modality: 'TEXT', tokenCount: 8000 },
+      ]);
       expect(full).toBeCloseTo(0.003, 10);
-      // discount = 8000 * (0.1/1M) * (1 - 0.1) = 0.00072 → 0.003 - 0.00072 = 0.00228.
+      // cached cost = 8000 * 0.025/1M; uncached prompt = 2000 * 0.1/1M.
       // Before the fix, cached tokens were billed at the full input rate (0.003).
-      expect(discounted).toBeCloseTo(0.00228, 10);
+      expect(discounted).toBeCloseTo(0.0024, 10);
       expect(discounted as number).toBeLessThan(full as number);
     });
 
@@ -2628,9 +2630,29 @@ describe('util', () => {
         50000,
         false,
         100000,
+        [{ modality: 'TEXT', tokenCount: 100000 }],
       );
-      // base 1.9; discount = 100000 * (4.0/1M) * 0.9 = 0.36 → 1.54
+      // base 1.9; cached cost = 100000 * 0.4/1M, uncached prompt = 150000 * 4.0/1M.
       expect(discounted).toBeCloseTo(1.54, 10);
+    });
+
+    it('should keep explicit cost overrides authoritative when cached tokens are present', () => {
+      const config = { cost: 0.001 };
+      const full = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000);
+      const withCache = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000, false, 8000, [
+        { modality: 'TEXT', tokenCount: 8000 },
+      ]);
+      expect(withCache).toBe(full);
+    });
+
+    it('should not discount cached tokens without safe modality detail', () => {
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, 8000)).toBe(full);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, 8000, [
+          { modality: 'AUDIO', tokenCount: 8000 },
+        ]),
+      ).toBe(full);
     });
 
     it('should not change cost when there are no cached tokens', () => {

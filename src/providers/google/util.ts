@@ -17,7 +17,7 @@ import {
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GOOGLE_MODELS, type GoogleModelCost } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -225,12 +225,41 @@ export function stripExecutableToolFileReferences(
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
-// Gemini context-cache reads are billed at 0.1x the normal input-token rate
-// across the Gemini family. `cachedContentTokenCount` is reported as a SUBSET of
-// `promptTokenCount`, so without applying this discount those tokens are billed
-// at the full input rate, over-reporting cost.
-// https://ai.google.dev/gemini-api/docs/pricing
-const GOOGLE_CACHE_READ_RATE_MULTIPLIER = 0.1;
+interface GeminiTokenDetails {
+  modality?: string;
+  tokenCount?: number;
+}
+
+function getGoogleCacheReadCost(
+  cost: GoogleModelCost | undefined,
+  cacheTokensDetails: GeminiTokenDetails[] | undefined,
+): number | undefined {
+  if (!cost?.cacheRead || !cacheTokensDetails?.length) {
+    return undefined;
+  }
+
+  let cacheReadCost = 0;
+  for (const detail of cacheTokensDetails) {
+    const tokenCount = detail.tokenCount ?? 0;
+    if (tokenCount <= 0) {
+      continue;
+    }
+
+    const cacheReadRate =
+      typeof cost.cacheRead === 'number'
+        ? cost.cacheRead
+        : ['text', 'image', 'video'].includes(detail.modality?.toLowerCase() ?? '')
+          ? cost.cacheRead.textImageVideo
+          : undefined;
+
+    if (cacheReadRate == null) {
+      return undefined;
+    }
+    cacheReadCost += tokenCount * cacheReadRate;
+  }
+
+  return cacheReadCost;
+}
 
 export function calculateGoogleCost(
   modelName: string,
@@ -239,23 +268,26 @@ export function calculateGoogleCost(
   completionTokens?: number,
   isVertexMode?: boolean,
   cachedTokens?: number,
+  cacheTokensDetails?: GeminiTokenDetails[],
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
   let baseCost: number | undefined;
-  let inputRate: number | undefined;
+  let inputCost: number | undefined;
+  const hasExplicitCostOverride =
+    config.cost != null || config.inputCost != null || config.outputCost != null;
 
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      inputRate = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
+      inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
       const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      baseCost = inputRate * promptTokens + outputCost * completionTokens;
+      baseCost = inputCost * promptTokens + outputCost * completionTokens;
     } else if (isVertexMode && model?.vertexCost) {
       // Use Vertex-specific pricing when available
-      inputRate = config.inputCost ?? config.cost ?? model.vertexCost.input;
+      inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
       const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      baseCost = inputRate * promptTokens + outputCost * completionTokens;
+      baseCost = inputCost * promptTokens + outputCost * completionTokens;
     }
   }
 
@@ -263,7 +295,7 @@ export function calculateGoogleCost(
     // Standard (non-tiered) pricing.
     baseCost = calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
     if (model?.cost) {
-      inputRate = config.inputCost ?? config.cost ?? model.cost.input;
+      inputCost = config.inputCost ?? config.cost ?? model.cost.input;
     }
   }
 
@@ -271,9 +303,19 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  // Re-price the cached subset of the prompt at the reduced cache-read rate.
-  if (cachedTokens && inputRate != null) {
-    return baseCost - cachedTokens * inputRate * (1 - GOOGLE_CACHE_READ_RATE_MULTIPLIER);
+  // Re-price cached text/image/video tokens only when Google returns modality detail and
+  // built-in model pricing has an explicit cache-read rate. Keep user overrides authoritative.
+  if (cachedTokens && inputCost != null && !hasExplicitCostOverride) {
+    const modelCost =
+      model?.tieredCost && promptTokens != null && promptTokens > model.tieredCost.threshold
+        ? model.tieredCost.above
+        : isVertexMode
+          ? model?.vertexCost
+          : model?.cost;
+    const cacheReadCost = getGoogleCacheReadCost(modelCost, cacheTokensDetails);
+    if (cacheReadCost !== undefined) {
+      return baseCost - cachedTokens * inputCost + cacheReadCost;
+    }
   }
 
   return baseCost;
@@ -324,6 +366,8 @@ interface GeminiUsageMetadata {
   thoughtsTokenCount?: number;
   /** Subset of promptTokenCount served from context cache (billed at the reduced rate). */
   cachedContentTokenCount?: number;
+  /** Modality breakdown for cachedContentTokenCount. Required for safe cache repricing. */
+  cacheTokensDetails?: GeminiTokenDetails[];
 }
 
 export interface GeminiErrorResponse {

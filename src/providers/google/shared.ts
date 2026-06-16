@@ -5,6 +5,8 @@
 export interface GoogleModelCost {
   input: number;
   output: number;
+  /** Cache-read price per token. Object form means only listed modalities are safe to reprice. */
+  cacheRead?: number | { textImageVideo?: number };
 }
 
 export interface GoogleModelTieredCost {
@@ -23,13 +25,13 @@ export interface GoogleModel {
 const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6 };
 const GEMINI_3_PRO_TIERED_COST = {
   threshold: 200_000,
-  above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+  above: { input: 4.0 / 1e6, output: 18.0 / 1e6, cacheRead: 0.4 / 1e6 },
 };
 
-const GEMINI_2_5_PRO_COST = { input: 1.25 / 1e6, output: 10.0 / 1e6 };
+const GEMINI_2_5_PRO_COST = { input: 1.25 / 1e6, output: 10.0 / 1e6, cacheRead: 0.125 / 1e6 };
 const GEMINI_2_5_PRO_TIERED_COST = {
   threshold: 200_000,
-  above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
+  above: { input: 2.5 / 1e6, output: 15.0 / 1e6, cacheRead: 0.25 / 1e6 },
 };
 
 /**
@@ -42,7 +44,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.5 models
   {
     id: 'gemini-3.5-flash',
-    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
+    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6, cacheRead: 0.15 / 1e6 },
   },
 
   // Gemini 3.1 models
@@ -54,7 +56,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
   ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
     id,
-    cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
+    cost: { input: 0.25 / 1e6, output: 1.5 / 1e6, cacheRead: { textImageVideo: 0.025 / 1e6 } },
   })),
 
   // Gemini 3.0 models (Preview)
@@ -78,17 +80,17 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   // current Flash snapshot. Pricing tracks the Flash tier ($0.30/$2.50 per 1M tokens).
   ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-flash-latest'].map((id) => ({
     id,
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, cacheRead: { textImageVideo: 0.03 / 1e6 } },
   })),
   ...['gemini-2.5-flash-lite', 'gemini-flash-lite-latest'].map((id) => ({
     id,
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
+    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: { textImageVideo: 0.01 / 1e6 } },
   })),
 
   // Gemini 2.0 models
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001'].map((id) => ({
     id,
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
+    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6, cacheRead: { textImageVideo: 0.025 / 1e6 } },
     vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
   })),
   ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
