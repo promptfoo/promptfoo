@@ -64,9 +64,14 @@ function hasSecretFormSegment(text: string): boolean {
     ) {
       return true;
     }
-    const decodedKey = decodeFormComponent(segment.slice(0, equalsIndex));
+    const rawKey = segment.slice(0, equalsIndex);
+    const decodedKey = decodeFormComponent(rawKey);
     const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    if (keyParts.some(isSecretField)) {
+    if (
+      SENSITIVE_URL_PARAM_NAMES.test(rawKey) ||
+      (decodedKey !== undefined &&
+        (SENSITIVE_URL_PARAM_NAMES.test(decodedKey) || keyParts.some(isSecretField)))
+    ) {
       return true;
     }
   }
