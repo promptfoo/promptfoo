@@ -909,7 +909,7 @@ export const TestCaseSchema = z.object({
       runSerially: z.boolean().optional(),
 
       // Number of times to repeat this specific test case.
-      repeat: z.number().int().positive().optional(),
+      repeat: z.number().int().positive().safe().optional(),
     })
     .catchall(z.any())
     .optional(),

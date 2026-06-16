@@ -2387,13 +2387,17 @@ function appendRunEvalOptionsForTestCase({
       : generateVarCombinations(testCase.vars || {});
 
   const testRepeat = testCase.options?.repeat ?? options.repeat ?? 1;
+  const effectiveOptions = {
+    ...options,
+    repeat: testRepeat,
+  };
   for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
     for (const vars of varCombinations) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
         evalId,
-        options,
+        options: effectiveOptions,
         promptIdCache,
         promptIndexMap,
         promptPrefix,
