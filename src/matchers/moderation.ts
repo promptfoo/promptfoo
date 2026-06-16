@@ -46,10 +46,14 @@ export async function matchesModeration(
 
   const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
   if (resp.error) {
+    // A provider/transport error is not evidence about the content. Tag it as a
+    // grader failure so inverse-aware callers (`not-moderation`) propagate it
+    // verbatim instead of flipping it into a spurious pass.
     return {
       pass: false,
       score: 0,
       reason: `Moderation API error: ${resp.error}`,
+      metadata: { graderError: true },
     };
   }
 
