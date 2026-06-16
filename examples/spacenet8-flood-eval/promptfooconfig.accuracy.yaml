@@ -30,7 +30,5 @@ defaultTest:
       metric: schema_contract
     - type: javascript
       value: file://grader.cjs:gradeFloodAssessment
-      threshold: 1
-      metric: labeled_accuracy
 
 tests: file://scripts/generate_tests.py:generate_tests

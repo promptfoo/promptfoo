@@ -73,11 +73,19 @@ promptfoo view
 `promptfooconfig.accuracy.yaml` adds one advanced concept: `grader.cjs` compares model output with
 the generated GeoJSON-derived labels and reports:
 
+- `coverage`: fraction of pairs receiving a complete answer
+- `selective_accuracy`: average accuracy on completely answered pairs only
+- `exact_match_answered`: strict four-field accuracy on answered pairs
 - `building_status_accuracy`
 - `road_status_accuracy`
-- `building_count_accuracy`
-- `road_count_accuracy`
-- `non_abstention`
+- `building_count_score` and `road_count_score`: exact = 1, adjacent range = 0.5
+- flooded-feature recall and clear-feature specificity
+- `decision_consistency`: either answer every field or consistently abstain
+
+A consistent abstention is excluded from selective accuracy rather than treated as five wrong
+answers. The generated test metadata also marks flood/clear cases so you can filter results by class.
+Compare coverage first, then compare selective and class-specific metrics at similar coverage.
+The top-level pass rate includes consistent abstentions, so do not treat it as model accuracy.
 
 ## Level 3: Compare models
 
@@ -86,19 +94,19 @@ The comparison config runs the same prompt and tests against GPT-5.5 and GPT-5.4
 ```bash
 umask 077
 promptfoo eval -c promptfooconfig.compare.yaml \
-  --no-cache --no-share -n 5 -j 50 -o results/model-comparison.json
+  --no-cache --no-share -n 5 --repeat 3 -j 50 -o results/model-comparison.json
 promptfoo view
 ```
 
-Start with `-n 5` because this makes two paid model calls per pair. Remove the filter when you are
-ready to compare the full generated sample. Promptfoo records each model's labeled accuracy,
-latency, token use, and cost.
+Start with `-n 5 --repeat 3` to expose run-to-run variance without paying for the full dataset.
+Remove the filter when you are ready to compare the complete generated sample. Promptfoo records
+each model's coverage, selective accuracy, latency, token use, and cost.
 
 To compare the same models through your local Codex login, use the app-server config:
 
 ```bash
 promptfoo eval -c promptfooconfig.codex-app-server.yaml \
-  --no-cache --no-share -n 5 -j 50 -o results/codex-app-server.json
+  --no-cache --no-share -n 5 --repeat 3 -j 50 -o results/codex-app-server.json
 ```
 
 Each provider starts and reuses its own `codex app-server` process. It sends the quicklooks as image
@@ -127,7 +135,8 @@ Treat the 50 pairs as a development set and change one axis at a time:
    use, and cost.
 3. Filter or group by `geography` and `event` metadata to find where a candidate improves or
    regresses.
-4. Add robustness cases such as cloud cover, image corruption, or registration offsets only after
+4. Compare `floodCase: true` and `floodCase: false` instead of relying on one imbalanced average.
+5. Add robustness cases such as cloud cover, image corruption, or registration offsets only after
    the labeled baseline is stable.
 
 Do not repeatedly optimize on this sample and then claim generalization. Once prompt or model
@@ -154,7 +163,8 @@ See `response-schema.json` for all allowed status and count-range values.
 This is a coarse image-level LLM evaluation, not the official SpaceNet 8 segmentation benchmark.
 It does not measure polygon IoU, road-network APLS, flood depth, structural safety, routing safety,
 or generalization to held-out events. The images are public training data, and the sample was
-selected using labels. Treat it as a multimodal evaluation demo, not operational validation.
+selected using labels. Selective accuracy must always be read alongside coverage. Treat this as a
+multimodal evaluation demo, not operational validation.
 
 The SpaceNet 8 data is distributed under CC BY-SA 4.0. See `DATA_LICENSE.md` for attribution and
 change notices.

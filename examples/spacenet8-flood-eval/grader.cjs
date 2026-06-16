@@ -1,13 +1,7 @@
 const dataset = require('./dataset.json');
 
 const references = new Map(dataset.tiles.map((tile) => [tile.tileId, tile]));
-const metrics = [
-  'building_status_accuracy',
-  'road_status_accuracy',
-  'building_count_accuracy',
-  'road_count_accuracy',
-  'non_abstention',
-];
+const countRanges = ['0', '1-10', '11-20', '21-50', '51-100', '>100'];
 
 function parseOutput(output) {
   if (output && typeof output === 'object' && !Array.isArray(output)) {
@@ -20,48 +14,129 @@ function parseOutput(output) {
   return parsed;
 }
 
-function zero(reason) {
+function countRangeScore(predicted, expected) {
+  const predictedIndex = countRanges.indexOf(predicted);
+  const expectedIndex = countRanges.indexOf(expected);
+  if (predictedIndex === -1 || expectedIndex === -1) {
+    return 0;
+  }
+  const distance = Math.abs(predictedIndex - expectedIndex);
+  if (distance === 0) {
+    return 1;
+  }
+  return distance === 1 ? 0.5 : 0;
+}
+
+function classScores(expectedBuilding, expectedRoad, buildingScore, roadScore) {
+  return {
+    [expectedBuilding === 'yes' ? 'building_flood_recall' : 'building_clear_specificity']:
+      buildingScore,
+    [expectedRoad === 'yes' ? 'road_flood_recall' : 'road_clear_specificity']: roadScore,
+  };
+}
+
+function invalidDecision(reason, expectedBuilding, expectedRoad) {
   return {
     pass: false,
     score: 0,
     reason,
-    namedScores: Object.fromEntries(metrics.map((metric) => [metric, 0])),
+    namedScores: {
+      coverage: 0,
+      decision_consistency: 0,
+      ...classScores(expectedBuilding, expectedRoad, 0, 0),
+    },
   };
 }
 
 function gradeFloodAssessment(output, context) {
-  try {
-    const parsed = parseOutput(output);
-    const reference = references.get(context?.vars?.tile_id);
-    if (!reference) {
-      return zero(`Unknown tile: ${context?.vars?.tile_id}`);
-    }
-
-    const expectedBuilding = reference.counts.building.flooded > 0 ? 'yes' : 'no';
-    const expectedRoad = reference.counts.road.flooded > 0 ? 'yes' : 'no';
-    const namedScores = {
-      building_status_accuracy: Number(parsed.building_flooded === expectedBuilding),
-      road_status_accuracy: Number(parsed.road_flooded === expectedRoad),
-      building_count_accuracy: Number(
-        parsed.flooded_building_count_range === reference.referenceRanges.floodedBuildings,
-      ),
-      road_count_accuracy: Number(
-        parsed.flooded_road_count_range === reference.referenceRanges.floodedRoads,
-      ),
-      non_abstention: Number(parsed.abstain === false),
-    };
-    const failed = metrics.filter((metric) => namedScores[metric] !== 1);
-    const score =
-      Object.values(namedScores).reduce((sum, value) => sum + value, 0) / metrics.length;
+  const reference = references.get(context?.vars?.tile_id);
+  if (!reference) {
     return {
-      pass: failed.length === 0,
-      score,
-      reason: failed.length === 0 ? 'All labeled fields matched' : `Failed: ${failed.join(', ')}`,
-      namedScores,
+      pass: false,
+      score: 0,
+      reason: `Unknown tile: ${context?.vars?.tile_id}`,
+      namedScores: { coverage: 0, decision_consistency: 0 },
     };
-  } catch (error) {
-    return zero(`Could not grade output: ${error.message}`);
   }
+
+  const expectedBuilding = reference.counts.building.flooded > 0 ? 'yes' : 'no';
+  const expectedRoad = reference.counts.road.flooded > 0 ? 'yes' : 'no';
+
+  let parsed;
+  try {
+    parsed = parseOutput(output);
+  } catch (error) {
+    return invalidDecision(
+      `Could not grade output: ${error.message}`,
+      expectedBuilding,
+      expectedRoad,
+    );
+  }
+
+  const answers = [
+    parsed.building_flooded,
+    parsed.road_flooded,
+    parsed.flooded_building_count_range,
+    parsed.flooded_road_count_range,
+  ];
+  const hasUnknown = answers.includes('unknown');
+  const allUnknown = answers.every((answer) => answer === 'unknown');
+
+  if (parsed.abstain === true && allUnknown) {
+    return {
+      pass: true,
+      score: 0,
+      reason: 'Consistent abstention; excluded from selective accuracy',
+      namedScores: {
+        coverage: 0,
+        decision_consistency: 1,
+        ...classScores(expectedBuilding, expectedRoad, 0, 0),
+      },
+    };
+  }
+
+  if (parsed.abstain !== false || hasUnknown) {
+    return invalidDecision(
+      'Inconsistent decision: either answer every field or abstain with every field set to unknown',
+      expectedBuilding,
+      expectedRoad,
+    );
+  }
+
+  const buildingStatus = Number(parsed.building_flooded === expectedBuilding);
+  const roadStatus = Number(parsed.road_flooded === expectedRoad);
+  const buildingCount = countRangeScore(
+    parsed.flooded_building_count_range,
+    reference.referenceRanges.floodedBuildings,
+  );
+  const roadCount = countRangeScore(
+    parsed.flooded_road_count_range,
+    reference.referenceRanges.floodedRoads,
+  );
+  const exactMatch = Number(
+    buildingStatus === 1 && roadStatus === 1 && buildingCount === 1 && roadCount === 1,
+  );
+  const selectiveAccuracy = (buildingStatus + roadStatus + buildingCount + roadCount) / 4;
+
+  return {
+    pass: exactMatch === 1,
+    score: selectiveAccuracy,
+    reason:
+      exactMatch === 1
+        ? 'Exact labeled match'
+        : `Answered with ${(selectiveAccuracy * 100).toFixed(0)}% selective accuracy`,
+    namedScores: {
+      coverage: 1,
+      decision_consistency: 1,
+      selective_accuracy: selectiveAccuracy,
+      exact_match_answered: exactMatch,
+      building_status_accuracy: buildingStatus,
+      road_status_accuracy: roadStatus,
+      building_count_score: buildingCount,
+      road_count_score: roadCount,
+      ...classScores(expectedBuilding, expectedRoad, buildingStatus, roadStatus),
+    },
+  };
 }
 
 module.exports = { gradeFloodAssessment };

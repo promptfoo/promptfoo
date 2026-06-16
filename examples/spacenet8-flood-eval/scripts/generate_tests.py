@@ -16,20 +16,27 @@ def generate_tests() -> list[dict[str, Any]]:
         raise RuntimeError("Run python scripts/build_dataset.py before promptfoo eval")
 
     dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
-    return [
-        {
-            "description": f"{tile['geography']} pair {index} ({tile['tileId']})",
-            "metadata": {
-                "collection": tile["collection"],
-                "event": tile["event"],
-                "geography": tile["geography"],
-                "postImageIndex": tile["postImageIndex"],
-            },
-            "vars": {
-                "tile_id": tile["tileId"],
-                "pre_image": f"file://assets/{tile['tileId']}/pre.jpg",
-                "post_image": f"file://assets/{tile['tileId']}/post.jpg",
-            },
-        }
-        for index, tile in enumerate(dataset["tiles"], start=1)
-    ]
+    tests = []
+    for index, tile in enumerate(dataset["tiles"], start=1):
+        building_flooded = tile["counts"]["building"]["flooded"] > 0
+        road_flooded = tile["counts"]["road"]["flooded"] > 0
+        tests.append(
+            {
+                "description": f"{tile['geography']} pair {index} ({tile['tileId']})",
+                "metadata": {
+                    "buildingFlooded": building_flooded,
+                    "collection": tile["collection"],
+                    "event": tile["event"],
+                    "floodCase": building_flooded or road_flooded,
+                    "geography": tile["geography"],
+                    "postImageIndex": tile["postImageIndex"],
+                    "roadFlooded": road_flooded,
+                },
+                "vars": {
+                    "tile_id": tile["tileId"],
+                    "pre_image": f"file://assets/{tile['tileId']}/pre.jpg",
+                    "post_image": f"file://assets/{tile['tileId']}/post.jpg",
+                },
+            }
+        )
+    return tests
