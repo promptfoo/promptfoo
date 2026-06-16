@@ -19,6 +19,16 @@ function getAssertionRegex(): RegExp {
   return _assertionRegex;
 }
 
+/**
+ * Parse a CSV cell into a finite number, returning `undefined` when the cell is empty
+ * or non-numeric. Used for threshold fields so that a meaningful `0` is preserved while
+ * a blank/garbage cell is treated as "unset" rather than leaking `NaN` into the TestCase.
+ */
+function parseFiniteNumber(value: string | undefined): number | undefined {
+  const parsed = Number.parseFloat(value ?? '');
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (
@@ -75,8 +85,7 @@ export function assertionFromString(expected: string): Assertion {
       string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
-    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
+    const threshold = parseFiniteNumber(thresholdStr);
 
     if (
       type === 'contains-all' ||
@@ -185,7 +194,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     } else if (key === '__metric') {
       metric = value;
     } else if (key === '__threshold') {
-      threshold = Number.parseFloat(value);
+      threshold = parseFiniteNumber(value);
     } else if (key.startsWith('__metadata:')) {
       const metadataKey = key.slice('__metadata:'.length);
       if (metadataKey.endsWith('[]')) {
@@ -297,6 +306,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     options,
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
+    // Gate on `=== undefined`, not a truthy check: a threshold of 0 is meaningful
+    // ("collect assertion scores but never fail an individual assertion") and must
+    // be preserved. parseFiniteNumber already normalizes blank/invalid cells to undefined.
     ...(threshold === undefined ? {} : { threshold }),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };

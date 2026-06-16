@@ -372,6 +372,24 @@ describe('testCaseFromCsvRow', () => {
     // A falsy guard like `threshold ? { threshold } : {}` silently drops it.
     expect(result.threshold).toBe(0);
   });
+
+  it.each([
+    ['empty', ''],
+    ['non-numeric', 'abc'],
+    ['whitespace', '   '],
+  ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // A blank/garbage cell must be treated as "unset" so it inherits defaultTest.threshold
+    // via `testCase.threshold ?? defaultTest?.threshold` in the evaluator. Leaking NaN here
+    // would clobber that inheritance (NaN ?? x === NaN), so the key must be omitted entirely.
+    expect(result).not.toHaveProperty('threshold');
+  });
 });
 
 describe('assertionFromString', () => {
