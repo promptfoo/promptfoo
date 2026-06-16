@@ -49,7 +49,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
@@ -471,7 +471,7 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 ### Is-SQL
 
-The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
 Example:
 
