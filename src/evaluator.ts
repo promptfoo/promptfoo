@@ -68,7 +68,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -587,16 +587,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function isAbortShapedError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
-}
-
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
 
   if (aborted) {
     // Skip stack serialization on the abort path — debug logs usually go
