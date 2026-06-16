@@ -170,6 +170,27 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should split on unescaped commas while unescaping multiple escaped commas per value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c,d\\,e',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c', 'd,e'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
   it('should handle single value metadata', () => {
     const row: CsvRow = {
       '__metadata:category': 'test-category',
