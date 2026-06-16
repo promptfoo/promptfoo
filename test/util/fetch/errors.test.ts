@@ -540,6 +540,45 @@ describe('formatFetchError', () => {
     expect(out).not.toContain('[object Object]');
   });
 
+  it('redacts secret-bearing fields in an object cause (this string is logged unsanitized)', () => {
+    // The formatted string is interpolated into a plain log message, which the
+    // logger does NOT sanitize. A raw JSON.stringify would leak the header, so
+    // formatErrorCause routes object causes through sanitizeObject first.
+    const err = Object.assign(new Error('fetch failed'), {
+      cause: {
+        url: 'https://api.promptfoo.app/api/v1/task',
+        headers: { authorization: 'Bearer sk-supersecret-123', 'x-api-key': 'pk-live-leakme' },
+      },
+    });
+    const out = formatFetchError(err);
+    expect(out).not.toContain('sk-supersecret-123');
+    expect(out).not.toContain('pk-live-leakme');
+    expect(out).toContain('[REDACTED]');
+    // Non-sensitive diagnostic context is preserved.
+    expect(out).toContain('api/v1/task');
+  });
+
+  it('degrades safely (no throw) when an object cause is not JSON-serializable (BigInt)', () => {
+    // A raw JSON.stringify throws on a BigInt value; sanitizeObject absorbs it
+    // (returning a placeholder) so formatFetchError never throws inside a logging
+    // call and never emits a bare `[object Object]`.
+    const err = Object.assign(new Error('boom'), { cause: { attempts: 3n } });
+    expect(() => formatFetchError(err)).not.toThrow();
+    const out = formatFetchError(err);
+    expect(out).toContain('boom');
+    expect(out).not.toContain('[object Object]');
+  });
+
+  it('handles a circular object cause without throwing', () => {
+    const circular: Record<string, unknown> = { reason: 'blocked' };
+    circular.self = circular;
+    const err = Object.assign(new Error('boom'), { cause: circular });
+    // Must not throw: sanitizeObject collapses the cycle, so JSON.stringify
+    // succeeds and the non-circular field still surfaces.
+    expect(() => formatFetchError(err)).not.toThrow();
+    expect(formatFetchError(err)).toContain('"reason":"blocked"');
+  });
+
   it('stringifies non-Error values', () => {
     expect(formatFetchError('boom')).toBe('boom');
   });

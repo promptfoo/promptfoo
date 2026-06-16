@@ -1,3 +1,5 @@
+import { sanitizeObject } from '../sanitizer';
+
 /**
  * Error with additional system information (e.g. Node.js system errors).
  */
@@ -321,13 +323,19 @@ const CONNECTION_BLOCK_CODES = new Set([
 
 /**
  * Hint appended when a request fails at the connection layer, pointing at the
- * most common real-world cause instead of leaving users with a bare
- * `terminated`.
+ * common real-world causes instead of leaving users with a bare `terminated`.
+ *
+ * Worded cause-agnostically: `isConnectionError` matches undici's generic
+ * `fetch failed` wrapper and DNS codes (`EAI_AGAIN`), so this hint is also shown
+ * for DNS, TLS, and offline failures — not only proxy/firewall blocks. It leads
+ * with the proxy/Cloudflare case (the original report, promptfoo#9679) but names
+ * the other likely causes so the attribution is not misleading.
  */
 export const CONNECTION_BLOCK_HINT =
-  'The connection was closed before a response was received. This often means a network ' +
-  'proxy, firewall, or Cloudflare rule is blocking the request (for example a 403 on POST). ' +
-  'Check your network or proxy settings, or try a different network.';
+  'The connection failed before a response was received. Common causes are a network proxy, ' +
+  'firewall, or Cloudflare rule blocking the request (for example a 403 on POST), a DNS ' +
+  'resolution failure, a TLS/certificate misconfiguration, or no network connectivity. Check ' +
+  'your network, DNS, and proxy settings, or try a different network.';
 
 /**
  * Undici's outer message for a connection-layer failure is one of a small set
@@ -377,6 +385,14 @@ export function isConnectionError(error: unknown): boolean {
  * `Name: message` (so a `SocketError` shows its class), other objects are
  * JSON-encoded to avoid a useless `[object Object]`, and primitives stringify
  * directly.
+ *
+ * Object causes are routed through {@link sanitizeObject} before serializing:
+ * this string is interpolated into a plain log message (e.g.
+ * `logger.warn(`...: ${describeFetchError(err)}`)`), and the logger only
+ * sanitizes its structured *context* argument, not the message text. Dumping a
+ * raw object cause could therefore leak secret-bearing fields (auth headers,
+ * api keys, cookies) into logs; `sanitizeObject` redacts those and also handles
+ * circular references, so a non-Error cause can never write a secret verbatim.
  */
 function formatErrorCause(cause: unknown): string {
   if (cause instanceof Error) {
@@ -384,7 +400,7 @@ function formatErrorCause(cause: unknown): string {
   }
   if (typeof cause === 'object' && cause !== null) {
     try {
-      return JSON.stringify(cause);
+      return JSON.stringify(sanitizeObject(cause));
     } catch {
       return String(cause);
     }
