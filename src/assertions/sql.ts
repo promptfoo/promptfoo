@@ -10,6 +10,8 @@ const LIKELY_MISSING_COMMA_PATTERN = new RegExp(
   String.raw`\bselect\s+(?:${SELECT_MODIFIER_PATTERN}\s+)*(?!${SELECT_MODIFIER_PATTERN}\b)${IDENTIFIER_PATTERN}\s+${IDENTIFIER_PATTERN}\s+from\b`,
   'i',
 );
+const SQL_IGNORED_TEXT_PATTERN =
+  /(?<dollarQuote>\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)[\s\S]*?\k<dollarQuote>|'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*"|`(?:``|\\[\s\S]|[^`\\])*`|\[(?:\]\]|[^\]])*\]|--[^\r\n]*|#[^\r\n]*|\/\*[\s\S]*?\*\//g;
 type SqlParserConstructor = typeof import('node-sql-parser').Parser;
 type SqlParserModule = {
   Parser?: SqlParserConstructor;
@@ -76,8 +78,10 @@ export const handleIsSql = async ({
     );
   }
   // node-sql-parser accepts a missing comma as implicit aliasing. Ignore leading
-  // SELECT modifiers, then check the first two column tokens.
-  if (LIKELY_MISSING_COMMA_PATTERN.test(normalizedSql)) {
+  // SELECT modifiers and SQL-looking text inside literals or comments, then check
+  // the first two column tokens.
+  const sqlForHeuristics = normalizedSql.replace(SQL_IGNORED_TEXT_PATTERN, ' ');
+  if (LIKELY_MISSING_COMMA_PATTERN.test(sqlForHeuristics)) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );

@@ -58,6 +58,40 @@ describe('is-sql assertion', () => {
     });
 
     it.each([
+      {
+        outputString: "SELECT 'select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 /* select distinct first_name last_name from employees */',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 -- select distinct first_name last_name from employees\n',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT "select distinct first_name last_name from employees" AS sample',
+        renderedValue: { databaseType: 'PostgreSQL' },
+      },
+      {
+        outputString: 'SELECT $$select distinct first_name last_name from employees$$ AS sample',
+        renderedValue: { databaseType: 'PostgreSQL' },
+      },
+    ])('should ignore SQL-like text in literals and comments: $outputString', async ({
+      outputString,
+      renderedValue,
+    }) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
       'SELECT a b FROM t',
       'SELECT DISTINCT first_name last_name FROM employees',
       'SELECT SQL_NO_CACHE first_name last_name FROM employees',
