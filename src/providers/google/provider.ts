@@ -655,6 +655,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             tokenUsage.prompt,
             completionForCost,
             this.isVertexMode,
+            lastData.usageMetadata?.cachedContentTokenCount,
           );
 
       const response: ProviderResponse = {

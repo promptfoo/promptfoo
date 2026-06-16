@@ -273,6 +273,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             config,
             data.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            data.usageMetadata?.cachedContentTokenCount,
           );
 
       return {
@@ -477,6 +479,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            lastData.usageMetadata?.cachedContentTokenCount,
           );
 
       return {

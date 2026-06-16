@@ -793,6 +793,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           promptTokenCount,
           completionForCost,
           true,
+          lastData.usageMetadata?.cachedContentTokenCount,
         );
 
         response = {

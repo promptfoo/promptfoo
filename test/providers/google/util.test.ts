@@ -2606,6 +2606,43 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
+    it('should discount cached prompt tokens at the cache-read rate (standard pricing)', () => {
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M. 10000 prompt tokens of which
+      // 8000 were served from context cache (0.1x input rate), 5000 output.
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const discounted = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, 8000);
+      expect(full).toBeCloseTo(0.003, 10);
+      // discount = 8000 * (0.1/1M) * (1 - 0.1) = 0.00072 → 0.003 - 0.00072 = 0.00228.
+      // Before the fix, cached tokens were billed at the full input rate (0.003).
+      expect(discounted).toBeCloseTo(0.00228, 10);
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('should discount cached prompt tokens under tiered pricing', () => {
+      // gemini-3.1-pro-preview above 200k: input=4.0/1M. 100000 of 250000 prompt
+      // tokens cached.
+      const discounted = calculateGoogleCost(
+        'gemini-3.1-pro-preview',
+        {},
+        250000,
+        50000,
+        false,
+        100000,
+      );
+      // base 1.9; discount = 100000 * (4.0/1M) * 0.9 = 0.36 → 1.54
+      expect(discounted).toBeCloseTo(1.54, 10);
+    });
+
+    it('should not change cost when there are no cached tokens', () => {
+      expect(calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, 0)).toBeCloseTo(
+        0.003,
+        10,
+      );
+      expect(
+        calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, undefined),
+      ).toBeCloseTo(0.003, 10);
+    });
+
     it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
       // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
       // tiered (>200k): input=4.0/1M, output=18.0/1M

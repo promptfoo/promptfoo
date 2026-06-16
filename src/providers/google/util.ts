@@ -225,33 +225,58 @@ export function stripExecutableToolFileReferences(
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
+// Gemini context-cache reads are billed at 0.1x the normal input-token rate
+// across the Gemini family. `cachedContentTokenCount` is reported as a SUBSET of
+// `promptTokenCount`, so without applying this discount those tokens are billed
+// at the full input rate, over-reporting cost.
+// https://ai.google.dev/gemini-api/docs/pricing
+const GOOGLE_CACHE_READ_RATE_MULTIPLIER = 0.1;
+
 export function calculateGoogleCost(
   modelName: string,
   config: ProviderConfig,
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
+  cachedTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
+
+  let baseCost: number | undefined;
+  let inputRate: number | undefined;
 
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
+      inputRate = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
       const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
-
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
+      baseCost = inputRate * promptTokens + outputCost * completionTokens;
+    } else if (isVertexMode && model?.vertexCost) {
+      // Use Vertex-specific pricing when available
+      inputRate = config.inputCost ?? config.cost ?? model.vertexCost.input;
       const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
+      baseCost = inputRate * promptTokens + outputCost * completionTokens;
     }
   }
 
-  // Use standard calculation for non-tiered pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  if (baseCost === undefined) {
+    // Standard (non-tiered) pricing.
+    baseCost = calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+    if (model?.cost) {
+      inputRate = config.inputCost ?? config.cost ?? model.cost.input;
+    }
+  }
+
+  if (baseCost === undefined) {
+    return undefined;
+  }
+
+  // Re-price the cached subset of the prompt at the reduced cache-read rate.
+  if (cachedTokens && inputRate != null) {
+    return baseCost - cachedTokens * inputRate * (1 - GOOGLE_CACHE_READ_RATE_MULTIPLIER);
+  }
+
+  return baseCost;
 }
 
 const ajv = getAjv();
@@ -297,6 +322,8 @@ interface GeminiUsageMetadata {
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
+  /** Subset of promptTokenCount served from context cache (billed at the reduced rate). */
+  cachedContentTokenCount?: number;
 }
 
 export interface GeminiErrorResponse {
