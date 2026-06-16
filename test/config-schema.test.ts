@@ -352,4 +352,22 @@ describe('config-schema.json', () => {
       }
     });
   });
+
+  describe('per-test repeat schema', () => {
+    it('accepts positive integers and rejects invalid repeat counts', () => {
+      const validate = ajv.compile(schema);
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{ options: { repeat: 3 } }],
+      };
+
+      expect(validate(config)).toBe(true);
+
+      for (const repeat of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+        config.tests[0].options.repeat = repeat;
+        expect(validate(config), `repeat ${repeat} should be invalid`).toBe(false);
+      }
+    });
+  });
 });

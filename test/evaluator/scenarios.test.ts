@@ -68,6 +68,34 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
   });
 
+  it('applies repeat from scenario config options', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Hello',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [
+        {
+          config: [{ options: { repeat: 3 } }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { repeat: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(summary.results).toHaveLength(3);
+  });
+
   it('evaluate with scenarios and multiple vars', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

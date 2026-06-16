@@ -432,6 +432,12 @@ function getRepeatCacheNamespace(
   return undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -2387,7 +2393,8 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
-  const testRepeat = testCase.options?.repeat ?? options.repeat ?? 1;
+  const globalRepeat = normalizeRepeatCount(options.repeat);
+  const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
   const effectiveOptions = {
     ...options,
     repeat: testRepeat,

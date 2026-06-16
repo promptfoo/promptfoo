@@ -528,8 +528,43 @@ describeEvaluator('evaluator basic flows', () => {
       id: randomUUID(),
     });
 
-    await evaluate(testSuite, evalRecord, { repeat: 1 });
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+
+    const summary = await evalRecord.toEvaluateSummary();
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(
+      vi.mocked(mockApiProvider.callApi).mock.calls.map(([, context]) => context?.repeatIndex),
+    ).toEqual([0, 1, 2]);
+    expect(summary.results).toHaveLength(3);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['NaN', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['unsafe', Number.MAX_SAFE_INTEGER + 1],
+  ])('falls back to global repeat for a %s per-test repeat', async (_label, repeat) => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          options: {
+            repeat,
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, {
+      id: randomUUID(),
+    });
+
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 });
