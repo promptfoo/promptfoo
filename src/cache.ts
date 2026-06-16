@@ -625,12 +625,13 @@ async function fetchAndReadBody(
       // Surface the URL and HTTP response context so opaque body-read failures
       // (e.g. "TypeError: terminated" from a Cloudflare-originated 403) include
       // actionable diagnostics instead of a bare platform error.
-      throw new Error(
+      const wrappedError = new Error(
         `Error reading response body from ${url}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}`,
-        { cause: err },
-      );
+      ) as Error & { cause?: unknown };
+      wrappedError.cause = err;
+      throw wrappedError;
     }
   }
   // Unreachable: loop always returns or throws, but TypeScript needs this
