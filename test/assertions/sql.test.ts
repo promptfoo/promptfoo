@@ -27,6 +27,25 @@ describe('is-sql assertion', () => {
       });
     });
 
+    it.each([
+      ['empty', ''],
+      ['whitespace-only', ' \n\t'],
+    ])('should fail when the output string is %s', async (_description, outputString) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toEqual({
+        assertion,
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
     it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
       const renderedValue = undefined;
       const outputString = 'SELECT * FROM orders ORDERY BY order_date';
@@ -502,29 +521,45 @@ describe('is-sql assertion', () => {
 
 describe('contains-sql assertion', () => {
   const fence = '```';
+  const runContainsSql = (outputString: string) =>
+    handleContainsSql({
+      assertion: { type: 'contains-sql' },
+      renderedValue: undefined,
+      outputString,
+      inverse: false,
+    } as AssertionParams);
 
   it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
     // Before the fix, the [^`]+ fence regex could not contain backticks, so this
     // valid MySQL (backtick-quoted identifiers) failed to extract and fell through
     // to validating the whole fenced string (including the fences) -> failure.
     const outputString = `Here is the query:\n${fence}sql\nSELECT \`id\` FROM \`users\`;\n${fence}`;
-    const result: GradingResult = await handleContainsSql({
-      assertion: { type: 'contains-sql' },
-      renderedValue: undefined,
-      outputString,
-      inverse: false,
-    } as AssertionParams);
+    const result: GradingResult = await runContainsSql(outputString);
     expect(result.pass).toBe(true);
   });
 
   it('should still extract a plain fenced SQL block', async () => {
     const outputString = `${fence}sql\nSELECT id, name FROM users\n${fence}`;
-    const result: GradingResult = await handleContainsSql({
-      assertion: { type: 'contains-sql' },
-      renderedValue: undefined,
-      outputString,
-      inverse: false,
-    } as AssertionParams);
+    const result: GradingResult = await runContainsSql(outputString);
     expect(result.pass).toBe(true);
+  });
+
+  it('should extract SQL with an escaped backtick in an identifier', async () => {
+    const outputString = `${fence}sql\nSELECT \`a\`\`b\` FROM \`users\`;\n${fence}`;
+    const result = await runContainsSql(outputString);
+
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['an empty fenced block', `${fence}sql\n${fence}`],
+    ['a whitespace-only fenced block', `${fence}sql\n  \n${fence}`],
+    ['an unclosed fenced block', `${fence}sql\nSELECT 1;`],
+    ['a non-SQL fenced block', `${fence}python\nprint('hello')\n${fence}`],
+  ])('should reject %s', async (_description, outputString) => {
+    const result = await runContainsSql(outputString);
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
   });
 });

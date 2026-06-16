@@ -29,10 +29,16 @@ export const handleIsSql = async ({
     throw new Error('is-sql assertion must have a object value.');
   }
 
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+  type SqlParserModule = typeof import('node-sql-parser');
+  let sqlParserModule: SqlParserModule | { default: SqlParserModule };
+  try {
+    sqlParserModule = await import('node-sql-parser');
+  } catch {
     throw new Error('node-sql-parser is not installed. Please install it first');
-  });
+  }
 
+  const SqlParser =
+    'Parser' in sqlParserModule ? sqlParserModule.Parser : sqlParserModule.default.Parser;
   const sqlParser = new SqlParser();
 
   const opt: sqlParserOption = { database: databaseType };
@@ -41,6 +47,11 @@ export const handleIsSql = async ({
 
   // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
+  if (normalizedSql.length === 0) {
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
   if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -57,14 +68,16 @@ export const handleIsSql = async ({
     );
   }
 
-  try {
-    sqlParser.astify(outputString, opt);
-    pass = !inverse;
-  } catch {
-    pass = inverse;
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
+  if (normalizedSql.length > 0) {
+    try {
+      sqlParser.astify(outputString, opt);
+      pass = !inverse;
+    } catch {
+      pass = inverse;
+      failureReasons.push(
+        `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+      );
+    }
   }
 
   if (failureReasons.length > 0) {
