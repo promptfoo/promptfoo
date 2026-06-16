@@ -249,7 +249,7 @@
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "block-no-verify": "^1.2.0",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.3",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
