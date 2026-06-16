@@ -149,6 +149,27 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should unescape every escaped comma within an array metadata value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
   it('should handle single value metadata', () => {
     const row: CsvRow = {
       '__metadata:category': 'test-category',
