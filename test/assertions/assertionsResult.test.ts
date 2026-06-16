@@ -133,6 +133,127 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
     });
 
+    it('should honor a threshold of 0 as an override (never fail on individual assertion failures)', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+
+      // A failing assertion — under the default all-pass logic this fails the test.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Test 1 failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      // A passing assertion.
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Test 2 passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // Aggregate score 0.5 ≥ 0 → the threshold override passes the test. Before the fix
+      // `if (this.threshold)` was falsy for 0, so the override was skipped and the failing
+      // assertion failed the whole test.
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+    });
+
+    it('should pass at the threshold:0 boundary when every assertion fails (aggregate score 0)', async () => {
+      // The override the fix depends on is `0 >= 0`. With every assertion failing the
+      // aggregate score is exactly 0, which must still pass under threshold:0.
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: false, score: 0, reason: 'failed', tokensUsed: DEFAULT_TOKENS_USED },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Aggregate score 0.00 ≥ 0 threshold');
+    });
+
+    it('should NOT force-pass when the threshold is null (e.g. an empty `threshold:` in YAML)', async () => {
+      // A null/NaN threshold is not a real score requirement. Gating the override on a
+      // numeric threshold keeps `score >= null` (always true) from silently passing every
+      // failing assertion; the default all-pass logic applies instead.
+      const assertionsResult = new AssertionsResult({ threshold: null as unknown as number });
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: false, score: 0, reason: 'Test failed', tokensUsed: DEFAULT_TOKENS_USED },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Test failed');
+    });
+
+    it('should honor an assert-set threshold of 0 (override + threshold survives in metadata)', async () => {
+      // The assert-set path (index.ts) builds an AssertionsResult with a parentAssertionSet,
+      // and flows through the same numeric-threshold override gate. A threshold of 0
+      // must still engage the override here, and `0` must round-trip into the assert-set metadata
+      // (buildAssertionSetMetadata uses `!== undefined`, not a truthy check).
+      const assertionsResult = new AssertionsResult({
+        threshold: 0,
+        parentAssertionSet: {
+          index: 0,
+          assertionSet: {
+            type: 'assert-set',
+            threshold: 0,
+            assert: [
+              { type: 'equals', value: 'Hello world' },
+              { type: 'contains', value: 'world' },
+            ],
+          } as AssertionSet,
+        },
+      });
+
+      // A failing assertion — under the default all-pass logic this fails the assert-set.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'equals failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'contains passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.5);
+      expect(result.reason).toBe('Aggregate score 0.50 ≥ 0 threshold');
+      expect(result.metadata?.assertionSet?.threshold).toBe(0);
+    });
+
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockResolvedValue({
