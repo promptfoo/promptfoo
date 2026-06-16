@@ -47,6 +47,96 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.0);
   });
 
+  it('should score a perfect short match ~1.0 regardless of token count', () => {
+    // A candidate shorter than the 4-gram order has no 4-grams (and a 1-2 word
+    // candidate has no 3-/2-grams). Those unavailable orders must be dropped and
+    // the weights renormalized, not treated as zero-precision. Before the fix an
+    // exact 1-word match scored ~0.00001 and a 3-word match ~0.018, failing the
+    // default 0.5 threshold; only candidates of >= 4 tokens could ever pass.
+    expect(calculateBleuScore('cat', ['cat'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('good dog', ['good dog'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('the good dog', ['the good dog'])).toBeCloseTo(1, 5);
+  });
+
+  it('should still penalize an imperfect short match', () => {
+    // 2-token candidate, one of two unigrams matches; only orders 1-2 exist.
+    // unigram precision = 1/2, bigram precision = 0 (smoothed to 1e-7), weights
+    // renormalized to 0.5 each over the two usable orders:
+    //   exp(0.5*ln(0.5) + 0.5*ln(1e-7)) ≈ 0.00022360679. Pin the exact value so
+    // the renormalization math is locked in; the old smoothed-zero behavior
+    // returned ~4.7e-6 (every missing order dragged the score down), so the
+    // > 1e-4 guard below fails on origin/main.
+    const score = calculateBleuScore('good cat', ['good dog']);
+    expect(score).toBeCloseTo(Math.exp(0.5 * Math.log(0.5) + 0.5 * Math.log(1e-7)), 10);
+    expect(score).toBeGreaterThan(1e-4);
+    expect(score).toBeLessThan(1.0);
+  });
+
+  it('should reduce a perfect short match to the brevity penalty when shorter than the reference', () => {
+    // Perfect n-gram precision on every usable order (product 1), so the score
+    // equals the brevity penalty alone. The candidate is shorter than the
+    // reference, so the penalty pulls it below 1 — but it no longer collapses to
+    // ~0 the way it did before short orders were dropped and renormalized.
+    expect(calculateBleuScore('cat', ['cat sat down'])).toBeCloseTo(Math.exp(1 - 3 / 1), 10);
+    expect(calculateBleuScore('good dog', ['good dog runs fast'])).toBeCloseTo(
+      Math.exp(1 - 4 / 2),
+      10,
+    );
+  });
+
+  it('should pick the best matching reference for a short candidate', () => {
+    // The renormalized short-candidate path must still take the best match across
+    // references: the exact reference yields a perfect score.
+    expect(calculateBleuScore('good dog', ['bad dog', 'good dog', 'the dog'])).toBeCloseTo(1, 5);
+  });
+
+  it('should be unchanged for candidates with all four n-gram orders (renormalization is a no-op)', () => {
+    // Every order 1-4 is present, so weightSum === 1 and dividing by it is a
+    // no-op: the result must match the pre-renormalization formula exactly,
+    // including non-uniform weights. Precisions are 5/6, 3/5, 2/4, 1/3.
+    const score = calculateBleuScore(
+      'the dog sat on the mat',
+      ['the cat sat on the mat'],
+      [0.4, 0.3, 0.2, 0.1],
+    );
+    expect(score).toBeCloseTo(
+      Math.exp(
+        0.4 * Math.log(5 / 6) +
+          0.3 * Math.log(3 / 5) +
+          0.2 * Math.log(2 / 4) +
+          0.1 * Math.log(1 / 3),
+      ),
+      10,
+    );
+  });
+
+  it('should not return NaN for a short candidate with custom n-gram weights', () => {
+    // Regression guard: dropping unavailable orders and renormalizing divides by
+    // the sum of the *usable* weights. With weights concentrated on higher orders
+    // a short candidate can have no usable weighted order. That must not divide by
+    // zero (NaN); it scores 0 (no scorable signal under these weights). A >= 4
+    // token candidate still has its 4-grams, so the same weights score normally.
+    expect(calculateBleuScore('cat', ['cat'], [0, 0, 0, 1])).toBe(0);
+    expect(calculateBleuScore('the good dog', ['the good dog'], [0, 0, 0, 1])).toBe(0);
+    expect(
+      calculateBleuScore('the very good dog', ['the very good dog'], [0, 0, 0, 1]),
+    ).toBeCloseTo(1, 5);
+    // A partially-weighted short candidate still scores finitely (not NaN).
+    expect(calculateBleuScore('good dog', ['good dog'], [0.5, 0.5, 0, 0])).not.toBeNaN();
+  });
+
+  it('should reject negative weights', () => {
+    // BLEU weights are non-negative by definition. Negatives would push the score
+    // far outside [0, 1] (a negative weight on a smoothed zero-precision order) and
+    // can make the usable-weight sum cancel to zero. Reject them outright.
+    expect(() => calculateBleuScore('a b', ['a b'], [1, -1, 0.5, 0.5])).toThrow(
+      'Weights must be non-negative',
+    );
+    expect(() => calculateBleuScore('a b c x', ['a b c d'], [0.5, 0.5, 1, -1])).toThrow(
+      'Weights must be non-negative',
+    );
+  });
+
   it('should handle sentences with different lengths', () => {
     const references = ['The cat sat on the mat.'];
     const candidate = 'The cat sat.';

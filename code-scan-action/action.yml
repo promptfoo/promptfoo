@@ -43,5 +43,5 @@ outputs:
     description: 'Path to the SARIF file when a scan completes and sarif-output-path is configured'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
