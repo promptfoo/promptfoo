@@ -4,11 +4,10 @@ All notable changes to this package will be documented in this file.
 
 ## [0.1.8](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.7...code-scan-action-0.1.8) (2026-06-16)
 
-
 ### Bug Fixes
 
-* **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
-* **code-scan:** run GitHub Action on Node 24 runtime ([#9772](https://github.com/promptfoo/promptfoo/issues/9772)) ([c25974e](https://github.com/promptfoo/promptfoo/commit/c25974e8e74a5ba923c0318cb6576e2b4dfc9ad6))
+- **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
+- **code-scan:** run GitHub Action on Node 24 runtime ([#9772](https://github.com/promptfoo/promptfoo/issues/9772)) ([c25974e](https://github.com/promptfoo/promptfoo/commit/c25974e8e74a5ba923c0318cb6576e2b4dfc9ad6))
 
 ## [0.1.7](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.6...code-scan-action-0.1.7) (2026-05-29)
 
