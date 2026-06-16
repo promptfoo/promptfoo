@@ -79,14 +79,18 @@ function hasSecretFormSegment(text: string): boolean {
  * non-URL strings (bare domains, relative paths, prose), which also flow through
  * sanitizeObject for any field literally named `url` and would otherwise be
  * destroyed in persisted eval results.
+ *
+ * Detection is structural — a `user:pass@` userinfo password, a whole value that
+ * looks like a secret, or a `key=value` form segment that carries one. We do NOT
+ * fail closed on a bare credential keyword appearing anywhere in the string:
+ * substring-matching `token`/`secret`/`sig`/etc. redacts benign values such as
+ * `my-tokenizer-model`, `secrets/config.yaml`, or `design-system` (contains `sig`),
+ * which is data loss with no corresponding leak. Genuine credential shapes all
+ * carry one of the structural markers above (the secret-named-key case is covered
+ * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
 function unparseableUrlMightLeakSecret(url: string): boolean {
-  return (
-    SENSITIVE_URL_PARAM_NAMES.test(url) ||
-    hasUrlUserinfoPassword(url) ||
-    looksLikeSecret(url.trim()) ||
-    hasSecretFormSegment(url)
-  );
+  return hasUrlUserinfoPassword(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
 }
 
 /**
