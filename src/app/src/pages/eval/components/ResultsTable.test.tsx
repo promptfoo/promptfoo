@@ -812,8 +812,14 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
-    it('renders markdown image variables with data URIs', () => {
-      const dataUri = 'data:image/png;base64,encodedImage';
+    it('renders long markdown image variables with lightbox support', async () => {
+      const user = userEvent.setup();
+      const dataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
@@ -823,7 +829,9 @@ describe('ResultsTable Metrics Display', () => {
             {
               outputs: [{ pass: true, score: 1, text: 'test output' }],
               test: {},
-              vars: [`![Preview image](${dataUri})`],
+              vars: [
+                `![Preview image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+              ],
             },
           ],
           head: {
@@ -844,7 +852,13 @@ describe('ResultsTable Metrics Display', () => {
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
 
-      expect(screen.getByRole('img', { name: 'Preview image' })).toHaveAttribute('src', dataUri);
+      const image = screen.getByRole('img', { name: 'Preview image' });
+      expect(image).toHaveAttribute('src', dataUri);
+      expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
+
+      await user.click(image);
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
     });
 
     it('renders variable video from file metadata', () => {

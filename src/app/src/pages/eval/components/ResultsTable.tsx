@@ -488,6 +488,7 @@ function renderVariableCell({
   lightboxOpen,
   lightboxImage,
   toggleLightbox,
+  toggleMarkdownLightbox,
 }: {
   info: CellContext<EvaluateTableRow, string>;
   varName: string;
@@ -497,6 +498,7 @@ function renderVariableCell({
   lightboxOpen: boolean;
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
+  toggleMarkdownLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
   let value = getVariableCellValue({
@@ -531,8 +533,14 @@ function renderVariableCell({
     }
   }
 
-  const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+  const shouldUseMarkdownCell = renderMarkdown || value.includes('![');
+  const cellContent = shouldUseMarkdownCell ? (
+    <VariableMarkdownCell
+      value={value}
+      maxTextLength={maxTextLength}
+      dataImagesOnly={!renderMarkdown}
+      onImageClick={toggleMarkdownLightbox}
+    />
   ) : (
     <TruncatedText text={value} maxLength={maxTextLength} />
   );
@@ -1630,6 +1638,7 @@ function ResultsTable({
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const [markdownLightboxImage, setMarkdownLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
@@ -1650,10 +1659,14 @@ function ResultsTable({
     });
   }, [filteredResultsCount]);
 
-  const toggleLightbox = (url?: string) => {
+  const toggleLightbox = React.useCallback((url?: string) => {
     setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+    setLightboxOpen((open) => !open);
+  }, []);
+
+  const toggleMarkdownLightbox = React.useCallback((url?: string) => {
+    setMarkdownLightboxImage((current) => (url && current !== url ? url : null));
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
@@ -1989,7 +2002,6 @@ function ResultsTable({
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -2012,6 +2024,7 @@ function ResultsTable({
                   lightboxOpen,
                   lightboxImage,
                   toggleLightbox,
+                  toggleMarkdownLightbox,
                 }),
               size: variableColumnSizes[idx],
             }),
@@ -2030,6 +2043,8 @@ function ResultsTable({
     lightboxImage,
     injectVarName,
     variableColumnSizes,
+    toggleLightbox,
+    toggleMarkdownLightbox,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
@@ -2512,6 +2527,11 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
+      {markdownLightboxImage && (
+        <div className="lightbox" onClick={() => toggleMarkdownLightbox()}>
+          <img src={markdownLightboxImage} alt="Lightbox" />
+        </div>
+      )}
       <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}

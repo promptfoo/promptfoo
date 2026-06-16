@@ -1,29 +1,52 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
+import { cn } from '@app/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './FailReasonCarousel.css';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { IMAGE_DATA_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import {
+  DATA_IMAGE_ONLY_URL_TRANSFORM,
+  hasMarkdownDataImage,
+  REMARK_PLUGINS,
+} from './markdown-config';
 
 interface FailReasonCarouselProps {
   failReasons: string[];
+  renderMarkdown: boolean;
+  onImageClick?: (src?: string) => void;
 }
 
-const MARKDOWN_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  img: ({ src, alt }) => (
-    <img src={src} alt={alt || ''} loading="lazy" className="fail-reason-image" />
-  ),
-  p: ({ children }) => <p className="fail-reason-paragraph">{children}</p>,
-};
-
-const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
+const FailReasonCarousel = ({
+  failReasons,
+  renderMarkdown,
+  onImageClick,
+}: FailReasonCarouselProps) => {
   // Validate props BEFORE hooks to comply with Rules of Hooks
   if (failReasons.length < 1) {
     return null;
   }
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const markdownComponents = useMemo<React.ComponentProps<typeof ReactMarkdown>['components']>(
+    () => ({
+      img: ({ src, alt }) =>
+        src ? (
+          <img
+            src={src}
+            alt={alt || ''}
+            loading="lazy"
+            onClick={() => onImageClick?.(src)}
+            className={cn(
+              'mt-2 block max-h-48 max-w-full object-contain',
+              onImageClick && 'cursor-pointer',
+            )}
+          />
+        ) : null,
+      p: ({ children }) => <p className="m-0">{children}</p>,
+    }),
+    [onImageClick],
+  );
 
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : failReasons.length - 1));
@@ -32,6 +55,8 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
   const handleNext = () => {
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
+  const currentReason = failReasons[currentIndex];
+  const shouldRenderMarkdown = renderMarkdown || hasMarkdownDataImage(currentReason ?? '');
 
   return (
     <div className="fail-reason">
@@ -56,19 +81,29 @@ const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
           </button>
         </span>
       )}
-      {failReasons[currentIndex] ? (
-        <MarkdownErrorBoundary fallback={failReasons[currentIndex]}>
-          <div className="fail-reason-content">
+      {currentReason && shouldRenderMarkdown ? (
+        <MarkdownErrorBoundary fallback={currentReason}>
+          <div className="whitespace-pre-wrap">
             <ReactMarkdown
-              components={MARKDOWN_COMPONENTS}
+              components={markdownComponents}
               remarkPlugins={REMARK_PLUGINS}
-              urlTransform={IMAGE_DATA_URL_TRANSFORM}
+              urlTransform={DATA_IMAGE_ONLY_URL_TRANSFORM}
             >
-              {failReasons[currentIndex].trim()}
+              {currentReason.trim()}
             </ReactMarkdown>
           </div>
         </MarkdownErrorBoundary>
-      ) : null}
+      ) : (
+        currentReason
+          ?.trim()
+          .split('\n')
+          .map((line, index) => (
+            <React.Fragment key={index}>
+              {line}
+              <br />
+            </React.Fragment>
+          ))
+      )}
     </div>
   );
 };
