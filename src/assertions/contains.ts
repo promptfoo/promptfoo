@@ -82,7 +82,7 @@ function parseUnquotedField(value: string, startIndex: number): ParsedField {
 /**
  * Split a contains-any string into fields while preserving quoted commas.
  */
-function parseCommaSeparatedValues(value: string): string[] {
+export function parseCommaSeparatedValues(value: string): string[] {
   const results: string[] = [];
   let i = 0;
   while (i < value.length) {

@@ -531,6 +531,14 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['substring1', 'substring2']);
   });
 
+  it('should preserve quoted commas in a contains-any assertion', () => {
+    const expected = 'contains-any:"hello, world",foo';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('contains-any');
+    expect(result.value).toEqual(['hello, world', 'foo']);
+  });
+
   it('should create a contains-all assertion', () => {
     const expected = 'contains-all:substring1,substring2';
 
