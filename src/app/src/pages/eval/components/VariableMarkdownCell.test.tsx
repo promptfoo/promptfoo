@@ -2,6 +2,7 @@ import React from 'react';
 
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import * as markdownConfig from './markdown-config';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
 describe('VariableMarkdownCell', () => {
@@ -10,6 +11,28 @@ describe('VariableMarkdownCell', () => {
       render(<VariableMarkdownCell value="Hello, world!" maxTextLength={100} />);
 
       expect(screen.getByText('Hello, world!')).toBeInTheDocument();
+    });
+
+    it('skips ordinary text parsing and parses image syntax once', () => {
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImageSources');
+
+      try {
+        const ordinaryRender = render(
+          <VariableMarkdownCell value={'ordinary text '.repeat(10_000)} maxTextLength={100} />,
+        );
+        expect(extractSpy).not.toHaveBeenCalled();
+        ordinaryRender.unmount();
+
+        render(
+          <VariableMarkdownCell
+            value="![Preview](data:image/png;base64,AA==)"
+            maxTextLength={100}
+          />,
+        );
+        expect(extractSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        extractSpy.mockRestore();
+      }
     });
 
     it('renders markdown bold text', () => {

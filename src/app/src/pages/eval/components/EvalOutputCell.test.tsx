@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
+import * as markdownConfig from './markdown-config';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -2543,8 +2544,10 @@ describe('EvalOutputCell provider error display', () => {
     expect(screen.getByText('AuthenticationError: Invalid API key')).toBeInTheDocument();
   });
 
-  it('renders markdown image previews in assertion failure reasons', () => {
-    const dataUri = 'data:image/png;base64,encodedImage';
+  it('renders markdown image previews in assertion failure reasons with lightbox support', async () => {
+    const user = userEvent.setup();
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
     const propsWithImageFailureReason: MockEvalOutputCellProps = {
       firstOutput: {
         cost: 0,
@@ -2600,7 +2603,12 @@ describe('EvalOutputCell provider error display', () => {
     renderWithProviders(<EvalOutputCell {...propsWithImageFailureReason} />);
 
     expect(screen.getByText('Expected image to match')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Actual image' })).toHaveAttribute('src', dataUri);
+    const image = screen.getByRole('img', { name: 'Actual image' });
+    expect(image).toHaveAttribute('src', dataUri);
+
+    await user.click(image);
+
+    expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
   });
 
   it('does not display error when output.error is null', () => {
@@ -2985,15 +2993,54 @@ describe('EvalOutputCell metrics pills setting', () => {
 describe('EvalOutputCell inline image lightbox', () => {
   const mockOnRating = vi.fn();
 
+  const createMarkdownPreviewProps = (
+    text: string,
+    maxTextLength = 40,
+  ): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 1,
+      text: 'First output',
+      testCase: {},
+    },
+    maxTextLength,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 1,
+      text,
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: false,
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('opens lightbox when clicking on inline image and closes when clicking lightbox', async () => {
+  it('opens lightbox for an uppercase image data URI and closes when clicked', async () => {
     const user = userEvent.setup();
     // Use a data URI which triggers the inline image rendering path (not markdown)
     const dataUri =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      'DATA:IMAGE/PNG;BASE64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
     const props: MockEvalOutputCellProps = {
       firstOutput: {
@@ -3047,6 +3094,163 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     await user.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('renders safe markdown data images when Markdown rendering is disabled', async () => {
+    const user = userEvent.setup();
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: `Expected image output\n![Actual image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(screen.getByText('Expected image output')).toBeInTheDocument();
+    const image = screen.getByRole('img', { name: 'Actual image' });
+    expect(image).toHaveAttribute('src', dataUri);
+    expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
+
+    await user.click(image);
+    expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('parses image syntax once per render and skips large ordinary text', () => {
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImageSources');
+    mockResultsViewSettings.renderMarkdown = false;
+
+    try {
+      const ordinaryRender = renderWithProviders(
+        <EvalOutputCell {...createMarkdownPreviewProps('ordinary text '.repeat(10_000))} />,
+      );
+      expect(extractSpy).not.toHaveBeenCalled();
+      ordinaryRender.unmount();
+
+      renderWithProviders(
+        <EvalOutputCell
+          {...createMarkdownPreviewProps(
+            '![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB)',
+          )}
+        />,
+      );
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      extractSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    [
+      'raw HTML',
+      '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">',
+    ],
+    [
+      'escaped image syntax',
+      String.raw`\![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`,
+    ],
+    [
+      'inline code',
+      '`![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`',
+    ],
+    [
+      'fenced code',
+      '```md\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n```',
+    ],
+    [
+      'four-space indented code',
+      '    ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+    [
+      'tab-indented code',
+      '\t![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+    [
+      'an HTML comment',
+      '<!-- ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==) -->',
+    ],
+    [
+      'a raw div block',
+      '<div>\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n</div>',
+    ],
+    [
+      'a raw pre block',
+      '<pre>\n![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n</pre>',
+    ],
+    [
+      'list-nested fenced code',
+      '- ```md\n  ![Preview](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\n  ```',
+    ],
+  ])('does not force Markdown or disable truncation for %s', (_label, sample) => {
+    const trailingMarker = 'BASE64_CONTENT_MUST_STAY_TRUNCATED';
+    mockResultsViewSettings.renderMarkdown = false;
+    const props = createMarkdownPreviewProps(`${sample}\n\n${trailingMarker}`);
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(trailingMarker);
+  });
+
+  it.each([
+    [
+      'a full reference image',
+      '![Reference image][preview]\n\n[preview]: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    ],
+    [
+      'escaped alt brackets',
+      String.raw`![Preview \[nested\]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`,
+    ],
+    [
+      'nested alt brackets',
+      '![Preview [nested]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)',
+    ],
+  ])('forces a safe preview for %s', (_label, markdown) => {
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(markdown)} />,
+    );
+
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    );
+    expect(container.querySelector('.truncation-toggler')).not.toBeInTheDocument();
   });
 
   it('toggleLightbox maintains stable behavior across multiple toggles', async () => {

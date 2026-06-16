@@ -36,7 +36,14 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import {
+  DATA_IMAGE_ONLY_URL_TRANSFORM,
+  extractMarkdownImageSources as extractRawMarkdownImageSources,
+  extractRenderableMarkdownImageSources as extractRawRenderableMarkdownImageSources,
+  IDENTITY_URL_TRANSFORM,
+  isImageDataUrl,
+  REMARK_PLUGINS,
+} from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -168,25 +175,18 @@ function hasImageSrcComparisonKey(keys: Set<string>, src: string): boolean {
 export function extractMarkdownImageSources(markdown: string): string[] {
   const sources = new Set<string>();
 
-  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
-  const htmlImageRegex = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
-
-  for (const match of markdown.matchAll(markdownImageRegex)) {
-    const candidate = match[1]?.trim();
-    if (!candidate) {
-      continue;
-    }
-    const unwrapped =
-      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
-    sources.add(normalizeImageSrcForComparison(unwrapped));
+  for (const source of extractRawMarkdownImageSources(markdown)) {
+    sources.add(normalizeImageSrcForComparison(source));
   }
 
-  for (const match of markdown.matchAll(htmlImageRegex)) {
-    const candidate = match[1]?.trim();
-    if (!candidate) {
-      continue;
-    }
-    sources.add(normalizeImageSrcForComparison(candidate));
+  return [...sources];
+}
+
+function extractRenderableMarkdownImageSources(markdown: string): string[] {
+  const sources = new Set<string>();
+
+  for (const source of extractRawRenderableMarkdownImageSources(markdown)) {
+    sources.add(normalizeImageSrcForComparison(source));
   }
 
   return [...sources];
@@ -200,18 +200,6 @@ export function resolveEvalImageOutputSource(image: ImageOutput): string | undef
   return resolveImageSource(image);
 }
 
-function isImageLikeDataUri(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('data:')) {
-    return false;
-  }
-
-  const mimeType = trimmed.slice('data:'.length).split(/[;,]/, 1)[0]?.toLowerCase();
-  return Boolean(
-    mimeType && (mimeType.startsWith('image/') || mimeType === 'application/octet-stream'),
-  );
-}
-
 function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): string | undefined {
   const trimmed = text.trim();
 
@@ -219,7 +207,7 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
     return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
   }
 
-  if (isImageLikeDataUri(text)) {
+  if (isImageDataUrl(text)) {
     return inlineImageSrc || text;
   }
 
@@ -415,16 +403,20 @@ function renderMarkdownOrJsonNode({
   text,
   normalizedText,
   renderMarkdown,
+  forceDataImagePreview,
   prettifyJson,
   markdownComponents,
 }: {
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
+  forceDataImagePreview: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
 }): { node?: React.ReactNode; renderedMarkdownOutput: boolean } {
-  if (!prettifyJson && !renderMarkdown) {
+  const shouldRenderMarkdown = renderMarkdown || forceDataImagePreview;
+
+  if (!prettifyJson && !shouldRenderMarkdown) {
     return { node: undefined, renderedMarkdownOutput: false };
   }
 
@@ -442,7 +434,7 @@ function renderMarkdownOrJsonNode({
     }
   }
 
-  if (!renderMarkdown) {
+  if (!shouldRenderMarkdown) {
     return { node: undefined, renderedMarkdownOutput: false };
   }
 
@@ -450,7 +442,7 @@ function renderMarkdownOrJsonNode({
     node: (
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        urlTransform={IDENTITY_URL_TRANSFORM}
+        urlTransform={renderMarkdown ? IDENTITY_URL_TRANSFORM : DATA_IMAGE_ONLY_URL_TRANSFORM}
         components={markdownComponents}
       >
         {normalizedText}
@@ -463,15 +455,15 @@ function renderMarkdownOrJsonNode({
 function renderStructuredImages({
   node,
   output,
-  normalizedText,
   primaryRenderedImageSrc,
+  renderableMarkdownImageSources,
   renderedMarkdownOutput,
   toggleLightbox,
 }: {
   node?: React.ReactNode;
   output: EvaluateTableOutput;
-  normalizedText: string;
   primaryRenderedImageSrc?: string;
+  renderableMarkdownImageSources: string[];
   renderedMarkdownOutput: boolean;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode | undefined {
@@ -484,7 +476,7 @@ function renderStructuredImages({
     addImageSrcComparisonKeys(renderedImageSrcs, primaryRenderedImageSrc);
   }
   if (renderedMarkdownOutput) {
-    for (const source of extractMarkdownImageSources(normalizedText)) {
+    for (const source of renderableMarkdownImageSources) {
       addImageSrcComparisonKeys(renderedImageSrcs, source);
     }
   }
@@ -532,8 +524,10 @@ function renderOutputNode({
   text,
   normalizedText,
   renderMarkdown,
+  forceDataImagePreview,
   prettifyJson,
   markdownComponents,
+  renderableMarkdownImageSources,
   toggleLightbox,
   outputAudioSource,
   primaryRenderedImageSrc,
@@ -546,8 +540,10 @@ function renderOutputNode({
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
+  forceDataImagePreview: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
+  renderableMarkdownImageSources: string[];
   toggleLightbox: (url?: string) => void;
   outputAudioSource: ReturnType<typeof resolveAudioSource>;
   primaryRenderedImageSrc?: string;
@@ -570,11 +566,13 @@ function renderOutputNode({
       }) || node;
   }
 
-  if (!node) {
-    const shouldPreserveFormattedRendering = extractMarkdownImageSources(normalizedText).length > 0;
-    if (searchText && shouldHighlightSearchText && !shouldPreserveFormattedRendering) {
-      node = renderHighlightedTextNode(text, searchText) ?? node;
-    }
+  if (
+    !node &&
+    searchText &&
+    shouldHighlightSearchText &&
+    renderableMarkdownImageSources.length === 0
+  ) {
+    node = renderHighlightedTextNode(text, searchText) ?? node;
   }
 
   if (!node && !showDiffs) {
@@ -582,6 +580,7 @@ function renderOutputNode({
       text,
       normalizedText,
       renderMarkdown,
+      forceDataImagePreview,
       prettifyJson,
       markdownComponents,
     });
@@ -592,8 +591,8 @@ function renderOutputNode({
   return renderStructuredImages({
     node,
     output,
-    normalizedText,
     primaryRenderedImageSrc,
+    renderableMarkdownImageSources,
     renderedMarkdownOutput,
     toggleLightbox,
   });
@@ -943,6 +942,8 @@ function renderStatusBlock({
   showMetricPills,
   showPassReasons,
   passReasons,
+  renderMarkdown,
+  toggleLightbox,
 }: {
   showPassFail: boolean;
   statusClass: string;
@@ -954,6 +955,8 @@ function renderStatusBlock({
   showMetricPills: boolean;
   showPassReasons: boolean;
   passReasons: string[];
+  renderMarkdown: boolean;
+  toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   if (!showPassFail) {
     return null;
@@ -971,7 +974,11 @@ function renderStatusBlock({
       {showMetricPills && <CustomMetrics lookup={namedScores} />}
       {failReasons.length > 0 && (
         <span className="fail-reason">
-          <FailReasonCarousel failReasons={failReasons} />
+          <FailReasonCarousel
+            failReasons={failReasons}
+            renderMarkdown={renderMarkdown}
+            onImageClick={toggleLightbox}
+          />
         </span>
       )}
       {showPassReasons && passReasons.length > 0 && (
@@ -1355,15 +1362,16 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-          loading="lazy"
-          src={src}
-          alt={alt}
-          onClick={() => toggleLightbox(src)}
-          style={{ cursor: 'pointer' }}
-        />
-      ),
+      img: ({ src, alt }: { src?: string; alt?: string }) =>
+        src ? (
+          <img
+            loading="lazy"
+            src={src}
+            alt={alt}
+            onClick={() => toggleLightbox(src)}
+            style={{ cursor: 'pointer' }}
+          />
+        ) : null,
     }),
     [toggleLightbox],
   );
@@ -1412,6 +1420,12 @@ function EvalOutputCell({
 
   const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
+  const renderableMarkdownImageSources = useMemo(
+    () =>
+      normalizedText.includes('![') ? extractRenderableMarkdownImageSources(normalizedText) : [],
+    [normalizedText],
+  );
+  const hasInlineMarkdownDataImage = renderableMarkdownImageSources.some(isImageDataUrl);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
@@ -1434,8 +1448,10 @@ function EvalOutputCell({
     text,
     normalizedText,
     renderMarkdown,
+    forceDataImagePreview: hasInlineMarkdownDataImage,
     prettifyJson,
     markdownComponents,
+    renderableMarkdownImageSources,
     toggleLightbox,
     outputAudioSource,
     primaryRenderedImageSrc,
@@ -1594,6 +1610,8 @@ function EvalOutputCell({
         showMetricPills,
         showPassReasons,
         passReasons,
+        renderMarkdown,
+        toggleLightbox,
       })}
       {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
       {renderResponseAudioPlayer(responseAudioSource)}
@@ -1604,7 +1622,9 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+            hasInlineMarkdownDataImage ||
+            (renderMarkdown &&
+              (isImageProvider(output.provider) || isVideoProvider(output.provider)))
               ? 0
               : maxTextLength
           }

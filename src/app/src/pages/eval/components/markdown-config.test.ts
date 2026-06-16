@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DATA_IMAGE_ONLY_URL_TRANSFORM,
+  extractRenderableMarkdownImageSources,
+  hasMarkdownDataImage,
   IDENTITY_URL_TRANSFORM,
   IMAGE_DATA_URL_TRANSFORM,
+  isImageDataUrl,
   REMARK_PLUGINS,
 } from './markdown-config';
+
+const imageNode = { tagName: 'img' } as Parameters<typeof IMAGE_DATA_URL_TRANSFORM>[2];
+const linkNode = { tagName: 'a' } as Parameters<typeof IMAGE_DATA_URL_TRANSFORM>[2];
 
 describe('markdown-config', () => {
   describe('REMARK_PLUGINS', () => {
@@ -62,36 +69,128 @@ describe('markdown-config', () => {
   });
 
   describe('IMAGE_DATA_URL_TRANSFORM', () => {
-    const imageNode = {
-      type: 'element' as const,
-      tagName: 'img',
-      properties: {},
-      children: [],
-    };
-    const linkNode = {
-      type: 'element' as const,
-      tagName: 'a',
-      properties: {},
-      children: [],
-    };
-
-    it('should allow image data URLs only for image sources', () => {
-      const dataUri = 'data:image/png;base64,encodedImage';
-
+    it('allows image data URIs for image sources', () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
       expect(IMAGE_DATA_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe(dataUri);
-      expect(IMAGE_DATA_URL_TRANSFORM(dataUri, 'href', linkNode)).toBe('');
     });
 
-    it('should preserve safe web URLs', () => {
-      const url = 'https://example.com/image.png';
-      expect(IMAGE_DATA_URL_TRANSFORM(url, 'src', imageNode)).toBe(url);
+    it('allows octet-stream data URIs for image sources', () => {
+      const dataUri = 'data:application/octet-stream;base64,R0lGODlhAQABAIAAAAAAAP';
+      expect(IMAGE_DATA_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe(dataUri);
     });
 
-    it('should reject executable and non-image data URLs', () => {
+    it('preserves safe remote and relative image sources', () => {
+      expect(IMAGE_DATA_URL_TRANSFORM('https://example.com/image.png', 'src', imageNode)).toBe(
+        'https://example.com/image.png',
+      );
+      expect(IMAGE_DATA_URL_TRANSFORM('/images/test.png', 'src', imageNode)).toBe(
+        '/images/test.png',
+      );
+    });
+
+    it('rejects unsafe and non-image data sources', () => {
       expect(IMAGE_DATA_URL_TRANSFORM('javascript:alert(1)', 'src', imageNode)).toBe('');
-      expect(
-        IMAGE_DATA_URL_TRANSFORM('data:text/html,<script>alert(1)</script>', 'src', imageNode),
-      ).toBe('');
+      expect(IMAGE_DATA_URL_TRANSFORM('data:text/html;base64,PHNjcmlwdD4=', 'src', imageNode)).toBe(
+        '',
+      );
+    });
+
+    it('does not allow image data URIs in links', () => {
+      expect(IMAGE_DATA_URL_TRANSFORM('data:image/png;base64,AA==', 'href', linkNode)).toBe('');
+    });
+  });
+
+  describe('DATA_IMAGE_ONLY_URL_TRANSFORM', () => {
+    it('allows image data URIs without allowing automatic URL requests', () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe(dataUri);
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM('https://example.com/image.png', 'src', imageNode)).toBe(
+        '',
+      );
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM('/api/internal/action', 'src', imageNode)).toBe('');
+    });
+
+    it('retains safe URL handling for non-image attributes', () => {
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM('https://example.com', 'href', linkNode)).toBe(
+        'https://example.com',
+      );
+      expect(DATA_IMAGE_ONLY_URL_TRANSFORM('data:image/png;base64,AA==', 'href', linkNode)).toBe(
+        '',
+      );
+    });
+  });
+
+  describe('hasMarkdownDataImage', () => {
+    it('short-circuits large ordinary text without image syntax', () => {
+      const markdown = 'ordinary text '.repeat(10_000);
+
+      expect(markdown).not.toContain('![');
+      expect(extractRenderableMarkdownImageSources(markdown)).toEqual([]);
+      expect(hasMarkdownDataImage(markdown)).toBe(false);
+    });
+
+    it('detects renderable data images case-insensitively', () => {
+      expect(hasMarkdownDataImage('![Preview](data:image/png;base64,AA==)')).toBe(true);
+      expect(hasMarkdownDataImage('![Preview](DATA:IMAGE/PNG;BASE64,AA==)')).toBe(true);
+      expect(hasMarkdownDataImage('![Remote](https://example.com/image.png)')).toBe(false);
+    });
+
+    it.each([
+      ['raw HTML', '<img src="data:image/png;base64,AA==">'],
+      ['escaped image syntax', String.raw`\![Preview](data:image/png;base64,AA==)`],
+      ['inline code', '`![Preview](data:image/png;base64,AA==)`'],
+      ['backtick fenced code', '```md\n![Preview](data:image/png;base64,AA==)\n```'],
+      ['tilde fenced code', '~~~md\n![Preview](data:image/png;base64,AA==)\n~~~'],
+      ['four-space indented code', '    ![Preview](data:image/png;base64,AA==)'],
+      ['tab-indented code', '\t![Preview](data:image/png;base64,AA==)'],
+      ['HTML comments', '<!-- ![Preview](data:image/png;base64,AA==) -->'],
+      ['raw div blocks', '<div>\n![Preview](data:image/png;base64,AA==)\n</div>'],
+      ['raw pre blocks', '<pre>\n![Preview](data:image/png;base64,AA==)\n</pre>'],
+      ['list-nested fenced code', '- ```md\n  ![Preview](data:image/png;base64,AA==)\n  ```'],
+    ])('does not treat %s as a renderable image', (_label, markdown) => {
+      expect(extractRenderableMarkdownImageSources(markdown)).toEqual([]);
+      expect(hasMarkdownDataImage(markdown)).toBe(false);
+    });
+
+    it.each([
+      ['full reference images', '![Preview][image]\n\n[image]: data:image/png;base64,AA=='],
+      ['collapsed reference images', '![Preview][]\n\n[Preview]: data:image/png;base64,AA=='],
+      ['shortcut reference images', '![Preview]\n\n[Preview]: data:image/png;base64,AA=='],
+      [
+        'escaped brackets in alt text',
+        String.raw`![Preview \[nested\]](data:image/png;base64,AA==)`,
+      ],
+      ['nested brackets in alt text', '![Preview [nested]](data:image/png;base64,AA==)'],
+    ])('detects %s using ReactMarkdown parsing semantics', (_label, markdown) => {
+      expect(extractRenderableMarkdownImageSources(markdown)).toEqual([
+        'data:image/png;base64,AA==',
+      ]);
+      expect(hasMarkdownDataImage(markdown)).toBe(true);
+    });
+
+    it('still detects an image after inline and fenced code', () => {
+      const markdown = [
+        '`![Code](data:image/png;base64,CODE)`',
+        '```md',
+        '![Fence](data:image/png;base64,FENCE)',
+        '```',
+        '![Preview](data:image/png;base64,AA==)',
+      ].join('\n');
+
+      expect(extractRenderableMarkdownImageSources(markdown)).toEqual([
+        'data:image/png;base64,AA==',
+      ]);
+      expect(hasMarkdownDataImage(markdown)).toBe(true);
+    });
+
+    it('recognizes image data URLs independent of scheme and MIME casing', () => {
+      expect(isImageDataUrl('DATA:IMAGE/PNG;BASE64,AA==')).toBe(true);
+      expect(isImageDataUrl(' Data:Application/Octet-Stream;Base64,AA==')).toBe(true);
+      expect(isImageDataUrl('data:text/html;base64,AA==')).toBe(false);
+    });
+
+    it('does not treat raw HTML as Markdown', () => {
+      expect(hasMarkdownDataImage('<img src="data:image/png;base64,AA==">')).toBe(false);
     });
   });
 });
