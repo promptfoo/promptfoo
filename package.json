@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.121.15",
+  "version": "0.121.17",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -115,12 +115,12 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
-    "esbuild": "0.28.0",
+    "esbuild": "0.28.1",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
-      "esbuild": "0.28.0"
+      "esbuild": "0.28.1"
     },
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -128,7 +128,7 @@
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
-      "esbuild": "0.28.0",
+      "esbuild": "0.28.1",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-musl": "^1.15.18",
     "@swc/core-win32-x64-msvc": "^1.15.18",
     "google-auth-library": "^10.7.0",
-    "hono": "^4.12.5",
+    "hono": "^4.12.25",
     "ibm-cloud-sdk-core": "^5.4.11",
     "jks-js": "^1.1.5",
     "langfuse": "^3.38.20",
@@ -320,7 +320,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.101.0",
+    "@anthropic-ai/sdk": "0.102.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",

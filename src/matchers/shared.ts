@@ -116,9 +116,19 @@ export function splitIntoSentences(text: string) {
  * edge case (e.g. decimals like "3.14", abbreviations); full segmentation would
  * need an NLP tokenizer. It is a substantial improvement over newline-only
  * splitting for the common prose case.
+ *
+ * Bare enumeration markers are dropped: splitting an inline numbered list such as
+ * "1. Paris is the capital. 2. France is in Europe." on the sentence boundary
+ * strands the "1." / "2." markers as their own segments, which would inflate
+ * sentence-level counts (e.g. the RAGAS context-relevance numerator). A segment
+ * that is only a list marker carries no content, so it is not a unit.
  */
+const ENUMERATION_MARKER_ONLY = /^\d+[.)]$/;
+
 export function splitTextIntoSentences(text: string): string[] {
   const lines = text.split('\n').filter((line) => line.trim() !== '');
   const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
-  return segments.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0);
+  return segments
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0 && !ENUMERATION_MARKER_ONLY.test(sentence));
 }
