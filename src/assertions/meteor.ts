@@ -22,7 +22,12 @@ async function ensureNaturalPackage(): Promise<void> {
 
   try {
     // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    const naturalModule = await import('natural');
+    // `natural` is CommonJS. Native Node ESM exposes it under `default`, while
+    // Vitest and some bundlers synthesize named exports.
+    const natural = (
+      'default' in naturalModule ? naturalModule.default : naturalModule
+    ) as typeof naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
