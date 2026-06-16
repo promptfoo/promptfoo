@@ -43,6 +43,137 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.relevantSentenceCount).toBe(1);
   });
 
+  it('should segment a single-paragraph prose context into sentences', async () => {
+    // Regression: a retrieved context is usually one prose paragraph with no
+    // newlines. Splitting it on newlines alone yields a single context unit, so
+    // the denominator is 1 and the score is forced to ~1.0 regardless of how
+    // little of the context is actually relevant. Segmenting on sentence
+    // boundaries restores a meaningful denominator.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.3;
+
+    // Mock LLM extracting 1 relevant sentence out of the 3 in the context.
+    const mockCallApi = vi.fn().mockImplementation(() => {
+      return Promise.resolve({
+        output: 'Paris is the capital of France.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 3 sentences in the context, 1 relevant → score = 1/3 ≈ 0.33.
+    // Before the fix this returned 1.0 (the whole paragraph counted as one unit).
+    expect(result.score).toBeCloseTo(0.33, 2);
+    expect(result.pass).toBe(true); // 0.33 >= 0.3
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
+  it('should count multiple relevant sentences in a prose grader response (single-line context)', async () => {
+    // For a single-paragraph prose context the grader echoes the relevant sentences
+    // verbatim as continuous prose (no newlines). The numerator must be segmented
+    // the same way as the denominator (by sentence here), otherwise a multi-sentence
+    // answer counts as a single relevant unit and undercounts relevance — e.g.
+    // echoing two of three sentences scored 1/3 instead of 2/3.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.5;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 2 relevant sentences out of 3 → 2/3 ≈ 0.67 (was 1/3 ≈ 0.33 when the prose
+    // answer was counted as a single line).
+    expect(result.score).toBeCloseTo(0.67, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+  });
+
+  it('should still segment prose when the context carries an incidental trailing newline', async () => {
+    // Regression: a context loaded from a file/template/YAML block scalar almost
+    // always carries a trailing newline. Keying segmentation off the mere presence
+    // of a newline collapsed such a context back to a single unit, reviving the
+    // forced ~1.0 score. The mode must key off two-or-more non-empty lines instead.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.\n';
+    const threshold = 0.3;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // Still 3 sentences despite the trailing newline → 1/3 ≈ 0.33 (not 1.0).
+    expect(result.score).toBeCloseTo(0.33, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
+  it('should not inflate the score when the grader returns a numbered list', async () => {
+    // Regression: the grading prompt does not constrain output format, and an LLM
+    // commonly returns the relevant sentences as a numbered list. Sentence-splitting
+    // the grader output would count each "1."/"2." marker as its own unit, inflating
+    // the numerator. The grader output must be counted by line instead.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.5;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '1. Paris is the capital of France.\n2. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 2 relevant lines out of 3 context sentences → 2/3 ≈ 0.67 (not 1.0).
+    expect(result.score).toBeCloseTo(0.67, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+  });
+
+  it('should count the grader output by line, not sentence, against a multi-line context', async () => {
+    // Regression: for a multi-line (pre-segmented) string context, a prose grader
+    // response (no newlines) was sentence-split while the context was line-split.
+    // The mismatched units inflated the numerator and forced the score to 1.0. The
+    // grader output is now counted by non-empty line, matching the context units.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe.\nBerlin is the capital of Germany. Germany is in Europe.';
+    const threshold = 0.5;
+
+    // Grader returns one line verbatim (prose with two sentences, no newline).
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // Context is 2 lines; the grader's single line is 1 relevant unit → 1/2 = 0.5
+    // (was 1.0 before the fix, when the grader's two sentences were counted).
+    expect(result.score).toBe(0.5);
+    expect(result.metadata?.totalContextUnits).toBe(2);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+  });
+
   it('should handle insufficient information responses', async () => {
     const input = 'What is quantum computing?';
     const context =

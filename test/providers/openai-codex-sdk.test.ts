@@ -8,6 +8,7 @@ import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
@@ -52,6 +53,11 @@ vi.mock('../../src/esm', async (importOriginal) => {
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 
+vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
+  getTraceparent: vi.fn(),
+}));
+
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
   finalResponse: string,
@@ -90,6 +96,7 @@ describe('OpenAICodexSDKProvider', () => {
   let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
   const mockResolvePackageEntryPoint = vi.mocked(resolvePackageEntryPoint);
+  const mockGetTraceparent = vi.mocked(getTraceparent);
   let originalBasePath: string | undefined;
   let originalOpenAiApiKey: string | undefined;
   let originalCodexApiKey: string | undefined;
@@ -115,6 +122,7 @@ describe('OpenAICodexSDKProvider', () => {
     mockImportModule.mockResolvedValue(mockCodexSDK);
     mockResolvePackageEntryPoint.mockReset();
     mockResolvePackageEntryPoint.mockReturnValue('@openai/codex-sdk');
+    mockGetTraceparent.mockReturnValue(undefined);
 
     // Default mocks
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
@@ -2282,6 +2290,97 @@ describe('OpenAICodexSDKProvider', () => {
         } finally {
           mockProcessEnv({ PROMPTFOO_TEST_EXISTING: undefined });
         }
+      });
+
+      it('should propagate promptfoo trace resource attributes for deep tracing', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            deep_tracing: true,
+            cli_env: {
+              OTEL_RESOURCE_ATTRIBUTES:
+                'deployment.environment=test,promptfoo.trace_id=stale,promptfoo.parent_span_id=stale',
+            },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${traceId}-${spanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `deployment.environment=test,promptfoo.trace_id=${traceId},` +
+                `promptfoo.parent_span_id=${spanId}`,
+            }),
+          }),
+        );
+      });
+
+      it('should prefer a valid active traceparent over the evaluator trace', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const activeTraceId = '0af7651916cd43dd8448eb211c80319c';
+        const activeSpanId = 'b7ad6b7169203331';
+        mockGetTraceparent.mockReturnValue(`00-${activeTraceId}-${activeSpanId}-01`);
+        const evaluatorTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+        const evaluatorSpanId = '00f067aa0ba902b7';
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${evaluatorTraceId}-${evaluatorSpanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${activeTraceId}-${activeSpanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `promptfoo.trace_id=${activeTraceId},` + `promptfoo.parent_span_id=${activeSpanId}`,
+            }),
+          }),
+        );
+      });
+
+      it.each([
+        '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+        '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
+      ])('should ignore an invalid active traceparent and use the evaluator trace', async (active) => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        mockGetTraceparent.mockReturnValue(active);
+        const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+        const spanId = '00f067aa0ba902b7';
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${traceId}-${spanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+            }),
+          }),
+        );
       });
 
       it('should handle codex_path_override', async () => {

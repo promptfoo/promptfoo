@@ -13,7 +13,8 @@ import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
-    (cliState as any).config = {};
+    cliState.config = {};
+    cliState.selectedProviderConfigs = undefined;
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
         return Promise.resolve({
@@ -31,6 +32,7 @@ describe('matchesSimilarity', () => {
   });
 
   afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
   });
 
@@ -92,6 +94,55 @@ describe('matchesSimilarity', () => {
         completionDetails: expect.any(Object),
         numRequests: 0,
       },
+    });
+  });
+
+  it('should include Cloud target context in remote similarity requests', async () => {
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/cloud-target-123'],
+      redteam: {},
+    };
+    vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'remote',
+    });
+
+    await matchesSimilarity('Expected output', 'Sample output', 0.5);
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'similar',
+      expected: 'Expected output',
+      output: 'Sample output',
+      threshold: 0.5,
+      inverse: false,
+      targetId: 'cloud-target-123',
+    });
+  });
+
+  it('should prefer filtered providers when building remote similarity context', async () => {
+    cliState.config = {
+      providers: ['promptfoo://provider/excluded-target'],
+      redteam: {},
+    };
+    cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+    vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'remote',
+    });
+
+    await matchesSimilarity('Expected output', 'Sample output', 0.5);
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'similar',
+      expected: 'Expected output',
+      output: 'Sample output',
+      threshold: 0.5,
+      inverse: false,
+      targetId: 'selected-target',
     });
   });
 

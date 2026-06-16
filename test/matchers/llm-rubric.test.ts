@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -21,9 +21,13 @@ vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
-vi.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
-}));
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
+  return {
+    ...actual,
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -69,7 +73,8 @@ describe('matchesLlmRubric', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
 
-    (cliState as any).config = {};
+    cliState.config = {};
+    cliState.selectedProviderConfigs = undefined;
 
     vi.mocked(remoteGrading.doRemoteGrading).mockReset();
     vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
@@ -83,6 +88,10 @@ describe('matchesLlmRubric', () => {
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
+  });
+
+  afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -2264,6 +2273,49 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should include Cloud target context in remote grading requests', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/cloud-target-123'],
+      redteam: {},
+    };
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'cloud-target-123',
+    });
+  });
+
+  it('should prefer filtered providers when building remote grading context', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    cliState.config = {
+      providers: ['promptfoo://provider/excluded-target'],
+      redteam: {},
+    };
+    cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'selected-target',
+    });
   });
 
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {

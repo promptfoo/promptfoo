@@ -9,8 +9,9 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
-import type { ApiProvider } from '../../types/index';
+import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -24,6 +25,7 @@ export type RedTeamTask = 'purpose' | 'entities';
  *
  * @param task - The type of task to perform ('purpose' or 'entities').
  * @param prompts - An array of prompts to process.
+ * @param generationContext - Resolved target context for routing the remote task.
  * @returns A Promise that resolves to either a string or an array of strings, depending on the task.
  * @throws Will throw an error if the remote generation fails.
  *
@@ -36,6 +38,7 @@ export type RedTeamTask = 'purpose' | 'entities';
 export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
+  generationContext?: RemoteGenerationContext,
 ): Promise<string | string[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -47,6 +50,7 @@ export async function fetchRemoteGeneration(
       prompts,
       version: VERSION,
       email: getUserEmail(),
+      ...remoteGenerationContextPayload(generationContext),
     };
 
     const response = await fetchWithCache(

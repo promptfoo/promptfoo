@@ -124,6 +124,35 @@ describe('fetchRemoteGeneration', () => {
     );
   });
 
+  it('should include the resolved cloud target in the remote generation payload', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { task: 'purpose', result: 'This is a purpose' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await fetchRemoteGeneration('purpose', ['prompt'], {
+      providerTargetIds: ['file://local-provider.ts'],
+      cloudTargetId: 'cloud-target-123',
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://api.promptfoo.app/api/v1/task',
+      expect.objectContaining({
+        body: JSON.stringify({
+          task: 'purpose',
+          prompts: ['prompt'],
+          version: VERSION,
+          email: null,
+          targetId: 'cloud-target-123',
+        }),
+      }),
+      getRequestTimeoutMs(),
+      'json',
+    );
+  });
+
   it('should throw an error when fetchWithCache fails', async () => {
     const mockError = new Error('Network error');
     vi.mocked(fetchWithCache).mockRejectedValue(mockError);

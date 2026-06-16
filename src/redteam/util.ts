@@ -18,6 +18,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from './remoteGeneration';
+import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
@@ -339,6 +340,7 @@ export function getShortPluginId(pluginId: string): string {
  * @param purpose - The purpose of the system.
  * @param pluginId - Optional plugin ID to provide context about the attack type.
  * @param policy - Optional policy text for custom policy tests to improve intent extraction.
+ * @param targetId - Optional cloud target database ID used by remote task handlers to resolve target-owned provider context.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
@@ -346,6 +348,7 @@ export async function extractGoalFromPrompt(
   purpose: string,
   pluginId?: string,
   policy?: string,
+  targetId?: string,
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -373,6 +376,7 @@ export async function extractGoalFromPrompt(
     purpose,
     ...(pluginDescription && { pluginContext: pluginDescription }),
     ...(policy && { policy }),
+    ...remoteGenerationContextPayload(targetId),
   };
 
   interface ExtractIntentResponse {
