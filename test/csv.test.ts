@@ -554,6 +554,12 @@ describe('assertionFromString', () => {
     expect(result.value).toEqual(['say "hello, world"', 'a "quoted" value', 'plain']);
   });
 
+  it('should match runtime handling of whitespace and repeated delimiters', () => {
+    const result: Assertion = assertionFromString('icontains-any: alpha, , beta,, ');
+
+    expect(result.value).toEqual(['alpha', 'beta']);
+  });
+
   it('should reject malformed quoted contains assertion values', () => {
     expect(() => assertionFromString('icontains-any:"unterminated')).toThrow(
       'Unterminated quoted field in contains assertion value',
