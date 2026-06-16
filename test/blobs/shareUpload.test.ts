@@ -47,7 +47,7 @@ describe('share-time blob upload', () => {
     });
   });
 
-  it('uploads each referenced blob only once across chunks', async () => {
+  it('uploads each referenced blob only once when the share context is unchanged', async () => {
     const hash = 'a'.repeat(64);
     const cache = createRemoteBlobUploadCache();
 
@@ -62,8 +62,8 @@ describe('share-time blob upload', () => {
     await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
       localEvalId: 'local-eval-123',
       remoteEvalId: 'remote-eval-123',
-      promptIdx: 4,
-      testIdx: 3,
+      promptIdx: 2,
+      testIdx: 1,
     });
 
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
@@ -75,6 +75,80 @@ describe('share-time blob upload', () => {
       location: 'share',
       promptIdx: 2,
       testIdx: 1,
+    });
+  });
+
+  it('uploads the same blob again when it appears in a different result row', async () => {
+    const hash = '7'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-123',
+      remoteEvalId: 'remote-eval-123',
+      promptIdx: 2,
+      testIdx: 1,
+    });
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-123',
+      remoteEvalId: 'remote-eval-123',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(getShareAuthorizedBlob).toHaveBeenNthCalledWith(1, hash, 'local-eval-123');
+    expect(getShareAuthorizedBlob).toHaveBeenNthCalledWith(2, hash, 'local-eval-123');
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-123',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 2,
+      testIdx: 1,
+    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-123',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 4,
+      testIdx: 3,
+    });
+  });
+
+  it('keeps a zero-index result row distinct from a coordinate-less reference', async () => {
+    // Pins the `?? null` (not `||`) choice in getUploadCacheKey: promptIdx/testIdx
+    // of 0 is the first row of every eval and must not collapse into a reference
+    // that carries no coordinates. A regression to `|| null` would dedupe these two
+    // into a single upload, dropping the (0, 0) row's provenance.
+    const hash = '0'.repeat(64);
+    const cache = createRemoteBlobUploadCache();
+
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-zero',
+      remoteEvalId: 'remote-eval-zero',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+    await uploadBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+      localEvalId: 'local-eval-zero',
+      remoteEvalId: 'remote-eval-zero',
+    });
+
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-zero',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
+      evalId: 'remote-eval-zero',
+      kind: 'image',
+      location: 'share',
+      promptIdx: undefined,
+      testIdx: undefined,
     });
   });
 
