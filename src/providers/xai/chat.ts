@@ -482,6 +482,7 @@ export function calculateXAICost(
   promptTokens?: number,
   completionTokens?: number,
   reasoningTokens?: number,
+  cachedTokens?: number,
 ): number | undefined {
   // xAI follows the OpenAI token convention: completion/output tokens already
   // INCLUDE reasoning tokens (reasoning is a sub-breakdown, not a separate
@@ -506,8 +507,15 @@ export function calculateXAICost(
 
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
-  const inputCostTotal = inputCost * promptTokens;
+  // Cached prompt tokens (prompt_tokens_details.cached_tokens) are billed at the
+  // reduced cache-read rate. Without this they were billed at the full input
+  // rate. Fall back to the full input behavior when no cache rate is known.
+  const inputCostTotal =
+    cachedTokens && cacheReadCost != null
+      ? inputCost * (promptTokens - cachedTokens) + cacheReadCost * cachedTokens
+      : inputCost * promptTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
 
   logger.debug(
@@ -686,12 +694,14 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         // is not reachable here. Fall back to local pricing math. Completion
         // tokens already include reasoning tokens, so they are not added on top.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
+        const cachedTokens = rawData?.usage?.prompt_tokens_details?.cached_tokens;
         response.cost = calculateXAICost(
           this.modelName,
           this.config || {},
           response.tokenUsage.prompt,
           response.tokenUsage.completion,
           reasoningTokens,
+          cachedTokens,
         );
       }
 

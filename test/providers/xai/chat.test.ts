@@ -623,6 +623,23 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('applies the cache-read rate to cached prompt tokens', () => {
+      // The model table defines cache_read for grok-4, but it was never applied.
+      const full = calculateXAICost('grok-4-0709', {}, 1000, 500);
+      const discounted = calculateXAICost('grok-4-0709', {}, 1000, 500, 0, 800);
+      expect(full).toBeDefined();
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('bills the cached prompt subset at the cache-read rate (deterministic)', () => {
+      // input $3/M, output $15/M, cache-read $0.75/M; 1000 prompt (800 cached), 500 output.
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+      // (200 uncached * 3e-6) + (800 cached * 0.75e-6) + (500 * 15e-6) = 0.0087
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 800)).toBeCloseTo(0.0087, 10);
+      // Without any cached tokens: (1000 * 3e-6) + (500 * 15e-6) = 0.0105
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
