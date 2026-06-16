@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-musl": "^1.15.18",
     "@swc/core-win32-x64-msvc": "^1.15.18",
     "google-auth-library": "^10.7.0",
-    "hono": "^4.12.5",
+    "hono": "^4.12.25",
     "ibm-cloud-sdk-core": "^5.4.11",
     "jks-js": "^1.1.5",
     "langfuse": "^3.38.20",
@@ -320,7 +320,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.101.0",
+    "@anthropic-ai/sdk": "0.102.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
