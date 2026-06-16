@@ -713,7 +713,10 @@ describe('assertionFromString', () => {
   });
 
   it('should return complete assertion object structure for representative threshold-based assertion types', () => {
-    const representativeAssertions = ['answer-relevance', 'levenshtein', 'starts-with'];
+    // All three genuinely consume `threshold` in their handlers (unlike e.g.
+    // starts-with, which receives the 0.75 default but ignores it), so the
+    // parsed default is meaningful for these types.
+    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
 
     for (const type of representativeAssertions) {
       const expected = `${type}:Expected output`;

@@ -381,13 +381,20 @@ export class ReplicateModerationProvider
   async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
     try {
       const response = await this.callApi(`Human: ${prompt}\n\nAssistant: ${assistant}`);
+      // LlamaGuard moderation runs as a chat completion, so the underlying call
+      // reports token usage. Forward it so callers (matchesModeration) can
+      // aggregate moderation costs into assertion metrics.
+      const { tokenUsage } = response;
       if (response.error) {
-        return { error: response.error };
+        return { error: response.error, ...(tokenUsage ? { tokenUsage } : {}) };
       }
 
       const { output } = response;
       if (!output || typeof output !== 'string') {
-        return { error: `Invalid moderation response: ${JSON.stringify(output)}` };
+        return {
+          error: `Invalid moderation response: ${JSON.stringify(output)}`,
+          ...(tokenUsage ? { tokenUsage } : {}),
+        };
       }
 
       // Parse the LlamaGuard output format
@@ -395,7 +402,7 @@ export class ReplicateModerationProvider
       const verdict = lines[0];
 
       if (verdict === 'safe') {
-        return { flags: [] };
+        return { flags: [], ...(tokenUsage ? { tokenUsage } : {}) };
       }
 
       // Parse unsafe categories
@@ -415,7 +422,7 @@ export class ReplicateModerationProvider
         }
       }
 
-      return { flags };
+      return { flags, ...(tokenUsage ? { tokenUsage } : {}) };
     } catch (err) {
       return { error: `Invalid moderation response: ${String(err)}` };
     }

@@ -152,7 +152,7 @@ describe('isTransientConnectionError', () => {
   });
 
   it('returns true for mixed-case ECONNRESET messages', () => {
-    const error = new Error('ECONNRESET');
+    const error = new Error('EConnReset');
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
@@ -192,18 +192,20 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
-  it('returns false for unable to verify TLS errors', () => {
-    const error = new Error('unable to verify the first certificate');
+  it('returns false for eproto unable-to-verify TLS errors', () => {
+    // Must include `eproto` to enter the permanent-error exclusion; otherwise the
+    // message has no transient marker and would return false trivially.
+    const error = new Error('write EPROTO unable to verify the first certificate');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
-  it('returns false for unknown ca TLS errors', () => {
-    const error = new Error('tlsv1 alert unknown ca');
+  it('returns false for eproto unknown ca TLS errors', () => {
+    const error = new Error('write EPROTO tlsv1 alert unknown ca');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
-  it('returns false for certificate-related TLS errors', () => {
-    const error = new Error('certificate verify failed');
+  it('returns false for eproto certificate verify TLS errors', () => {
+    const error = new Error('write EPROTO certificate verify failed');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 

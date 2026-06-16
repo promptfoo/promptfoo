@@ -529,6 +529,29 @@ describe('ReplicateModerationProvider', () => {
     expect(result.flags).toEqual([]);
   });
 
+  it('should forward token usage from the underlying completion', async () => {
+    // LlamaGuard moderation runs as a chat completion, so the underlying call
+    // reports token usage; callModerationApi must propagate it to the matcher.
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'unsafe\nS1',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callModerationApi('unsafe prompt', 'unsafe response');
+    expect(result.flags).toHaveLength(1);
+    expect(result.tokenUsage).toEqual(createEmptyTokenUsage());
+  });
+
   it('should handle unsafe content with categories', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {

@@ -106,6 +106,9 @@ export const handleModeration = async ({
     pass,
     score,
     reason: moderationResult.reason,
+    // Forward token usage from the matcher so moderation costs are aggregated
+    // into assertion metrics. `inverse` flips pass/score, not token accounting.
+    ...(moderationResult.tokensUsed ? { tokensUsed: moderationResult.tokensUsed } : {}),
     assertion,
   };
 };
