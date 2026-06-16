@@ -16,6 +16,15 @@ export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
   return new Map();
 }
 
+function getUploadCacheKey(hash: string, context: ShareBlobUploadContext): string {
+  return JSON.stringify({
+    hash,
+    remoteEvalId: context.remoteEvalId,
+    promptIdx: context.promptIdx ?? null,
+    testIdx: context.testIdx ?? null,
+  });
+}
+
 async function uploadAuthorizedBlob(
   hash: string,
   context: ShareBlobUploadContext,
@@ -60,12 +69,14 @@ function uploadBlobForShare(
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
 ): Promise<boolean> {
-  let pending = cache.get(hash);
+  const cacheKey = getUploadCacheKey(hash, context);
+  let pending = cache.get(cacheKey);
   if (!pending) {
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
-    // repeated references to the same hash share one authorization check and one upload.
+    // repeated references to the same blob within one result row share one
+    // authorization check and one upload without collapsing distinct row provenance.
     pending = uploadAuthorizedBlob(hash, context);
-    cache.set(hash, pending);
+    cache.set(cacheKey, pending);
   }
   return pending;
 }
