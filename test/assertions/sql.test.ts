@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleIsSql } from '../../src/assertions/sql';
+import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -497,5 +497,34 @@ describe('is-sql assertion', () => {
       expect(result.reason).toContain('SQL references unauthorized table(s)');
       expect(result.reason).toContain('select::null::posts');
     });
+  });
+});
+
+describe('contains-sql assertion', () => {
+  const fence = '```';
+
+  it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
+    // Before the fix, the [^`]+ fence regex could not contain backticks, so this
+    // valid MySQL (backtick-quoted identifiers) failed to extract and fell through
+    // to validating the whole fenced string (including the fences) -> failure.
+    const outputString = `Here is the query:\n${fence}sql\nSELECT \`id\` FROM \`users\`;\n${fence}`;
+    const result: GradingResult = await handleContainsSql({
+      assertion: { type: 'contains-sql' },
+      renderedValue: undefined,
+      outputString,
+      inverse: false,
+    } as AssertionParams);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should still extract a plain fenced SQL block', async () => {
+    const outputString = `${fence}sql\nSELECT id, name FROM users\n${fence}`;
+    const result: GradingResult = await handleContainsSql({
+      assertion: { type: 'contains-sql' },
+      renderedValue: undefined,
+      outputString,
+      inverse: false,
+    } as AssertionParams);
+    expect(result.pass).toBe(true);
   });
 });

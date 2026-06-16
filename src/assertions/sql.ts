@@ -150,7 +150,11 @@ export const handleIsSql = async ({
 export const handleContainsSql = async (
   assertionParams: AssertionParams,
 ): Promise<GradingResult> => {
-  const match = coerceString(assertionParams.outputString).match(/```(?:sql)?([^`]+)```/);
+  // Match a fenced code block. Use a non-greedy [\s\S]*? body (not [^`]+) so the
+  // SQL can contain backtick-quoted identifiers (e.g. MySQL SELECT `id` FROM
+  // `users`) — the single backticks inside won't be confused with the closing
+  // triple-backtick fence.
+  const match = coerceString(assertionParams.outputString).match(/```(?:sql)?\s*([\s\S]*?)```/i);
   if (match) {
     const sqlCode = match[1].trim();
     return handleIsSql({ ...assertionParams, outputString: sqlCode });
