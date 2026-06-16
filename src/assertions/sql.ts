@@ -3,6 +3,34 @@ import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+const SELECT_MODIFIER_PATTERN =
+  '(?:all|distinct(?:row)?|high_priority|straight_join|sql_(?:big_result|buffer_result|cache|calc_found_rows|no_cache|small_result))';
+const IDENTIFIER_PATTERN = '[A-Za-z_][A-Za-z0-9_]*';
+const LIKELY_MISSING_COMMA_PATTERN = new RegExp(
+  String.raw`\bselect\s+(?:${SELECT_MODIFIER_PATTERN}\s+)*(?!${SELECT_MODIFIER_PATTERN}\b)${IDENTIFIER_PATTERN}\s+${IDENTIFIER_PATTERN}\s+from\b`,
+  'i',
+);
+type SqlParserConstructor = typeof import('node-sql-parser').Parser;
+type SqlParserModule = {
+  Parser?: SqlParserConstructor;
+  default?: { Parser?: SqlParserConstructor };
+};
+
+async function createSqlParser() {
+  let sqlParserModule: SqlParserModule;
+  try {
+    sqlParserModule = await import('node-sql-parser');
+  } catch {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  }
+
+  const SqlParser = sqlParserModule.Parser ?? sqlParserModule.default?.Parser;
+  if (!SqlParser) {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  }
+  return new SqlParser();
+}
+
 export const handleIsSql = async ({
   assertion,
   renderedValue,
@@ -29,11 +57,7 @@ export const handleIsSql = async ({
     throw new Error('is-sql assertion must have a object value.');
   }
 
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
-    throw new Error('node-sql-parser is not installed. Please install it first');
-  });
-
-  const sqlParser = new SqlParser();
+  const sqlParser = await createSqlParser();
 
   const opt: sqlParserOption = { database: databaseType };
 
@@ -41,20 +65,19 @@ export const handleIsSql = async ({
 
   // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
+  if (normalizedSql.length === 0) {
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
   if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
   }
-  // Heuristic for a missing comma between columns (e.g. `SELECT a b FROM t`),
-  // which node-sql-parser silently accepts as implicit aliasing. Exclude leading
-  // SELECT modifiers (DISTINCT, ALL, etc.) from the first identifier slot so that
-  // valid statements like `SELECT DISTINCT name FROM users` are not flagged.
-  if (
-    /select\s+(?!(?:distinct|distinctrow|all|high_priority|straight_join|sql_no_cache|sql_cache|sql_calc_found_rows|sql_small_result|sql_big_result|sql_buffer_result)\b)[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(
-      normalizedSql,
-    )
-  ) {
+  // node-sql-parser accepts a missing comma as implicit aliasing. Ignore leading
+  // SELECT modifiers, then check the first two column tokens.
+  if (LIKELY_MISSING_COMMA_PATTERN.test(normalizedSql)) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleIsSql } from '../../src/assertions/sql';
+import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -27,36 +27,83 @@ describe('is-sql assertion', () => {
       });
     });
 
-    it('should pass for valid SELECT DISTINCT (not flagged as a missing-comma typo)', async () => {
-      // Before the fix, the missing-comma heuristic treated "DISTINCT name" as
-      // two identifiers and forced a failure for this valid statement.
-      for (const outputString of [
-        'SELECT DISTINCT name FROM users',
-        'select distinct id from users',
-      ]) {
-        const result: GradingResult = await handleIsSql({
-          assertion,
-          renderedValue: undefined,
-          outputString,
-          inverse: false,
-        } as AssertionParams);
-        expect(result).toEqual({
-          assertion,
-          pass: true,
-          reason: 'Assertion passed',
-          score: 1,
-        });
-      }
-    });
-
-    it('should still fail a likely missing comma between columns (SELECT a b FROM t)', async () => {
+    it.each([
+      'SELECT DISTINCT name FROM users',
+      'select distinct id from users',
+      'SELECT SQL_NO_CACHE name FROM users',
+      'SELECT DISTINCT SQL_NO_CACHE name FROM users',
+    ])('should pass valid SELECT modifiers: %s', async (outputString) => {
       const result: GradingResult = await handleIsSql({
         assertion,
         renderedValue: undefined,
-        outputString: 'SELECT a b FROM t',
+        outputString,
         inverse: false,
       } as AssertionParams);
-      expect(result.pass).toBe(false);
+      expect(result).toEqual({
+        assertion,
+        pass: true,
+        reason: 'Assertion passed',
+        score: 1,
+      });
+    });
+
+    it('should pass a quoted column after DISTINCT', async () => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'PostgreSQL' },
+        outputString: 'SELECT DISTINCT "display name" FROM users',
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      'SELECT a b FROM t',
+      'SELECT DISTINCT first_name last_name FROM employees',
+      'SELECT SQL_NO_CACHE first_name last_name FROM employees',
+      'SELECT DISTINCTIVE name FROM users',
+    ])('should fail a likely missing comma between columns: %s', async (outputString) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
+    it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
+    it('should validate SQL extracted from a fenced response', async () => {
+      const containsSqlAssertion: Assertion = { type: 'contains-sql' };
+      const result = await handleContainsSql({
+        assertion: containsSqlAssertion,
+        renderedValue: undefined,
+        outputString: 'Result:\n```sql\nSELECT DISTINCT name FROM users\n```',
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        assertion: containsSqlAssertion,
+        pass: true,
+        reason: 'Assertion passed',
+        score: 1,
+      });
     });
 
     it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
