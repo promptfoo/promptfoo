@@ -8,6 +8,8 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
+// Keep this parser local: importing the assertion handler would widen the
+// legacy-runtime -> core dependency edge beyond its architecture baseline.
 interface ParsedAssertionField {
   field: string;
   nextIndex: number;
