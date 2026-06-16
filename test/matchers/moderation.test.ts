@@ -10,6 +10,18 @@ describe('matchesModeration', () => {
     flags: [],
     tokenUsage: { total: 5, prompt: 2, completion: 3 },
   };
+  const normalizedTokenUsage = {
+    total: 5,
+    prompt: 2,
+    completion: 3,
+    cached: 0,
+    numRequests: 0,
+    completionDetails: {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  };
   let restoreProcessEnv = () => {};
 
   function setTestEnv(overrides: Record<string, string | undefined> = {}) {
@@ -75,18 +87,7 @@ describe('matchesModeration', () => {
       assistantResponse: 'test response',
     });
 
-    expect(result.tokensUsed).toEqual({
-      total: 5,
-      prompt: 2,
-      completion: 3,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    });
+    expect(result.tokensUsed).toEqual(normalizedTokenUsage);
   });
 
   it('should fall back to Replicate when only REPLICATE_API_KEY is present', async () => {
@@ -126,6 +127,7 @@ describe('matchesModeration', () => {
     setTestEnv({ OPENAI_API_KEY: 'test-key' });
     vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
       error: 'provider unavailable',
+      tokenUsage: mockModerationResponse.tokenUsage,
     });
 
     await expect(
@@ -137,6 +139,7 @@ describe('matchesModeration', () => {
       pass: false,
       score: 0,
       reason: 'Moderation API error: provider unavailable',
+      tokensUsed: normalizedTokenUsage,
       // Tagged so inverse-aware callers (not-moderation) don't flip a transport
       // error into a spurious pass.
       metadata: { graderError: true },

@@ -381,9 +381,8 @@ export class ReplicateModerationProvider
   async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
     try {
       const response = await this.callApi(`Human: ${prompt}\n\nAssistant: ${assistant}`);
-      // LlamaGuard moderation runs as a chat completion, so the underlying call
-      // reports token usage. Forward it so callers (matchesModeration) can
-      // aggregate moderation costs into assertion metrics.
+      // LlamaGuard moderation runs as a chat completion. Preserve any token usage
+      // reported by that provider response for downstream assertion metrics.
       const { tokenUsage } = response;
       if (response.error) {
         return { error: response.error, ...(tokenUsage ? { tokenUsage } : {}) };

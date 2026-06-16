@@ -95,20 +95,16 @@ export const handleModeration = async ({
     return { ...moderationResult, assertion };
   }
 
-  let { pass, score } = moderationResult;
   // `not-moderation` asserts the opposite outcome (e.g. that the output WAS
   // flagged). Flip pass/score for the inverse case, mirroring handleClassifier.
-  if (inverse) {
-    pass = !pass;
-    score = 1 - score;
-  }
+  const pass = inverse ? !moderationResult.pass : moderationResult.pass;
+  const score = inverse ? 1 - moderationResult.score : moderationResult.score;
   return {
+    // Preserve provider-reported moderation token usage and any matcher metadata;
+    // inversion changes only the verdict.
+    ...moderationResult,
     pass,
     score,
-    reason: moderationResult.reason,
-    // Forward token usage from the matcher so moderation costs are aggregated
-    // into assertion metrics. `inverse` flips pass/score, not token accounting.
-    ...(moderationResult.tokensUsed ? { tokensUsed: moderationResult.tokensUsed } : {}),
     assertion,
   };
 };

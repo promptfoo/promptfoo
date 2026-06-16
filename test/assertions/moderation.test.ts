@@ -51,6 +51,14 @@ describe('handleModeration', () => {
     output: 'output',
     providerResponse: { output: 'output' },
   };
+  const tokensUsed = {
+    total: 5,
+    prompt: 2,
+    completion: 3,
+    cached: 0,
+    numRequests: 1,
+    completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+  };
 
   beforeEach(() => {
     mockedMatchesModeration.mockReset();
@@ -145,16 +153,7 @@ describe('handleModeration', () => {
   });
 
   it('should forward matcher token usage on a clean (pass) result', async () => {
-    // Regression guard: the matcher reports token usage, and the handler must
-    // forward it so the evaluator can aggregate moderation costs into metrics.
-    const tokensUsed = {
-      total: 5,
-      prompt: 2,
-      completion: 3,
-      cached: 0,
-      numRequests: 1,
-      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-    };
+    // Preserve provider-reported moderation usage in assertion metrics.
     mockedMatchesModeration.mockResolvedValue({
       pass: true,
       score: 1,
@@ -177,14 +176,6 @@ describe('handleModeration', () => {
   });
 
   it('should forward matcher token usage on a flagged (fail) result', async () => {
-    const tokensUsed = {
-      total: 8,
-      prompt: 5,
-      completion: 3,
-      cached: 0,
-      numRequests: 1,
-      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-    };
     mockedMatchesModeration.mockResolvedValue({
       pass: false,
       score: 0,
@@ -208,14 +199,6 @@ describe('handleModeration', () => {
 
   it('should preserve token usage when flipping pass/score for not-moderation (inverse)', async () => {
     // `inverse` flips pass/score but must not drop token accounting.
-    const tokensUsed = {
-      total: 8,
-      prompt: 5,
-      completion: 3,
-      cached: 0,
-      numRequests: 1,
-      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-    };
     mockedMatchesModeration.mockResolvedValue({
       pass: false,
       score: 0,
@@ -246,6 +229,7 @@ describe('handleModeration', () => {
       pass: false,
       score: 0,
       reason: 'Moderation API error: provider unavailable',
+      tokensUsed,
       metadata: { graderError: true },
     });
 
@@ -259,6 +243,7 @@ describe('handleModeration', () => {
       pass: false,
       score: 0,
       reason: 'Moderation API error: provider unavailable',
+      tokensUsed,
       metadata: { graderError: true },
       assertion: mockAssertion,
     });
