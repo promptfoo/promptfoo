@@ -384,13 +384,57 @@ describe('WatsonXProvider', () => {
       const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
       expect(cacheKey).not.toContain(config.apiKey);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(cache.set).toHaveBeenCalledWith(cacheKey, JSON.stringify(response));
+    });
+
+    it.each([
+      {
+        name: 'missing token counts',
+        usage: {},
+        expected: { total: 0, prompt: 0, completion: 0 },
+      },
+      {
+        name: 'zero completion tokens',
+        usage: { input_token_count: 5, generated_token_count: 0 },
+        expected: { total: 5, prompt: 5, completion: 0 },
+      },
+      {
+        name: 'zero prompt tokens',
+        usage: { input_token_count: 0, generated_token_count: 7 },
+        expected: { total: 7, prompt: 0, completion: 7 },
+      },
+    ])('should handle $name with caching disabled', async ({ usage, expected }) => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [{ generated_text: 'Boundary response', ...usage }],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache = {
+        get: vi.fn(),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as any);
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+
+      const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
+
+      expect(response.tokenUsage).toEqual(expected);
+      expect(response.cost).toBeUndefined();
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
     });
 
     it('should include configured auth mode in cache keys without exposing secrets', async () => {
@@ -762,7 +806,7 @@ describe('WatsonXProvider', () => {
       const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
@@ -888,6 +932,67 @@ describe('WatsonXProvider', () => {
       // Output: generated_token_count = 100 tokens * $0.106/1M = 0.0000106
       // Total expected: 0.0000159
       expect(response.cost).toBeCloseTo(0.0000159, 10);
+    });
+
+    it.each([
+      {
+        name: 'zero completion tokens',
+        inputTokens: 50,
+        generatedTokens: 0,
+        expectedCost: 0.0000053,
+      },
+      {
+        name: 'zero input tokens',
+        inputTokens: 0,
+        generatedTokens: 100,
+        expectedCost: 0.0000106,
+      },
+      {
+        name: 'missing token counts',
+        inputTokens: undefined,
+        generatedTokens: undefined,
+        expectedCost: undefined,
+      },
+    ])('should calculate cost with $name', async ({
+      inputTokens,
+      generatedTokens,
+      expectedCost,
+    }) => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: MODEL_ID,
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Boundary response',
+                generated_token_count: generatedTokens,
+                input_token_count: inputTokens,
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as any);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const response = await new WatsonXProvider(MODEL_ID, {
+        config: configWithModelId,
+      }).callApi(prompt);
+
+      if (expectedCost === undefined) {
+        expect(response.cost).toBeUndefined();
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        expect(response.cost).toBeCloseTo(expectedCost, 10);
+      }
     });
 
     it('should calculate cost correctly for class_9 tier', async () => {

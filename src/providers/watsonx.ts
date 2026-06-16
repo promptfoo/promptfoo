@@ -126,8 +126,8 @@ function convertResponse(response: z.infer<typeof TextGenResponseSchema>): Provi
   // watsonx reports input (prompt) and generated (completion) token counts
   // separately; the total is their sum. See IBM docs:
   // https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-tokens
-  const promptTokens = firstResult.input_token_count || 0;
-  const completionTokens = firstResult.generated_token_count || 0;
+  const promptTokens = firstResult.input_token_count ?? 0;
+  const completionTokens = firstResult.generated_token_count ?? 0;
 
   const tokenUsage: Partial<TokenUsage> = {
     total: promptTokens + completionTokens,
@@ -166,6 +166,7 @@ function sortObject(obj: any): any {
 
 const WATSONX_SECRET_FIELD_NAMES = new Set(['apiKey', 'apiBearerToken']);
 const WATSONX_CACHE_HASH_KEY = 'promptfoo:watsonx:cache-key:v1';
+const WATSONX_TEXT_GENERATION_CACHE_VERSION = 'v2';
 
 function hashWatsonXCacheValue(value: unknown): string {
   return crypto
@@ -297,7 +298,7 @@ async function calculateWatsonXCost(
   promptTokens?: number,
   completionTokens?: number,
 ): Promise<number | undefined> {
-  if (!promptTokens || !completionTokens) {
+  if (promptTokens == null || completionTokens == null) {
     return undefined;
   }
 
@@ -540,7 +541,7 @@ export class WatsonXProvider implements ApiProvider {
     const cache = getCache();
     const configHash = generateConfigHash(config);
     const authHash = this.getAuthCacheHash();
-    const cacheKey = `watsonx:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
+    const cacheKey = `watsonx:${WATSONX_TEXT_GENERATION_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
       const cachedResponse = await cache.get(cacheKey);
@@ -612,13 +613,14 @@ export class WatsonXProvider implements ApiProvider {
       }
 
       const textGenResponse = parsedResponse.data;
+      const textGenResult = textGenResponse.results[0];
       const providerResponse = convertResponse(textGenResponse);
 
       providerResponse.cost = await calculateWatsonXCost(
         this.modelName,
         config,
-        providerResponse.tokenUsage?.prompt,
-        providerResponse.tokenUsage?.completion,
+        textGenResult.input_token_count,
+        textGenResult.generated_token_count,
       );
 
       if (isCacheEnabled()) {
