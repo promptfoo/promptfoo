@@ -266,17 +266,12 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           assertionConfigs[targetIndex] = {};
         }
 
-        // Parse the value based on the config key
-        let parsedValue: string | number = value.trim();
-        if (configKey === 'threshold') {
-          const parsedThreshold = parseFiniteNumber(value);
-          if (parsedThreshold === undefined) {
-            logger.error(
-              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-            );
-            throw new Error(`Invalid numeric value for ${configKey}`);
-          }
-          parsedValue = parsedThreshold;
+        const parsedValue = parseFiniteNumber(value);
+        if (parsedValue === undefined) {
+          logger.error(
+            `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+          );
+          throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
