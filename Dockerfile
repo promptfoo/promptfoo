@@ -5,8 +5,11 @@ FROM node:24.16.0-alpine AS base
 RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
-# Make Python version configurable with a default of 3.12
-ARG PYTHON_VERSION=3.12
+# Make Python version configurable with a default matching the Alpine base.
+# `node:24.16.0-alpine` + `apk upgrade` now ships Python 3.14, and py3-pip /
+# py3-setuptools depend on `python3~3.14`, so pinning an older minor (e.g. 3.12)
+# makes `apk add` unsatisfiable. Keep this aligned with the base image's Python.
+ARG PYTHON_VERSION=3.14
 
 # Install Python for python providers, prompts, asserts, etc.
 RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
