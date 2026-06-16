@@ -4,5 +4,5 @@ langchain-community==0.4.1
 langchain-core==1.3.3
 langchain-openai==1.2.1
 langchain-text-splitters==1.1.2
-pypdf==6.12.0
+pypdf==6.12.2
 tqdm==4.67.3
