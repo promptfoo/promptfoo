@@ -263,24 +263,30 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Denominator (total context units): chunks if provided, otherwise the prose
-  // context segmented into sentences. A retrieved context is typically a single
-  // paragraph with no newlines; splitting on newlines alone would yield one unit,
-  // forcing the score to ~1.0 regardless of relevance.
+  // The context is segmented into "units": chunks if provided, otherwise — for a
+  // string — by line when it is already segmented (multiple non-empty lines) or by
+  // sentence when it is a single prose block. A retrieved context is typically a
+  // single paragraph with no newlines; splitting on newlines alone would yield one
+  // unit, forcing the score to ~1.0 regardless of relevance.
+  const contextIsPreSegmented =
+    Array.isArray(context) || context.split('\n').filter((line) => line.trim() !== '').length > 1;
   const contextUnits = Array.isArray(context)
     ? context.filter((chunk) => chunk.trim().length > 0)
     : splitTextIntoSentences(context);
   const totalContextUnits = contextUnits.length;
 
-  // Numerator (relevant units): the grader lists the relevant sentences/chunks one
-  // per line, so count its non-empty lines. We intentionally do NOT sentence-split
-  // the grader output — the prompt does not constrain its format, and an LLM often
-  // returns a numbered list ("1. ...\n2. ..."), where sentence-splitting would
-  // count each "1." marker as its own unit and inflate the score.
+  // Numerator (relevant units): segment the grader output into the SAME kind of
+  // units as the context so the two are comparable — by line when the context is
+  // pre-segmented (chunk array or multi-line), otherwise by sentence. The grader
+  // echoes relevant sentences verbatim; for a prose context that is continuous
+  // text with no newlines, so counting by line alone would treat a multi-sentence
+  // answer as one unit and undercount relevance (e.g. echoing the whole context
+  // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
+  const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
   const relevantSentences = insufficientInformation
     ? []
-    : [...new Set(splitIntoSentences(resp.output))];
+    : [...new Set(segmentRelevant(resp.output))];
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 

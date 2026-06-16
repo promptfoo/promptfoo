@@ -74,6 +74,32 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.metadata?.relevantSentenceCount).toBe(1);
   });
 
+  it('should count multiple relevant sentences in a prose grader response (single-line context)', async () => {
+    // For a single-paragraph prose context the grader echoes the relevant sentences
+    // verbatim as continuous prose (no newlines). The numerator must be segmented
+    // the same way as the denominator (by sentence here), otherwise a multi-sentence
+    // answer counts as a single relevant unit and undercounts relevance — e.g.
+    // echoing two of three sentences scored 1/3 instead of 2/3.
+    const input = 'What is the capital of France?';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const threshold = 0.5;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'Paris is the capital of France. France is in Europe.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // 2 relevant sentences out of 3 → 2/3 ≈ 0.67 (was 1/3 ≈ 0.33 when the prose
+    // answer was counted as a single line).
+    expect(result.score).toBeCloseTo(0.67, 2);
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+  });
+
   it('should still segment prose when the context carries an incidental trailing newline', async () => {
     // Regression: a context loaded from a file/template/YAML block scalar almost
     // always carries a trailing newline. Keying segmentation off the mere presence
