@@ -64,7 +64,32 @@ describe('matchesModeration', () => {
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
 
-  it('should fallback to Replicate when only REPLICATE_API_KEY is present', async () => {
+  it('should propagate token usage returned by moderation provider', async () => {
+    setTestEnv({ OPENAI_API_KEY: 'test-key' });
+    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue(
+      mockModerationResponse,
+    );
+
+    const result = await matchesModeration({
+      userPrompt: 'test prompt',
+      assistantResponse: 'test response',
+    });
+
+    expect(result.tokensUsed).toEqual({
+      total: 5,
+      prompt: 2,
+      completion: 3,
+      cached: 0,
+      numRequests: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+    });
+  });
+
+  it('should fall back to Replicate when only REPLICATE_API_KEY is present', async () => {
     setTestEnv({ REPLICATE_API_KEY: 'test-key' });
     const replicateSpy = vi
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')

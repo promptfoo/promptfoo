@@ -207,6 +207,7 @@ describe('handleSimilar', () => {
 
     expect(result.pass).toBe(false);
     expect(result.reason).toBe('None of the provided values met the similarity threshold');
+    expect(result.score).toBe(0);
   });
 
   it('should report the best (highest) score when no array values meet threshold', async () => {
@@ -352,10 +353,22 @@ describe('handleSimilar', () => {
 
     const result = await handleSimilar({
       assertion: { type: 'similar', value: ['A', 'B', 'C'], threshold: 0.75 },
+      baseType: 'similar' as any,
       renderedValue: ['A', 'B', 'C'],
       outputString: 'a totally different response',
       inverse: true,
       test: { description: 'test', vars: {}, assert: [], options: {} },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: { description: 'test', vars: {}, assert: [], options: {} },
+        logProbs: undefined,
+        // @ts-ignore
+        provider: createMockProvider({ response: {} }),
+        providerResponse: { output: 'a totally different response' },
+      },
+      output: 'a totally different response',
+      providerResponse: { output: 'a totally different response' },
     } as any);
 
     expect(result.pass).toBe(true);

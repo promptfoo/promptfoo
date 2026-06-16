@@ -4,6 +4,7 @@ import { loadApiProvider } from '../providers/index';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
 import { getAndCheckProvider } from './providers';
+import { normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -45,6 +46,7 @@ export async function matchesModeration(
   invariant(moderationProvider, 'Moderation provider must be defined');
 
   const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  const tokensUsed = resp.tokenUsage ? normalizeMatcherTokenUsage(resp.tokenUsage) : undefined;
   if (resp.error) {
     // A provider/transport error is not evidence about the content. Tag it as a
     // grader failure so inverse-aware callers (`not-moderation`) propagate it
@@ -53,6 +55,7 @@ export async function matchesModeration(
       pass: false,
       score: 0,
       reason: `Moderation API error: ${resp.error}`,
+      ...(tokensUsed ? { tokensUsed } : {}),
       metadata: { graderError: true },
     };
   }
@@ -63,6 +66,7 @@ export async function matchesModeration(
       pass: true,
       score: 1,
       reason: 'No moderation flags detected',
+      ...(tokensUsed ? { tokensUsed } : {}),
     };
   }
   const filteredFlags =
@@ -74,6 +78,7 @@ export async function matchesModeration(
       reason: `Moderation flags detected: ${filteredFlags
         .map((flag) => flag.description)
         .join(', ')}`,
+      ...(tokensUsed ? { tokensUsed } : {}),
     };
   }
 
@@ -81,5 +86,6 @@ export async function matchesModeration(
     pass: true,
     score: 1,
     reason: 'No relevant moderation flags detected',
+    ...(tokensUsed ? { tokensUsed } : {}),
   };
 }

@@ -151,6 +151,11 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case ECONNRESET messages', () => {
+    const error = new Error('ECONNRESET');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for EPIPE errors', () => {
     const error = new Error('Broken pipe') as Error & { code?: string };
     error.code = 'EPIPE';
@@ -162,13 +167,43 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case socket hang up errors', () => {
+    const error = new Error('Socket Hang Up');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for bad record mac errors', () => {
     const error = new Error('bad record mac');
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case bad record mac errors', () => {
+    const error = new Error('Bad Record MAC');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('returns true for standalone eproto errors', () => {
+    const error = new Error('eproto');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns false for permanent TLS config errors', () => {
     const error = new Error('eproto self signed certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for unable to verify TLS errors', () => {
+    const error = new Error('unable to verify the first certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for unknown ca TLS errors', () => {
+    const error = new Error('tlsv1 alert unknown ca');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for certificate-related TLS errors', () => {
+    const error = new Error('certificate verify failed');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
