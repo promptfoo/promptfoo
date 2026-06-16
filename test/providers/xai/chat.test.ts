@@ -640,6 +640,17 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
     });
 
+    it('clamps cached prompt tokens to valid usage boundaries', () => {
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+
+      // A full cache hit bills every prompt token at the reduced rate.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 1000)).toBeCloseTo(0.00825, 10);
+      // Inconsistent provider usage cannot discount more tokens than the prompt contains.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 2000)).toBeCloseTo(0.00825, 10);
+      // Invalid negative usage falls back to the undiscounted input cost.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
@@ -908,6 +919,57 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('should apply cache-read pricing from normalized token usage', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Cached response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+            prompt_tokens_details: { cached_tokens: 800 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: {
+          apiKey: 'test-key',
+          inputCost: 3e-6,
+          outputCost: 15e-6,
+          cacheReadCost: 0.75e-6,
+        } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(800);
+      expect(result.cost).toBeCloseTo(0.0087, 10);
+    });
+
+    it('should leave cost undefined when usage is missing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Response without usage' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Response without usage');
+      expect(result.cost).toBeUndefined();
     });
 
     it('does not double-count reasoning tokens already included in completion tokens', async () => {
