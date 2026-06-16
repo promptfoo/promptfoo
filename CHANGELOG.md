@@ -6,13 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.121.17](https://github.com/promptfoo/promptfoo/compare/0.121.16...0.121.17) (2026-06-16)
 
-
 ### Bug Fixes
 
-* **docker:** bump pinned Python to 3.14 to match the Alpine base image ([#9769](https://github.com/promptfoo/promptfoo/issues/9769)) ([24fc5be](https://github.com/promptfoo/promptfoo/commit/24fc5be1ae645cbe6ecf0f06238ea6a360ad7866))
-* **docker:** unpin Python minor by default so Alpine drift can't break the build ([#9771](https://github.com/promptfoo/promptfoo/issues/9771)) ([c69ef40](https://github.com/promptfoo/promptfoo/commit/c69ef40c611c7b6b83b5e6118c7907e411f0d07b))
-* **matchers:** drop stranded list markers in RAGAS context-relevance segmentation ([#9767](https://github.com/promptfoo/promptfoo/issues/9767)) ([b06eb88](https://github.com/promptfoo/promptfoo/commit/b06eb885191ec47e7b5eada1d89c00d9d304949c))
-* **sanitizer:** stop over-redacting benign url values that mention a credential keyword ([#9764](https://github.com/promptfoo/promptfoo/issues/9764)) ([77abc5e](https://github.com/promptfoo/promptfoo/commit/77abc5e6131191128b4ecb3de41a6cceae5b0d65))
+- **docker:** bump pinned Python to 3.14 to match the Alpine base image ([#9769](https://github.com/promptfoo/promptfoo/issues/9769)) ([24fc5be](https://github.com/promptfoo/promptfoo/commit/24fc5be1ae645cbe6ecf0f06238ea6a360ad7866))
+- **docker:** unpin Python minor by default so Alpine drift can't break the build ([#9771](https://github.com/promptfoo/promptfoo/issues/9771)) ([c69ef40](https://github.com/promptfoo/promptfoo/commit/c69ef40c611c7b6b83b5e6118c7907e411f0d07b))
+- **matchers:** drop stranded list markers in RAGAS context-relevance segmentation ([#9767](https://github.com/promptfoo/promptfoo/issues/9767)) ([b06eb88](https://github.com/promptfoo/promptfoo/commit/b06eb885191ec47e7b5eada1d89c00d9d304949c))
+- **sanitizer:** stop over-redacting benign url values that mention a credential keyword ([#9764](https://github.com/promptfoo/promptfoo/issues/9764)) ([77abc5e](https://github.com/promptfoo/promptfoo/commit/77abc5e6131191128b4ecb3de41a6cceae5b0d65))
 
 ## [0.121.16](https://github.com/promptfoo/promptfoo/compare/0.121.15...0.121.16) (2026-06-16)
 
