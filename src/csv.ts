@@ -1,4 +1,5 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
+import { parseCommaSeparatedValues } from './assertions/contains';
 import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
@@ -86,7 +87,7 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value ? value.split(',').map((s) => s.trim()) : value,
+        value: value ? parseCommaSeparatedValues(value) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
