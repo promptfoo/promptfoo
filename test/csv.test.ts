@@ -347,16 +347,20 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it('throws on non-numeric threshold values', () => {
+    it.each([
+      'not-a-number',
+      '0abc',
+      '0,8',
+    ])('throws on invalid threshold value %s', (thresholdValue) => {
       const key = '__config:__expected1:threshold';
       const row: CsvRow = {
         __expected1: 'similar:foo',
-        [key]: 'not-a-number',
+        [key]: thresholdValue,
       } as any;
 
       expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
       expect(logger.error).toHaveBeenCalledWith(
-        'Invalid numeric value "not-a-number" for config key "threshold" in column "__config:__expected1:threshold"',
+        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
       );
     });
   });
@@ -377,6 +381,8 @@ describe('testCaseFromCsvRow', () => {
     ['empty', ''],
     ['non-numeric', 'abc'],
     ['whitespace', '   '],
+    ['numeric prefix', '0abc'],
+    ['comma decimal', '0,8'],
   ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
     const row: CsvRow = {
       __expected: 'equals:ok',

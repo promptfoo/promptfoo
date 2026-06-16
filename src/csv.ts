@@ -21,11 +21,16 @@ function getAssertionRegex(): RegExp {
 
 /**
  * Parse a CSV cell into a finite number, returning `undefined` when the cell is empty
- * or non-numeric. Used for threshold fields so that a meaningful `0` is preserved while
- * a blank/garbage cell is treated as "unset" rather than leaking `NaN` into the TestCase.
+ * or not a complete numeric literal. Used for threshold fields so that a meaningful `0`
+ * is preserved while a blank/garbage cell is treated as "unset" rather than leaking
+ * `NaN` into the TestCase.
  */
 function parseFiniteNumber(value: string | undefined): number | undefined {
-  const parsed = Number.parseFloat(value ?? '');
+  const trimmed = value?.trim() ?? '';
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
@@ -264,13 +269,14 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         // Parse the value based on the config key
         let parsedValue: string | number = value.trim();
         if (configKey === 'threshold') {
-          parsedValue = Number.parseFloat(value);
-          if (!Number.isFinite(parsedValue)) {
+          const parsedThreshold = parseFiniteNumber(value);
+          if (parsedThreshold === undefined) {
             logger.error(
               `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
             );
             throw new Error(`Invalid numeric value for ${configKey}`);
           }
+          parsedValue = parsedThreshold;
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
