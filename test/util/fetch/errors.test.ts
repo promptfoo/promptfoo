@@ -8,6 +8,7 @@ import {
   formatRateLimitDetail,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
+  isAbortError,
   isConnectionError,
   isHardQuotaCode,
   isHttpRateLimitError,
@@ -30,6 +31,25 @@ function makeTerminatedError(
   const cause = Object.assign(new Error(causeMessage), { name: 'SocketError', code: causeCode });
   return Object.assign(new TypeError(message), { cause });
 }
+
+describe('isAbortError', () => {
+  it('returns true for AbortError and AbortException', () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    const abortException = new Error('aborted');
+    abortException.name = 'AbortException';
+    expect(isAbortError(abortError)).toBe(true);
+    expect(isAbortError(abortException)).toBe(true);
+  });
+
+  it('returns false for other errors and non-errors', () => {
+    expect(isAbortError(new TypeError('terminated'))).toBe(false);
+    expect(isAbortError(new Error('boom'))).toBe(false);
+    expect(isAbortError({ name: 'AbortError' })).toBe(false);
+    expect(isAbortError('AbortError')).toBe(false);
+    expect(isAbortError(undefined)).toBe(false);
+  });
+});
 
 describe('isNonTransientHttpStatus', () => {
   it('returns true for 401 Unauthorized', () => {

@@ -441,3 +441,12 @@ export function describeFetchError(error: unknown): string {
   const base = formatFetchError(error);
   return isConnectionError(error) ? `${base}\n${CONNECTION_BLOCK_HINT}` : base;
 }
+
+/**
+ * True when an error represents an aborted/cancelled operation (an AbortController
+ * signal firing). Callers use this to suppress expected cancellation rather than
+ * treating it as a real failure, so the abort's `.name` must be preserved upstream.
+ */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
