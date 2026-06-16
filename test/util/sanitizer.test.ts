@@ -1357,6 +1357,11 @@ describe('sanitizeObject url-keyed fields', () => {
     expect(sanitizeObject({ vars: { url: '/relative/path' } })).toEqual({
       vars: { url: '/relative/path' },
     });
+    // A `url` value that only mentions a credential keyword (here `token`) is not a
+    // secret and must survive — substring matching would wrongly redact it.
+    expect(sanitizeObject({ vars: { url: 'my-tokenizer-model' } })).toEqual({
+      vars: { url: 'my-tokenizer-model' },
+    });
   });
 
   it('still redacts url values that carry credentials', () => {
@@ -1427,9 +1432,29 @@ describe('sanitizeUrl', () => {
     });
 
     it('should redact unparseable URLs that carry credential indicators', () => {
+      // Secret-named key (`api_key`) carrying any value: the `key=value` form scan
+      // fails closed even though the value itself is not secret-looking.
       expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
-      // `ht!tp://...` fails new URL(); the `token` indicator forces fail-closed.
+      // `ht!tp://...` fails new URL(); the `token=sk-...` form segment forces
+      // fail-closed (a secret-named key with a secret-looking value).
       expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
+    });
+
+    it('should preserve unparseable values that merely mention a credential keyword', () => {
+      // A bare keyword substring (`token`, `secret`, `sig`, `auth`) is NOT a leak —
+      // these are ordinary `url`-named var values in persisted eval results, and
+      // wholesale redaction would be silent data loss. None carries a structural
+      // credential marker (userinfo password, secret-looking value, or `key=value`).
+      for (const benign of [
+        'my-tokenizer-model',
+        'secrets/config.yaml',
+        'gpt-4-32k-token-limit',
+        'design-system',
+        'authentication-guide',
+        'signature-pad-component',
+      ]) {
+        expect(sanitizeUrl(benign)).toBe(benign);
+      }
     });
 
     it('should redact a secret-looking value under a benign key in a malformed URL', () => {

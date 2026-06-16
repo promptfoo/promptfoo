@@ -5,11 +5,16 @@ FROM node:24.16.0-alpine AS base
 RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
-# Make Python version configurable with a default of 3.12
-ARG PYTHON_VERSION=3.12
+# Python version pin. Empty by default so `apk` installs whatever python3 the
+# Alpine base ships — py3-pip/py3-setuptools depend on that exact minor, so any
+# fixed minor goes stale and makes `apk add` unsatisfiable when the base advances
+# (e.g. Alpine moving 3.12 -> 3.14 broke the release build). Self-hosters can pin a
+# specific minor for reproducibility with `--build-arg PYTHON_VERSION=3.14`.
+ARG PYTHON_VERSION=
 
-# Install Python for python providers, prompts, asserts, etc.
-RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
+# Install Python for python providers, prompts, asserts, etc. The `${VAR:+~=$VAR}`
+# expansion adds the `~=<minor>` constraint only when PYTHON_VERSION is set.
+RUN apk add --no-cache "python3${PYTHON_VERSION:+~=${PYTHON_VERSION}}" py3-pip py3-setuptools curl && \
     ln -sf python3 /usr/bin/python
 
 # Install dependencies only when needed
