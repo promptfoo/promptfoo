@@ -72,6 +72,29 @@ describe('splitTextIntoSentences', () => {
     expect(splitTextIntoSentences('Line one.\n\n\nLine two.')).toEqual(['Line one.', 'Line two.']);
   });
 
+  it('drops bare enumeration markers stranded from an inline numbered list', () => {
+    // Sentence-splitting "1. Paris ... 2. France ..." strands the "1." / "2."
+    // markers as their own segments; counting them would inflate sentence-level
+    // metrics (e.g. the RAGAS context-relevance numerator). Only real units remain.
+    expect(splitTextIntoSentences('1. Paris is the capital. 2. France is in Europe.')).toEqual([
+      'Paris is the capital.',
+      'France is in Europe.',
+    ]);
+    // A `)`-style marker on a sentence boundary is likewise dropped when stranded.
+    expect(splitTextIntoSentences('1. First fact. 2. Second fact.')).toEqual([
+      'First fact.',
+      'Second fact.',
+    ]);
+  });
+
+  it('keeps numbers that are part of a sentence, not bare markers', () => {
+    // A decimal or a number embedded in prose is content, never a stray marker.
+    expect(splitTextIntoSentences('Pi is 3.14 here. There are 42 items.')).toEqual([
+      'Pi is 3.14 here.',
+      'There are 42 items.',
+    ]);
+  });
+
   it('returns an empty array for empty or whitespace-only text', () => {
     expect(splitTextIntoSentences('')).toEqual([]);
     expect(splitTextIntoSentences('   \n  \n ')).toEqual([]);
