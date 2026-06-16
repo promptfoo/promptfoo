@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
@@ -576,5 +576,39 @@ describe('is-sql assertion', () => {
       expect(result.reason).toContain('SQL references unauthorized table(s)');
       expect(result.reason).toContain('select::null::posts');
     });
+  });
+});
+
+describe('is-sql parser loading', () => {
+  afterEach(() => {
+    vi.doUnmock('node-sql-parser');
+  });
+
+  it('should report when node-sql-parser cannot be imported', async () => {
+    vi.doMock('node-sql-parser', () => {
+      throw new Error('module unavailable');
+    });
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
+  });
+
+  it('should report when node-sql-parser has no Parser export', async () => {
+    vi.doMock('node-sql-parser', () => ({ Parser: undefined, default: {} }));
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
   });
 });
