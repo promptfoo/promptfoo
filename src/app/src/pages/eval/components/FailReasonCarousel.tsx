@@ -9,7 +9,7 @@ import MarkdownImage from './MarkdownImage';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractRenderableMarkdownImages,
-  isImageDataUrl,
+  isInlineDataImage,
   REMARK_PLUGINS,
 } from './markdown-config';
 
@@ -44,9 +44,7 @@ const FailReasonCarousel = ({
   const dataImages = useMemo(
     () =>
       currentReason.includes('![')
-        ? extractRenderableMarkdownImages(currentReason).filter((image) =>
-            isImageDataUrl(image.source),
-          )
+        ? extractRenderableMarkdownImages(currentReason).filter(isInlineDataImage)
         : [],
     [currentReason],
   );

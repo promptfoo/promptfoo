@@ -3195,6 +3195,20 @@ describe('EvalOutputCell inline image lightbox', () => {
     );
   });
 
+  it('does not force previews for reference-style data images', () => {
+    const text = ['![Preview][image]', `[image]: data:image/png;base64,${'A'.repeat(200)}`].join(
+      '\n',
+    );
+    mockResultsViewSettings.renderMarkdown = false;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...createMarkdownPreviewProps(text)} />,
+    );
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+  });
+
   it('keeps truncation when prettified JSON bypasses the image preview path', () => {
     const dataUri = `data:image/png;base64,${'A'.repeat(500)}`;
     mockResultsViewSettings.renderMarkdown = false;
@@ -3298,10 +3312,6 @@ describe('EvalOutputCell inline image lightbox', () => {
   });
 
   it.each([
-    [
-      'a full reference image',
-      '![Reference image][preview]\n\n[preview]: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-    ],
     [
       'escaped alt brackets',
       String.raw`![Preview \[nested\]](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)`,

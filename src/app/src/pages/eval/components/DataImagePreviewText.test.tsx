@@ -22,4 +22,16 @@ describe('DataImagePreviewText', () => {
     expect(container).toHaveTextContent('![Remote](https://attacker.example/collect)');
     expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
   });
+
+  it('leaves reference-style data images literal', () => {
+    const text = ['![Preview][image]', '[image]: data:image/png;base64,AA=='].join('\n');
+
+    const { container } = render(
+      <DataImagePreviewText text={text} images={extractRenderableMarkdownImages(text)} />,
+    );
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('![Preview][image]');
+    expect(container).toHaveTextContent('[image]: data:image/png;base64,AA==');
+  });
 });

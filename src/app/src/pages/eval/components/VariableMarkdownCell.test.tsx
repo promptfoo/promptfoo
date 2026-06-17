@@ -56,6 +56,19 @@ describe('VariableMarkdownCell', () => {
       expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
     });
 
+    it('does not force previews for reference-style data images', () => {
+      const value = ['![Preview][image]', `[image]: data:image/png;base64,${'A'.repeat(200)}`].join(
+        '\n',
+      );
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={40} dataImagesOnly />,
+      );
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+      expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
+    });
+
     it('renders markdown bold text', () => {
       render(<VariableMarkdownCell value="**bold text**" maxTextLength={100} />);
 

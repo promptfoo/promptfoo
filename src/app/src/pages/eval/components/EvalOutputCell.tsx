@@ -43,6 +43,7 @@ import {
   extractRenderableMarkdownImages,
   IDENTITY_URL_TRANSFORM,
   isImageDataUrl,
+  isInlineDataImage,
   REMARK_PLUGINS,
   type RenderableMarkdownImage,
 } from './markdown-config';
@@ -1467,7 +1468,7 @@ function EvalOutputCell({
     const images = normalizedText.includes('![')
       ? extractRenderableMarkdownImages(normalizedText)
       : [];
-    const renderableDataImages = images.filter((image) => isImageDataUrl(image.source));
+    const renderableDataImages = images.filter(isInlineDataImage);
     const renderedImages = renderMarkdown ? images : renderableDataImages;
 
     return {

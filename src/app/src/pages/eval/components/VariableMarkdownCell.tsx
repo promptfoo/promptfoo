@@ -7,7 +7,7 @@ import MarkdownImage from './MarkdownImage';
 import {
   extractRenderableMarkdownImages,
   IMAGE_DATA_URL_TRANSFORM,
-  isImageDataUrl,
+  isInlineDataImage,
   REMARK_PLUGINS,
 } from './markdown-config';
 import TruncatedText from './TruncatedText';
@@ -54,7 +54,7 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
     [value],
   );
   const dataImages = React.useMemo(
-    () => renderableMarkdownImages.filter((image) => isImageDataUrl(image.source)),
+    () => renderableMarkdownImages.filter(isInlineDataImage),
     [renderableMarkdownImages],
   );
   const hasRenderedImage = dataImagesOnly

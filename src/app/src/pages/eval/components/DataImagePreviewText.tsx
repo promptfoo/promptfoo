@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import MarkdownImage from './MarkdownImage';
-import { isImageDataUrl, type RenderableMarkdownImage } from './markdown-config';
+import { isInlineDataImage, type RenderableMarkdownImage } from './markdown-config';
 
 interface DataImagePreviewTextProps {
   images: RenderableMarkdownImage[];
@@ -22,7 +22,7 @@ export default function DataImagePreviewText({
 
   for (const image of images) {
     if (
-      !isImageDataUrl(image.source) ||
+      !isInlineDataImage(image) ||
       image.start < cursor ||
       image.end <= image.start ||
       image.end > text.length

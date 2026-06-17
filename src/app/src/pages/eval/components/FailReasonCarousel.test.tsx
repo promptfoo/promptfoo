@@ -96,4 +96,16 @@ describe('FailReasonCarousel', () => {
     expect(container.querySelector('a')).not.toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Actual image' })).toHaveAttribute('src', dataUri);
   });
+
+  it('does not force previews for reference-style data images', () => {
+    const reason = ['![Preview][image]', '[image]: data:image/png;base64,AA=='].join('\n');
+
+    const { container } = render(
+      <FailReasonCarousel failReasons={[reason]} renderMarkdown={false} />,
+    );
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent('![Preview][image]');
+    expect(container).toHaveTextContent('[image]: data:image/png;base64,AA==');
+  });
 });

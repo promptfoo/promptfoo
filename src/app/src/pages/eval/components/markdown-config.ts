@@ -31,13 +31,14 @@ type MarkdownImageReference = {
   alt?: string;
   end: number;
   start: number;
-} & ({ identifier: string } | { url: string });
+} & ({ identifier: string; syntax: 'reference' } | { url: string; syntax: 'inline' });
 
 export interface RenderableMarkdownImage {
   alt?: string;
   end: number;
   source: string;
   start: number;
+  syntax: 'inline' | 'reference';
 }
 
 /**
@@ -55,6 +56,10 @@ export function isImageDataUrl(url: string): boolean {
     normalizedUrl.startsWith('data:image/') ||
     normalizedUrl.startsWith('data:application/octet-stream')
   );
+}
+
+export function isInlineDataImage(image: RenderableMarkdownImage): boolean {
+  return image.syntax === 'inline' && isImageDataUrl(image.source);
 }
 
 function visitMarkdownAst(node: MarkdownAstNode, visitor: (node: MarkdownAstNode) => void): void {
@@ -92,9 +97,15 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
     }
 
     if (node.type === 'image' && node.url) {
-      images.push({ url: node.url, alt: node.alt, start, end });
+      images.push({ url: node.url, alt: node.alt, start, end, syntax: 'inline' });
     } else if (node.type === 'imageReference' && node.identifier) {
-      images.push({ identifier: node.identifier, alt: node.alt, start, end });
+      images.push({
+        identifier: node.identifier,
+        alt: node.alt,
+        start,
+        end,
+        syntax: 'reference',
+      });
     }
   });
 
@@ -107,6 +118,7 @@ export function extractRenderableMarkdownImages(markdown: string): RenderableMar
         alt: image.alt,
         start: image.start,
         end: image.end,
+        syntax: image.syntax,
       });
     }
   }
