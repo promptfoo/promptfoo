@@ -400,6 +400,16 @@ describe('WatsonXProvider', () => {
         expected: { total: 0, prompt: 0, completion: 0 },
       },
       {
+        name: 'missing completion token count',
+        usage: { input_token_count: 5 },
+        expected: { total: 5, prompt: 5, completion: 0 },
+      },
+      {
+        name: 'missing prompt token count',
+        usage: { generated_token_count: 7 },
+        expected: { total: 7, prompt: 0, completion: 7 },
+      },
+      {
         name: 'zero completion tokens',
         usage: { input_token_count: 5, generated_token_count: 0 },
         expected: { total: 5, prompt: 5, completion: 0 },
@@ -978,6 +988,18 @@ describe('WatsonXProvider', () => {
         name: 'missing token counts',
         inputTokens: undefined,
         generatedTokens: undefined,
+        expectedCost: undefined,
+      },
+      {
+        name: 'missing completion token count',
+        inputTokens: 50,
+        generatedTokens: undefined,
+        expectedCost: undefined,
+      },
+      {
+        name: 'missing input token count',
+        inputTokens: undefined,
+        generatedTokens: 100,
         expectedCost: undefined,
       },
     ])('should calculate cost with $name', async ({
