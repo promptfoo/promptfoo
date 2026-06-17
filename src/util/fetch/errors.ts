@@ -63,9 +63,15 @@ export type RateLimitKind = 'quota' | 'rate_limit';
 export interface HttpRateLimitErrorInit {
   status: number;
   statusText?: string;
-  /** Parsed `Retry-After` (or equivalent) in milliseconds, if known. */
+  /**
+   * Parsed `Retry-After` (or equivalent) in milliseconds, if known. Negative or
+   * non-numeric values are rejected (treated as absent).
+   */
   retryAfterMs?: number;
-  /** Absolute reset timestamp (ms since epoch), if known. */
+  /**
+   * Absolute reset timestamp (ms since epoch), if known. Validated independently
+   * of {@link retryAfterMs}; negative or non-numeric values are rejected.
+   */
   resetAt?: number;
   /** Body-level error code (e.g. `insufficient_quota`, `rate_limit_exceeded`). */
   code?: string;
@@ -73,6 +79,15 @@ export interface HttpRateLimitErrorInit {
   headers?: Record<string, string>;
   /** Parsed body — JSON object if parseable, else raw string. */
   body?: unknown;
+}
+
+/**
+ * Normalize a caller-supplied millisecond duration / timestamp: a non-negative
+ * number passes through; anything else (negative, `NaN`, or — for untyped
+ * callers — a non-number) maps to `undefined`.
+ */
+function normalizeNonNegativeMs(value: number | undefined): number | undefined {
+  return typeof value === 'number' && value >= 0 ? value : undefined;
 }
 
 /**
@@ -107,16 +122,11 @@ export class HttpRateLimitError extends Error {
   constructor(init: HttpRateLimitErrorInit) {
     const status = init.status;
     const statusText = init.statusText || 'Too Many Requests';
-    const retryAfterMs =
-      typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
-        ? init.retryAfterMs
-        : undefined;
-    const resetAt =
-      retryAfterMs === undefined && init.retryAfterMs !== undefined
-        ? undefined
-        : typeof init.resetAt === 'number' && init.resetAt >= 0
-          ? init.resetAt
-          : undefined;
+    // `retryAfterMs` (Retry-After) and `resetAt` (X-RateLimit-Reset) come from
+    // independent headers, so each is validated on its own merits — a malformed
+    // value in one must not discard a valid value in the other.
+    const retryAfterMs = normalizeNonNegativeMs(init.retryAfterMs);
+    const resetAt = normalizeNonNegativeMs(init.resetAt);
 
     // A hard-quota body code normally implies `kind: 'quota'`. But Azure
     // OpenAI is known to return `insufficient_quota` for per-minute

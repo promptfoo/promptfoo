@@ -348,13 +348,29 @@ describe('HttpRateLimitError', () => {
     expect(err.retryAfterMs).toBeUndefined();
   });
 
-  it('rejects resetAt metadata paired with negative retryAfterMs', () => {
+  it('keeps a valid resetAt even when retryAfterMs is negative (independent validation)', () => {
+    const resetAt = Date.now() + 30_000;
     const err = new HttpRateLimitError({
       status: 429,
       retryAfterMs: -100,
-      resetAt: Date.now() + 30_000,
+      resetAt,
     });
     expect(err.retryAfterMs).toBeUndefined();
+    expect(err.resetAt).toBe(resetAt);
+  });
+
+  it('drops a negative resetAt when retryAfterMs is valid', () => {
+    const err = new HttpRateLimitError({ status: 429, retryAfterMs: 5000, resetAt: -1 });
+    expect(err.retryAfterMs).toBe(5000);
+    expect(err.resetAt).toBeUndefined();
+  });
+
+  it('drops a non-number resetAt (e.g. string) regardless of retryAfterMs', () => {
+    // Exercises the runtime typeof guard for untyped / `any` callers.
+    const err = new HttpRateLimitError({
+      status: 429,
+      resetAt: '1700000000000' as unknown as number,
+    });
     expect(err.resetAt).toBeUndefined();
   });
 });
@@ -371,6 +387,15 @@ describe('formatRateLimitDetail', () => {
       resetAt: Date.now() + 30_000,
     });
     expect(formatRateLimitDetail(err)).toMatch(/resets in \d+s/);
+  });
+
+  it('prefers retry-after over resetAt when both are present', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: 12_000,
+      resetAt: Date.now() + 999_000,
+    });
+    expect(formatRateLimitDetail(err)).toBe(' [retry after 12s]');
   });
 
   it('returns empty string when no metadata is present', () => {
