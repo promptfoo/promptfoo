@@ -404,7 +404,7 @@ describe('assertionFromString', () => {
     );
   });
 
-  it('should create an contains-json assertion', () => {
+  it('should create a contains-json assertion', () => {
     const expected = 'contains-json';
 
     const result: Assertion = assertionFromString(expected);
@@ -709,6 +709,24 @@ describe('assertionFromString', () => {
       expect(result.type).toBe(type);
       expect(result.value).toBe('Expected output');
       expect(result.threshold).toBe(0.75);
+    }
+  });
+
+  it('should return complete assertion object structure for representative threshold-based assertion types', () => {
+    // All three genuinely consume `threshold` in their handlers (unlike e.g.
+    // starts-with, which receives the 0.75 default but ignores it), so the
+    // parsed default is meaningful for these types.
+    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
+
+    for (const type of representativeAssertions) {
+      const expected = `${type}:Expected output`;
+      const result: Assertion = assertionFromString(expected);
+
+      expect(result).toEqual({
+        type,
+        value: 'Expected output',
+        threshold: 0.75,
+      });
     }
   });
 
