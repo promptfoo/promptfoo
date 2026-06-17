@@ -293,7 +293,6 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
     return undefined;
   }
 
-  const moduleFactoryByName = findModuleFactories(file.sourceFile);
   let finding: ts.CallExpression | undefined;
 
   function visit(node: ts.Node) {
@@ -302,8 +301,10 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
     }
 
     if (isViHoistedCall(node) && node.arguments.length > 0) {
-      const callback = resolveModuleFactoryArg(node.arguments[0], moduleFactoryByName);
-      finding = findEvaluatedPersistentMockSetter(callback, { enterRootFunction: true });
+      finding = findEvaluatedPersistentMockSetter(node.arguments[0], {
+        enterRootFunction: true,
+        followSynchronousCalls: true,
+      });
       if (finding) {
         return;
       }
@@ -321,7 +322,7 @@ function findHoistedPersistentMockWithoutReset(file: HygieneFile): ts.CallExpres
 // instantiated. Class static blocks are NOT included: they execute when the
 // class declaration is evaluated (i.e. at module load), so mock setters
 // inside them DO leak across tests if not reset.
-function isFunctionLikeNode(node: ts.Node): boolean {
+function isFunctionLikeNode(node: ts.Node): node is ts.FunctionLikeDeclaration {
   return (
     ts.isArrowFunction(node) ||
     ts.isFunctionExpression(node) ||
@@ -331,6 +332,207 @@ function isFunctionLikeNode(node: ts.Node): boolean {
     ts.isSetAccessorDeclaration(node) ||
     ts.isConstructorDeclaration(node)
   );
+}
+
+type InvokableFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
+type LexicalBinding = InvokableFunction | null;
+
+function isInvokableFunction(node: ts.Node): node is InvokableFunction {
+  if (ts.isArrowFunction(node)) {
+    return true;
+  }
+  return (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && !node.asteriskToken;
+}
+
+function unwrapExpression(node: ts.Node): ts.Node {
+  let current = node;
+
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+
+  return current;
+}
+
+function getFunctionValue(node: ts.Node | undefined): InvokableFunction | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  const unwrapped = unwrapExpression(node);
+  return isInvokableFunction(unwrapped) ? unwrapped : undefined;
+}
+
+function setBinding(
+  bindings: Map<string, LexicalBinding>,
+  name: ts.BindingName,
+  value: InvokableFunction | undefined,
+) {
+  if (ts.isIdentifier(name)) {
+    bindings.set(name.text, value ?? null);
+    return;
+  }
+
+  for (const element of name.elements) {
+    if (!ts.isOmittedExpression(element)) {
+      setBinding(bindings, element.name, undefined);
+    }
+  }
+}
+
+function addVariableBindings(
+  bindings: Map<string, LexicalBinding>,
+  declarations: ts.NodeArray<ts.VariableDeclaration>,
+) {
+  for (const declaration of declarations) {
+    const value = ts.isIdentifier(declaration.name)
+      ? getFunctionValue(declaration.initializer)
+      : undefined;
+    setBinding(bindings, declaration.name, value);
+  }
+}
+
+function addImportBindings(bindings: Map<string, LexicalBinding>, statement: ts.ImportDeclaration) {
+  const clause = statement.importClause;
+  if (!clause) {
+    return;
+  }
+
+  if (clause.name) {
+    bindings.set(clause.name.text, null);
+  }
+
+  if (clause.namedBindings) {
+    if (ts.isNamespaceImport(clause.namedBindings)) {
+      bindings.set(clause.namedBindings.name.text, null);
+    } else {
+      for (const element of clause.namedBindings.elements) {
+        bindings.set(element.name.text, null);
+      }
+    }
+  }
+}
+
+function addStatementBindings(
+  bindings: Map<string, LexicalBinding>,
+  statements: ts.NodeArray<ts.Statement>,
+  includeFunctionScopedVariables: boolean,
+) {
+  for (const statement of statements) {
+    if (ts.isVariableStatement(statement)) {
+      const isBlockScoped = (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0;
+      if (includeFunctionScopedVariables || isBlockScoped) {
+        addVariableBindings(bindings, statement.declarationList.declarations);
+      }
+    } else if (ts.isFunctionDeclaration(statement) && statement.name) {
+      bindings.set(statement.name.text, isInvokableFunction(statement) ? statement : null);
+    } else if (
+      (ts.isClassDeclaration(statement) ||
+        ts.isEnumDeclaration(statement) ||
+        ts.isModuleDeclaration(statement)) &&
+      statement.name
+    ) {
+      bindings.set(statement.name.text, null);
+    } else if (ts.isImportDeclaration(statement)) {
+      addImportBindings(bindings, statement);
+    } else if (ts.isImportEqualsDeclaration(statement)) {
+      bindings.set(statement.name.text, null);
+    }
+  }
+}
+
+function addFunctionScopedVariableBindings(
+  bindings: Map<string, LexicalBinding>,
+  scope: ts.SourceFile | ts.FunctionLikeDeclaration,
+) {
+  function visit(node: ts.Node, isRoot: boolean) {
+    if (!isRoot && isFunctionLikeNode(node)) {
+      return;
+    }
+
+    if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.BlockScoped) === 0) {
+      addVariableBindings(bindings, node.declarations);
+    }
+
+    ts.forEachChild(node, (child) => visit(child, false));
+  }
+
+  visit(scope, true);
+}
+
+function getLexicalBindings(
+  scope: ts.Node,
+  cache: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>,
+): ReadonlyMap<string, LexicalBinding> | undefined {
+  const cached = cache.get(scope);
+  if (cached) {
+    return cached;
+  }
+
+  const bindings = new Map<string, LexicalBinding>();
+  if (ts.isSourceFile(scope)) {
+    addStatementBindings(bindings, scope.statements, true);
+    addFunctionScopedVariableBindings(bindings, scope);
+  } else if (ts.isBlock(scope) || ts.isModuleBlock(scope)) {
+    addStatementBindings(bindings, scope.statements, false);
+  } else if (isFunctionLikeNode(scope)) {
+    if ((ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name) {
+      bindings.set(scope.name.text, scope);
+    }
+    for (const parameter of scope.parameters) {
+      setBinding(bindings, parameter.name, undefined);
+    }
+    addFunctionScopedVariableBindings(bindings, scope);
+  } else if (ts.isCatchClause(scope) && scope.variableDeclaration) {
+    setBinding(bindings, scope.variableDeclaration.name, undefined);
+  } else if (
+    (ts.isForStatement(scope) || ts.isForInStatement(scope) || ts.isForOfStatement(scope)) &&
+    scope.initializer &&
+    ts.isVariableDeclarationList(scope.initializer) &&
+    (scope.initializer.flags & ts.NodeFlags.BlockScoped) !== 0
+  ) {
+    addVariableBindings(bindings, scope.initializer.declarations);
+  } else {
+    return undefined;
+  }
+
+  cache.set(scope, bindings);
+  return bindings;
+}
+
+function resolveLexicalFunction(
+  identifier: ts.Identifier,
+  cache: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>,
+): InvokableFunction | undefined {
+  let scope: ts.Node | undefined = identifier.parent;
+  while (scope) {
+    const bindings = getLexicalBindings(scope, cache);
+    if (bindings?.has(identifier.text)) {
+      return bindings.get(identifier.text) ?? undefined;
+    }
+    scope = scope.parent;
+  }
+  return undefined;
+}
+
+function resolveInvokedFunction(
+  node: ts.Node,
+  cache: Map<ts.Node, ReadonlyMap<string, LexicalBinding>>,
+): InvokableFunction | undefined {
+  const unwrapped = unwrapExpression(node);
+  if (isInvokableFunction(unwrapped)) {
+    return unwrapped;
+  }
+  if (ts.isIdentifier(unwrapped)) {
+    return resolveLexicalFunction(unwrapped, cache);
+  }
+  return undefined;
 }
 
 function isViMockCall(node: ts.Node): node is ts.CallExpression {
@@ -344,25 +546,50 @@ function isViMockCall(node: ts.Node): node is ts.CallExpression {
 }
 
 // Returns the first call ending in a persistent mock setter that `node`
-// synchronously evaluates (mockReturnValue/mockResolvedValue/etc). Skips
-// function-literal bodies since those only run when the callback fires. Pass
-// `enterRootFunction: true` for a vi.mock(...) factory, which executes at
-// module load.
+// synchronously evaluates (mockReturnValue/mockResolvedValue/etc). Function
+// bodies remain boundaries unless the function is the evaluated root or is a
+// directly invoked local function/IIFE. Identifier resolution is deliberately
+// lexical and file-local; imported and indirectly aliased functions are not
+// followed.
 function findEvaluatedPersistentMockSetter(
   node: ts.Node,
-  opts: { enterRootFunction?: boolean } = {},
+  opts: { enterRootFunction?: boolean; followSynchronousCalls?: boolean } = {},
 ): ts.CallExpression | undefined {
   let finding: ts.CallExpression | undefined;
-  function visit(current: ts.Node, isRoot: boolean) {
+  const activeFunctions = new Set<InvokableFunction>();
+  const bindingCache = new Map<ts.Node, ReadonlyMap<string, LexicalBinding>>();
+
+  function visitInvokedFunction(fn: InvokableFunction) {
+    if (finding || activeFunctions.has(fn)) {
+      return;
+    }
+
+    activeFunctions.add(fn);
+    try {
+      for (const parameter of fn.parameters) {
+        if (parameter.initializer) {
+          visit(parameter.initializer);
+        }
+      }
+      if (fn.body) {
+        visit(fn.body);
+      }
+    } finally {
+      activeFunctions.delete(fn);
+    }
+  }
+
+  function visit(current: ts.Node) {
     if (finding) {
       return;
     }
-    // Stop at function literal boundaries — their bodies don't run at module
-    // load. Exception: when `enterRootFunction` is set, descend into the root
-    // node itself (used for vi.mock(..., factory) factories).
-    if (isFunctionLikeNode(current) && !(isRoot && opts.enterRootFunction)) {
+
+    // A function body is only evaluated when the call-expression handling
+    // below resolves an actual synchronous invocation.
+    if (isFunctionLikeNode(current)) {
       return;
     }
+
     if (
       ts.isCallExpression(current) &&
       ts.isPropertyAccessExpression(current.expression) &&
@@ -371,9 +598,31 @@ function findEvaluatedPersistentMockSetter(
       finding = current;
       return;
     }
-    ts.forEachChild(current, (child) => visit(child, false));
+
+    if (opts.followSynchronousCalls && ts.isCallExpression(current)) {
+      const invokedFunction = resolveInvokedFunction(current.expression, bindingCache);
+      // Callee/argument expressions evaluate before the called function body.
+      // Function literals encountered here remain boundaries.
+      ts.forEachChild(current, visit);
+      if (invokedFunction) {
+        visitInvokedFunction(invokedFunction);
+      }
+      return;
+    }
+
+    ts.forEachChild(current, visit);
   }
-  visit(node, true);
+
+  if (opts.enterRootFunction) {
+    const rootFunction = resolveInvokedFunction(node, bindingCache);
+    if (rootFunction) {
+      visitInvokedFunction(rootFunction);
+    } else {
+      visit(node);
+    }
+  } else {
+    visit(node);
+  }
   return finding;
 }
 
@@ -1007,6 +1256,7 @@ describe('root test hygiene', () => {
 
   it.each([
     [
+      'direct setter control',
       [
         'const mockRequest = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));',
         'beforeEach(() => {',
@@ -1015,6 +1265,7 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
     [
+      'object setter control',
       [
         'const mockClient = vi.hoisted(() => ({',
         '  connect: vi.fn().mockImplementation(() => undefined),',
@@ -1022,12 +1273,49 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
     [
+      'callback identifier control',
       [
         'const factory = () => vi.fn().mockReturnValue("default");',
         'const mockClient = vi.hoisted(factory);',
       ].join('\n'),
     ],
-  ])('detects hoisted persistent mock implementations without reset', (source) => {
+    [
+      'immediately invoked arrow expression',
+      "const mock = vi.hoisted(() => (() => vi.fn().mockReturnValue('x'))());",
+    ],
+    [
+      'module-scope function declaration',
+      [
+        "function build() { return vi.fn().mockReturnValue('x'); }",
+        'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+    [
+      'module-scope function-valued variable',
+      [
+        "const build = () => vi.fn().mockReturnValue('x');",
+        'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+    [
+      'callback-local function declaration',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  function build() { return vi.fn().mockReturnValue('x'); }",
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'callback-local function-valued variable',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const build = () => vi.fn().mockReturnValue('x');",
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+  ])('detects hoisted persistent mock implementations through %s', (_case, source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
 
@@ -1052,6 +1340,91 @@ describe('root test hygiene', () => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
 
+  it.each([
+    [
+      'an uninvoked helper returned from the callback',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const build = () => vi.fn().mockReturnValue('x');",
+        '  return build;',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'a helper passed through another synchronous helper',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const build = () => vi.fn().mockReturnValue('x');",
+        '  function pass(callback: () => unknown) { return callback; }',
+        '  return pass(build);',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'a scheduled callback',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const build = () => vi.fn().mockReturnValue('x');",
+        '  setTimeout(build, 0);',
+        '  return vi.fn();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'an inline deferred callback',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  setTimeout(() => vi.fn().mockReturnValue('x'), 0);",
+        '  return vi.fn();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'a safe local helper shadowing an unsafe module helper',
+      [
+        "function build() { return vi.fn().mockReturnValue('x'); }",
+        'const mock = vi.hoisted(() => {',
+        '  const build = () => vi.fn();',
+        '  return build();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'recursive and cyclic helper references',
+      [
+        'const mock = vi.hoisted(() => {',
+        "  const unused = () => vi.fn().mockReturnValue('x');",
+        '  function first(depth: number): unknown {',
+        '    return depth === 0 ? vi.fn() : second(depth - 1);',
+        '  }',
+        '  function second(depth: number): unknown {',
+        '    return depth === 0 ? vi.fn() : first(depth - 1);',
+        '  }',
+        '  return first(1);',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      'an imported helper',
+      [
+        "import { build } from './helper';",
+        "const unused = () => vi.fn().mockReturnValue('x');",
+        'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+    [
+      'a generator helper whose body has not started',
+      [
+        'function* build() {',
+        "  return vi.fn().mockReturnValue('x');",
+        '}',
+        'const mock = vi.hoisted(() => build());',
+      ].join('\n'),
+    ],
+  ])('preserves deferred function boundaries for %s', (_case, source) => {
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toEqual([]);
+  });
+
   it('anchors multi-hoist diagnostics to the persistent setter in the violating callback', () => {
     const source = [
       'const safe = vi.hoisted(() => vi.fn());',
@@ -1070,6 +1443,25 @@ describe('root test hygiene', () => {
           'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
         snippet: 'vi.fn().mockResolvedValue({ ok: true })',
       },
+    ]);
+  });
+
+  it('anchors a multi-hoist helper diagnostic to the invoked helper setter', () => {
+    const source = [
+      'const safe = vi.hoisted(() => vi.fn());',
+      'function buildUnsafe() {',
+      "  return vi.fn().mockReturnValue('x');",
+      '}',
+      'const unsafe = vi.hoisted(() => buildUnsafe());',
+    ].join('\n');
+
+    expect(scanFixturePolicies(source, 'nested/fixture.test.ts').hoistedPersistentMock).toEqual([
+      expect.objectContaining({
+        file: 'nested/fixture.test.ts',
+        line: 3,
+        column: 10,
+        snippet: "vi.fn().mockReturnValue('x')",
+      }),
     ]);
   });
 
