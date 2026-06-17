@@ -8,8 +8,12 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-// Keep this parser local: importing the assertion handler would widen the
-// legacy-runtime -> core dependency edge beyond its architecture baseline.
+// Keep this parser local rather than importing it from src/assertions/contains.ts:
+// this module is bundled into the frontend (see the app layer's allowedImportPaths
+// in architecture/layers.json), so importing the assertion handlers would pull the
+// backend-only assertion code into the browser bundle and widen the
+// legacy-runtime -> core edge past its baseline. A drift-guard test in
+// test/csv.test.ts keeps this copy in sync with the canonical implementation.
 interface ParsedAssertionField {
   field: string;
   nextIndex: number;
