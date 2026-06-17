@@ -1251,6 +1251,17 @@ describe('computeRateLimitWaitMs', () => {
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
   });
+
+  it('falls back to Retry-After when a reset header is non-finite', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': 'Infinity',
+        'Retry-After': '7',
+      }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
 });
 
 describe('fetchWithRetries', () => {

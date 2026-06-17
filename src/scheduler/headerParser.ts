@@ -93,9 +93,9 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
 
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {
-    const ms = parseInt(h['retry-after-ms'], 10);
+    const ms = Number.parseInt(h['retry-after-ms'], 10);
     // Accept 0 as valid (means "retry immediately")
-    if (!isNaN(ms) && ms >= 0) {
+    if (Number.isFinite(ms) && ms >= 0) {
       result.retryAfterMs = ms;
       if (result.resetAt === undefined) {
         result.resetAt = Date.now() + ms;
@@ -121,9 +121,15 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
  */
 export function parseRetryAfter(value: string): number | null {
   // Try as integer seconds (must be non-negative)
-  const seconds = parseInt(value, 10);
-  if (!isNaN(seconds) && seconds >= 0 && String(seconds) === value.trim()) {
-    return seconds * 1000;
+  const seconds = Number.parseInt(value, 10);
+  const durationMs = seconds * 1000;
+  if (
+    Number.isFinite(seconds) &&
+    seconds >= 0 &&
+    String(seconds) === value.trim() &&
+    Number.isFinite(durationMs)
+  ) {
+    return durationMs;
   }
 
   // Try HTTP-date format
@@ -139,8 +145,8 @@ function parseFirstMatch(headers: Record<string, string>, names: string[]): numb
   for (const name of names) {
     const value = headers[name];
     if (value !== undefined) {
-      const num = parseInt(value, 10);
-      if (!isNaN(num) && num >= 0) {
+      const num = Number.parseInt(value, 10);
+      if (Number.isFinite(num) && num >= 0) {
         return num;
       }
     }
@@ -160,8 +166,8 @@ function parseResetTime(value: string): number | null {
   }
 
   // Try as numeric
-  const num = parseFloat(value);
-  if (!isNaN(num)) {
+  const num = Number.parseFloat(value);
+  if (Number.isFinite(num) && num >= 0) {
     // Disambiguate by magnitude:
     // - < 1 billion: relative seconds
     // - 1-10 billion: Unix seconds (10 digits)
@@ -189,7 +195,7 @@ function parseResetTime(value: string): number | null {
  */
 function parseHttpDate(value: string): number | null {
   const timestamp = Date.parse(value);
-  if (!isNaN(timestamp)) {
+  if (Number.isFinite(timestamp)) {
     // Sanity check: within reasonable range (not too far past or future)
     const now = Date.now();
     const oneYearMs = 365 * 24 * 60 * 60 * 1000;
@@ -228,17 +234,17 @@ function parseDuration(value: string): number | null {
   let ms = 0;
 
   if (hours) {
-    ms += parseInt(hours, 10) * 3600_000;
+    ms += Number.parseInt(hours, 10) * 3600_000;
   }
   if (minutes) {
-    ms += parseInt(minutes, 10) * 60_000;
+    ms += Number.parseInt(minutes, 10) * 60_000;
   }
   if (secondsValue) {
-    const num = parseFloat(secondsValue);
+    const num = Number.parseFloat(secondsValue);
     ms += secondsUnit === 'ms' ? num : num * 1000;
   }
 
-  return ms;
+  return Number.isFinite(ms) ? ms : null;
 }
 
 function lowercaseKeys(obj: Record<string, string>): Record<string, string> {
