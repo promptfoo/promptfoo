@@ -274,6 +274,7 @@ function getGoogleCacheReadUsage(
   let detailTokenCount = 0;
   let pricedTokenCount = 0;
   let hasUnpricedTokens = false;
+  const pricedRates = new Set<number>();
 
   for (const detail of cacheTokensDetails) {
     if (!Number.isFinite(detail.tokenCount) || detail.tokenCount == null || detail.tokenCount < 0) {
@@ -286,19 +287,25 @@ function getGoogleCacheReadUsage(
     }
     detailTokenCount += tokenCount;
 
-    // Google bills DOCUMENT (e.g. PDF) tokens at the image rate, so they share the
-    // text/image/video cache-read rate. See https://ai.google.dev/gemini-api/docs/pricing.
-    const cacheReadRate = ['text', 'image', 'video', 'document'].includes(
-      detail.modality?.toLowerCase() ?? '',
-    )
-      ? cost.cacheRead.textImageVideo
-      : undefined;
+    // Google treats an unspecified modality as text and bills DOCUMENT (for example,
+    // PDF) tokens at the image rate. Audio has a separate cache-read rate.
+    const modality = detail.modality?.toLowerCase();
+    const cacheReadRate =
+      modality == null ||
+      modality === '' ||
+      modality === 'modality_unspecified' ||
+      ['text', 'image', 'video', 'document'].includes(modality)
+        ? cost.cacheRead.textImageVideo
+        : modality === 'audio'
+          ? cost.cacheRead.audio
+          : undefined;
 
     if (cacheReadRate == null) {
       hasUnpricedTokens = true;
       continue;
     }
     pricedTokenCount += tokenCount;
+    pricedRates.add(cacheReadRate);
     cacheReadCost += tokenCount * cacheReadRate;
   }
 
@@ -309,12 +316,12 @@ function getGoogleCacheReadUsage(
   if (detailTokenCount > cachedTokenLimit) {
     // If the aggregate and mixed-modality detail disagree, there is no safe way
     // to know which modality counts fit within the reported cached-token total.
-    if (hasUnpricedTokens) {
+    if (hasUnpricedTokens || pricedRates.size > 1) {
       return undefined;
     }
 
-    // Every detailed token has the same known rate for this model cost entry, so
-    // the priced count can be safely capped to the aggregate/prompt limit.
+    // Every detailed token has the same known rate, so the priced count can be
+    // safely capped to the aggregate/prompt limit.
     const scale = cachedTokenLimit / detailTokenCount;
     return { cost: cacheReadCost * scale, tokenCount: cachedTokenLimit };
   }
@@ -429,12 +436,25 @@ export function getGoogleTokenUsageCompletionDetails(
   usageMetadata:
     | {
         thoughtsTokenCount?: number;
+        promptTokenCount?: number;
         cachedContentTokenCount?: number;
       }
     | undefined,
 ) {
   const reasoningTokens = usageMetadata?.thoughtsTokenCount;
-  const cacheReadInputTokens = usageMetadata?.cachedContentTokenCount;
+  const reportedCacheReadInputTokens = usageMetadata?.cachedContentTokenCount;
+  const promptTokens = usageMetadata?.promptTokenCount;
+  const boundedPromptTokens =
+    promptTokens != null && Number.isFinite(promptTokens) ? Math.max(0, promptTokens) : undefined;
+  const cacheReadInputTokens =
+    reportedCacheReadInputTokens != null && Number.isFinite(reportedCacheReadInputTokens)
+      ? Math.max(
+          0,
+          boundedPromptTokens === undefined
+            ? reportedCacheReadInputTokens
+            : Math.min(reportedCacheReadInputTokens, boundedPromptTokens),
+        )
+      : undefined;
   const hasReasoningTokens = reasoningTokens !== undefined;
   const hasCacheReadTokens = cacheReadInputTokens !== undefined;
   if (!hasReasoningTokens && !hasCacheReadTokens) {
