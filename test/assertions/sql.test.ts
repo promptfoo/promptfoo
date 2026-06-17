@@ -140,6 +140,22 @@ describe('is-sql assertion', () => {
       });
     });
 
+    it('should fail a likely missing comma inside a fenced response', async () => {
+      const containsSqlAssertion: Assertion = { type: 'contains-sql' };
+      const result = await handleContainsSql({
+        assertion: containsSqlAssertion,
+        renderedValue: undefined,
+        outputString:
+          'Here you go:\n```sql\nSELECT DISTINCT first_name last_name FROM employees\n```',
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
     it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
       const renderedValue = undefined;
       const outputString = 'SELECT * FROM orders ORDERY BY order_date';
