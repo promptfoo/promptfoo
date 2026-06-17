@@ -57,8 +57,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         }
         // Check retry-after-ms first (milliseconds)
         if (headers['retry-after-ms']) {
-          const ms = parseInt(headers['retry-after-ms'], 10);
-          if (!isNaN(ms) && ms >= 0) {
+          const ms = Number.parseInt(headers['retry-after-ms'], 10);
+          if (Number.isFinite(ms) && ms >= 0) {
             return ms;
           }
         }
@@ -73,7 +73,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       // Try to extract from error message (some providers include it)
       const match = error?.message?.match(/\bretry after (\d+)\b/i);
       if (match) {
-        return parseInt(match[1], 10) * 1000;
+        const retryAfterMs = Number.parseInt(match[1], 10) * 1000;
+        return Number.isFinite(retryAfterMs) ? retryAfterMs : undefined;
       }
       return undefined;
     },

@@ -287,32 +287,32 @@ describe('sanitizeObject', () => {
   });
 
   describe('function handling', () => {
-    it('should lose named functions during JSON serialization', () => {
+    it('should omit named functions during JSON serialization', () => {
       function namedFunction() {
         return 'test';
       }
       const result = sanitizeObject({ func: namedFunction });
-      // Functions get lost during JSON.parse/stringify cycle
+      // Functions are omitted during JSON.parse/stringify cycle
       expect(result.func).toBeUndefined();
     });
 
-    it('should lose anonymous functions during JSON serialization', () => {
+    it('should omit anonymous functions during JSON serialization', () => {
       const anonymousFunc = function () {
         return 'test';
       };
       const result = sanitizeObject({ func: anonymousFunc });
-      // Functions get lost during JSON.parse/stringify cycle
+      // Functions are omitted during JSON.parse/stringify cycle
       expect(result.func).toBeUndefined();
     });
 
-    it('should lose arrow functions during JSON serialization', () => {
+    it('should omit arrow functions during JSON serialization', () => {
       const arrowFunc = () => 'test';
       const result = sanitizeObject({ func: arrowFunc });
-      // Functions get lost during JSON.parse/stringify cycle
+      // Functions are omitted during JSON.parse/stringify cycle
       expect(result.func).toBeUndefined();
     });
 
-    it('should handle functions at multiple nesting levels', () => {
+    it('should omit functions at multiple nesting levels during JSON serialization', () => {
       const input = {
         level1: {
           func: () => 'test',
@@ -324,7 +324,7 @@ describe('sanitizeObject', () => {
         },
       };
       const result = sanitizeObject(input);
-      // Functions get lost during JSON.parse/stringify cycle
+      // Functions are omitted during JSON.parse/stringify cycle
       expect(result.level1.func).toBeUndefined();
       expect(result.level1.level2.func).toBeUndefined();
     });
@@ -619,7 +619,7 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject([])).toEqual([]);
     });
 
-    it('should handle arrays with functions', () => {
+    it('should replace functions in arrays with null during JSON serialization', () => {
       const input = [
         1,
         function test() {
@@ -629,7 +629,7 @@ describe('sanitizeObject', () => {
       ];
       const result = sanitizeObject(input);
       expect(result[0]).toBe(1);
-      // Functions get lost during JSON.parse/stringify cycle
+      // JSON serialization preserves the array slot by replacing the function with null.
       expect(result[1]).toBeNull();
       expect(result[2]).toBe(3);
     });

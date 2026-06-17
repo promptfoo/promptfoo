@@ -20,6 +20,12 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Set the OpenAI API key used by both providers:
+
+```sh
+export OPENAI_API_KEY=your-api-key
+```
+
 Then run the eval:
 
 ```bash
