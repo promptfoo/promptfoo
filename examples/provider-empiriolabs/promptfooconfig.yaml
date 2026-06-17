@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Compare EmpirioLabs chat models
+
+prompts:
+  - 'Answer in one sentence: {{question}}'
+
+providers:
+  - id: openai:chat:qwen3-7-plus
+    label: Qwen 3.7 Plus via EmpirioLabs
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      max_tokens: 1000
+
+  - id: openai:chat:deepseek-v4-flash
+    label: DeepSeek V4 Flash via EmpirioLabs
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      max_tokens: 1000
+
+tests:
+  - vars:
+      question: What is the time complexity of binary search?
+    assert:
+      - type: icontains
+        value: log

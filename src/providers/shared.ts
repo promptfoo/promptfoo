@@ -68,19 +68,24 @@ export function calculateCost(
     return undefined;
   }
 
-  const model = models.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
+  const modelCost = models.find((m) => m.id === modelName)?.cost;
+
+  const longContextCost =
+    modelCost?.longContext && promptTokens > modelCost.longContext.threshold
+      ? modelCost.longContext
+      : undefined;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? modelCost?.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? modelCost?.output;
+
+  if (
+    (promptTokens !== 0 && !Number.isFinite(inputCost)) ||
+    (completionTokens !== 0 && !Number.isFinite(outputCost))
+  ) {
     return undefined;
   }
 
-  const longContextCost =
-    model.cost.longContext && promptTokens > model.cost.longContext.threshold
-      ? model.cost.longContext
-      : undefined;
-  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
-  const outputCost =
-    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens;
+  return (inputCost ?? 0) * promptTokens + (outputCost ?? 0) * completionTokens;
 }
 
 /**

@@ -255,6 +255,32 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBeUndefined();
     });
 
+    it('should use an explicit shared cost when model pricing is unavailable', () => {
+      expect(calculateCost('nonexistent', { cost: 0.005 }, 1000, 500, models)).toBe(7.5);
+    });
+
+    it('should use explicit input and output costs when model pricing is unavailable', () => {
+      expect(
+        calculateCost('nonexistent', { inputCost: 0.003, outputCost: 0.007 }, 1000, 500, models),
+      ).toBe(6.5);
+    });
+
+    it('should calculate prompt-only and completion-only costs', () => {
+      expect(calculateCost('nonexistent', { inputCost: 0.003 }, 1000, 0, models)).toBe(3);
+      expect(calculateCost('nonexistent', { outputCost: 0.007 }, 0, 500, models)).toBe(3.5);
+    });
+
+    it('should return undefined when a non-zero token side has no price', () => {
+      expect(calculateCost('nonexistent', { inputCost: 0.003 }, 1000, 500, models)).toBeUndefined();
+      expect(
+        calculateCost('nonexistent', { outputCost: 0.007 }, 1000, 500, models),
+      ).toBeUndefined();
+    });
+
+    it('should return zero when both token counts are zero', () => {
+      expect(calculateCost('nonexistent', {}, 0, 0, models)).toBe(0);
+    });
+
     it('should return undefined if tokens are not finite', () => {
       expect(calculateCost('model1', {}, Number.NaN, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, Infinity, models)).toBeUndefined();

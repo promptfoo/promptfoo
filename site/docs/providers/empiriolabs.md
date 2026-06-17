@@ -1,93 +1,140 @@
 ---
-sidebar_label: EmpirioLabs
-description: Configure EmpirioLabs AI's OpenAI-compatible API to evaluate frontier chat and embedding models, including Qwen3, DeepSeek V4, GLM, Kimi, and MiniMax, through a single endpoint
+title: EmpirioLabs
+description: Connect promptfoo to EmpirioLabs' OpenAI-compatible chat and embedding APIs, configure credential isolation, and evaluate routed models with test cases.
+sidebar_position: 42
 ---
 
 # EmpirioLabs
 
-[EmpirioLabs](https://empiriolabs.ai) provides an OpenAI-compatible API that serves frontier chat and embedding models from many model families through a single endpoint. The EmpirioLabs provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
+[EmpirioLabs](https://empiriolabs.ai/) exposes OpenAI-compatible chat, Responses, and embedding
+endpoints for models from multiple families. Promptfoo connects to those endpoints through its
+existing [OpenAI provider](/docs/providers/openai/) with a custom base URL; there is no separate
+`empiriolabs:` provider prefix.
 
 ## Setup
 
-1. Create an API key from the [EmpirioLabs dashboard](https://platform.empiriolabs.ai/dashboard/api-keys)
-2. Set the `EMPIRIOLABS_API_KEY` environment variable or specify `apiKey` in your config
+1. Create an API key in the
+   [EmpirioLabs dashboard](https://platform.empiriolabs.ai/dashboard/api-keys).
+2. Export it as `EMPIRIOLABS_API_KEY`:
 
-```sh
-export EMPIRIOLABS_API_KEY=your_api_key
-```
+   ```bash
+   export EMPIRIOLABS_API_KEY=your_api_key_here
+   ```
 
-## Configuration
+## Chat completions
 
-Basic configuration example:
+Use `https://api.empiriolabs.ai/v1` as the API root. Promptfoo appends
+`/chat/completions` for `openai:chat` providers.
 
-```yaml
-providers:
-  - id: empiriolabs:qwen3-7-plus
-    config:
-      temperature: 0.7
-      max_tokens: 4000
-      apiKey: YOUR_EMPIRIOLABS_API_KEY
-
-  - id: empiriolabs:deepseek-v4-pro
-    config:
-      max_tokens: 8000
-```
-
-### Configuration Options
-
-- `temperature`
-- `max_tokens`
-- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
-- `top_p`, `presence_penalty`, `frequency_penalty`
-- `stream`
-
-## Available Models
-
-You can pass any model ID that your EmpirioLabs account has access to. Fetch the live catalog with a `GET` request to `https://api.empiriolabs.ai/v1/models`, or browse the [models documentation](https://docs.empiriolabs.ai). Commonly used IDs include:
-
-### Chat models
-
-- `qwen3-7-plus`
-- `qwen3-7-max`
-- `deepseek-v4-pro`
-- `deepseek-v4-flash`
-- `glm-5-1`
-- `kimi-k2-7-code`
-- `minimax-m3`
-
-### Embedding models
-
-- `text-embedding-v4`
-
-## Example Usage
-
-Compare two EmpirioLabs models on a reasoning task:
-
-```yaml
-providers:
-  - id: empiriolabs:qwen3-7-max
-    config:
-      max_tokens: 8000
-  - id: empiriolabs:deepseek-v4-pro
-    config:
-      temperature: 0.0
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare EmpirioLabs chat models
 
 prompts:
-  - 'Solve this step by step: {{math_problem}}'
+  - 'Answer in one sentence: {{question}}'
+
+providers:
+  - id: openai:chat:qwen3-7-plus
+    label: Qwen 3.7 Plus via EmpirioLabs
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      max_tokens: 1000
+
+  - id: openai:chat:deepseek-v4-flash
+    label: DeepSeek V4 Flash via EmpirioLabs
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      max_tokens: 1000
 
 tests:
   - vars:
-      math_problem: 'What is the derivative of x^3 + 2x with respect to x?'
+      question: What is the time complexity of binary search?
+    assert:
+      - type: icontains
+        value: log
 ```
 
-## API Details
+Setting `apiKeyEnvar` keeps EmpirioLabs authentication separate from `OPENAI_API_KEY`. The explicit
+`apiBaseUrl` also takes precedence over OpenAI endpoint environment variables, so an unrelated
+OpenAI proxy cannot redirect these requests.
 
-- Base URL: `https://api.empiriolabs.ai/v1`
-- OpenAI-compatible API format with streaming support
-- Model catalog endpoint: `GET https://api.empiriolabs.ai/v1/models`
-- Full [API documentation](https://docs.empiriolabs.ai)
+## Embeddings
 
-## See Also
+Use EmpirioLabs embeddings as the provider for similarity assertions:
 
-- [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
-- [EmpirioLabs documentation](https://docs.empiriolabs.ai)
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: openai:embedding:text-embedding-v4
+        config:
+          apiBaseUrl: https://api.empiriolabs.ai/v1
+          apiKeyEnvar: EMPIRIOLABS_API_KEY
+          passthrough:
+            dimensions: 1024
+
+tests:
+  - assert:
+      - type: similar
+        value: The expected answer
+        threshold: 0.8
+```
+
+Promptfoo sends this provider to `/v1/embeddings`. Check the selected model's documentation before
+setting `dimensions` or other model-specific fields.
+
+## Model-specific request fields
+
+EmpirioLabs models expose different reasoning and tool controls. Use `passthrough` for fields that
+are not part of Promptfoo's shared OpenAI configuration, and only send fields listed for the exact
+model. For example, DeepSeek V4 Flash accepts `reasoning_effort`:
+
+```yaml
+providers:
+  - id: openai:chat:deepseek-v4-flash
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      passthrough:
+        reasoning_effort: low
+```
+
+## Cost estimates
+
+EmpirioLabs publishes live per-model pricing through its model catalog. Promptfoo accepts per-token
+overrides for model IDs that are not in its built-in OpenAI pricing table:
+
+```yaml
+providers:
+  - id: openai:chat:deepseek-v4-flash
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+      inputCost: 0.00000014
+      outputCost: 0.00000028
+```
+
+The values above correspond to $0.14 input and $0.28 output per million tokens. Verify current rates
+with `GET https://api.empiriolabs.ai/v1/models/deepseek-v4-flash` before using cost as a release
+gate.
+
+## Example
+
+Initialize the runnable example:
+
+```bash
+npx promptfoo@latest init --example provider-empiriolabs
+cd provider-empiriolabs
+npx promptfoo@latest eval --no-cache
+```
+
+## Additional resources
+
+- [EmpirioLabs API documentation](https://docs.empiriolabs.ai/welcome)
+- [EmpirioLabs model catalog](https://empiriolabs.ai/models)
+- [EmpirioLabs privacy policy](https://empiriolabs.ai/policy/privacy-policy)
+- [EmpirioLabs terms of service](https://empiriolabs.ai/policy/terms-of-service)
+- [OpenAI provider configuration](/docs/providers/openai/)

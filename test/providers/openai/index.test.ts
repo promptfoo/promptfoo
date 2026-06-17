@@ -37,6 +37,18 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai');
     });
 
+    it('should prefer an explicit API base URL over OpenAI environment overrides', () => {
+      mockProcessEnv({
+        OPENAI_API_HOST: 'proxy.openai.example.com',
+        OPENAI_API_BASE_URL: 'https://base.openai.example.com/v1',
+      });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/v1' },
+      });
+
+      expect(customProvider.getApiUrl()).toBe('https://custom.api.com/v1');
+    });
+
     it('should get organization', () => {
       expect(provider.getOrganization()).toBe('test-org');
     });
@@ -89,11 +101,13 @@ describe('OpenAI Provider', () => {
     });
 
     it('should not attribute compatible endpoints unless explicitly configured', () => {
+      mockProcessEnv({ OPENAI_ORGANIZATION: 'openai-org' });
       const customProvider = new OpenAiGenericProvider('test-model', {
         config: { apiBaseUrl: 'https://custom.api.com/openai' },
       });
 
       expect(customProvider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORIGINATOR_HEADER);
+      expect(customProvider.getOpenAiRequestHeaders()).not.toHaveProperty('OpenAI-Organization');
       expect(
         customProvider.getOpenAiRequestHeaders({
           [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
@@ -119,6 +133,25 @@ describe('OpenAI Provider', () => {
         config: { apiKeyEnvar: 'CUSTOM_API_KEY' },
       });
       expect(customProvider.getApiKey()).toBe('custom-key');
+    });
+
+    it('should not fall back to the OpenAI key when a custom env var is configured', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'openai-key' });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKeyEnvar: 'CUSTOM_API_KEY' },
+      });
+
+      expect(customProvider.getApiKey()).toBeUndefined();
+    });
+
+    it('should prefer provider env overrides for a custom API key variable', () => {
+      mockProcessEnv({ FIREWORKS_API_KEY: 'process-key' });
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiKeyEnvar: 'FIREWORKS_API_KEY' },
+        env: { FIREWORKS_API_KEY: 'provider-key' },
+      });
+
+      expect(customProvider.getApiKey()).toBe('provider-key');
     });
 
     it('should generate correct ID', () => {

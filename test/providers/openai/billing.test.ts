@@ -195,6 +195,59 @@ describe('OpenAI billing helpers', () => {
     ).toBeUndefined();
   });
 
+  it('uses explicit costs for unknown OpenAI-compatible models', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+      ),
+    ).toBeCloseTo(0.000028, 10);
+  });
+
+  it('prices zero-token sides without requiring an explicit cost', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 0,
+        },
+      ),
+    ).toBeCloseTo(0.000014, 10);
+  });
+
+  it('leaves unknown models unpriced when a used token side has no cost', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('does not charge for cached unknown-model responses with explicit costs', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+        { cachedResponse: true },
+      ),
+    ).toBe(0);
+  });
+
   it('prices audio text and audio tokens separately', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-4o-mini-audio-preview',

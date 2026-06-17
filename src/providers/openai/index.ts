@@ -80,7 +80,9 @@ export class OpenAiGenericProvider implements ApiProvider {
     const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
 
     const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
-    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+    const organization = hasOrganizationOverride
+      ? undefined
+      : (this.config.organization ?? (sendsToOpenAiApi ? this.getOrganization() : undefined));
 
     return {
       ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
@@ -94,13 +96,18 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+
+    const envApiHost = this.env?.OPENAI_API_HOST ?? getEnvString('OPENAI_API_HOST');
+    if (envApiHost) {
+      return `https://${envApiHost}/v1`;
     }
     return (
-      this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
       getEnvString('OPENAI_API_BASE_URL') ||
@@ -110,15 +117,14 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
-    );
+    if (this.config.apiKey !== undefined) {
+      return this.config.apiKey;
+    }
+    if (this.config.apiKeyEnvar) {
+      const key = this.config.apiKeyEnvar as EnvVarKey;
+      return this.env?.[key as keyof EnvOverrides] ?? getEnvString(key);
+    }
+    return this.env?.OPENAI_API_KEY ?? getEnvString('OPENAI_API_KEY');
   }
 
   requiresApiKey(): boolean {

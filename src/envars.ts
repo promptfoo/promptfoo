@@ -304,9 +304,6 @@ type EnvVars = {
   // ElevenLabs
   ELEVENLABS_API_KEY?: string;
 
-  // EmpirioLabs
-  EMPIRIOLABS_API_KEY?: string;
-
   // FAL
   FAL_KEY?: string;
 

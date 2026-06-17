@@ -1,6 +1,5 @@
+import { calculateCost, type ProviderConfig } from '../shared';
 import { OPENAI_BILLING_MODELS } from './util';
-
-import type { ProviderConfig } from '../shared';
 
 type OpenAITextRates = {
   input: number;
@@ -684,7 +683,14 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const rates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!rates) {
-    return undefined;
+    const customCost = calculateCost(
+      modelName,
+      config,
+      usage.totalInputTokens,
+      usage.totalOutputTokens,
+      [],
+    );
+    return customCost === undefined || !options.cachedResponse ? customCost : 0;
   }
 
   if (options.cachedResponse) {
