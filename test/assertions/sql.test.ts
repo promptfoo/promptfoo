@@ -63,12 +63,34 @@ describe('is-sql assertion', () => {
         renderedValue: undefined,
       },
       {
+        outputString:
+          "SELECT 'it''s select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
+        outputString:
+          "SELECT 'it\\'s select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
         outputString: 'SELECT 1 /* select distinct first_name last_name from employees */',
         renderedValue: undefined,
       },
       {
         outputString: 'SELECT 1 -- select distinct first_name last_name from employees\n',
         renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 # select distinct first_name last_name from employees\n',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT `select distinct first_name last_name from employees` AS sample',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT [select distinct first_name last_name from employees] AS sample',
+        renderedValue: { databaseType: 'TransactSQL' },
       },
       {
         outputString: 'SELECT "select distinct first_name last_name from employees" AS sample',
@@ -122,6 +144,21 @@ describe('is-sql assertion', () => {
         reason: 'SQL statement does not conform to the provided MySQL database syntax.',
         score: 0,
       });
+    });
+
+    it('should handle many unmatched dollar-quote tags without pathological backtracking', async () => {
+      const outputString = `SELECT ${Array.from(
+        { length: 20_000 },
+        (_, index) => `$tag${index}$ value`,
+      ).join(' ')}`;
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'PostgreSQL' },
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
     });
 
     it('should validate SQL extracted from a fenced response', async () => {
