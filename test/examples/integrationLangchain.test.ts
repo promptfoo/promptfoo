@@ -35,6 +35,11 @@ function findPythonPath(): string | undefined {
 
 const PYTHON_PATH = findPythonPath();
 
+// Skip (rather than hard-fail) when no Python interpreter is available, matching
+// the repo precedent for interpreter-gated suites. CI always provides Python, so
+// these cases still run there.
+const itPy = PYTHON_PATH ? it : it.skip;
+
 describe('integration-langchain example', () => {
   let stubRoot: string;
 
@@ -102,7 +107,7 @@ class PromptTemplate:
     return { status: result.status, stdout: result.stdout, stderr: result.stderr };
   }
 
-  it('prints usage and exits non-zero when the question is missing', () => {
+  itPy('prints usage and exits non-zero when the question is missing', () => {
     const result = runExample([]);
 
     expect(result.status).toBe(1);
@@ -111,7 +116,7 @@ class PromptTemplate:
     expect(result.stderr).toContain('<question>');
   });
 
-  it('reports a missing API key without importing LangChain', () => {
+  itPy('reports a missing API key without importing LangChain', () => {
     const result = runExample(['What is 2 + 2?'], { PYTHONPATH: '' });
 
     expect(result.status).toBe(1);
@@ -119,7 +124,7 @@ class PromptTemplate:
     expect(result.stderr.trim()).toBe('OPENAI_API_KEY environment variable is required.');
   });
 
-  it('prints the LangChain result to stdout', () => {
+  itPy('prints the LangChain result to stdout', () => {
     const result = runExample(['What is 2 + 2?'], { OPENAI_API_KEY: 'test-key' });
 
     expect(result.status).toBe(0);
@@ -127,7 +132,7 @@ class PromptTemplate:
     expect(result.stderr).toBe('');
   });
 
-  it('reports invocation failures on stderr and exits non-zero', () => {
+  itPy('reports invocation failures on stderr and exits non-zero', () => {
     const result = runExample(['What is 2 + 2?'], {
       OPENAI_API_KEY: 'test-key',
       PROMPTFOO_LANGCHAIN_STUB_ERROR: 'true',
