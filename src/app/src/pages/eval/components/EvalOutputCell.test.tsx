@@ -815,6 +815,31 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
+  it('keeps structured images whose matching Markdown source is blocked', () => {
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const remoteImage = 'https://example.com/structured.png';
+    mockResultsViewSettings.renderMarkdown = false;
+    const propsWithBlockedMarkdownAndStructuredImage: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: `![Inline preview](${dataUri})\n![Blocked remote](${remoteImage})`,
+        images: [{ data: remoteImage, mimeType: 'image/png' }],
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithBlockedMarkdownAndStructuredImage} />,
+    );
+
+    const renderedSources = [...container.querySelectorAll('img')]
+      .map((img) => img.getAttribute('src'))
+      .filter((src): src is string => Boolean(src));
+
+    expect(renderedSources).toEqual([dataUri, remoteImage]);
+  });
+
   it('deduplicates inline image from structured images list', () => {
     const dataUri =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -3147,6 +3172,19 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     await user.click(image);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('keeps search highlighting for blocked remote Markdown images', () => {
+    mockResultsViewSettings.renderMarkdown = false;
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const props = createMarkdownPreviewProps(
+      'Remote ![Probe](https://attacker.example/collect) marker',
+    );
+    props.searchText = 'Remote';
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('.search-highlight')).toHaveTextContent('Remote');
   });
 
   it('parses image syntax once per render and skips large ordinary text', () => {

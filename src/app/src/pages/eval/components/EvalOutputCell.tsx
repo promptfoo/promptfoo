@@ -456,14 +456,14 @@ function renderStructuredImages({
   node,
   output,
   primaryRenderedImageSrc,
-  renderableMarkdownImageSources,
+  renderedMarkdownImageSources,
   renderedMarkdownOutput,
   toggleLightbox,
 }: {
   node?: React.ReactNode;
   output: EvaluateTableOutput;
   primaryRenderedImageSrc?: string;
-  renderableMarkdownImageSources: string[];
+  renderedMarkdownImageSources: string[];
   renderedMarkdownOutput: boolean;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode | undefined {
@@ -476,7 +476,7 @@ function renderStructuredImages({
     addImageSrcComparisonKeys(renderedImageSrcs, primaryRenderedImageSrc);
   }
   if (renderedMarkdownOutput) {
-    for (const source of renderableMarkdownImageSources) {
+    for (const source of renderedMarkdownImageSources) {
       addImageSrcComparisonKeys(renderedImageSrcs, source);
     }
   }
@@ -527,7 +527,7 @@ function renderOutputNode({
   forceDataImagePreview,
   prettifyJson,
   markdownComponents,
-  renderableMarkdownImageSources,
+  renderedMarkdownImageSources,
   toggleLightbox,
   outputAudioSource,
   primaryRenderedImageSrc,
@@ -543,7 +543,7 @@ function renderOutputNode({
   forceDataImagePreview: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
-  renderableMarkdownImageSources: string[];
+  renderedMarkdownImageSources: string[];
   toggleLightbox: (url?: string) => void;
   outputAudioSource: ReturnType<typeof resolveAudioSource>;
   primaryRenderedImageSrc?: string;
@@ -570,7 +570,7 @@ function renderOutputNode({
     !node &&
     searchText &&
     shouldHighlightSearchText &&
-    renderableMarkdownImageSources.length === 0
+    renderedMarkdownImageSources.length === 0
   ) {
     node = renderHighlightedTextNode(text, searchText) ?? node;
   }
@@ -592,7 +592,7 @@ function renderOutputNode({
     node,
     output,
     primaryRenderedImageSrc,
-    renderableMarkdownImageSources,
+    renderedMarkdownImageSources,
     renderedMarkdownOutput,
     toggleLightbox,
   });
@@ -1420,12 +1420,17 @@ function EvalOutputCell({
 
   const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
-  const renderableMarkdownImageSources = useMemo(
-    () =>
-      normalizedText.includes('![') ? extractRenderableMarkdownImageSources(normalizedText) : [],
-    [normalizedText],
-  );
-  const hasInlineMarkdownDataImage = renderableMarkdownImageSources.some(isImageDataUrl);
+  const { hasInlineMarkdownDataImage, renderedMarkdownImageSources } = useMemo(() => {
+    const sources = normalizedText.includes('![')
+      ? extractRenderableMarkdownImageSources(normalizedText)
+      : [];
+    const hasDataImage = sources.some(isImageDataUrl);
+
+    return {
+      hasInlineMarkdownDataImage: hasDataImage,
+      renderedMarkdownImageSources: renderMarkdown ? sources : sources.filter(isImageDataUrl),
+    };
+  }, [normalizedText, renderMarkdown]);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
@@ -1451,7 +1456,7 @@ function EvalOutputCell({
     forceDataImagePreview: hasInlineMarkdownDataImage,
     prettifyJson,
     markdownComponents,
-    renderableMarkdownImageSources,
+    renderedMarkdownImageSources,
     toggleLightbox,
     outputAudioSource,
     primaryRenderedImageSrc,
