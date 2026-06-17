@@ -1,18 +1,21 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Moonshot AI Provider Demo
+description: Moonshot AI (Kimi) provider demo
 
 prompts:
   - 'In one sentence, summarise: {{passage}}'
 
-# Both models run on a single `MOONSHOT_API_KEY`. Kimi K2 is a reasoning model,
-# so `max_tokens` is set high enough to leave room for hidden reasoning tokens
-# plus the visible answer.
+# Both models run on a single `MOONSHOT_API_KEY`.
+#   - kimi-k2.6 is Moonshot's flagship Kimi K2 "thinking" model. It pins
+#     temperature and the other sampling params to fixed values, so the provider
+#     sends no sampling defaults for kimi-* models — just leave them unset.
+#     `showThinking: false` keeps its reasoning out of the graded answer.
+#   - moonshot-v1-8k is a generation model that accepts arbitrary sampling, so
+#     we set a low temperature for a deterministic comparison.
 providers:
-  - id: moonshot:kimi-k2-0711-preview
-    label: 'Kimi K2'
+  - id: moonshot:kimi-k2.6
+    label: 'Kimi K2.6'
     config:
-      temperature: 0.2
-      max_tokens: 1024
+      showThinking: false
   - id: moonshot:moonshot-v1-8k
     label: 'Moonshot v1 8k'
     config:

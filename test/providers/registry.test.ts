@@ -278,16 +278,27 @@ describe('Provider Registry', () => {
     });
 
     it('should handle moonshot providers correctly', async () => {
-      const factory = providerMap.find((f) => f.test('moonshot:kimi-k2-0711-preview'));
+      const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
       expect(factory).toBeDefined();
 
+      const moonshotOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'moonshot-test-key' },
+      };
       const provider = await factory!.create(
-        'moonshot:kimi-k2-0711-preview',
-        { ...mockProviderOptions, id: undefined },
+        'moonshot:moonshot-v1-8k',
+        moonshotOptions,
         mockContext,
       );
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('moonshot:kimi-k2-0711-preview');
+      expect(provider.id()).toBe('moonshot:moonshot-v1-8k');
+      // The registry double-nests config (createMoonshotProvider reads
+      // options.config.config); assert the user config survives end-to-end.
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('moonshot-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
     });
 
     it('should handle http/websocket providers correctly', async () => {
