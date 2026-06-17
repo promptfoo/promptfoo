@@ -336,7 +336,7 @@ translated_text,__expected
 
 If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
 
-To match a value that itself contains a comma, wrap that value in double quotes. Escape a double quote inside a quoted value by doubling it (`""`) or with a backslash (`\"`):
+To match a value that itself contains a comma, wrap that value in double quotes. Because the assertion is inside a quoted CSV cell, write each of those wrapping quotes twice:
 
 ```csv title="test_cases.csv"
 text,__expected
@@ -344,6 +344,8 @@ text,__expected
 ```
 
 Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. The same quoting rules apply when these assertions are written as a plain string anywhere else (for example via `__expected` in JSON test files).
+
+At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
 
 ### Special CSV Columns

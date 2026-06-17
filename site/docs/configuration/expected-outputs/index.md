@@ -405,25 +405,27 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 The general format is `type:value` or `type(threshold):value`. Values without a prefix default to `equals`.
 
-| Syntax                     | Type            | Example                                     |
-| -------------------------- | --------------- | ------------------------------------------- |
-| `value`                    | `equals`        | `Paris`                                     |
-| `contains:value`           | `contains`      | `contains:Paris`                            |
-| `icontains:value`          | `icontains`     | `icontains:paris`                           |
-| `starts-with:value`        | `starts-with`   | `starts-with:The answer`                    |
-| `regex:pattern`            | `regex`         | `regex:^Hello.*world$`                      |
-| `is-json`                  | `is-json`       | `is-json`                                   |
-| `contains-json`            | `contains-json` | `contains-json`                             |
-| `similar(threshold):value` | `similar`       | `similar(0.8):Hello world`                  |
-| `llm-rubric:criteria`      | `llm-rubric`    | `llm-rubric:Is helpful and accurate`        |
-| `grade:criteria`           | `llm-rubric`    | `grade:Does not mention being an AI`        |
-| `factuality:reference`     | `factuality`    | `factuality:Paris is the capital of France` |
-| `javascript:code`          | `javascript`    | `javascript:output.length < 100`            |
-| `fn:code`                  | `javascript`    | `fn:output.includes('hello')`               |
-| `python:code`              | `python`        | `python:len(output) > 10`                   |
-| `file://path`              | External file   | `file://assertions/custom.js`               |
-| `not-type:value`           | Negated         | `not-contains:error`                        |
-| `levenshtein(N):value`     | `levenshtein`   | `levenshtein(5):expected text`              |
+| Syntax                       | Type            | Example                                     |
+| ---------------------------- | --------------- | ------------------------------------------- |
+| `value`                      | `equals`        | `Paris`                                     |
+| `contains:value`             | `contains`      | `contains:Paris`                            |
+| `icontains:value`            | `icontains`     | `icontains:paris`                           |
+| `contains-any:value1,value2` | `contains-any`  | `contains-any:Paris,London`                 |
+| `contains-all:value1,value2` | `contains-all`  | `contains-all:Paris,France`                 |
+| `starts-with:value`          | `starts-with`   | `starts-with:The answer`                    |
+| `regex:pattern`              | `regex`         | `regex:^Hello.*world$`                      |
+| `is-json`                    | `is-json`       | `is-json`                                   |
+| `contains-json`              | `contains-json` | `contains-json`                             |
+| `similar(threshold):value`   | `similar`       | `similar(0.8):Hello world`                  |
+| `llm-rubric:criteria`        | `llm-rubric`    | `llm-rubric:Is helpful and accurate`        |
+| `grade:criteria`             | `llm-rubric`    | `grade:Does not mention being an AI`        |
+| `factuality:reference`       | `factuality`    | `factuality:Paris is the capital of France` |
+| `javascript:code`            | `javascript`    | `javascript:output.length < 100`            |
+| `fn:code`                    | `javascript`    | `fn:output.includes('hello')`               |
+| `python:code`                | `python`        | `python:len(output) > 10`                   |
+| `file://path`                | External file   | `file://assertions/custom.js`               |
+| `not-type:value`             | Negated         | `not-contains:error`                        |
+| `levenshtein(N):value`       | `levenshtein`   | `levenshtein(5):expected text`              |
 
 When the `__expected` field is provided, the success and failure statistics in the evaluation summary will be based on whether the expected criteria are met.
 
