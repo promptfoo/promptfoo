@@ -369,7 +369,18 @@ providers:
       temperature: 0.7
       max_output_tokens: 2000
       instructions: 'You are a helpful AI assistant.'
-      response_format: file://./response-format.json
+      response_format:
+        type: json_schema
+        name: structured_output
+        schema:
+          type: object
+          properties:
+            result:
+              type: string
+            confidence:
+              type: number
+          required: [result, confidence]
+          additionalProperties: false
       tools:
         - type: code_interpreter
           container:
