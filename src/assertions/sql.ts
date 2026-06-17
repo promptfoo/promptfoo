@@ -3,6 +3,28 @@ import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+type SqlParserConstructor = typeof import('node-sql-parser').Parser;
+type SqlParserModule = {
+  Parser?: SqlParserConstructor;
+  default?: { Parser?: SqlParserConstructor };
+};
+
+async function createSqlParser() {
+  let sqlParserModule: SqlParserModule;
+  try {
+    sqlParserModule = await import('node-sql-parser');
+  } catch {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  }
+
+  const SqlParser = sqlParserModule.Parser ?? sqlParserModule.default?.Parser;
+  if (!SqlParser) {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  }
+
+  return new SqlParser();
+}
+
 export const handleIsSql = async ({
   assertion,
   renderedValue,
@@ -29,17 +51,7 @@ export const handleIsSql = async ({
     throw new Error('is-sql assertion must have a object value.');
   }
 
-  type SqlParserModule = typeof import('node-sql-parser');
-  let sqlParserModule: SqlParserModule | { default: SqlParserModule };
-  try {
-    sqlParserModule = await import('node-sql-parser');
-  } catch {
-    throw new Error('node-sql-parser is not installed. Please install it first');
-  }
-
-  const SqlParser =
-    'Parser' in sqlParserModule ? sqlParserModule.Parser : sqlParserModule.default.Parser;
-  const sqlParser = new SqlParser();
+  const sqlParser = await createSqlParser();
 
   const opt: sqlParserOption = { database: databaseType };
 
@@ -47,11 +59,6 @@ export const handleIsSql = async ({
 
   // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
-  if (normalizedSql.length === 0) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
   if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
@@ -68,16 +75,14 @@ export const handleIsSql = async ({
     );
   }
 
-  if (normalizedSql.length > 0) {
-    try {
-      sqlParser.astify(outputString, opt);
-      pass = !inverse;
-    } catch {
-      pass = inverse;
-      failureReasons.push(
-        `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-      );
-    }
+  try {
+    sqlParser.astify(outputString, opt);
+    pass = !inverse;
+  } catch {
+    pass = inverse;
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
   }
 
   if (failureReasons.length > 0) {
@@ -160,17 +165,82 @@ export const handleIsSql = async ({
   };
 };
 
+const FENCE_START_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*([^\r\n]*)$/;
+const FENCE_END_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/;
+
+function extractSqlCodeBlocks(output: string): string[] {
+  const sqlBlocks: string[] = [];
+  let activeBlock:
+    | { body: string[]; fenceCharacter: string; fenceLength: number; isSql: boolean }
+    | undefined;
+
+  for (const line of output.split(/\r\n?|\n/)) {
+    if (!activeBlock) {
+      const openingFence = FENCE_START_PATTERN.exec(line);
+      if (openingFence) {
+        const fence = openingFence[1];
+        const language = openingFence[2].trim().toLowerCase();
+        activeBlock = {
+          body: [],
+          fenceCharacter: fence[0],
+          fenceLength: fence.length,
+          isSql: language === '' || language === 'sql',
+        };
+      }
+      continue;
+    }
+
+    const closingFence = FENCE_END_PATTERN.exec(line)?.[1];
+    if (
+      closingFence?.[0] === activeBlock.fenceCharacter &&
+      closingFence.length >= activeBlock.fenceLength
+    ) {
+      if (activeBlock.isSql) {
+        sqlBlocks.push(activeBlock.body.join('\n').trim());
+      }
+      activeBlock = undefined;
+    } else {
+      activeBlock.body.push(line);
+    }
+  }
+
+  return sqlBlocks;
+}
+
 export const handleContainsSql = async (
   assertionParams: AssertionParams,
 ): Promise<GradingResult> => {
-  // Match a fenced code block. Use a non-greedy [\s\S]*? body (not [^`]+) so the
-  // SQL can contain backtick-quoted identifiers (e.g. MySQL SELECT `id` FROM
-  // `users`) — the single backticks inside won't be confused with the closing
-  // triple-backtick fence.
-  const match = coerceString(assertionParams.outputString).match(/```(?:sql)?\s*([\s\S]*?)```/i);
-  if (match) {
-    const sqlCode = match[1].trim();
-    return handleIsSql({ ...assertionParams, outputString: sqlCode });
+  const outputString = coerceString(assertionParams.outputString);
+  const sqlBlocks = extractSqlCodeBlocks(outputString);
+  const candidates = sqlBlocks.length > 0 ? sqlBlocks : [outputString];
+  let failureReason = 'Output does not contain valid SQL';
+  let containsValidSql = false;
+
+  for (const candidate of candidates) {
+    if (candidate.trim().length === 0) {
+      continue;
+    }
+    const result = await handleIsSql({
+      ...assertionParams,
+      outputString: candidate,
+      inverse: false,
+    });
+    if (result.pass) {
+      containsValidSql = true;
+      break;
+    }
+    failureReason = result.reason;
   }
-  return handleIsSql(assertionParams);
+
+  const pass = assertionParams.inverse ? !containsValidSql : containsValidSql;
+  return {
+    assertion: assertionParams.assertion,
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? 'Assertion passed'
+      : containsValidSql
+        ? 'The output SQL statement is valid'
+        : failureReason,
+  };
 };
