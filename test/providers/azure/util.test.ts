@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
 describe('throwConfigurationError', () => {
@@ -79,5 +80,49 @@ describe('calculateAzureCost', () => {
   it('handles undefined prompt tokens', () => {
     const cost = calculateAzureCost('gpt-4', {}, undefined, 50);
     expect(cost).toBeUndefined();
+  });
+});
+
+describe('AZURE_MODELS cost coverage', () => {
+  // Guards against the cost=0 / undefined-cost class: every supported model in the pricing
+  // table must compute a positive, finite cost for non-zero token usage.
+  it('every AZURE_MODELS entry computes a positive, finite cost', () => {
+    const broken: string[] = [];
+    for (const { id } of AZURE_MODELS) {
+      const cost = calculateAzureCost(id, {}, 1000, 1000);
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost <= 0) {
+        broken.push(`${id} => ${cost}`);
+      }
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it('has no duplicate model ids', () => {
+    const ids = AZURE_MODELS.map((m) => m.id);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(dupes).toEqual([]);
+  });
+
+  // Spot-check that a representative of each supported family is priced (documents coverage and
+  // fails loudly if a whole family is dropped from the table).
+  it.each([
+    ['gpt-5.4', 'GPT-5.x'],
+    ['gpt-4.1', 'GPT-4.1'],
+    ['gpt-4o', 'GPT-4o'],
+    ['o3', 'o-series reasoning'],
+    ['gpt-4o-mini-transcribe', 'audio/transcribe'],
+    ['text-embedding-3-large', 'embeddings'],
+    ['gpt-image-1', 'image'],
+    ['claude-opus-4-7', 'Anthropic Claude'],
+    ['Llama-3.3-70B-Instruct', 'Meta Llama'],
+    ['DeepSeek-R1', 'DeepSeek'],
+    ['grok-4', 'xAI Grok'],
+    ['Phi-4', 'Microsoft Phi'],
+    ['Mistral-Large-3', 'Mistral'],
+    ['Cohere-command-r', 'Cohere'],
+    ['AI21-Jamba-1.5-Large', 'AI21'],
+    ['MAI-DS-R1', 'Microsoft MAI'],
+  ])('prices the %s family (%s)', (id) => {
+    expect(calculateAzureCost(id, {}, 1000, 1000)).toBeGreaterThan(0);
   });
 });

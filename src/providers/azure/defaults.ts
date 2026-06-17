@@ -97,6 +97,45 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-5.4-nano-2026-03-17',
     cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
   },
+  // gpt-5.5 / gpt-5.2 / gpt-5.3 are offered on Azure (see `az cognitiveservices model list`) and
+  // follow the gpt-5.x Azure rate (full 2.5/10, pro 5/20); verify current rates at
+  // https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/.
+  {
+    id: 'gpt-5.5',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.5-2026-04-23',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.5-pro',
+    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.2',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.2-2025-12-11',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.2-chat',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.2-codex',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.3-chat',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.3-codex',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
   {
     id: 'gpt-5-mini',
     cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
