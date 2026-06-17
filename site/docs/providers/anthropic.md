@@ -36,14 +36,14 @@ providers:
       apiKeyRequired: false
 ```
 
-When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Promptfoo loads the Claude Code OAuth credential from:
+When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, promptfoo loads the Claude Code OAuth credential from:
 
 1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
 2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
 
-Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
+promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
 
-If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
+If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
 
 This also enables [model-graded assertions](#model-graded-tests) such as `llm-rubric` to run without a separate Anthropic Console key — see [the example below](#model-graded-tests).
 
@@ -166,6 +166,7 @@ The Anthropic provider supports several options to customize the behavior of the
 Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -317,7 +318,7 @@ providers:
 
 ##### Combined Web Search and Web Fetch
 
-You can use both tools together for comprehensive web information gathering:
+You can use both tools together for web information gathering:
 
 ```yaml
 providers:
@@ -338,7 +339,7 @@ This configuration allows the model to first search for relevant information, th
 
 ##### Memory Tool
 
-Anthropic's `memory_20250818` tool can be included in `tools`. Promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. Promptfoo does not manage Anthropic memory stores or run local memory handlers for you.
+Anthropic's `memory_20250818` tool can be included in `tools`. promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. promptfoo does not manage Anthropic memory stores or run local memory handlers for you.
 
 ```yaml
 providers:
@@ -428,6 +429,7 @@ Claude supports prompt caching to optimize API usage and reduce costs for repeti
 Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -475,6 +477,7 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -523,13 +526,13 @@ tests:
 
 ### Claude Fable 5 and Mythos 5 notes
 
-Fable 5 and Mythos 5 use always-on adaptive thinking. Promptfoo omits unsupported
+Fable 5 and Mythos 5 use always-on adaptive thinking. promptfoo omits unsupported
 `temperature`, `top_p`, and `top_k` values, converts legacy
 `thinking: { type: 'enabled', budget_tokens: N }` configs to adaptive thinking, and
 omits `thinking: { type: 'disabled' }` because thinking cannot be disabled.
 Set `thinking: { type: 'adaptive', display: 'summarized' }` to include a readable
 thinking summary; the default `display: 'omitted'` returns an empty thinking block,
-which Promptfoo excludes from the output.
+which promptfoo excludes from the output.
 
 Both models use a 1M-token context window, support up to 128K output tokens, and are
 priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
@@ -838,7 +841,7 @@ defaultTest:
         apiKeyRequired: false
 ```
 
-See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers Promptfoo sets.
+See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers promptfoo sets.
 
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 
@@ -880,7 +883,7 @@ tests:
 
 ### Additional Capabilities
 
-- **Caching**: Promptfoo caches previous LLM requests by default.
+- **Caching**: promptfoo caches previous LLM requests by default.
 - **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
 - **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
 

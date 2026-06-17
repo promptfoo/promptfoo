@@ -139,7 +139,7 @@ For the complete list of 200+ models with pricing, see the [Azure model catalog]
 
 ## Azure Responses API
 
-The Azure OpenAI Responses API is a stateful API that brings together the best capabilities from chat completions and assistants API in one unified experience. It provides advanced features like MCP servers, code interpreter, and background tasks.
+The Azure OpenAI Responses API is a stateful API that brings together capabilities from chat completions and assistants API in one unified experience. It provides features like MCP servers, code interpreter, and background tasks.
 
 ### Using the Responses API
 
@@ -355,14 +355,14 @@ config:
 
 ### Complete Responses API Example
 
-Here's a comprehensive example using multiple Azure Responses API features:
+Here's an example using multiple Azure Responses API features:
 
-```yaml
-# promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Responses API evaluation
 
 providers:
-  # Using the new azure:responses alias (recommended)
+  # Using the azure:responses alias (recommended)
   - id: azure:responses:gpt-4.1-deployment
     label: azure-gpt-4.1
     config:
@@ -443,7 +443,7 @@ config:
 
 ### Responses API Limitations
 
-- Web search tool support is still in development
+- Web search tool support is in development
 - PDF file upload with `purpose: user_data` requires workaround (use `purpose: assistants`)
 - Background mode requires `store: true`
 - Some features may have region-specific availability
@@ -826,7 +826,8 @@ providers:
 
 You can use variables in your configuration to dynamically adjust the reasoning effort based on your test cases:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Configure different reasoning efforts based on test variables
 prompts:
   - 'Solve this complex math problem: {{problem}}'
@@ -857,7 +858,7 @@ If you encounter this error with `azure:chat` or `azure:completion`:
 API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
 ```
 
-For a custom or aliased reasoning deployment, this commonly means Promptfoo is not
+For a custom or aliased reasoning deployment, this commonly means promptfoo is not
 treating it as a reasoning model because `isReasoningModel: true` is missing. Update
 your config as shown above.
 
@@ -998,6 +999,7 @@ command has no flag for it yet, so create the deployment via the REST API
 ### Claude Configuration Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Azure Claude evaluation
 
 providers:
@@ -1081,8 +1083,8 @@ Adjust `reasoning_effort` to control response quality vs. speed: `low` for faste
 
 Microsoft's first-party **MAI** model family splits across two promptfoo provider types. Availability varies, so check the per-model notes below before relying on a model.
 
-- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all currently **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
-- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited today — see [Reasoning chat](#reasoning-chat-azurechat).
+- **Image generation** models (`MAI-Image-2.5`, `MAI-Image-2.5-Flash`, `MAI-Image-2e`, `MAI-Image-2` — all in **Preview**) are [Foundry Models sold by Azure](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure), served from a Microsoft-managed `/mai/v1/images/generations` route, and use the dedicated **`azure:image`** provider. This path is fully supported and tested.
+- **Text / reasoning / coding** models (`MAI-DS-R1`, `MAI-Thinking-1`, `MAI-Code-1-Flash`) speak the standard chat-completions API and use **`azure:chat`**. promptfoo recognizes them for cost and reasoning detection, but their Azure availability is limited — see [Reasoning chat](#reasoning-chat-azurechat).
 
 Deploy a model to a Microsoft Foundry (AIServices) resource, then point promptfoo at the resource's `*.services.ai.azure.com` endpoint:
 
@@ -1127,7 +1129,7 @@ To grade generated images with a vision LLM, use an `llm-rubric` assertion with 
 
 ### Reasoning chat (`azure:chat`)
 
-MAI text models run through the standard `azure:chat` provider. **Availability is limited today:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog (checked via `az cognitiveservices model list` in eastus, westus, swedencentral, and eastus2 — as of this writing). promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` as soon as your subscription can deploy them. The example below is forward-looking.
+MAI text models run through the standard `azure:chat` provider. **Availability is limited:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog (checked via `az cognitiveservices model list` in eastus, westus, swedencentral, and eastus2 — as of this writing). promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` as soon as your subscription can deploy them. The example below is forward-looking.
 
 promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
@@ -1239,7 +1241,8 @@ Key requirements:
 
 Here's an example of a simple full assistant eval:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -1416,7 +1419,8 @@ In that example, the request tells the runtime that file search is available, bu
 
 Here's a complete example configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Azure Foundry Agent evaluation'
 
 providers:
@@ -1448,7 +1452,7 @@ tests:
 
 ### Error Handling
 
-The Azure Foundry Agent provider includes comprehensive error handling:
+The Azure Foundry Agent provider includes error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
 - **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
@@ -1545,7 +1549,8 @@ providers:
 
 ### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - azure:video:sora
 

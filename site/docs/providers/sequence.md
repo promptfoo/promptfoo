@@ -1,6 +1,6 @@
 ---
 sidebar_label: Sequence
-description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
+description: 'Chain multiple AI providers sequentially to create evaluation workflows with data transformation and routing'
 ---
 
 # Sequence Provider
@@ -36,7 +36,8 @@ The Sequence Provider:
 
 Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - openai:chat:gpt-4
   - id: sequence

@@ -43,7 +43,7 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable Promptfoo's upfront API key check:
+If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable promptfoo's upfront API key check:
 
 ```yaml
 providers:
@@ -85,6 +85,7 @@ export CLAUDE_CODE_USE_VERTEX=true
 By default, Claude Agent SDK runs in a temporary directory with no tools enabled, using the `default` permission mode. This makes it behave similarly to the standard [Anthropic provider](/docs/providers/anthropic/). It has no access to the file system (read or write) and can't run system commands.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - anthropic:claude-agent-sdk
 
@@ -138,7 +139,7 @@ prompts:
 | Parameter                            | Type             | Description                                                                                                  | Default                  |
 | ------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
 | `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
-| `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
+| `apiKeyRequired`                     | boolean          | Require promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
@@ -404,7 +405,7 @@ providers:
 ```
 
 :::note
-Only the `local` type is currently supported. Relative paths in `path` resolve against the config file's directory.
+Only the `local` type is supported. Relative paths in `path` resolve against the config file's directory.
 :::
 
 ### Plugin Structure
@@ -502,7 +503,8 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 
 Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -559,6 +561,7 @@ This ensures tests don't depend on user-specific skills that may not be present 
 ### Example: Complete Skills Testing Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -712,7 +715,7 @@ providers:
         - context-1m-2025-08-07
 ```
 
-Currently available betas:
+Available betas:
 
 | Beta                    | Description                                        |
 | ----------------------- | -------------------------------------------------- |
@@ -1066,7 +1069,7 @@ assert:
       return grepCall?.output?.includes('expected match');
 ```
 
-For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
+For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
 By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
 

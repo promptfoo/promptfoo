@@ -11,7 +11,7 @@ The `a2a` provider allows you to use agents that implement the
 promptfoo. This is useful for testing agentic applications that expose an A2A interface for
 message-based interaction, streaming responses, and asynchronous task execution.
 
-Promptfoo sends each test prompt as an A2A message, waits for the agent to respond or complete a
+promptfoo sends each test prompt as an A2A message, waits for the agent to respond or complete a
 task, and extracts the final text from the A2A response. When an Agent Card is available, promptfoo
 can also use it to discover the agent endpoint and add advertised skills to red team generation
 context.
@@ -19,7 +19,7 @@ context.
 ## Setup
 
 To use the A2A provider, you need an A2A server that supports the HTTP+JSON REST binding. The
-current provider supports:
+provider supports:
 
 - `POST /message:send`
 - `POST /message:stream`
@@ -41,7 +41,7 @@ providers:
         token: '{{ env.A2A_API_KEY }}'
 ```
 
-The `a2a:<url>` shorthand sets `config.url`. Promptfoo appends the operation paths, such as
+The `a2a:<url>` shorthand sets `config.url`. promptfoo appends the operation paths, such as
 `/message:send`, `/message:stream`, and `/tasks/{id}`, to this base URL.
 
 ## Agent Card Discovery
@@ -89,7 +89,7 @@ context, similar to how the MCP provider uses discovered tools.
 
 ## Authentication
 
-Use `auth` for common authentication schemes. Promptfoo applies it to both Agent Card discovery
+Use `auth` for common authentication schemes. promptfoo applies it to both Agent Card discovery
 requests and A2A operation requests. Values support Nunjucks variables, so use the `env` global for
 environment variables, such as `{{ env.A2A_API_KEY }}`.
 
@@ -429,7 +429,7 @@ The A2A provider returns provider errors for common failure cases:
 - JSON-RPC and gRPC bindings are not supported yet
 - Push-notification webhooks are not supported because promptfoo evals require a synchronous result
 - Streaming is consumed into a single final `ProviderResponse`; token-by-token UI streaming is not exposed
-- Agent Card discovery currently selects the first `HTTP+JSON` supported interface
+- Agent Card discovery selects the first `HTTP+JSON` supported interface
 
 ## See Also
 

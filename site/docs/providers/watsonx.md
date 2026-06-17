@@ -9,11 +9,11 @@ description: Configure IBM WatsonX's text and chat models for enterprise-grade L
 
 ## Supported Models
 
-IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider currently supports **text generation and chat models** that can be called directly via API.
+IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider supports **text generation and chat models** that can be called directly via API.
 
 :::tip Finding Available Models
 
-To see the latest models available in your region, use IBM's API or review IBM's [supported foundation models](https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-supported-foundation-models):
+To see the models available in your region, use IBM's API or review IBM's [supported foundation models](https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-supported-foundation-models):
 
 ```bash
 curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-05-01" \
@@ -24,22 +24,22 @@ curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=202
 
 ### Currently Available Models
 
-The following are representative **ready-to-use** models that IBM currently provides for direct inferencing through the text generation or chat APIs:
+The following are representative **ready-to-use** models that IBM provides for direct inferencing through the text generation or chat APIs:
 
 #### IBM Granite
 
-- `ibm/granite-4-h-small` - Latest ready-to-use Granite text model
+- `ibm/granite-4-h-small` - Ready-to-use Granite text model
 - `ibm/granite-3-8b-instruct` - Older instruct model (deprecated)
 - `ibm/granite-8b-code-instruct` - Code generation specialist
 
 #### Meta Llama
 
-- `meta-llama/llama-4-maverick-17b-128e-instruct-fp8` - Latest Llama 4 model
-- `meta-llama/llama-3-3-70b-instruct` - Latest Llama 3.3 (70B)
+- `meta-llama/llama-4-maverick-17b-128e-instruct-fp8` - Llama 4 model
+- `meta-llama/llama-3-3-70b-instruct` - Llama 3.3 (70B)
 
 #### Mistral
 
-- `mistralai/mistral-large-2512` - Latest ready-to-use Mistral Large model
+- `mistralai/mistral-large-2512` - Ready-to-use Mistral Large model
 - `mistralai/mistral-medium-2505` - Mid-tier model
 - `mistralai/mistral-small-3-1-24b-instruct-2503` - Smaller instruct model
 
@@ -148,7 +148,8 @@ To install the WatsonX provider, use the following steps:
 
 Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here's an example using the **Granite 4 H Small** model:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - watsonx:ibm/granite-4-h-small
 

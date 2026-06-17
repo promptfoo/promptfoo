@@ -42,7 +42,7 @@ providers:
 
 :::note
 
-The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and currently map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
+The primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
 
 :::
 
@@ -65,12 +65,12 @@ The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro
 
 ### deepseek-chat
 
-- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
+- Legacy alias that maps to non-thinking `deepseek-v4-flash`
 - Scheduled for retirement on July 24, 2026
 
 ### deepseek-reasoner
 
-- Legacy alias that currently maps to thinking `deepseek-v4-flash`
+- Legacy alias that maps to thinking `deepseek-v4-flash`
 - Scheduled for retirement on July 24, 2026
 - Supports showing or hiding reasoning content through the `showThinking` parameter
 
@@ -84,7 +84,8 @@ Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `freq
 
 Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: deepseek:deepseek-reasoner
     config:

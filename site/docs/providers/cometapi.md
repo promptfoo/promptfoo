@@ -121,7 +121,8 @@ npx promptfoo@latest eval --prompts "Describe what's in this image: {{image_url}
 
 **Image Generation with Custom Parameters:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: cometapi:image:dall-e-3
     config:
@@ -141,7 +142,8 @@ tests:
 
 **Vision Model Configuration:**
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: cometapi:chat:gpt-4o
     config:
@@ -167,7 +169,7 @@ curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 
 Or browse models on the [CometAPI pricing page](https://api.cometapi.com/pricing).
 
-**Using Any Model:** Simply specify the model name with the appropriate type prefix:
+**Using Any Model:** Specify the model name with the appropriate type prefix:
 
 - `cometapi:chat:any-model-name` for text/chat models
 - `cometapi:image:any-image-model` for image generation

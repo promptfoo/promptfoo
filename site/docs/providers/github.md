@@ -29,7 +29,7 @@ export GITHUB_TOKEN=your_github_token
 
 ## Available Models
 
-GitHub Models provides access to industry-leading AI models from various providers. Models are regularly updated and added frequently.
+GitHub Models provides access to industry-leading AI models from various providers.
 
 ### Model Categories
 
@@ -78,28 +78,23 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github-fast
-    provider: github:openai/gpt-5-nano
+  - id: github:openai/gpt-5-nano
     config:
       temperature: 0.5
 
-  - id: github-balanced
-    provider: github:openai/gpt-5-mini
+  - id: github:openai/gpt-5-mini
     config:
       temperature: 0.6
 
-  - id: github-smart
-    provider: github:openai/gpt-5
+  - id: github:openai/gpt-5
     config:
       temperature: 0.7
 
-  - id: github-multimodal
-    provider: github:meta/llama-4-maverick
+  - id: github:meta/llama-4-maverick
     config:
       temperature: 0.8
 
-  - id: github-reasoning
-    provider: github:xai/grok-4
+  - id: github:xai/grok-4
     config:
       temperature: 0.7
 ```
@@ -209,7 +204,7 @@ const specializedModelsEvalRecord = await promptfoo.evaluate({
   providers: [
     'github:azureml-mistral/Codestral-2501', // Code generation
     'github:deepseek/deepseek-r1', // Advanced reasoning
-    'github:xai/grok-4', // Powerful reasoning and analysis
+    'github:xai/grok-4', // Reasoning and analysis
     'github:meta/llama-4-scout', // Extended context (10M tokens)
   ],
   prompts: ['Implement {{algorithm}} with optimal time complexity'],

@@ -44,7 +44,8 @@ end
 
 ### Step 2: Configure Promptfoo
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - id: 'file://echo_provider.rb'
@@ -54,7 +55,7 @@ prompts:
   - 'What is 2+2?'
 ```
 
-### Step 3: Run the evaluation
+### Step 3: Run the eval
 
 ```bash
 npx promptfoo@latest eval
@@ -471,7 +472,7 @@ npx promptfoo@latest eval
 
 #### Ruby Detection Process
 
-Promptfoo automatically detects your Ruby installation in this priority order:
+promptfoo automatically detects your Ruby installation in this priority order:
 
 1. **Provider config**: `rubyExecutable` in your config
 2. **Environment variable**: `PROMPTFOO_RUBY` (if set)

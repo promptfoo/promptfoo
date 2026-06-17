@@ -184,7 +184,8 @@ providers:
 
 ### Basic Human Feedback Collection
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Collect human feedback on AI responses
 
 providers:
@@ -208,7 +209,8 @@ tests:
 
 ### Expert Review with Specific User
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Get expert feedback from specific team member
 
 providers:
@@ -233,7 +235,8 @@ tests:
 
 ### Thread-based Conversations
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Continue conversation in thread
 
 providers:
@@ -295,7 +298,7 @@ module.exports = {
 
 ## Testing Other Slack Bots
 
-The Slack provider is excellent for testing other Slack bots in their native environment. This allows you to:
+The Slack provider supports testing other Slack bots in their native environment. This allows you to:
 
 - Evaluate bot responses to various prompts
 - Compare different bot implementations
@@ -338,7 +341,8 @@ The Slack provider is excellent for testing other Slack bots in their native env
 
 ### Example: Testing a Customer Support Bot
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Test our customer support bot
 
 providers:
@@ -427,7 +431,8 @@ promptfoo eval -c bot-test-config.yaml -j 10
 
 Compare multiple bot implementations:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: slack
     label: bot-v1
@@ -511,7 +516,8 @@ async function findBotId() {
 
 ## Complete Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Human evaluation of customer service responses
 description: Compare AI and human customer service responses
 
@@ -565,7 +571,8 @@ tests:
 2. Invite your bot to the channel: `/invite @YourBotName`
 3. Create a simple test config:
 
-   ```yaml
+   ```yaml title="promptfooconfig.yaml"
+   # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
    providers:
      - id: slack:YOUR_CHANNEL_ID
        config:

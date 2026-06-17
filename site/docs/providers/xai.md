@@ -16,11 +16,11 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. xAI does not expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
-The xAI provider includes support for the following model formats. xAI's public model catalog currently recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
+The xAI provider includes support for the following model formats. xAI's public model catalog recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
 
 :::caution Legacy xAI model aliases
 
@@ -195,7 +195,7 @@ providers:
 
 ### Grok-4 Specific Behavior
 
-Grok-4 introduces significant changes compared to previous Grok models:
+Grok-4 introduces changes compared to previous Grok models:
 
 - **Always uses reasoning**: Grok-4 is a reasoning model that always operates at maximum reasoning capacity
 - **No `reasoning_effort` parameter**: Unlike Grok-3 mini models, Grok-4 does not support the `reasoning_effort` parameter
@@ -220,7 +220,7 @@ providers:
 The Grok Code Fast models are optimized for agentic coding workflows and offer several key features:
 
 - **Built for Speed**: Designed to be highly responsive for agentic coding tools where multiple tool calls are common
-- **Economical Pricing**: At $0.20/1M input tokens and $1.50/1M output tokens, significantly more affordable than flagship models
+- **Economical Pricing**: At $0.20/1M input tokens and $1.50/1M output tokens, more affordable than flagship models
 - **Reasoning Capabilities**: Built-in reasoning for code analysis, debugging, and problem-solving
 - **Tool Integration**: Excellent support for function calling, tool usage, and web search
 - **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
@@ -251,13 +251,13 @@ providers:
 
 This is equivalent to setting `base_url="https://eu-west-1.api.x.ai/v1"` in the Python client. The same `region` option is also accepted by the xAI image, video, Responses, and realtime voice providers.
 
-xAI's public regional docs say the global endpoint automatically routes requests and gives access to every model available to your team. The current public model catalog shows xAI's language, Grok Imagine image, and Grok Imagine video models in both `us-east-1` and `eu-west-1`. Regional endpoints are useful for data-residency requirements, but xAI warns that not every model is guaranteed in every region over time; for the latest region-by-region availability, use the xAI Console or the model pages on xAI's site.
+xAI's public regional docs say the global endpoint automatically routes requests and gives access to every model available to your team. The public model catalog shows xAI's language, Grok Imagine image, and Grok Imagine video models in both `us-east-1` and `eu-west-1`. Regional endpoints are useful for data-residency requirements, but xAI warns that not every model is guaranteed in every region over time; for region-by-region availability, use the xAI Console or the model pages on xAI's site.
 
 ### Live Search (Beta)
 
 :::warning
 
-xAI's current documentation recommends the Responses API for server-side tools. Promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
+xAI's documentation recommends the Responses API for server-side tools. promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
 
 :::
 
@@ -347,6 +347,7 @@ tools:
 #### Complete Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:responses:grok-4.3
     config:
@@ -392,7 +393,7 @@ tests:
 
 #### Supported Models
 
-The Responses API works with current Grok models, including:
+The Responses API works with Grok models, including:
 
 - `grok-4.3`
 - `grok-4.20-reasoning`
@@ -591,7 +592,7 @@ prompts:
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
+promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
 
 ### Video Generation
 
@@ -678,7 +679,7 @@ Reference-to-video requires a non-empty prompt, cannot be combined with `image` 
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
+promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, promptfoo falls back to the video provider's local duration-based estimate.
 
 ### Voice Agent API
 

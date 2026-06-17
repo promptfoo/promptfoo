@@ -69,7 +69,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
@@ -208,7 +208,8 @@ Once the endpoint is created, take the `Endpoint URL` shown on the page:
 
 Then set up your promptfoo config like this:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'HF private inference endpoint'
 
 prompts:

@@ -5,7 +5,7 @@ description: Configure Databricks Foundation Model APIs with Llama-3, Claude, an
 
 # Databricks Foundation Model APIs
 
-The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to state-of-the-art models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
+The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
 
 ## Overview
 
@@ -44,7 +44,7 @@ providers:
 
 Available pay-per-token models include:
 
-- `databricks-meta-llama-3-3-70b-instruct` - Meta's latest Llama model
+- `databricks-meta-llama-3-3-70b-instruct` - Meta's Llama model
 - `databricks-claude-3-7-sonnet` - Anthropic Claude with reasoning capabilities
 - `databricks-gte-large-en` - Text embeddings model
 - `databricks-dbrx-instruct` - Databricks' own foundation model
@@ -125,6 +125,7 @@ providers:
 Vision models on Databricks require structured JSON prompts similar to OpenAI's format. Here's how to use them:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://vision-prompt.json
 
@@ -225,6 +226,7 @@ Usage data is available through Databricks system tables:
 ## Example: Multi-Model Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Explain quantum computing to a 10-year-old'
 

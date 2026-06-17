@@ -114,7 +114,7 @@ For a complete list of all 200+ available models and their specifications, refer
 ## Example Configuration
 
 ```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.jsons
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: togetherai:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
     config:

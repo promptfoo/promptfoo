@@ -121,7 +121,7 @@ Webhook URLs and responses can contain sensitive workflow data. Put authenticati
 templated headers rather than URL query strings or paths, and treat local eval result exports and
 debug logs as sensitive. The provider hides webhook URLs in its display identifier and does not
 cache webhook requests or responses, so tokenized URLs and session-bearing payloads do not enter
-Promptfoo response-cache diagnostics or storage. The shared fetch layer now strips basic-auth
+promptfoo response-cache diagnostics or storage. The shared fetch layer now strips basic-auth
 credentials and known sensitive query parameters (`api_key`, `token`, `signature`, …) before
 writing URLs to debug logs, but path-as-secret URLs (`/webhook/<unguessable-id>`) still appear in
 those logs by design — keep `LOG_LEVEL=debug` output out of shared transcripts when running

@@ -24,7 +24,8 @@ providers:
 
 The placeholder variable `{{prompt}}` will be replaced with the final prompt for the test case. You can also reference test variables as you construct the request:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: https
     config:
@@ -40,7 +41,7 @@ tests:
       language: 'French'
 ```
 
-When available, Promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
+When available, promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
 
 ```yaml
 body:
@@ -76,7 +77,7 @@ providers:
 ## Sending multipart/form-data
 
 Use `multipart.parts` when the target API expects form fields or file uploads.
-Promptfoo builds a fresh `FormData` body for every request and automatically sets the
+promptfoo builds a fresh `FormData` body for every request and automatically sets the
 multipart boundary. Do not set `Content-Type: multipart/form-data` yourself unless
 you are using [raw HTTP request mode](#sending-a-raw-http-request).
 
@@ -183,7 +184,7 @@ providers:
       transformResponse: 'json.text'
 ```
 
-This path is relative to the directory containing the Promptfoo config file.
+This path is relative to the directory containing the promptfoo config file.
 
 Then create a file at `path/to/request.txt`:
 
@@ -632,7 +633,8 @@ When this flag is set, multi-turn red team attackers stop gracefully instead of 
 
 The `transformResponse` output becomes the input for test-level transforms. Understanding this pipeline is important for complex evaluations:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: https
     config:
@@ -657,9 +659,9 @@ tests:
 
 ## Tool Calling
 
-The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
+The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
 
-Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+Setting `transformToolsFormat` is important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
 
 ### Basic Configuration
 
@@ -1633,7 +1635,7 @@ sessionParser: 'data.headers.["x-session-Id"]'
 
 ### Client-side session management
 
-If you want the Promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your Promptfoo or redteam config. This is useful for multi-turn evals or multi-turn redteam attacks where the provider maintains a conversation state.
+If you want the promptfoo client to send a unique session or conversation ID with each test case, you can add a `transformVars` option to your promptfoo or redteam config. This is useful for multi-turn evals or multi-turn redteam attacks where the provider maintains a conversation state.
 
 For example:
 

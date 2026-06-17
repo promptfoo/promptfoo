@@ -275,7 +275,7 @@ providers:
 
 ### Response Transforms
 
-Use `transformResponse` when the MCP tool result needs to be reshaped before Promptfoo evaluates it.
+Use `transformResponse` when the MCP tool result needs to be reshaped before promptfoo evaluates it.
 This is useful when a tool returns structured content, multiple content blocks, or metadata that you
 want to promote into a `ProviderResponse`.
 
@@ -297,7 +297,7 @@ providers:
 The transform receives three arguments:
 
 - `result`: The raw MCP SDK tool result
-- `content`: Promptfoo's normalized string representation of the tool result
+- `content`: promptfoo's normalized string representation of the tool result
 - `context`: Tool-call metadata with `toolName`, `toolArgs`, and `originalPayload`
 
 You can provide the transform as a JavaScript expression, a function, or a file reference:
@@ -315,7 +315,7 @@ module.exports = (result, content, context) => ({
 
 Return a primitive value to set `output`, or return a full `ProviderResponse` object when you need
 fields such as `metadata`, `guardrails`, or `sessionId`.
-Function and file-based transforms may be async; Promptfoo awaits them before evaluating the tool
+Function and file-based transforms may be async; promptfoo awaits them before evaluating the tool
 result.
 
 ### Timeout Configuration
@@ -413,7 +413,7 @@ tests:
 
 ## Red Team Testing with MCP
 
-The MCP provider is particularly powerful for red team testing of agentic systems. Here's a recommended configuration for comprehensive security testing:
+The MCP provider is useful for red team testing of agentic systems. Here's a recommended configuration for security testing:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

@@ -5,7 +5,7 @@ description: Use Meta's hosted Llama API service for text generation and multimo
 
 # Meta Llama API
 
-The Llama API provider enables you to use Meta's hosted Llama models through their official API service. This includes access to the latest Llama 4 multimodal models and Llama 3.3 text models, as well as accelerated variants from partners like Cerebras and Groq.
+The Llama API provider enables you to use Meta's hosted Llama models through their official API service. This includes access to Llama 4 multimodal models and Llama 3.3 text models, as well as accelerated variants from partners like Cerebras and Groq.
 
 ## Setup
 
@@ -51,8 +51,8 @@ providers:
 
 #### Llama 4 (Multimodal)
 
-- **`Llama-4-Maverick-17B-128E-Instruct-FP8`**: Industry-leading multimodal model with image and text understanding
-- **`Llama-4-Scout-17B-16E-Instruct-FP8`**: Class-leading multimodal model with superior visual intelligence
+- **`Llama-4-Maverick-17B-128E-Instruct-FP8`**: Multimodal model with image and text understanding
+- **`Llama-4-Scout-17B-16E-Instruct-FP8`**: Multimodal model with visual intelligence
 
 Both Llama 4 models support:
 
@@ -89,7 +89,8 @@ Note: Accelerated variants are text-only and don't support image inputs.
 
 Basic text generation works with all models:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - llamaapi:Llama-3.3-70B-Instruct
 
@@ -107,7 +108,8 @@ tests:
 
 Llama 4 models can process images alongside text:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
 
@@ -138,7 +140,8 @@ tests:
 
 Generate responses following a specific JSON schema:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
     config:
@@ -182,7 +185,8 @@ tests:
 
 Enable models to call external functions:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llamaapi:Llama-3.3-70B-Instruct
     config:
@@ -219,7 +223,8 @@ tests:
 
 Enable real-time response streaming:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llamaapi:Llama-3.3-8B-Instruct
     config:
@@ -259,7 +264,7 @@ Rate limit information is available in response headers:
 ### Choose Llama 4 Models When:
 
 - You need multimodal capabilities (text + images)
-- You want the most advanced reasoning and intelligence
+- You want strong reasoning and intelligence
 - Quality is more important than speed
 - You're building complex AI applications
 
@@ -313,7 +318,7 @@ Error: 401 Unauthorized
 
 - Verify your `LLAMA_API_KEY` environment variable is set
 - Check that your API key is valid at llama.developer.meta.com
-- Ensure you have access to the Llama API (currently in preview)
+- Ensure you have access to the Llama API
 
 ### Rate Limiting
 

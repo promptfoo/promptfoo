@@ -5,11 +5,11 @@ description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-T
 
 # ElevenLabs
 
-The ElevenLabs provider integrates multiple AI audio capabilities for comprehensive voice AI testing and evaluation.
+The ElevenLabs provider integrates multiple AI audio capabilities for voice AI testing and evaluation.
 
 :::tip
 
-For a comprehensive step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
+For a step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
 
 :::
 
@@ -26,7 +26,8 @@ Get started with ElevenLabs in 3 steps:
 
 2. **Create a config file** (`promptfooconfig.yaml`):
 
-   ```yaml
+   ```yaml title="promptfooconfig.yaml"
+   # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
    prompts:
      - 'Welcome to our customer service. How can I help you today?'
 
@@ -227,7 +228,8 @@ All providers support these common parameters:
 
 ### Text-to-Speech: Voice Comparison
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Welcome to ElevenLabs. Our AI voice technology delivers natural-sounding speech.'
 
@@ -251,7 +253,8 @@ tests:
 
 ### Speech-to-Text: Accuracy Testing
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://audio/test-recording.mp3
 
@@ -271,7 +274,8 @@ tests:
 
 ### Conversational Agents: Evaluation
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     User: I need help with my order
@@ -456,7 +460,8 @@ Common voice IDs and names:
 
 Compare voice quality across models and voices:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
@@ -491,7 +496,8 @@ tests:
 
 Test end-to-end TTS → STT accuracy:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     The meeting is scheduled for Thursday at 2 PM in conference room B.
@@ -525,7 +531,8 @@ tests:
 
 Ensure agent improvements don't degrade performance:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     User: I need to cancel my subscription

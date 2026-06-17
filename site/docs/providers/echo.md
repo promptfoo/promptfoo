@@ -5,7 +5,7 @@ description: Configure Echo Provider for testing and debugging LLM integrations 
 
 # Echo Provider
 
-The Echo Provider is a simple utility provider that returns the input prompt as the output. It's particularly useful for testing, debugging, and validating pre-generated outputs without making any external API calls.
+The Echo Provider is a simple utility provider that returns the input prompt as the output. It's useful for testing, debugging, and validating pre-generated outputs without making any external API calls.
 
 ## Configuration
 
@@ -36,7 +36,8 @@ The Echo Provider requires no additional configuration and returns the input aft
 
 ### Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - echo
   - openai:chat:gpt-5-mini
@@ -75,7 +76,8 @@ A common pattern is evaluating LLM outputs that were already generated in produc
 
 Use your logged output directly as the prompt:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{logged_output}}'
 
@@ -96,7 +98,8 @@ The echo provider returns the prompt as-is, so your logged output flows directly
 
 For JSON-formatted production logs, use a default transform to extract specific fields:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - '{{logged_output}}'
 
@@ -122,7 +125,7 @@ tests:
         value: 'London'
 ```
 
-This pattern is particularly useful for:
+This pattern is useful for:
 
 - Post-deployment evaluation of production prompts
 - Regression testing against known outputs

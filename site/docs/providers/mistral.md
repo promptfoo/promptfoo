@@ -17,7 +17,7 @@ keywords:
 
 # Mistral AI
 
-The [Mistral AI API](https://docs.mistral.ai/api/) provides access to cutting-edge language models that deliver exceptional performance at competitive pricing. Mistral offers a compelling alternative to OpenAI and other providers, with specialized models for reasoning, code generation, and multimodal tasks.
+The [Mistral AI API](https://docs.mistral.ai/api/) provides access to language models at competitive pricing. Mistral is an alternative to OpenAI and other providers, with specialized models for reasoning, code generation, and multimodal tasks.
 
 Mistral is particularly valuable for:
 
@@ -30,7 +30,7 @@ Mistral is particularly valuable for:
 
 :::tip Why Choose Mistral?
 
-Mistral's current catalog spans low-cost small models, native reasoning models, and
+Mistral's catalog spans low-cost small models, native reasoning models, and
 frontier multimodal models such as Mistral Large 3 at $0.50/$1.50 per million tokens
 (input/output).
 
@@ -71,14 +71,15 @@ providers:
       prompt_mode: reasoning # reasoning | null on native reasoning models
 ```
 
-`safe_prompt` is still accepted for compatibility, but Mistral now recommends inline
+`safe_prompt` is accepted for compatibility, but Mistral recommends inline
 `guardrails` instead.
 
 ### JSON Mode
 
 Force structured JSON output:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: mistral:mistral-large-latest
     config:
@@ -229,7 +230,7 @@ providers:
 ## Reasoning Models
 
 Mistral's **Magistral** models are specialized native reasoning models. `magistral-medium-latest`
-currently points to the 2509 generation, which uses tokenized thinking chunks and a 128k
+points to the 2509 generation, which uses tokenized thinking chunks and a 128k
 context window. Mistral's public model card marks `magistral-small-2509` for deprecation
 after April 30, 2026.
 
@@ -258,7 +259,7 @@ providers:
 ```
 
 `n` requests multiple completions where the target model supports them. Mistral notes
-that `mistral-large-2512` does not currently support `n > 1`.
+that `mistral-large-2512` does not support `n > 1`.
 
 ## Multimodal Capabilities
 
@@ -268,7 +269,8 @@ Mistral offers vision-capable models that can process both text and images:
 
 Use a current multimodal chat model such as `mistral-large-2512`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: mistral:mistral-large-2512
     config:
@@ -291,7 +293,8 @@ tests:
 
 Mistral models support advanced function calling for building AI agents and tools:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: mistral:mistral-large-latest
     config:
@@ -333,7 +336,8 @@ Mistral's Codestral models excel at code generation across 80+ programming langu
 
 ### Fill-in-the-Middle (FIM)
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: mistral:codestral-latest
     config:
@@ -383,7 +387,8 @@ tests:
 
 ### Example 1: Multi-Model Comparison
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Compare reasoning capabilities across Mistral models'
 
 providers:
@@ -407,7 +412,8 @@ tests:
 
 ### Example 2: Code Review Assistant
 
-````yaml
+````yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'AI-powered code review using Codestral'
 
 providers:
@@ -448,7 +454,8 @@ tests:
 
 ### Example 3: Multimodal Document Analysis
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Analyze documents with text and images'
 
 providers:

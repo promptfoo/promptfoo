@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.5, GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.5, GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for AI evals'
 ---
 
 # OpenAI
@@ -529,7 +529,7 @@ providers:
 
 ### GPT-5.5
 
-GPT-5.5 is the latest GPT-5 family model for high-capability reasoning, professional work, and agentic workflows.
+GPT-5.5 is a GPT-5 family model for high-capability reasoning, professional work, and agentic workflows.
 
 #### Available Models
 
@@ -719,7 +719,7 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-2` - OpenAI's latest image generation model with flexible custom sizes
+- `gpt-image-2` - OpenAI's image generation model with flexible custom sizes
 - `gpt-image-1.5` - High-quality GPT Image model with strong instruction following
 - `gpt-image-1` - High-quality image generation model
 - `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
@@ -732,7 +732,7 @@ See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo
 
 #### GPT Image 2
 
-GPT Image 2 is OpenAI's latest image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
+GPT Image 2 is OpenAI's image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -922,6 +922,7 @@ providers:
 ### Example Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'A cinematic shot of: {{scene}}'
 
@@ -947,6 +948,7 @@ tests:
 Generate videos starting from a source image using `input_reference`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:video:sora-2
     config:
@@ -964,6 +966,7 @@ The `input_reference` accepts either a `file://` path or base64-encoded image da
 Remix an existing Sora video with a new prompt using `remix_video_id`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:video:sora-2
     config:
@@ -1440,6 +1443,7 @@ npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Answer this question: {{question}}'
 
@@ -1498,7 +1502,8 @@ Set functions, code interpreter, and files for retrieval as necessary.
 
 Then, include the assistant in your config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
@@ -1655,6 +1660,7 @@ You can include audio files in your prompts using the following format:
 With a corresponding configuration:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - id: file://audio-input.json
     label: Audio Input
@@ -1709,6 +1715,7 @@ OpenAI provides dedicated transcription models for converting speech to text. Th
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://sample-audio.mp3
 
@@ -1754,6 +1761,7 @@ Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
 The diarization model identifies different speakers in the audio:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://interview.mp3
 
@@ -1986,7 +1994,7 @@ The Responses API supports a wide range of models, including:
 - `o3-pro` - Highest-tier reasoning model
 - `o3` - OpenAI's most powerful reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
-- `o4-mini` - Latest fast, cost-effective reasoning model
+- `o4-mini` - Fast, cost-effective reasoning model
 - `codex-mini-latest` - Fast reasoning model optimized for the Codex CLI
 - `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 - `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
@@ -2468,7 +2476,7 @@ providers:
 
 Legacy `apiHost`, newer `apiBaseUrl`, and OpenAI endpoint environment variable Azure configurations all support the same Responses reasoning and verbosity options.
 
-For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
+For Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 
@@ -2504,7 +2512,7 @@ Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/provid
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts

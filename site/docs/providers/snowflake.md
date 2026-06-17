@@ -5,7 +5,7 @@ description: "Connect to AI models through Snowflake Cortex's OpenAI-compatible 
 
 # Snowflake Cortex
 
-[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) is Snowflake's AI and ML platform that provides access to various LLM models through an [OpenAI-compatible](/docs/providers/openai/) REST API. Cortex offers industry-leading LLMs including Claude, GPT, Mistral, and Llama models without requiring a dedicated warehouse.
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) is Snowflake's AI and ML platform that provides access to various LLM models through an [OpenAI-compatible](/docs/providers/openai/) REST API. Cortex offers LLMs including Claude, GPT, Mistral, and Llama models without requiring a dedicated warehouse.
 
 ## Setup
 

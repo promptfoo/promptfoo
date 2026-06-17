@@ -250,7 +250,7 @@ Pricing varies by model and usage tier:
 
 Rate limits also vary by usage tier (high, medium, low). Specify your tier with the `usage_tier` parameter to get accurate cost calculations.
 
-Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for the latest rates.
+Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/pricing) for current rates.
 
 ## Troubleshooting
 

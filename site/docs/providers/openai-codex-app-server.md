@@ -6,9 +6,9 @@ description: Evaluate Codex app-server with streamed agent events, approvals, sa
 
 # OpenAI Codex App Server
 
-This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the rich client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
+This provider starts `codex app-server` as a local child process and drives the Codex app-server JSON-RPC protocol from promptfoo. Use it when you need to eval the client surface of Codex: streamed agent items, approvals, skills, plugins, app connector events, command/file trajectories, and thread lifecycle metadata.
 
-For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for rich product integrations.
+For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./openai-codex-sdk.md). The app-server protocol is experimental, broader than the SDK, and designed for product integrations.
 
 ## Provider IDs
 
@@ -20,7 +20,7 @@ providers:
   - openai:codex-desktop:gpt-5.5
 ```
 
-`openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
+`openai:codex-desktop` is an alias for the same app-server protocol. promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
 
 ## Codex SDK vs App Server vs Desktop App
 
@@ -50,7 +50,7 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
 | WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
 
-When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
+When `service_tier: fast` is used, promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
 
 ## Setup
 
@@ -92,6 +92,7 @@ The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-5.5
     config:
@@ -108,7 +109,7 @@ For downstream coding-agent checks, `raw` also includes SDK-compatible `items` a
 
 ## Safety Defaults
 
-The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. Promptfoo defaults to deterministic eval behavior:
+The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. promptfoo defaults to deterministic eval behavior:
 
 | Option                | Default       |
 | --------------------- | ------------- |
@@ -211,7 +212,7 @@ providers:
 
 ### Goals and Subagents
 
-Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which Promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
+Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
 
 ```yaml
 providers:
@@ -223,7 +224,7 @@ providers:
           multi_agent: true
 ```
 
-`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default, so set it explicitly only to pin that default or disable it with `false` (run `codex features list` to confirm the default for the build you target).
 
 ## Server Request Policy
 
@@ -280,6 +281,7 @@ Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled
 ## Structured Output
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: openai:codex-app-server:gpt-5.5
     config:
@@ -346,7 +348,7 @@ Command output, tool arguments, and approval metadata are sanitized before they 
 
 ## Tracing
 
-Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
+promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
 
 To verify that an app-server protocol turn was traced, count the turn markers:
 
@@ -364,7 +366,7 @@ generations and tool execution. App-server notifications do not expose those int
 model-generation boundaries, so these markers cannot distinguish batched from
 sequential tool calls inside a turn.
 
-Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
+Enable deeper app-server tracing by setting `deep_tracing: true` with promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 
 ## Local Verification
 

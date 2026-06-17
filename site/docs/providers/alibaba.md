@@ -72,7 +72,7 @@ The Alibaba provider includes support for the following model formats:
 - `qvq-max` / `qvq-max-latest` / `qvq-max-2025-03-25` - Visual reasoning models (commercial)
 - `qvq-72b-preview` - Experimental visual reasoning research model
 - **DeepSeek models** (hosted by Alibaba Cloud):
-  - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - Latest DeepSeek models (671-685B)
+  - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - DeepSeek models (671-685B)
   - `deepseek-r1` / `deepseek-r1-0528` - DeepSeek reasoning models
   - `deepseek-r1-distill-qwen-{1.5b,7b,14b,32b}` - Distilled on Qwen2.5
   - `deepseek-r1-distill-llama-{8b,70b}` - Distilled on Llama
@@ -138,7 +138,7 @@ All support 131K context (129,024 in, 8,192 out)
 
 ### Qwen 3 Open-source Models
 
-Latest open-source Qwen3 models with thinking mode support:
+Open-source Qwen3 models with thinking mode support:
 
 - `qwen3-next-80b-a3b-thinking` / `qwen3-next-80b-a3b-instruct` - Next-gen 80B (September 2025)
 - `qwen3-235b-a22b-thinking-2507` / `qwen3-235b-a22b-instruct-2507` - 235B July 2025 versions
@@ -158,13 +158,13 @@ Latest open-source Qwen3 models with thinking mode support:
 ### Embeddings
 
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
-- `text-embedding-v4` - Latest Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
+- `text-embedding-v4` - Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
 
 ### Image Generation
 
 - `qwen-image-plus` - Text-to-image with complex text rendering (Chinese/English)
 
-For the latest availability, see the [official DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models), which is updated frequently.
+For current availability, see the [official DashScope model catalog](https://www.alibabacloud.com/help/en/model-studio/getting-started/models).
 
 ## Additional Configuration
 

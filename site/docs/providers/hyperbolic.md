@@ -5,7 +5,7 @@ description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qw
 
 # Hyperbolic
 
-The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM, image generation, audio generation, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai). This makes it easy to integrate into existing applications that use the OpenAI SDK.
+The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM, image generation, audio generation, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai). This lets you integrate into existing applications that use the OpenAI SDK.
 
 ## Setup
 
@@ -64,7 +64,7 @@ hyperbolic:audio:<model_name>
 - `hyperbolic:meta-llama/Llama-3.1-405B-BASE` - Base completion model (BF16)
 - `hyperbolic:meta-llama/Llama-3.1-70B` - Best LLM at its size
 - `hyperbolic:meta-llama/Llama-3.1-8B` - Smallest and fastest Llama 3.1
-- `hyperbolic:meta-llama/Llama-3-70B` - Highly efficient and powerful
+- `hyperbolic:meta-llama/Llama-3-70B` - Highly efficient
 
 #### Other Models
 
@@ -151,7 +151,8 @@ providers:
 
 ### Text Generation Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts/coding_assistant.json
 providers:
@@ -174,7 +175,8 @@ tests:
 
 ### Image Generation Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'A futuristic city skyline at sunset with flying cars'
 providers:
@@ -195,7 +197,8 @@ tests:
 
 ### Audio Generation Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Welcome to Hyperbolic AI. We are excited to help you build amazing applications.'
 providers:
@@ -211,7 +214,8 @@ tests:
 
 ### Vision-Language Model Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - role: user
     content:

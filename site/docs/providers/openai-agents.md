@@ -34,7 +34,7 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent:
         name: Customer Support Agent
@@ -43,7 +43,7 @@ providers:
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model (`gpt-5.4-mini`), and that upstream default can change over time.
 
 ## Configuration Options
 
@@ -71,7 +71,7 @@ Load agent and tools from external files:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -87,7 +87,7 @@ Inline agent definitions follow the SDK `AgentOptions` surface for fields such a
 
 ## Multimodal Input
 
-If a rendered prompt is a JSON object or array that matches the SDK's `AgentInputItem` shape, Promptfoo passes it to `run()` as structured input instead of a plain string. This supports image, audio, and file inputs:
+If a rendered prompt is a JSON object or array that matches the SDK's `AgentInputItem` shape, promptfoo passes it to `run()` as structured input instead of a plain string. This supports image, audio, and file inputs:
 
 ```yaml
 prompts:
@@ -117,7 +117,7 @@ Example prompt file (`prompts/vision-input.json`):
 ]
 ```
 
-Promptfoo resolves local image vars like `file://./images/cat.jpg` to data URLs before the prompt is passed to the SDK.
+promptfoo resolves local image vars like `file://./images/cat.jpg` to data URLs before the prompt is passed to the SDK.
 
 Arbitrary JSON prompts that do not match an agent input item are still sent as plain text.
 
@@ -159,7 +159,7 @@ Transfer conversations between specialized agents:
 
 ```yaml
 providers:
-  - openai:agents:triage
+  - id: openai:agents:triage
     config:
       agent:
         name: Triage Agent
@@ -179,7 +179,7 @@ Validate tool inputs and outputs with guardrails:
 
 ```yaml
 providers:
-  - openai:agents:secure-agent
+  - id: openai:agents:secure-agent
     config:
       agent: file://./agents/secure-agent.ts
       inputGuardrails: file://./guardrails/input-guardrails.ts
@@ -190,11 +190,11 @@ Guardrails run validation logic before tool execution (input) and after (output)
 
 ## Sessions
 
-OpenAI Agents SDK sessions keep conversation history across agent runs. Promptfoo supports the SDK session classes directly and also provides YAML-friendly shortcuts for the built-in session types:
+OpenAI Agents SDK sessions keep conversation history across agent runs. promptfoo supports the SDK session classes directly and also provides YAML-friendly shortcuts for the built-in session types:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session:
@@ -214,19 +214,19 @@ For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/support-session.ts
 ```
 
-Inline session definitions and exported session instances stay attached to the provider for later turns. Export a factory when you want Promptfoo to create a fresh session for each call.
+Inline session definitions and exported session instances stay attached to the provider for later turns. Export a factory when you want promptfoo to create a fresh session for each call.
 
-If you need the full `run()` surface, use `runOptions`. Promptfoo reserves `context`, `maxTurns`, `signal`, and streaming mode, but passes through the remaining non-streaming SDK options:
+If you need the full `run()` surface, use `runOptions`. promptfoo reserves `context`, `maxTurns`, `signal`, and streaming mode, but passes through the remaining non-streaming SDK options:
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       runOptions:
@@ -239,7 +239,7 @@ When an option needs executable code, such as `sessionInputCallback`, `callModel
 
 ## Local Context
 
-Promptfoo passes the current test vars into the SDK's local `context` object for each run. Tools and callbacks can read those values through `runContext.context`:
+promptfoo passes the current test vars into the SDK's local `context` object for each run. Tools and callbacks can read those values through `runContext.context`:
 
 ```typescript
 export const lookupCustomerContext = tool({
@@ -265,7 +265,7 @@ Use `transformVars` to stamp each test with a stable per-test session ID, then e
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       session: file://./sessions/redteam-session.ts
@@ -325,7 +325,7 @@ export default new SandboxAgent({
 
 ```yaml
 providers:
-  - openai:agents:workspace-agent
+  - id: openai:agents:workspace-agent
     config:
       agent: file://./agents/workspace-agent.ts
       sandbox:
@@ -365,11 +365,11 @@ For `SandboxAgent` workflows, use the SDK's sandbox capability helpers in the ex
 
 ## Retry Policies
 
-OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
+OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       modelSettings:
@@ -390,7 +390,7 @@ providers:
 
 Supported preset policies are `never`, `providerSuggested`, `networkError`, and `retryAfter`.
 
-You can also compose them with `any` or `all`. If you are configuring Promptfoo in TypeScript or JavaScript instead of YAML, you can pass SDK retry callbacks directly.
+You can also compose them with `any` or `all`. If you are configuring promptfoo in TypeScript or JavaScript instead of YAML, you can pass SDK retry callbacks directly.
 
 ## Mock Tool Execution
 
@@ -398,7 +398,7 @@ Use mocked tool outputs when you want deterministic evals without calling extern
 
 ```yaml
 providers:
-  - openai:agents:support-agent
+  - id: openai:agents:support-agent
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -415,7 +415,7 @@ Enable OpenTelemetry tracing to debug agent execution:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true # Exports to http://localhost:4318
@@ -425,7 +425,7 @@ With a custom OTLP endpoint:
 
 ```yaml
 providers:
-  - openai:agents:my-agent
+  - id: openai:agents:my-agent
     config:
       agent: file://./agents/my-agent.ts
       tracing: true
@@ -439,11 +439,11 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
-Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
+Once promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
 ```yaml
 tests:
@@ -470,13 +470,14 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
+See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want promptfoo to ingest and evaluate these traces directly.
 
 ## Example: D&D Dungeon Master
 
 Full working example with D&D mechanics, dice rolling, and character management:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: D&D Adventure with AI Dungeon Master
 
 prompts:

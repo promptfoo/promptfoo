@@ -63,7 +63,7 @@ The provider accepts standard OpenAI chat parameters:
 
 ### Structured Outputs
 
-Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build reliable applications that can process AI outputs programmatically.
+Cerebras models support structured outputs with JSON schema enforcement to ensure your AI-generated responses follow a consistent, predictable format. This makes it easier to build applications that can process AI outputs programmatically.
 
 To use structured outputs, set the `response_format` parameter to include a JSON schema:
 
@@ -115,7 +115,7 @@ When using tool calling, you'll need to process the model's response and handle 
 
 ## Example Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Cerebras model evaluation
 prompts:

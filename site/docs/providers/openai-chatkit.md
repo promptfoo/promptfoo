@@ -41,6 +41,7 @@ Use `version="draft"` for testing, or omit version to use the latest published v
 ### Step 3: Create Your Eval Config
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ChatKit workflow eval
 
 prompts:
@@ -159,7 +160,7 @@ Stateful mode requires `--max-concurrency 1` for reliable behavior. The conversa
 
 ### Using with Simulated User
 
-For comprehensive multi-turn testing, combine ChatKit with the [simulated user provider](/docs/providers/simulated-user):
+For multi-turn testing, combine ChatKit with the [simulated user provider](/docs/providers/simulated-user):
 
 ```yaml
 prompts:
@@ -231,6 +232,7 @@ Set `maxApprovals` to limit approval interactions per message (default: 5).
 Test changes between workflow versions by configuring multiple providers:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Compare workflow v2 vs v3
 
 prompts:
@@ -273,6 +275,7 @@ This helps verify that new versions maintain quality and don't regress on import
 ## Complete Example
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ChatKit customer support eval
 
 prompts:

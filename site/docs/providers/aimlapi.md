@@ -5,7 +5,7 @@ description: "Access 200+ open-source AI models via AIML API's unified interface
 
 # AI/ML API
 
-[AI/ML API](https://aimlapi.com) provides access to 300+ AI models through a unified OpenAI-compatible interface, including state-of-the-art models from OpenAI, Anthropic, Google, Meta, and more.
+[AI/ML API](https://aimlapi.com) provides access to 300+ AI models through a unified OpenAI-compatible interface, including models from OpenAI, Anthropic, Google, Meta, and more.
 
 ## OpenAI Compatibility
 
@@ -88,29 +88,29 @@ AI/ML API offers models from multiple providers. Here are some of the most popul
 
 - **DeepSeek R1**: `deepseek-r1` - Advanced reasoning with chain-of-thought capabilities
 - **OpenAI o3 Mini**: `openai/o3-mini` - Efficient reasoning model
-- **OpenAI o4 Mini**: `openai/o4-mini` - Latest compact reasoning model
+- **OpenAI o4 Mini**: `openai/o4-mini` - Compact reasoning model
 - **QwQ-32B**: `qwen/qwq-32b` - Alibaba's reasoning model
 
 ### Advanced Language Models
 
-- **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
+- **GPT-4.1**: `openai/gpt-5` - GPT with 1M token context
 - **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
 - **Claude 4 Sonnet**: `anthropic/claude-4-sonnet` - Balanced speed and capability
 - **Claude 4 Opus**: `anthropic/claude-4-opus` - Claude 4 Opus model
 - **Gemini 2.5 Pro**: `google/gemini-2.5-pro-preview` - Google's versatile multimodal model
-- **Gemini 2.5 Flash**: `google/gemini-2.5-flash` - Ultra-fast streaming responses
+- **Gemini 2.5 Flash**: `google/gemini-2.5-flash` - Fast streaming responses
 - **Grok 3 Beta**: `x-ai/grok-3-beta` - xAI's most advanced model
 
 ### Open Source Models
 
-- **DeepSeek V3**: `deepseek-v3` - Powerful open-source alternative
-- **Llama 4 Maverick**: `meta-llama/llama-4-maverick` - Latest Llama model
+- **DeepSeek V3**: `deepseek-v3` - Open-source alternative
+- **Llama 4 Maverick**: `meta-llama/llama-4-maverick` - Llama model
 - **Qwen Max**: `qwen/qwen-max-2025-01-25` - Alibaba's efficient MoE model
 - **Mistral Codestral**: `mistral/codestral-2501` - Specialized for coding
 
 ### Embedding Models
 
-- **Text Embedding 3 Large**: `text-embedding-3-large` - OpenAI's latest embedding model
+- **Text Embedding 3 Large**: `text-embedding-3-large` - OpenAI embedding model
 - **Voyage Large 2**: `voyage-large-2` - High-quality embeddings
 - **BGE M3**: `bge-m3` - Multilingual embeddings
 
@@ -252,7 +252,7 @@ This includes tested configurations for comparing multiple models, evaluating re
 - **API Key Required**: Sign up at [aimlapi.com](https://aimlapi.com) to get your API key
 - **Free Credits**: New users receive free credits to explore the platform
 - **Rate Limits**: Vary by subscription tier
-- **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the latest additions
+- **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the current list
 - **Unified Billing**: Pay for all models through a single account
 
 For detailed pricing information, visit [aimlapi.com/pricing](https://aimlapi.com/pricing).

@@ -83,7 +83,7 @@ Nscale offers a wide range of popular AI models:
 | GPT OSS 120B                  | `nscale:openai/gpt-oss-120b`                    | General-purpose reasoning and tasks |
 | GPT OSS 20B                   | `nscale:openai/gpt-oss-20b`                     | Lightweight general-purpose model   |
 | Qwen 3 235B Instruct          | `nscale:qwen/qwen-3-235b-a22b-instruct`         | Large-scale language understanding  |
-| Qwen 3 235B Instruct 2507     | `nscale:qwen/qwen-3-235b-a22b-instruct-2507`    | Latest Qwen 3 235B variant          |
+| Qwen 3 235B Instruct 2507     | `nscale:qwen/qwen-3-235b-a22b-instruct-2507`    | Qwen 3 235B 2507 variant            |
 | Qwen 3 4B Thinking 2507       | `nscale:qwen/qwen-3-4b-thinking-2507`           | Reasoning and thinking tasks        |
 | Qwen 3 8B                     | `nscale:qwen/qwen-3-8b`                         | Mid-size general-purpose model      |
 | Qwen 3 14B                    | `nscale:qwen/qwen-3-14b`                        | Enhanced reasoning capabilities     |
@@ -151,7 +151,8 @@ providers:
 
 Here's a complete example configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: nscale-gpt-oss
     config:
@@ -184,7 +185,7 @@ Nscale offers highly competitive pricing:
 - **Embeddings**: $0.04 per 1M tokens
 - **Image Generation**: Starting from $0.0008 per mega-pixel
 
-For the most current pricing information, visit [Nscale's pricing page](https://docs.nscale.com/pricing).
+For up-to-date pricing information, visit [Nscale's pricing page](https://docs.nscale.com/pricing).
 
 ## Key Features
 

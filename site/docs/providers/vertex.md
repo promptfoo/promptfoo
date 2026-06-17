@@ -18,7 +18,7 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash` - Latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash` - Frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 
 **Gemini 3.1:**
 
@@ -44,7 +44,7 @@ Anthropic's Claude models are available with the following versions:
 
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
-Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
+promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 5 models; promptfoo includes that premium in
@@ -215,7 +215,7 @@ providers:
 
 ### Gemini Model Specifications
 
-Current Gemini models on Vertex AI (2.5 and 3.x):
+Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
 - Supports: Text, code, images, audio, video, and PDF inputs
@@ -357,7 +357,7 @@ Express mode is automatic when an API key is available. If you need OAuth/ADC fe
 
 #### Environment Variables
 
-Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
+promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
 ```bash
 # .env
@@ -456,7 +456,8 @@ providers:
 
 After completing authentication, create a simple evaluation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - vertex:gemini-2.5-flash
@@ -487,7 +488,8 @@ promptfoo eval
 
 Compare different models available on Vertex AI:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Google models
   - id: vertex:gemini-2.5-pro

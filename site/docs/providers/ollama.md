@@ -79,6 +79,7 @@ providers:
 Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'What is the weather like in {{city}}?'
 
@@ -115,6 +116,7 @@ tests:
 Ollama can be used as a local grading provider for assertions that require language model evaluation. When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 defaultTest:
   options:
     provider:
@@ -148,13 +150,14 @@ tests:
         threshold: 0.85
 ```
 
-When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
+When running with `--max-concurrency 1` and no per-eval timeout, promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
 Ollama's embedding models can be used with the `similar` assertion to check semantic similarity between outputs and expected values:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - ollama:chat:llama3.2
 
@@ -203,7 +206,7 @@ Popular Ollama embedding models include:
 
 ## Using a Remote Ollama Server
 
-To connect to Ollama running on another machine (e.g., a more powerful server on your local network), set `OLLAMA_BASE_URL` to the remote address:
+To connect to Ollama running on another machine (e.g., a server on your local network), set `OLLAMA_BASE_URL` to the remote address:
 
 ```bash
 export OLLAMA_BASE_URL="http://192.168.1.100:11434"
@@ -242,7 +245,7 @@ To investigate and fix this issue, there's a few possible solutions:
 
 ## Evaluating models serially
 
-By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
+By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evals serially using the `-j 1` option:
 
 ```bash
 promptfoo eval -j 1
@@ -250,7 +253,7 @@ promptfoo eval -j 1
 
 This sets concurrency to 1, which means:
 
-1. Evaluations happen one provider at a time, then one prompt at a time.
+1. Evals happen one provider at a time, then one prompt at a time.
 2. Only one model is loaded into memory, conserving system resources.
 3. You can easily swap models between evaluations without conflicts.
 

@@ -11,7 +11,7 @@ sidebar_position: 85
 **"abliterated"** models - open-weight LLMs where the refusal direction has
 been removed from the residual stream so the model no longer declines
 requests it would ordinarily refuse. It exposes an OpenAI-compatible chat
-completions API, and Promptfoo ships a thin `abliteration:` wrapper around the
+completions API, and promptfoo ships a thin `abliteration:` wrapper around the
 [OpenAI provider](/docs/providers/openai/) for it.
 
 :::warning Safety
@@ -60,7 +60,7 @@ Abliteration speaks the OpenAI chat-completions protocol, so most options
 from the [OpenAI provider](/docs/providers/openai/) work here too, including
 sampling options, structured output, and multimodal messages.
 
-Abliteration responses can include `reasoning_content`. Promptfoo hides this
+Abliteration responses can include `reasoning_content`. promptfoo hides this
 thinking output by default for this provider. Set `showThinking: true` in the
 provider config if you want it included in eval outputs.
 

@@ -35,7 +35,8 @@ providers:
 
 You can use test variables in your `messageTemplate`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: 'wss://example.com/ws'
     config:

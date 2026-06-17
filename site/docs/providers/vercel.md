@@ -9,7 +9,7 @@ description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Verc
 
 [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
-If you call the Vercel AI SDK directly from a [`file://` custom provider](/docs/providers/custom-api/) and enable `experimental_telemetry`, Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
+If you call the Vercel AI SDK directly from a [`file://` custom provider](/docs/providers/custom-api/) and enable `experimental_telemetry`, promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
 ## Setup
 
@@ -108,6 +108,7 @@ providers:
 Generate structured JSON output by providing a JSON schema:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:
@@ -172,6 +173,7 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 Generate embeddings for text similarity, search, and RAG applications:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - vercel:embedding:openai/text-embedding-3-small
 
@@ -199,6 +201,7 @@ Supported embedding models:
 ### Multi-Provider Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -224,6 +227,7 @@ tests:
 ### JSON Response with Validation
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:

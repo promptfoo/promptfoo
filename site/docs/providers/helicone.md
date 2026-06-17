@@ -135,7 +135,8 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 
 ### Basic OpenAI Integration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - helicone:openai/gpt-5-mini
 
@@ -152,7 +153,8 @@ tests:
 
 ### Multi-Provider Comparison with Observability
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: helicone:openai/gpt-4o
     config:
@@ -176,7 +178,8 @@ tests:
 
 ### Custom Provider with Full Configuration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: helicone:openai/gpt-4o
     config:
@@ -199,7 +202,8 @@ tests:
 
 ### Caching and Performance Optimization
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: helicone:openai/gpt-3.5-turbo
     config:

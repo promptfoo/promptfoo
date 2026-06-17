@@ -1,6 +1,6 @@
 ---
 sidebar_label: Google AI / Gemini
-description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for comprehensive multimodal LLM testing and evaluation
+description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for multimodal LLM testing and evaluation
 ---
 
 # Google AI / Gemini
@@ -50,7 +50,7 @@ Create a `.env` file in your project root:
 GOOGLE_API_KEY=your_api_key_here
 ```
 
-Promptfoo automatically loads environment variables from `.env` files in your project directory. Make sure to add `.env` to your `.gitignore` file.
+promptfoo automatically loads environment variables from `.env` files in your project directory. Make sure to add `.env` to your `.gitignore` file.
 
 #### Option 3: Provider Configuration
 
@@ -110,7 +110,8 @@ prompt and completion pricing. The legacy `cost` option remains the shared fallb
 
 Create a simple `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - google:gemini-2.5-flash
@@ -135,7 +136,8 @@ promptfoo eval
 
 Compare different Gemini and Gemma models:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - google:gemma-4-31b-it
   - google:gemini-2.5-flash
@@ -263,7 +265,7 @@ providers:
 
 # After (Vertex AI)
 providers:
-  - vertex:gemini-2.5-pro
+  - id: vertex:gemini-2.5-pro
     config:
       projectId: my-project-id
       region: us-central1
@@ -277,7 +279,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash, a frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
@@ -293,7 +295,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
+- `google:embedding:gemini-embedding-2` - Gemini embedding model for text input through promptfoo
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
@@ -349,13 +351,13 @@ Configuration options:
 
 ```yaml
 providers:
-  - google:image:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
     config:
-      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1'          # Optional, defaults to us-central1
+      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1' # Optional, defaults to us-central1
       aspectRatio: '16:9'
       seed: 42
-      addWatermark: false            # Must be false when using seed
+      addWatermark: false # Must be false when using seed
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
@@ -407,17 +409,18 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 
 #### Available Models
 
-| Model                                   | Description                                       | Duration Support |
-| --------------------------------------- | ------------------------------------------------- | ---------------- |
-| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
-| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                                | 4, 6, 8 seconds  |
-| `google:video:veo-3-generate`           | Veo 3.0 standard model                            | 4, 6, 8 seconds  |
-| `google:video:veo-3-fast`               | Veo 3.0 fast model                                | 4, 6, 8 seconds  |
-| `google:video:veo-2-generate`           | Veo 2.0 model                                     | 5, 6, 8 seconds  |
+| Model                                   | Description                                | Duration Support |
+| --------------------------------------- | ------------------------------------------ | ---------------- |
+| `google:video:veo-3.1-generate-preview` | Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
+| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                         | 4, 6, 8 seconds  |
+| `google:video:veo-3-generate`           | Veo 3.0 standard model                     | 4, 6, 8 seconds  |
+| `google:video:veo-3-fast`               | Veo 3.0 fast model                         | 4, 6, 8 seconds  |
+| `google:video:veo-2-generate`           | Veo 2.0 model                              | 5, 6, 8 seconds  |
 
 #### Basic Usage
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
@@ -457,7 +460,8 @@ tests:
 
 Generate videos from a starting image:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
@@ -477,7 +481,8 @@ tests:
 
 Generate video that transitions between two images:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
@@ -493,7 +498,8 @@ prompts:
 
 Extend a previously generated Veo video using its operation ID:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vertex:video:veo-3.1-generate-preview
     config:
@@ -631,7 +637,8 @@ For multimodal inputs (images and video), the provider supports:
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts: |
   {{imageFile}}
   Caption this image.
@@ -676,7 +683,7 @@ System instructions support Nunjucks templating and can be loaded from external 
 
 ### Role Mapping Configuration
 
-Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+Gemini models require specific role names in chat messages. By default, promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
 
 ```yaml
 providers:
@@ -698,7 +705,7 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ### Gemini 3.5 Flash
 
-The latest frontier Flash model, tuned for agentic and coding workloads:
+A frontier Flash model, tuned for agentic and coding workloads:
 
 ```yaml
 providers:
@@ -1038,7 +1045,7 @@ For complete working examples of the search grounding, code execution, and url c
 
 ## Google Live API
 
-Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+promptfoo supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
 ### Using the Live Provider
 
@@ -1107,7 +1114,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The current Google Live API model supports built-in Google Search:
+The Google Live API model supports built-in Google Search:
 
 1. **Google Search**: Perform real-time web searches
    ```json

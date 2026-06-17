@@ -1,6 +1,6 @@
 ---
 sidebar_label: Cohere
-description: Configure Cohere chat models for RAG-optimized inference, with current Command A, Aya, and Command R variants plus flexible prompt truncation controls
+description: Configure Cohere chat models for RAG-optimized inference, with Command A, Aya, and Command R variants plus flexible prompt truncation controls
 ---
 
 # Cohere
@@ -15,7 +15,7 @@ Next, edit the promptfoo configuration file to point to the Cohere provider.
 
 - `cohere:<model name>` - uses the specified Cohere model (for example, `command-a-03-2025`).
 
-The following models are confirmed supported. For an up-to-date list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
+The following models are confirmed supported. For the complete list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
 
 - `command-a-03-2025`
 - `command-r7b-12-2024`
@@ -31,8 +31,8 @@ The following models are confirmed supported. For an up-to-date list of supporte
 - `c4ai-aya-expanse-32b`
 - `c4ai-aya-vision-32b`
 
-Legacy aliases such as `command`, `command-r`, and `command-r-plus` are still accepted for
-existing configs, but new configurations should use the current IDs above.
+Legacy aliases such as `command`, `command-r`, and `command-r-plus` remain accepted for
+existing configs, but new configurations should use the IDs above.
 
 Here's an example configuration:
 
@@ -51,7 +51,8 @@ providers:
 
 By default, a regular string prompt will be automatically wrapped in the appropriate chat format and sent to the Cohere API via the `message` field:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -65,7 +66,8 @@ tests:
 
 If desired, your prompt can reference a YAML or JSON file that has a more complex set of API parameters. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt1.yaml
 

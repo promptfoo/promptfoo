@@ -5,7 +5,7 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 
 # Groq
 
-[Groq](https://groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
+[Groq](https://groq.com) is a fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
 
 Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
@@ -293,7 +293,7 @@ Combine with the `stop` parameter for precise output control.
 
 ## Responses API
 
-Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is currently in beta.
+Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is in beta.
 
 ### Basic Usage
 
@@ -309,7 +309,7 @@ providers:
 
 ### Structured Outputs
 
-The Responses API makes it easy to get structured JSON outputs:
+The Responses API can produce structured JSON outputs:
 
 ```yaml
 providers:

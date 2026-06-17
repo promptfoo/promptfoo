@@ -14,7 +14,7 @@ description: "Access 300+ models through OpenRouter's unified API gateway with c
 
 ## Popular current models
 
-OpenRouter's catalog changes quickly. These are current popular and recent model IDs that work well as starting points. Context lengths are from the OpenRouter catalog at time of writing — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
+OpenRouter's catalog changes quickly. These are popular model IDs that work well as starting points. Context lengths are from the OpenRouter catalog — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
@@ -29,7 +29,7 @@ OpenRouter's catalog changes quickly. These are current popular and recent model
 | [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          128,000 | Compact Mistral general use        |
 | [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |           40,960 | Strong open multilingual model     |
 
-For the full catalog of 300+ models and current pricing, visit [OpenRouter Models](https://openrouter.ai/models).
+For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 
 ## Basic Configuration
 

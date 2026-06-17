@@ -5,7 +5,7 @@ description: Run local LLM inference with Transformers.js for embeddings and tex
 
 # Transformers.js
 
-The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a new WebGPU backend, broader model support (8B+ parameter models), and improved performance.
+The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a WebGPU backend, broader model support (8B+ parameter models), and improved performance.
 
 ## Installation
 
@@ -93,7 +93,8 @@ providers:
 
 Use local embeddings as a grading provider for `similar` assertions:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 defaultTest:
   options:
     provider:
@@ -126,7 +127,7 @@ assert:
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
-- **WebGPU:** v4 includes a new WebGPU runtime written in C++ with significantly improved performance. Use `device: webgpu` on supported systems.
+- **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
 
 ## Troubleshooting

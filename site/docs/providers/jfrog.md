@@ -95,6 +95,7 @@ Example chat conversation:
 ```
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.yaml
 

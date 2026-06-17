@@ -5,9 +5,9 @@ description: "Leverage Voyage AI's domain-specific embedding models for enhanced
 
 # Voyage AI
 
-[Voyage AI](https://www.voyageai.com/) is Anthropic's [recommended](https://docs.anthropic.com/en/docs/embeddings) embeddings provider. It supports [all models](https://docs.voyageai.com/docs/embeddings). Latest models include:
+[Voyage AI](https://www.voyageai.com/) is Anthropic's [recommended](https://docs.anthropic.com/en/docs/embeddings) embeddings provider. It supports [all models](https://docs.voyageai.com/docs/embeddings). Models include:
 
-- voyage-3-large (state-of-the-art general-purpose, Jan 2025)
+- voyage-3-large (general-purpose, Jan 2025)
 - voyage-3.5 and voyage-3.5-lite (improved quality, May 2025)
 - voyage-3 and voyage-3-lite (general-purpose with 32K context)
 - voyage-multimodal-3 (text + images)

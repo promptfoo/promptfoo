@@ -84,6 +84,7 @@ The Cloudera provider is built on top of the OpenAI protocol, which means it sup
 Example chat conversation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'You are a helpful assistant. Answer the following question: {{user_input}}'
 
