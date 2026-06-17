@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-opus-4-7-v1:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-6
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -43,7 +43,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-6
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -89,8 +89,14 @@ The `inferenceModelType` config option supports the following values:
 - `ai21` - For AI21 models
 - `titan` - For Amazon Titan models
 - `deepseek` - For DeepSeek models
-- `openai` - For OpenAI models
+- `openai` - For OpenAI open-weight (gpt-oss) models
 - `qwen` - For Alibaba Qwen models
+- `zai` - For Z.AI GLM models
+- `minimax` - For MiniMax models
+- `moonshot` - For Moonshot Kimi models
+- `nvidia` - For NVIDIA Nemotron models
+- `writer` - For Writer Palmyra models
+- `gemma` - For Google Gemma models
 
 ### Example: Multi-Region Inference Profile
 
@@ -188,19 +194,19 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 
 ### Configuration Options
 
-| Option                | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `maxTokens`           | Maximum output tokens                           |
-| `temperature`         | Sampling temperature (0-1)                      |
-| `topP`                | Nucleus sampling parameter                      |
-| `stopSequences`       | Array of stop sequences                         |
-| `thinking`            | Extended thinking configuration (Claude models) |
-| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: true)      |
-| `performanceConfig`   | Performance settings (`latency: optimized`)     |
-| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
-| `guardrailIdentifier` | Guardrail ID for content filtering              |
-| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+| Option                | Description                                               |
+| --------------------- | --------------------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                                     |
+| `temperature`         | Sampling temperature (0-1)                                |
+| `topP`                | Nucleus sampling parameter                                |
+| `stopSequences`       | Array of stop sequences                                   |
+| `thinking`            | Extended thinking configuration (Claude models)           |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)            |
+| `showThinking`        | Include thinking in output (default: true)                |
+| `performanceConfig`   | Performance settings (`latency: optimized`)               |
+| `serviceTier`         | Service tier object (`type: priority \| default \| flex`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering                        |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)                        |
 
 ### Performance Configuration
 
@@ -555,7 +561,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `nova2`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. See [Supported Model Types](#supported-model-types) for the full list of values.
 
 ### Amazon Nova Models
 
@@ -811,7 +817,7 @@ config:
 
 For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`) and converts configured manual thinking to adaptive thinking for Opus 4.7 and 4.8.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`) and converts configured manual thinking to adaptive thinking for Opus 4.7 and 4.8.
 
 #### Claude Fable and Mythos models
 
@@ -819,14 +825,14 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-4-
 supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
 inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
 returns a `ValidationException`, and the `us.`/`eu.` geo profiles listed on the
-model card may not be provisioned in every region yet. Fable 5 also supports
+model card may not be provisioned in every region. Fable 5 also supports
 Bedrock's Anthropic-compatible Messages endpoint through the explicit
 `bedrock:messages:anthropic.claude-fable-5` provider ID in `us-east-1` and
 `eu-north-1` (this route may additionally require account enablement from AWS).
 
 [Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
 is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
-Promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
+promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
 Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`:
 
 ```yaml
@@ -839,8 +845,7 @@ providers:
 
 AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5 — without
 it every request fails with `data retention mode 'default' is not available for this
-model`. There is no console UI at launch; opt in per region via the Data Retention
-API:
+model`. Opt in per region via the Data Retention API:
 
 ```bash
 aws bedrock put-account-data-retention --mode provider_data_share --region us-east-1
@@ -849,7 +854,7 @@ aws bedrock put-account-data-retention --mode provider_data_share --region us-ea
 Both models use always-on adaptive thinking, so promptfoo omits sampling controls,
 converts manual thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`)
 to adaptive thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo
-endpoints cost 10% more than the global endpoint; Promptfoo applies that premium when
+endpoints cost 10% more than the global endpoint; promptfoo applies that premium when
 calculating costs.
 
 ```yaml
@@ -1130,8 +1135,9 @@ as shown above.
 xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
-`Converse`. It is currently available only in **`us-west-2`** and authenticates with an
-**Amazon Bedrock API key** (set `AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
+`Converse`. It is offered in **`us-west-2`** (check `aws bedrock list-foundation-models` for
+current regional availability) and authenticates with an **Amazon Bedrock API key** (set
+`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
 
 ```yaml
 providers:
@@ -1150,7 +1156,7 @@ providers:
   `reasoning: { effort }`) and surfaces reasoning token counts in `tokenUsage`.
 - Grok's Responses API **does not accept `temperature`** — setting it returns
   `Unsupported parameter`. promptfoo therefore does not send a temperature default for Grok.
-- **Cost is not currently reported** for Grok (`cost` is left undefined). The Responses
+- **Cost is not reported** for Grok (`cost` is left undefined). The Responses
   billing tables are keyed on OpenAI model names; refer to the
   [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for Grok rates.
 
@@ -1285,7 +1291,7 @@ providers:
 
 ### OpenAI-compatible Models (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra) {#openai-compatible-models}
 
-Several newer Bedrock families speak the OpenAI Chat Completions schema over `InvokeModel`
+Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeModel`
 (`{ messages, max_tokens, ... }` → `{ choices: [{ message: { content } }] }`), so they share
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
@@ -1339,7 +1345,7 @@ API, and TwelveLabs Marengo (`twelvelabs.marengo-embed-*`) is an [embeddings](#e
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use an OpenAI grader and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 You can use either regular model IDs or application inference profiles for grading:
 
@@ -1465,7 +1471,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 
 See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
-When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+When loading image files as variables, promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 
 - jpg/jpeg
 - png
@@ -1584,7 +1590,7 @@ This will show detailed AWS SDK logs including credential resolution.
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
@@ -1727,11 +1733,11 @@ tests:
 
 ### Citations
 
-The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the evaluation results and can be used to verify the accuracy of the responses.
+The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the eval results and can be used to verify the accuracy of the responses.
 
 :::info
 
-When viewing evaluation results in the UI, citations appear in a separate section within the details view of each response. You can click on the source links to visit the original documents or copy citation content for reference.
+When viewing eval results in the UI, citations appear in a separate section within the details view of each response. You can click on the source links to visit the original documents or copy citation content for reference.
 
 :::
 
@@ -1787,7 +1793,7 @@ Quick example:
 
 ```yaml
 providers:
-  - bedrock-agent:YOUR_AGENT_ID
+  - id: bedrock-agent:YOUR_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS
       region: us-east-1

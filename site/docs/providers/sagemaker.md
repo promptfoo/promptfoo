@@ -1,7 +1,7 @@
 ---
 sidebar_label: Amazon SageMaker AI
 title: Amazon SageMaker AI Provider
-description: Test and evaluate ML models deployed on Amazon SageMaker endpoints with comprehensive metrics and performance benchmarking
+description: Evaluate models deployed on Amazon SageMaker AI endpoints — JumpStart, Hugging Face, and custom containers — with promptfoo
 ---
 
 # Amazon SageMaker AI
@@ -124,7 +124,8 @@ The provider will auto-detect JumpStart endpoints if `'jumpstart'` is in the nam
 
 ### Standard Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Write a tweet about {{topic}}'
 
@@ -153,13 +154,14 @@ tests:
 
 For Llama 3 models deployed via JumpStart:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
 
 providers:
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: 'Llama 3.2 (8B) on SageMaker'
+    label: 'Llama 3.2 (1B) on SageMaker'
     delay: 500 # Add 500ms delay between requests to prevent endpoint saturation
     config:
       region: us-west-2
@@ -185,7 +187,8 @@ tests:
 
 This example demonstrates advanced response processing with a file-based transform:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Who won the World Series in {{year}}?'
 
@@ -234,7 +237,8 @@ This transform not only extracts the content but also parses it to identify spec
 
 For Mistral 7B models deployed via Hugging Face:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Generate a creative name for a coffee shop that specializes in {{flavor}} coffee.'
 
@@ -266,7 +270,8 @@ tests:
 
 This example shows how to compare Llama and Mistral models side-by-side:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Comparison between Mistral 7B and Llama 3 on SageMaker'
 
 prompts:
@@ -277,7 +282,7 @@ prompts:
 providers:
   # Llama 3.2 provider
   - id: sagemaker:jumpstart:llama-3-2-1b-instruct
-    label: 'Llama 3.2 (8B)'
+    label: 'Llama 3.2 (1B)'
     delay: 500 # Add 500ms delay between requests
     config:
       region: us-west-2
@@ -431,7 +436,7 @@ providers:
   - id: sagemaker:my-custom-endpoint
     config:
       responseFormat:
-        path: 'file://transformers/custom-parser.js'
+        path: 'file://transforms/custom-parser.js'
 ```
 
 See the [Response Path Expressions](#response-path-expressions) section for more details on using JavaScript expressions and file-based transformers.
@@ -487,7 +492,7 @@ defaultTest:
 
 ## Environment Variables
 
-Promptfoo will also read certain environment variables to set default generation parameters:
+promptfoo will also read certain environment variables to set default generation parameters:
 
 - `AWS_REGION` or `AWS_DEFAULT_REGION`: Default region for SageMaker API calls
 - `AWS_SAGEMAKER_MAX_TOKENS`: Default maximum number of tokens to generate
@@ -499,7 +504,7 @@ These serve as global defaults for your eval runs. You can use them to avoid rep
 
 ## Caching Support
 
-The SageMaker provider fully supports the promptfoo caching system, which can significantly speed up evaluations and reduce costs when running repeated tests:
+The SageMaker provider supports the promptfoo caching system, which speeds up repeated evals and reduces cost:
 
 ```yaml
 # Caching is enabled by default. To explicitly configure it:
@@ -518,7 +523,7 @@ When caching is enabled:
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 
-Caching is enabled by default. To disable caching for specific test runs:
+To disable caching for specific test runs:
 
 ```bash
 promptfoo eval --no-cache
@@ -528,7 +533,7 @@ promptfoo eval --no-cache
 
 SageMaker endpoints will process requests as fast as the underlying instance allows. If you send too many requests in rapid succession, you may saturate the endpoint's capacity and get latency spikes or errors. To avoid this, you can configure a delay between calls.
 
-For example, `delay: 1000` will wait 1 second between each request to the endpoint. This is especially useful to prevent hitting concurrency limits on your model or to avoid invoking autoscaling too aggressively.
+For example, `delay: 1000` waits 1 second between each request to the endpoint. This helps prevent hitting concurrency limits on your model or invoking autoscaling too aggressively.
 
 ```yaml
 providers:
@@ -554,7 +559,7 @@ Note that delays are only applied for actual API calls, not when responses are r
 
 ## Transforming Prompts
 
-The SageMaker provider supports transforming prompts before they're sent to the endpoint. This is especially useful for:
+The SageMaker provider supports transforming prompts before they're sent to the endpoint. This is useful for:
 
 - Formatting prompts specifically for a particular model type
 - Adding system instructions or context
