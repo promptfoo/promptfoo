@@ -383,6 +383,9 @@ describe('testCaseFromCsvRow', () => {
     ['whitespace', '   '],
     ['numeric prefix', '0abc'],
     ['comma decimal', '0,8'],
+    ['non-finite literal', 'Infinity'],
+    ['overflow', '1e309'],
+    ['hexadecimal', '0x10'],
   ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
     const row: CsvRow = {
       __expected: 'equals:ok',
@@ -401,8 +404,11 @@ describe('testCaseFromCsvRow', () => {
     ['integer', '5', 5],
     ['decimal', '0.8', 0.8],
     ['leading-dot decimal', '.5', 0.5],
+    ['trailing-dot decimal', '5.', 5],
     ['negative', '-1', -1],
     ['exponent', '1e3', 1000],
+    ['signed exponent', '-2.5e-2', -0.025],
+    ['explicit plus', '+1', 1],
     ['surrounding whitespace', '  0.8  ', 0.8],
   ])('should parse a %s __threshold cell to %s', (_label, thresholdValue, expected) => {
     const row: CsvRow = {

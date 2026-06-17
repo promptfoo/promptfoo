@@ -308,7 +308,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
     // Gate on `=== undefined`, not a truthy check: a threshold of 0 is meaningful
-    // ("collect assertion scores but never fail an individual assertion") and must
+    // ("collect assertion scores without letting failures fail the test") and must
     // be preserved. parseFiniteNumber already normalizes blank/invalid cells to undefined.
     ...(threshold === undefined ? {} : { threshold }),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
