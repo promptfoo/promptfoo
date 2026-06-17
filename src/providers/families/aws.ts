@@ -59,35 +59,36 @@ export const awsProviderFactories: ProviderFactory[] = [
         );
       }
 
-      // OpenAI frontier models (gpt-5.x) are served only through Bedrock's OpenAI-compatible
-      // Responses API on the regional mantle endpoint — never the native InvokeModel/Converse
-      // APIs. Route them before the per-type handlers so `bedrock:openai.gpt-5.5`,
-      // `bedrock:converse:openai.gpt-5.5`, and `bedrock:completion:openai.gpt-5.5` all resolve
-      // correctly. Open-weight gpt-oss models fall through to InvokeModel/Converse below.
+      // OpenAI frontier models (gpt-5.x) and xAI Grok (grok-4.3) are served only through
+      // Bedrock's OpenAI-compatible Responses API on the regional mantle endpoint — never the
+      // native InvokeModel/Converse APIs. Route them before the per-type handlers so
+      // `bedrock:openai.gpt-5.5`, `bedrock:xai.grok-4.3`, and the explicit
+      // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
+      // gpt-oss models fall through to InvokeModel/Converse below.
       //
-      // Only those three forms carry a frontier model id, so restrict the candidate to the
-      // bare id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
-      // `converse:`/`completion:` forms. Frontier ids contain no colon, so the bare form is
-      // always two segments. This prevents sub-typed forms whose id merely contains `openai.`
+      // Only those three forms carry a mantle model id, so restrict the candidate to the bare
+      // id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
+      // `converse:`/`completion:` forms. Mantle ids contain no colon, so the bare form is
+      // always two segments. This prevents sub-typed forms whose id merely contains the prefix
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
-      const candidateOpenAiModel =
+      const candidateMantleModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.length === 2
             ? splits[1]
             : undefined;
       // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
-      // behind a cheap `openai.` prefix check, like every other handler import below, so the
-      // common non-OpenAI bedrock: models don't load it at construction. The prefix is a
-      // necessary condition; isBedrockOpenAiResponsesModel remains the source of truth for the
-      // frontier-vs-gpt-oss decision (a gpt-oss id passes the prefix gate but is rejected there
-      // and falls through to InvokeModel below).
-      if (candidateOpenAiModel?.startsWith('openai.')) {
-        const { isBedrockOpenAiResponsesModel, createBedrockOpenAiResponsesProvider } =
+      // behind a cheap prefix check, like every other handler import below, so the common
+      // non-mantle bedrock: models don't load it at construction. The prefix is a necessary
+      // condition; isBedrockMantleResponsesModel remains the source of truth for the decision
+      // (a gpt-oss id passes the prefix gate but is rejected there and falls through to
+      // InvokeModel below).
+      if (candidateMantleModel?.startsWith('openai.') || candidateMantleModel?.startsWith('xai.')) {
+        const { isBedrockMantleResponsesModel, createBedrockOpenAiResponsesProvider } =
           await import('../bedrock/openaiResponses');
-        if (isBedrockOpenAiResponsesModel(candidateOpenAiModel)) {
-          return createBedrockOpenAiResponsesProvider(candidateOpenAiModel, {
+        if (isBedrockMantleResponsesModel(candidateMantleModel)) {
+          return createBedrockOpenAiResponsesProvider(candidateMantleModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
           });

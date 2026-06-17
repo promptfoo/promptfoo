@@ -4491,6 +4491,18 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       );
     });
 
+    it('does not truncate when a reasoning tag appears mid-message (only strips a leading block)', () => {
+      // A code sample / preamble containing the tag must be preserved verbatim.
+      const midMessage = {
+        choices: [
+          { message: { content: 'Here is an example: <think>not real reasoning</think> done.' } },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, midMessage)).toBe(
+        'Here is an example: <think>not real reasoning</think> done.',
+      );
+    });
+
     it('returns non-string content (e.g. multimodal blocks) unchanged', () => {
       const blocks = [{ type: 'text', text: 'hi' }];
       expect(modelHandler.output({}, { choices: [{ message: { content: blocks } }] })).toBe(blocks);

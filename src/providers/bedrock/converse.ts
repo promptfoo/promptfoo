@@ -224,15 +224,27 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // Writer Palmyra
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // Newer OpenAI Chat-compatible families. Pricing is estimated — AWS does not publish
-  // per-token rates for all of these on the public pricing page; verify current rates at
-  // https://aws.amazon.com/bedrock/pricing/ . `includes()` matching tolerates geo prefixes
-  // (e.g. `us.zai.glm-5`) and version suffixes (e.g. `minimax.minimax-m2.5`).
-  'zai.glm': { input: 0.6, output: 2.2 },
+  // Newer OpenAI Chat-compatible families (US-region on-demand rates per
+  // https://aws.amazon.com/bedrock/pricing/ ; verify there as rates change). Keys are
+  // variant-specific because rates differ within a family, and `includes()` matches the
+  // first key in insertion order — so list more specific ids first (e.g. `glm-4.7-flash`
+  // before `glm-4.7`). `includes()` also tolerates geo prefixes (e.g. `us.zai.glm-5`).
+  // Z.AI GLM
+  'zai.glm-5': { input: 1.0, output: 3.2 },
+  'zai.glm-4.7-flash': { input: 0.07, output: 0.4 },
+  'zai.glm-4.7': { input: 0.6, output: 2.2 },
+  // MiniMax (M2 / M2.1 / M2.5 share a rate)
   'minimax.minimax-m2': { input: 0.3, output: 1.2 },
-  moonshot: { input: 0.6, output: 2.5 },
-  'nvidia.nemotron': { input: 0.15, output: 0.6 },
-  'google.gemma': { input: 0.1, output: 0.3 },
+  // Moonshot Kimi
+  'kimi-k2.5': { input: 0.6, output: 3.0 },
+  'kimi-k2-thinking': { input: 0.6, output: 2.5 },
+  // NVIDIA Nemotron
+  'nemotron-nano': { input: 0.06, output: 0.23 },
+  'nemotron-super': { input: 0.15, output: 0.65 },
+  // Google Gemma 3
+  'gemma-3-4b': { input: 0.04, output: 0.08 },
+  'gemma-3-12b': { input: 0.09, output: 0.29 },
+  'gemma-3-27b': { input: 0.23, output: 0.38 },
   // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
   // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
   // Responses API (see src/providers/bedrock/openaiResponses.ts).

@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BedrockGrokResponsesProvider,
   BedrockOpenAiResponsesProvider,
   createBedrockOpenAiResponsesProvider,
   getBedrockMantleBaseUrl,
+  isBedrockGrokModel,
+  isBedrockMantleResponsesModel,
   isBedrockOpenAiResponsesModel,
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
@@ -231,6 +234,69 @@ describe('bedrock openaiResponses helper', () => {
       expect(direct.getApiUrl()).toBe(
         new OpenAiResponsesProvider('gpt-5.5', { config: { apiKey: 'k' } }).getApiUrl(),
       );
+    });
+  });
+
+  describe('xAI Grok (mantle Responses)', () => {
+    it('classifies xai. ids', () => {
+      expect(isBedrockGrokModel('xai.grok-4.3')).toBe(true);
+      expect(isBedrockGrokModel('openai.gpt-5.5')).toBe(false);
+      expect(isBedrockGrokModel('anthropic.claude-opus-4-8')).toBe(false);
+    });
+
+    it('isBedrockMantleResponsesModel covers both frontier OpenAI and Grok', () => {
+      expect(isBedrockMantleResponsesModel('openai.gpt-5.5')).toBe(true);
+      expect(isBedrockMantleResponsesModel('xai.grok-4.3')).toBe(true);
+      // gpt-oss (InvokeModel) and ordinary InvokeModel families are not mantle Responses models.
+      expect(isBedrockMantleResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockMantleResponsesModel('zai.glm-5')).toBe(false);
+    });
+
+    it('builds a Grok provider on the us-west-2 mantle endpoint by default', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+      expect(provider).toBeInstanceOf(BedrockGrokResponsesProvider);
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+    });
+
+    it('reuses the missing-key error path', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
+        /AWS_BEARER_TOKEN_BEDROCK/,
+      );
+    });
+
+    it('treats Grok as a reasoning model but does NOT mark it GPT-5', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+      // Capability/billing name strips the xai. prefix.
+      expect((provider as any).getCapabilityModelName()).toBe('grok-4.3');
+      expect((provider as any).isReasoningModel()).toBe(true);
+      expect((provider as any).isGPT5Model()).toBe(false);
+      // Reasoning-model coupling => no temperature (Grok's Responses API rejects it).
+      expect((provider as any).supportsTemperature()).toBe(false);
+    });
+
+    it('forwards reasoning effort, sends the real xai. model id, and omits temperature', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: { reasoning_effort: 'high', temperature: 0 } as any,
+      });
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect(body.model).toBe('xai.grok-4.3');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      // Grok's Responses API rejects temperature; promptfoo must not send it even if configured.
+      expect(body.temperature).toBeUndefined();
+      // No GPT-5 verbosity for Grok.
+      expect(body.text?.verbosity).toBeUndefined();
     });
   });
 });

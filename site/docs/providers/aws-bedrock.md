@@ -1117,6 +1117,37 @@ as shown above.
 
 :::
 
+### xAI Grok Models
+
+xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
+frontier models and is served through the **OpenAI-compatible Responses API** on the regional
+mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
+`Converse`. It is currently available only in **`us-west-2`** and authenticates with an
+**Amazon Bedrock API key** (set `AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
+
+```yaml
+providers:
+  - id: bedrock:xai.grok-4.3
+    config:
+      region: us-west-2 # Grok 4.3 is only available in us-west-2
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
+      max_output_tokens: 4096
+```
+
+:::note
+
+- Grok 4.3 is **reasoning-first**: reasoning is always active and the effort is configurable
+  (`none` | `low` | `medium` | `high`). promptfoo forwards `reasoning_effort` (or
+  `reasoning: { effort }`) and surfaces reasoning token counts in `tokenUsage`.
+- Grok's Responses API **does not accept `temperature`** — setting it returns
+  `Unsupported parameter`. promptfoo therefore does not send a temperature default for Grok.
+- **Cost is not currently reported** for Grok (`cost` is left undefined). The Responses
+  billing tables are keyed on OpenAI model names; refer to the
+  [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for Grok rates.
+
+:::
+
 ### Qwen Models
 
 Qwen model IDs include `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,

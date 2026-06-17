@@ -32,6 +32,30 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:openai.gpt-5.5');
   });
 
+  it('routes xai.grok ids to the Responses provider on the us-west-2 mantle endpoint', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:xai.grok-4.3',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+    expect(provider.id()).toBe('bedrock:xai.grok-4.3');
+  });
+
+  it.each([
+    'bedrock:converse:xai.grok-4.3',
+    'bedrock:completion:xai.grok-4.3',
+  ])('routes the explicit %s form to the Grok mantle Responses provider', async (id) => {
+    const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
+    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+  });
+
   it('routes gpt-oss ids to the InvokeModel completion provider', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:openai.gpt-oss-120b-1:0',

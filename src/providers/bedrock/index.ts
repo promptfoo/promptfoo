@@ -2461,19 +2461,20 @@ ${prompt}
         return content;
       }
 
-      // Optionally strip a leading reasoning block. These models emit either
-      // `<think>…</think>` (Qwen-style) or `<reasoning>…</reasoning>` (gpt-oss-style);
-      // handle both. Default (showThinking unset) returns the raw output.
+      // Optionally strip a reasoning block. These models emit either `<think>…</think>`
+      // (Qwen-style) or `<reasoning>…</reasoning>` (gpt-oss-style); handle both. The match is
+      // anchored to the START of the message so a tag that appears mid-message (a literal code
+      // sample, HTML, or a model that emits a preamble before the block) is not truncated. An
+      // unclosed tag does not match, so a truncated turn is left intact. Default (showThinking
+      // unset) returns the raw output.
       if (config.showThinking === false) {
-        for (const tag of ['think', 'reasoning']) {
-          const close = `</${tag}>`;
-          if (content.includes(`<${tag}>`) && content.includes(close)) {
-            const stripped = content.slice(content.indexOf(close) + close.length).trim();
-            // If the model returned only a reasoning block (no trailing answer), fall back to
-            // the raw content rather than silently emitting an empty string — matching the
-            // gpt-oss handler so assertions/graders never see a dropped response.
-            return stripped === '' ? content : stripped;
-          }
+        const leadingBlock = content.match(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>/);
+        if (leadingBlock) {
+          const stripped = content.slice(leadingBlock[0].length).trim();
+          // If the model returned only a reasoning block (no trailing answer), fall back to
+          // the raw content rather than silently emitting an empty string — matching the
+          // gpt-oss handler so assertions/graders never see a dropped response.
+          return stripped === '' ? content : stripped;
         }
       }
 
@@ -2893,6 +2894,16 @@ export function getHandlerForModel(
         `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
         `"bedrock:${bareFrontierId}" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+    );
+  }
+  if (modelName.includes('xai.') || modelName.includes('grok')) {
+    // Grok runs on Mantle (OpenAI-compatible Responses API), not InvokeModel. The bare id is
+    // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
+    // the edge cases (e.g. an inference-profile ARN with inferenceModelType) with a clear hint.
+    throw new Error(
+      `xAI model "${modelName}" is not served by Bedrock's InvokeModel API. Grok runs on the ` +
+        `OpenAI-compatible Responses API (mantle endpoint) — use "bedrock:xai.grok-4.3" and set ` +
+        `AWS_BEARER_TOKEN_BEDROCK. See https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
     );
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);

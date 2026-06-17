@@ -24,6 +24,9 @@ import type { ProviderOptions } from '../../types/providers';
 /** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
 export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
+/** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
+export const DEFAULT_BEDROCK_GROK_REGION = 'us-west-2';
+
 /**
  * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
  * (a bare `openai.` id that is not an open-weight `gpt-oss` model, e.g. `openai.gpt-5.5`).
@@ -36,6 +39,24 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
  */
 export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
   return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
+}
+
+/**
+ * Whether a Bedrock model id is an xAI Grok model (e.g. `xai.grok-4.3`). Grok also runs on the
+ * mantle endpoint and is served through the same OpenAI-compatible Responses API; its model
+ * card lists only the bare `xai.` id (no Geo/Global inference IDs), so a prefixed id like
+ * `us.xai.grok-4.3` is not a real Bedrock model.
+ */
+export function isBedrockGrokModel(modelName: string): boolean {
+  return modelName.startsWith('xai.');
+}
+
+/**
+ * Whether a Bedrock model id is served through the OpenAI-compatible Responses API on the
+ * mantle endpoint — either an OpenAI frontier model or an xAI Grok model.
+ */
+export function isBedrockMantleResponsesModel(modelName: string): boolean {
+  return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);
 }
 
 /**
@@ -85,35 +106,62 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
 }
 
 /**
- * Construct an OpenAI Responses provider configured for a Bedrock frontier model. Resolves
- * the region (config → AWS_BEDROCK_REGION → AWS_REGION → default) and the Amazon Bedrock
- * API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle endpoint
- * unless the caller supplies an explicit `apiBaseUrl`.
+ * Responses provider for xAI Grok on Bedrock (`xai.grok-4.3`). Shares the mantle Responses
+ * transport with the OpenAI frontier provider, but Grok has its own request semantics:
+ *
+ * - The capability/billing name strips the `xai.` prefix (→ `grok-4.3`).
+ * - Grok is reasoning-first with a configurable `reasoning.effort`, so it is treated as a
+ *   reasoning model — promptfoo forwards `reasoning` / `reasoning_effort` and, because the base
+ *   provider couples reasoning models to "no temperature", it stops sending a `temperature`
+ *   default. This matches the live API: Grok's Responses endpoint rejects `temperature`
+ *   ("Unsupported parameter: 'temperature' is not supported with this model").
+ *
+ * Cost is not computed for Grok: the Responses billing tables are keyed on OpenAI model names,
+ * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
+ */
+export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider {
+  protected getCapabilityModelName(): string {
+    return this.modelName.replace(/^xai\./, '');
+  }
+
+  protected isReasoningModel(): boolean {
+    return true;
+  }
+}
+
+/**
+ * Construct an OpenAI Responses provider configured for a Bedrock model served on the mantle
+ * endpoint — an OpenAI frontier model (`openai.gpt-5.x`) or an xAI Grok model (`xai.grok-4.3`).
+ * Resolves the region (config → AWS_BEDROCK_REGION → AWS_REGION → family default) and the
+ * Amazon Bedrock API key (config.apiKey → AWS_BEARER_TOKEN_BEDROCK), and targets the mantle
+ * endpoint unless the caller supplies an explicit `apiBaseUrl`.
  */
 export function createBedrockOpenAiResponsesProvider(
   modelName: string,
   providerOptions: ProviderOptions & { id?: string } = {},
 ): OpenAiResponsesProvider {
   const config: Record<string, any> = providerOptions.config ?? {};
+  const isGrok = isBedrockGrokModel(modelName);
   const region = resolveBedrockMantleRegion(
     config,
     providerOptions.env,
-    DEFAULT_BEDROCK_OPENAI_REGION,
+    isGrok ? DEFAULT_BEDROCK_GROK_REGION : DEFAULT_BEDROCK_OPENAI_REGION,
   );
   const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 
   if (!apiKey) {
     throw new Error(
-      `Amazon Bedrock model "${modelName}" is an OpenAI frontier model served through ` +
-        `Bedrock's OpenAI-compatible Responses API, which authenticates with an Amazon ` +
-        `Bedrock API key. Set the AWS_BEARER_TOKEN_BEDROCK environment variable (or ` +
-        `config.apiKey). See https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+      `Amazon Bedrock model "${modelName}" is served through Bedrock's OpenAI-compatible ` +
+        `Responses API on the mantle endpoint, which authenticates with an Amazon Bedrock API ` +
+        `key. Set the AWS_BEARER_TOKEN_BEDROCK environment variable (or config.apiKey). See ` +
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
     );
   }
 
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleBaseUrl(region);
+  const ProviderClass = isGrok ? BedrockGrokResponsesProvider : BedrockOpenAiResponsesProvider;
 
-  return new BedrockOpenAiResponsesProvider(modelName, {
+  return new ProviderClass(modelName, {
     ...providerOptions,
     config: { ...config, apiBaseUrl, apiKey },
   });

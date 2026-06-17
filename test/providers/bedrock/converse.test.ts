@@ -2405,14 +2405,24 @@ Third line`;
     // Covers geo-prefixed (`us.`) and version-suffixed (`-m2.5`) ids to lock in the
     // order-sensitive `includes()` pricing-key matching.
     it.each([
-      { id: 'zai.glm-5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
-      { id: 'us.zai.glm-5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
+      // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
+      { id: 'zai.glm-5', expected: (10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2 },
+      { id: 'us.zai.glm-5', expected: (10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2 },
+      { id: 'zai.glm-4.7', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
+      { id: 'zai.glm-4.7-flash', expected: (10000 / 1e6) * 0.07 + (5000 / 1e6) * 0.4 },
+      // MiniMax — M2 / M2.1 / M2.5 share a rate.
       { id: 'minimax.minimax-m2', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
       { id: 'minimax.minimax-m2.5', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
-      { id: 'moonshotai.kimi-k2.5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
+      // Moonshot Kimi — K2.5 and K2 Thinking differ on output rate.
+      { id: 'moonshotai.kimi-k2.5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 3.0 },
       { id: 'moonshot.kimi-k2-thinking', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
-      { id: 'nvidia.nemotron-super-3-120b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.6 },
-      { id: 'google.gemma-3-12b-it', expected: (10000 / 1e6) * 0.1 + (5000 / 1e6) * 0.3 },
+      // NVIDIA Nemotron — nano vs super.
+      { id: 'nvidia.nemotron-nano-9b-v2', expected: (10000 / 1e6) * 0.06 + (5000 / 1e6) * 0.23 },
+      { id: 'nvidia.nemotron-super-3-120b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.65 },
+      // Google Gemma 3 — per size.
+      { id: 'google.gemma-3-4b-it', expected: (10000 / 1e6) * 0.04 + (5000 / 1e6) * 0.08 },
+      { id: 'google.gemma-3-12b-it', expected: (10000 / 1e6) * 0.09 + (5000 / 1e6) * 0.29 },
+      { id: 'google.gemma-3-27b-it', expected: (10000 / 1e6) * 0.23 + (5000 / 1e6) * 0.38 },
       { id: 'us.writer.palmyra-x5-v1:0', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 6 },
     ])('should calculate cost for OpenAI-compatible model $id', async ({ id, expected }) => {
       const provider = new AwsBedrockConverseProvider(id, { config: { region: 'us-east-1' } });

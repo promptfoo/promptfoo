@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'xAI Grok 4.3 on Amazon Bedrock (Mantle / OpenAI-compatible Responses API)'
+
+# Grok 4.3 runs on Bedrock's Mantle inference engine and is served through the
+# OpenAI-compatible Responses API — NOT the InvokeModel/Converse APIs. It authenticates with
+# an Amazon Bedrock API key, so set AWS_BEARER_TOKEN_BEDROCK (a long-term Bedrock API key) in
+# your environment. Grok 4.3 is currently available only in us-west-2.
+#
+#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c promptfooconfig.grok.yaml
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: bedrock:xai.grok-4.3
+    label: Grok 4.3
+    config:
+      region: us-west-2
+      # Grok is reasoning-first; configure effort with none | low | medium | high.
+      # (Grok's Responses API does not accept `temperature`.)
+      reasoning_effort: low
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: icontains
+        value: Paris
+
+  - vars:
+      question: What is 17 multiplied by 23?
+    assert:
+      - type: contains
+        value: '391'
