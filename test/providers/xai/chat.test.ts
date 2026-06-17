@@ -638,6 +638,10 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 800)).toBeCloseTo(0.0087, 10);
       // Without any cached tokens: (1000 * 3e-6) + (500 * 15e-6) = 0.0105
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
+      // A proxy may make cache hits free; an explicit zero must not fall back to model pricing.
+      expect(
+        calculateXAICost('grok-4-0709', { ...rates, cacheReadCost: 0 }, 1000, 500, 0, 800),
+      ).toBeCloseTo(0.0081, 10);
     });
 
     it('clamps cached prompt tokens to valid usage boundaries', () => {
@@ -649,6 +653,14 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 2000)).toBeCloseTo(0.00825, 10);
       // Invalid negative usage falls back to the undiscounted input cost.
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Number.NaN)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Infinity)).toBeCloseTo(
+        0.0105,
+        10,
+      );
     });
 
     it('falls back to full input pricing when the model has no cache-read rate', () => {
@@ -958,11 +970,13 @@ describe('xAI Chat Provider', () => {
 
       const provider = createXAIProvider('xai:grok-4-0709', {
         config: {
-          apiKey: 'test-key',
-          inputCost: 3e-6,
-          outputCost: 15e-6,
-          cacheReadCost: 0.75e-6,
-        } as any,
+          config: {
+            apiKey: 'test-key',
+            inputCost: 3e-6,
+            outputCost: 15e-6,
+            cacheReadCost: 0.75e-6,
+          },
+        },
       });
 
       const result = await provider.callApi('test prompt');

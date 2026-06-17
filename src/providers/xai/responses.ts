@@ -9,7 +9,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs } from '../shared';
-import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd } from './chat';
+import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd, type XAICostConfig } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -232,7 +232,7 @@ function buildTextFormat(responseFormat: any) {
   return { format: { type: 'text' } };
 }
 
-export interface XAIResponsesConfig {
+export interface XAIResponsesConfig extends XAICostConfig {
   /** API key (defaults to XAI_API_KEY env var) */
   apiKey?: string;
   /** API base URL (defaults to https://api.x.ai/v1) */

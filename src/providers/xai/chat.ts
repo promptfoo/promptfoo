@@ -72,13 +72,25 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
+export interface XAICostConfig {
+  /** Custom per-token cost override for both input and output tokens. */
+  cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
+  /** Custom per-token cost for prompt tokens served from xAI's prompt cache. */
+  cacheReadCost?: number;
+}
+
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
   agent_tools?: XAIAgentTool[];
-} & OpenAiCompletionOptions;
+} & OpenAiCompletionOptions &
+  XAICostConfig;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: {
@@ -478,7 +490,7 @@ export const GROK_4_MODELS = [
  */
 export function calculateXAICost(
   modelName: string,
-  config: any,
+  config: XAICostConfig,
   promptTokens?: number,
   completionTokens?: number,
   reasoningTokens?: number,
@@ -508,20 +520,18 @@ export function calculateXAICost(
   const inputCostOverride = config.inputCost ?? config.cost;
   const inputCost = inputCostOverride ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read;
+  const cacheReadCost =
+    config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read ?? inputCost;
 
   const billableCachedTokens = Number.isFinite(cachedTokens)
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens)
     : 0;
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
 
-  // Cached prompt tokens (prompt_tokens_details.cached_tokens) are billed at the
-  // reduced cache-read rate. Without this they were billed at the full input
-  // rate. Fall back to the full input behavior when no cache rate is known.
-  const inputCostTotal =
-    billableCachedTokens > 0 && cacheReadCost != null
-      ? inputCost * uncachedPromptTokens + cacheReadCost * billableCachedTokens
-      : inputCost * promptTokens;
+  // Cached prompt tokens (prompt_tokens_details.cached_tokens) use the reduced
+  // cache-read rate. When no cache rate is known, cacheReadCost falls back to the
+  // full input rate so this formula preserves the undiscounted behavior.
+  const inputCostTotal = inputCost * uncachedPromptTokens + cacheReadCost * billableCachedTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
 
   logger.debug(
