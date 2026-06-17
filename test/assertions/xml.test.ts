@@ -75,6 +75,20 @@ describe('validateXml', () => {
     }
   });
 
+  it('should accept external DOCTYPEs whose quoted identifiers contain brackets', () => {
+    // The `[` lives inside a quoted SYSTEM/PUBLIC literal, so it must not be
+    // mistaken for the start of an internal subset and rejected.
+    for (const xml of [
+      '<!DOCTYPE root SYSTEM "weird[name].dtd"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//[bracket]//EN" "sys.dtd"><root/>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
   it('should validate XML with attributes', () => {
     expect(validateXml('<root><child id="1">Content</child></root>')).toEqual({
       isValid: true,
