@@ -1999,14 +1999,17 @@ describe('BEDROCK_MODEL MISTRAL', () => {
 
       const params = await modelHandler.params(config, prompt, stop);
 
+      // top_k is intentionally omitted: the Bedrock Mistral InvokeModel API validates
+      // `top_k >= 1` and rejects `top_k: 0` with a ValidationException, so there is no safe
+      // hardcoded default — let the model use its own.
       expect(params).toEqual({
         prompt,
         stop,
         max_tokens: 1024,
         temperature: 0,
         top_p: 1,
-        top_k: 0,
       });
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 

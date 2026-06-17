@@ -2086,7 +2086,12 @@ ${prompt}
         0,
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'), 0);
+      // Only send top_k when explicitly configured. The Bedrock Mistral InvokeModel API now
+      // validates `top_k >= 1` and rejects the request with a ValidationException if it sees
+      // `top_k: 0`, so a hardcoded 0 default broke every model on this handler (mistral-7b,
+      // mistral-large-2402, mistral-small-2402, mixtral-8x7b). Omitting it lets the model use
+      // its own default.
+      addConfigParam(params, 'top_k', config?.top_k, getEnvFloat('MISTRAL_TOP_K'));
 
       return params;
     },
