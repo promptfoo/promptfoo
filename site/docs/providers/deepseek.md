@@ -91,9 +91,7 @@ providers:
     config:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
-  - id: openai:o-1
-    config:
-      temperature: 0.0
+  - id: openai:o1
 
 prompts:
   - 'Solve this step by step: {{math_problem}}'

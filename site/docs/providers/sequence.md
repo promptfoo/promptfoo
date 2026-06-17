@@ -40,20 +40,19 @@ Here's a complete example showing how to use the Sequence Provider to create a m
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - openai:chat:gpt-4
-  - id: sequence
-    config:
-      inputs:
-        - 'What is {{prompt}}?'
-        - 'What are the potential drawbacks of {{prompt}}?'
-        - 'Can you summarize the pros and cons of {{prompt}}?'
-      separator: "\n\n=== Next Response ===\n\n"
 
 prompts:
   - 'artificial intelligence'
 
 tests:
-  - vars:
-      prompt: artificial intelligence
+  - provider:
+      id: sequence
+      config:
+        inputs:
+          - 'What is {{prompt}}?'
+          - 'What are the potential drawbacks of {{prompt}}?'
+          - 'Can you summarize the pros and cons of {{prompt}}?'
+        separator: "\n\n=== Next Response ===\n\n"
     assert:
       - type: contains
         value: drawbacks

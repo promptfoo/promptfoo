@@ -192,7 +192,7 @@ tests:
   - assert:
       - type: is-valid-image
       - type: image-width
-        value: 1920
+        value: 1024
 ```
 
 ### Audio Generation Example
@@ -217,13 +217,24 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - role: user
-    content:
-      - type: text
-        text: "What's in this image?"
-      - type: image_url
-        image_url:
-          url: 'https://example.com/image.jpg'
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What's in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.com/image.jpg"
+            }
+          }
+        ]
+      }
+    ]
 providers:
   - id: hyperbolic:qwen/Qwen2.5-VL-72B-Instruct
     config:

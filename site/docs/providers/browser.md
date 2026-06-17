@@ -607,19 +607,15 @@ providers:
             selector: '.welcome-message'
           name: welcomeText
 
-      transformResponse: |
-        return {
-          output: extracted.welcomeText,
-          success: extracted.welcomeText.includes('Welcome')
-        };
+      transformResponse: '({ output: extracted.welcomeText })'
 
 tests:
   - vars:
       username: 'testuser'
       password: 'testpass123'
     assert:
-      - type: javascript
-        value: output.success === true
+      - type: contains
+        value: 'Welcome'
 ```
 
 ## Troubleshooting

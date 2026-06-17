@@ -401,7 +401,7 @@ tests:
       problem: "A company has 100 employees. 60% work remotely, 25% work hybrid, and the rest work in office. If remote workers get a $200 stipend and hybrid workers get $100, what's the total monthly stipend cost?"
     assert:
       - type: llm-rubric
-        value: 'Shows clear mathematical reasoning and arrives at correct answer ($13,500)'
+        value: 'Shows clear mathematical reasoning and arrives at correct answer ($14,500)'
       - type: cost
         threshold: 0.10
 ```

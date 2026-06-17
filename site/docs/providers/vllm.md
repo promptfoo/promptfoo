@@ -153,7 +153,7 @@ defaultTest:
   options:
     provider:
       id: openai:chat:llm_judge
-      label: Judge: llm_judge @ vLLM
+      label: 'Judge: llm_judge @ vLLM'
       config:
         apiBaseUrl: http://localhost:8000/v1
         apiKey: token-abc123

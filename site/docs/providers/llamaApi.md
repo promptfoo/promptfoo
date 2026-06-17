@@ -114,13 +114,24 @@ providers:
   - llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
 
 prompts:
-  - role: user
-    content:
-      - type: text
-        text: 'What do you see in this image?'
-      - type: image_url
-        image_url:
-          url: 'https://example.com/image.jpg'
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What do you see in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.com/image.jpg"
+            }
+          }
+        ]
+      }
+    ]
 
 tests:
   - vars: {}
@@ -213,10 +224,11 @@ tests:
   - vars:
       city: 'New York, NY'
     assert:
-      - type: function-call
-        value: get_weather
+      - type: is-valid-openai-tools-call
       - type: javascript
-        value: "output.arguments.location.includes('New York')"
+        value: output[0].function.name === 'get_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location.includes('New York')
 ```
 
 ### Streaming

@@ -154,11 +154,13 @@ Here's a complete example configuration:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: nscale-gpt-oss
+  - id: nscale:openai/gpt-oss-120b
+    label: nscale-gpt-oss
     config:
       temperature: 0.7
       max_tokens: 512
-  - id: nscale-llama
+  - id: nscale:meta/llama-3.3-70b-instruct
+    label: nscale-llama
     config:
       temperature: 0.5
       max_tokens: 1024

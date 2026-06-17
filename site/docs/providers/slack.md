@@ -352,15 +352,13 @@ providers:
       channel: C_TEST_CHANNEL
       timeout: 15000
       responseStrategy: user
-      userId: U_SUPPORT_BOT_ID
-      messageFormatter: |
-        <@U_SUPPORT_BOT_ID> {{prompt}}
+      waitForUser: U_SUPPORT_BOT_ID
 
 prompts:
-  - 'How do I reset my password?'
-  - 'What are your business hours?'
-  - 'I need to speak to a human'
-  - "My order hasn't arrived yet, order #12345"
+  - '<@U_SUPPORT_BOT_ID> How do I reset my password?'
+  - '<@U_SUPPORT_BOT_ID> What are your business hours?'
+  - '<@U_SUPPORT_BOT_ID> I need to speak to a human'
+  - "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
 
 tests:
   - vars:
@@ -438,20 +436,23 @@ providers:
     label: bot-v1
     config:
       channel: C_CHANNEL_V1
-      userId: U_BOT_V1
+      responseStrategy: user
+      waitForUser: U_BOT_V1
 
   - id: slack
     label: bot-v2
     config:
       channel: C_CHANNEL_V2
-      userId: U_BOT_V2
+      responseStrategy: user
+      waitForUser: U_BOT_V2
 
 prompts:
   - "What's your return policy?"
 
-assert:
-  - type: llm-rubric
-    value: 'Response should be helpful, accurate, and mention the 30-day return window'
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response should be helpful, accurate, and mention the 30-day return window'
 ```
 
 ### Best Practices for Bot Testing
@@ -532,14 +533,14 @@ providers:
     config:
       responseStrategy: 'first'
       timeout: 180000 # 3 minutes
-      formatMessage: (prompt) =>
-        `📋 *Customer Service Evaluation*\n\n${prompt}\n\n_How would you respond to this customer?_`
 
 prompts:
   - |
+    📋 Customer Service Evaluation
+
     Customer message: "{{message}}"
 
-    Please provide a helpful and empathetic response.
+    How would you respond to this customer? Please provide a helpful and empathetic response.
 
 tests:
   - vars:

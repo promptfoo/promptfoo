@@ -256,20 +256,22 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - file://audio/test-recording.mp3
+  - '{{audioFile}}'
 
 providers:
   - id: elevenlabs:stt
     config:
       diarization: true
+      calculateWER: true
+      referenceText: 'The quick brown fox jumps over the lazy dog.'
 
 tests:
   - description: WER is acceptable
+    vars:
+      audioFile: audio/test-recording.mp3
     assert:
       - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          return result.wer < 0.05; // Less than 5% error
+        value: context.metadata?.wer?.wer < 0.05
 ```
 
 ### Conversational Agents: Evaluation
@@ -466,27 +468,27 @@ prompts:
   - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
 providers:
-  - id: flash-model
-    label: Flash Model (Fastest)
+  - id: elevenlabs:tts:rachel
+    label: flash-model
     config:
       modelId: eleven_flash_v2_5
       voiceId: rachel
 
-  - id: turbo-model
-    label: Turbo Model (Best Quality)
+  - id: elevenlabs:tts:rachel
+    label: turbo-model
     config:
       modelId: eleven_turbo_v2_5
       voiceId: rachel
 
 tests:
   - description: Flash model completes quickly
-    provider: flash-model
+    providers: [flash-model]
     assert:
       - type: latency
         threshold: 1000
 
   - description: Turbo model has better quality
-    provider: turbo-model
+    providers: [turbo-model]
     assert:
       - type: cost
         threshold: 0.01
@@ -494,37 +496,25 @@ tests:
 
 ### Transcription Accuracy Pipeline
 
-Test end-to-end TTS → STT accuracy:
+Save the TTS output as `audio/tts-output.mp3`, then run the STT stage to measure transcription accuracy:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - |
-    The meeting is scheduled for Thursday at 2 PM in conference room B.
-    Please bring your laptop and quarterly report.
+  - '{{audioFile}}'
 
 providers:
-  - id: tts-generator
-    label: elevenlabs:tts:rachel
-    config:
-      modelId: eleven_flash_v2_5
-
-  - id: stt-transcriber
-    label: elevenlabs:stt
+  - id: elevenlabs:stt
     config:
       calculateWER: true
+      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
 
 tests:
   - vars:
-      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
+      audioFile: audio/tts-output.mp3
     assert:
       - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          if (result.wer_result) {
-            return result.wer_result.wer < 0.03; // Less than 3% error
-          }
-          return true;
+        value: context.metadata?.wer?.wer < 0.03
 ```
 
 ### Agent Regression Testing
