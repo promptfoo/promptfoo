@@ -135,7 +135,7 @@ Azure AI Foundry provides access to models from multiple providers:
 | **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                 |
 | **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                        |
 
-For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
+For the complete list of models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
 ## Azure Responses API
 
@@ -298,12 +298,15 @@ config:
   instructions: 'You are a helpful assistant specializing in technical documentation.'
 ```
 
-**Background Tasks**: Enable asynchronous processing for long-running tasks:
+**Background Tasks**: Enable asynchronous processing for long-running tasks. The provider does
+not model `background` directly, so forward it through `passthrough` (which is merged into the
+request body):
 
 ```yaml
 config:
-  background: true
   store: true
+  passthrough:
+    background: true
 ```
 
 **Chaining Responses**: Chain multiple responses together for multi-turn conversations:
@@ -434,11 +437,13 @@ config:
   truncation: auto # or 'disabled'
 ```
 
-**Webhook URL**: Set a webhook for async notifications:
+**Webhook URL**: Set a webhook for async notifications. Like `background`, `webhook_url` is
+forwarded via `passthrough`:
 
 ```yaml
 config:
-  webhook_url: 'https://your-webhook.com/callback'
+  passthrough:
+    webhook_url: 'https://your-webhook.com/callback'
 ```
 
 ### Responses API Limitations
@@ -452,35 +457,41 @@ config:
 
 The Azure OpenAI provider supports the following environment variables:
 
-| Environment Variable    | Config Key           | Description                        | Required |
-| ----------------------- | -------------------- | ---------------------------------- | -------- |
-| `AZURE_API_KEY`         | `apiKey`             | Your Azure OpenAI API key          | No\*     |
-| `AZURE_API_HOST`        | `apiHost`            | API host                           | No       |
-| `AZURE_API_BASE_URL`    | `apiBaseUrl`         | API base URL                       | No       |
-| `AZURE_BASE_URL`        | `apiBaseUrl`         | Alternative API base URL           | No       |
-| `AZURE_DEPLOYMENT_NAME` | -                    | Default deployment name            | Yes      |
-| `AZURE_CLIENT_ID`       | `azureClientId`      | Azure AD application client ID     | No\*     |
-| `AZURE_CLIENT_SECRET`   | `azureClientSecret`  | Azure AD application client secret | No\*     |
-| `AZURE_TENANT_ID`       | `azureTenantId`      | Azure AD tenant ID                 | No\*     |
-| `AZURE_AUTHORITY_HOST`  | `azureAuthorityHost` | Azure AD authority host            | No       |
-| `AZURE_TOKEN_SCOPE`     | `azureTokenScope`    | Azure AD token scope               | No       |
+| Environment Variable           | Config Key           | Description                                                                             | Required |
+| ------------------------------ | -------------------- | --------------------------------------------------------------------------------------- | -------- |
+| `AZURE_API_KEY`                | `apiKey`             | Your Azure OpenAI API key                                                               | No\*     |
+| `AZURE_API_HOST`               | `apiHost`            | API host                                                                                | No       |
+| `AZURE_API_BASE_URL`           | `apiBaseUrl`         | API base URL                                                                            | No       |
+| `AZURE_BASE_URL`               | `apiBaseUrl`         | Alternative API base URL                                                                | No       |
+| `AZURE_DEPLOYMENT_NAME`        | -                    | Opt-in flag that, with `AZURE_OPENAI_DEPLOYMENT_NAME`, makes Azure the default provider | No†      |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | -                    | Deployment used when Azure is the default provider                                      | No†      |
+| `AZURE_CLIENT_ID`              | `azureClientId`      | Azure AD application client ID                                                          | No\*     |
+| `AZURE_CLIENT_SECRET`          | `azureClientSecret`  | Azure AD application client secret                                                      | No\*     |
+| `AZURE_TENANT_ID`              | `azureTenantId`      | Azure AD tenant ID                                                                      | No\*     |
+| `AZURE_AUTHORITY_HOST`         | `azureAuthorityHost` | Azure AD authority host                                                                 | No       |
+| `AZURE_TOKEN_SCOPE`            | `azureTokenScope`    | Azure AD token scope                                                                    | No       |
 
 \* Either `AZURE_API_KEY` OR the combination of `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` must be provided.
+
+† Not needed when you name the deployment in the provider ID (e.g. `azure:chat:my-deployment`). Both are required only to make Azure the default provider (see [Default Deployment](#default-deployment)).
 
 Note: For API URLs, you only need to set one of `AZURE_API_HOST`, `AZURE_API_BASE_URL`, or `AZURE_BASE_URL`. If multiple are set, the provider will use them in that order of preference.
 
 ### Default Deployment
 
-If `AZURE_DEPLOYMENT_NAME` is set, it will be automatically used as the default deployment when no other provider is configured. This makes Azure OpenAI the default provider when:
+Azure OpenAI becomes the default provider (used for grading, dataset generation, suggestions, and synthesis) when **all** of these hold:
 
 1. No OpenAI API key is present (`OPENAI_API_KEY` is not set)
 2. Azure authentication is configured (either via API key or client credentials)
-3. `AZURE_DEPLOYMENT_NAME` is set
+3. Both `AZURE_DEPLOYMENT_NAME` **and** `AZURE_OPENAI_DEPLOYMENT_NAME` are set
+
+The default deployment is taken from `AZURE_OPENAI_DEPLOYMENT_NAME` (`AZURE_DEPLOYMENT_NAME` acts as the opt-in flag). If `AZURE_DEPLOYMENT_NAME` is set but `AZURE_OPENAI_DEPLOYMENT_NAME` is not, Azure is not selected as the default.
 
 For example, if you have these environment variables set:
 
 ```bash
 AZURE_DEPLOYMENT_NAME=gpt-4o
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
 AZURE_API_KEY=your-api-key
 AZURE_API_HOST=your-host.openai.azure.com
 ```
@@ -489,6 +500,7 @@ Or these client credential environment variables:
 
 ```bash
 AZURE_DEPLOYMENT_NAME=gpt-4o
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
 AZURE_TENANT_ID=your-tenant-id
@@ -614,7 +626,7 @@ The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not 
 
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-5` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use a default OpenAI grader model unless overridden. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
@@ -704,14 +716,14 @@ providers:
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       deployment_id: 'abc123'
-data_sources:
- - type: azure_search
-  parameters:
-   endpoint: https://xxxxxxxx.search.windows.net
-    index_name: index123
-     authentication:
-      type: api_key
-       key: ''
+      data_sources:
+        - type: azure_search
+          parameters:
+            endpoint: https://xxxxxxxx.search.windows.net
+            index_name: index123
+            authentication:
+              type: api_key
+              key: ''
 ```
 
 :::note
@@ -1048,7 +1060,7 @@ Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning mode
 
 1. Set `isReasoningModel: true`
 2. Use `max_completion_tokens` instead of `max_tokens`
-3. Set API version to '2025-04-01-preview' (or latest available)
+3. Set API version to '2025-04-01-preview' (or later)
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1127,7 +1139,7 @@ To grade generated images with a vision LLM, use an `llm-rubric` assertion with 
 
 ### Reasoning chat (`azure:chat`)
 
-MAI text models run through the standard `azure:chat` provider. **Availability is limited today:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and aren't yet in the public CLI catalog (checked via `az cognitiveservices model list` in eastus, westus, swedencentral, and eastus2 — as of this writing). promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` as soon as your subscription can deploy them. The example below is forward-looking.
+MAI text models run through the standard `azure:chat` provider. **Availability is limited:** `MAI-DS-R1` is marked **Deprecated** in the Azure model catalog, and `MAI-Thinking-1` / `MAI-Code-1-Flash` are in **private preview** and may not appear in the public CLI catalog. promptfoo already recognizes these names for cost and reasoning detection, so they work through `azure:chat` once your subscription can deploy them — confirm availability with `az cognitiveservices model list`.
 
 promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
@@ -1501,7 +1513,7 @@ Azure AI Foundry provides access to OpenAI's Sora video generation model for tex
 
 ### Prerequisites
 
-1. An Azure AI Foundry resource in a supported region (`eastus2` or `swedencentral`)
+1. An Azure AI Foundry resource in a Sora-supported region (e.g. `eastus2` or `swedencentral`; check the [Azure model availability docs](https://learn.microsoft.com/azure/ai-foundry/openai/concepts/models) for current regions)
 2. A Sora model deployment
 
 ### Configuration
