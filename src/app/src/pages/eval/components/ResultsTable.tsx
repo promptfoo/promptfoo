@@ -294,8 +294,8 @@ function getVariableCellValue({
   row: EvaluateTableRow;
   varName: string;
   injectVarName: string;
-  fallbackValue: string | object;
-}): string | object {
+  fallbackValue: unknown;
+}): unknown {
   let value = fallbackValue;
 
   if (varName === injectVarName) {
@@ -335,7 +335,7 @@ function renderMediaVariableCell({
 }: {
   output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
-  value: string | object;
+  value: unknown;
   lightboxOpen: boolean;
   lightboxImage: string | null;
   maxTextLength: number;
@@ -413,7 +413,7 @@ function renderDecodedVariableCell({
   maxTextLength,
   cellContent,
 }: {
-  value: string | object;
+  value: string;
   varName: string;
   row: EvaluateTableRow;
   injectVarName: string;
@@ -501,7 +501,7 @@ function renderVariableCell({
   toggleMarkdownLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
-  let value = getVariableCellValue({
+  const value: unknown = getVariableCellValue({
     row,
     varName,
     injectVarName,
@@ -526,27 +526,28 @@ function renderVariableCell({
     return mediaCell;
   }
 
-  if (typeof value === 'object') {
-    value = JSON.stringify(value, null, 2);
-    if (renderMarkdown) {
-      value = `\`\`\`json\n${value}\n\`\`\``;
-    }
+  const isObjectValue = typeof value === 'object';
+  let displayValue = isObjectValue
+    ? (JSON.stringify(value, null, 2) ?? String(value))
+    : String(value);
+  if (renderMarkdown && isObjectValue) {
+    displayValue = `\`\`\`json\n${displayValue}\n\`\`\``;
   }
 
-  const shouldUseMarkdownCell = renderMarkdown || value.includes('![');
+  const shouldUseMarkdownCell = renderMarkdown || displayValue.includes('![');
   const cellContent = shouldUseMarkdownCell ? (
     <VariableMarkdownCell
-      value={value}
+      value={displayValue}
       maxTextLength={maxTextLength}
       dataImagesOnly={!renderMarkdown}
       onImageClick={toggleMarkdownLightbox}
     />
   ) : (
-    <TruncatedText text={value} maxLength={maxTextLength} />
+    <TruncatedText text={displayValue} maxLength={maxTextLength} />
   );
 
   return renderDecodedVariableCell({
-    value,
+    value: displayValue,
     varName,
     row,
     injectVarName,

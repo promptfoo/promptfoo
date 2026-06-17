@@ -3153,7 +3153,7 @@ describe('EvalOutputCell inline image lightbox', () => {
         prompt: 'Test prompt',
         provider: 'test-provider',
         score: 1,
-        text: `Expected image output\n![Actual image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
+        text: `**literal emphasis**\n[diagnostic]: https://example.com/debug\nExpected image output\n![Actual image](${dataUri})\n![Remote image](https://attacker.example/collect)`,
         testCase: {},
       },
       promptIndex: 0,
@@ -3165,13 +3165,46 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
 
-    expect(screen.getByText('Expected image output')).toBeInTheDocument();
+    expect(container).toHaveTextContent('Expected image output');
+    expect(container).toHaveTextContent('**literal emphasis**');
+    expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+    expect(container).toHaveTextContent('![Remote image](https://attacker.example/collect)');
+    expect(container.querySelector('strong')).not.toBeInTheDocument();
+    expect(container.querySelector('a')).not.toBeInTheDocument();
     const image = screen.getByRole('img', { name: 'Actual image' });
     expect(image).toHaveAttribute('src', dataUri);
     expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
 
     await user.click(image);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
+  });
+
+  it('does not treat bare base64 Markdown destinations as rendered data images', () => {
+    const bareBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    mockResultsViewSettings.renderMarkdown = false;
+    const props = createMarkdownPreviewProps(`![Bare image](${bareBase64})`, 1000);
+    props.output.images = [{ data: bareBase64, mimeType: 'image/png' }];
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      `data:image/png;base64,${bareBase64}`,
+    );
+  });
+
+  it('keeps truncation when prettified JSON bypasses the image preview path', () => {
+    const dataUri = `data:image/png;base64,${'A'.repeat(500)}`;
+    mockResultsViewSettings.renderMarkdown = false;
+    mockResultsViewSettings.prettifyJson = true;
+    const props = createMarkdownPreviewProps(JSON.stringify({ image: `![Preview](${dataUri})` }));
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('.truncation-toggler')).toBeInTheDocument();
   });
 
   it('keeps search highlighting for blocked remote Markdown images', () => {
@@ -3188,7 +3221,7 @@ describe('EvalOutputCell inline image lightbox', () => {
   });
 
   it('parses image syntax once per render and skips large ordinary text', () => {
-    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImageSources');
+    const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
     mockResultsViewSettings.renderMarkdown = false;
 
     try {

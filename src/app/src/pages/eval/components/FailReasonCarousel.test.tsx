@@ -77,4 +77,23 @@ describe('FailReasonCarousel', () => {
 
     expect(onImageClick).toHaveBeenCalledWith(dataUri);
   });
+
+  it('keeps surrounding diagnostics literal when forcing a data-image preview', () => {
+    const dataUri = 'data:image/png;base64,AA==';
+    const reason = [
+      '**literal emphasis**',
+      '[diagnostic]: https://example.com/debug',
+      `![Actual image](${dataUri})`,
+    ].join('\n');
+
+    const { container } = render(
+      <FailReasonCarousel failReasons={[reason]} renderMarkdown={false} />,
+    );
+
+    expect(container).toHaveTextContent('**literal emphasis**');
+    expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+    expect(container.querySelector('strong')).not.toBeInTheDocument();
+    expect(container.querySelector('a')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Actual image' })).toHaveAttribute('src', dataUri);
+  });
 });

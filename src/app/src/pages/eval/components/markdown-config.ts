@@ -17,12 +17,28 @@ const MARKDOWN_PARSER = unified().use(remarkParse).use(remarkGfm);
 
 interface MarkdownAstNode {
   type: string;
+  alt?: string;
   children?: MarkdownAstNode[];
   identifier?: string;
+  position?: {
+    start: { offset?: number };
+    end: { offset?: number };
+  };
   url?: string;
 }
 
-type MarkdownImageReference = { identifier: string } | { url: string };
+type MarkdownImageReference = {
+  alt?: string;
+  end: number;
+  start: number;
+} & ({ identifier: string } | { url: string });
+
+export interface RenderableMarkdownImage {
+  alt?: string;
+  end: number;
+  source: string;
+  start: number;
+}
 
 /**
  * Identity URL transform that allows all URLs including data: URIs.
@@ -47,12 +63,12 @@ function visitMarkdownAst(node: MarkdownAstNode, visitor: (node: MarkdownAstNode
 }
 
 /**
- * Extract image sources that ReactMarkdown will parse as Markdown images.
+ * Extract images that ReactMarkdown will parse, including their source ranges.
  *
- * Parsing with the same remark plugins as ReactMarkdown keeps forced preview
- * and truncation decisions aligned with the image elements it will render.
+ * Source ranges let the Markdown-off preview path replace only image tokens
+ * while leaving all surrounding diagnostic text byte-for-byte literal.
  */
-export function extractRenderableMarkdownImageSources(markdown: string): string[] {
+export function extractRenderableMarkdownImages(markdown: string): RenderableMarkdownImage[] {
   if (!markdown.includes('![')) {
     return [];
   }
@@ -69,21 +85,38 @@ export function extractRenderableMarkdownImageSources(markdown: string): string[
       return;
     }
 
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (typeof start !== 'number' || typeof end !== 'number') {
+      return;
+    }
+
     if (node.type === 'image' && node.url) {
-      images.push({ url: node.url });
+      images.push({ url: node.url, alt: node.alt, start, end });
     } else if (node.type === 'imageReference' && node.identifier) {
-      images.push({ identifier: node.identifier });
+      images.push({ identifier: node.identifier, alt: node.alt, start, end });
     }
   });
 
-  const sources = new Set<string>();
+  const renderableImages: RenderableMarkdownImage[] = [];
   for (const image of images) {
     const source = 'url' in image ? image.url : definitions.get(image.identifier);
     if (source) {
-      sources.add(source);
+      renderableImages.push({
+        source,
+        alt: image.alt,
+        start: image.start,
+        end: image.end,
+      });
     }
   }
 
+  return renderableImages;
+}
+
+/** Extract unique image sources using the same parsing semantics as ReactMarkdown. */
+export function extractRenderableMarkdownImageSources(markdown: string): string[] {
+  const sources = new Set(extractRenderableMarkdownImages(markdown).map((image) => image.source));
   return [...sources];
 }
 
@@ -114,9 +147,7 @@ export function extractMarkdownImageSources(markdown: string): string[] {
 }
 
 export function hasMarkdownDataImage(markdown: string): boolean {
-  return (
-    markdown.includes('![') && extractRenderableMarkdownImageSources(markdown).some(isImageDataUrl)
-  );
+  return extractRenderableMarkdownImages(markdown).some((image) => isImageDataUrl(image.source));
 }
 
 export const IMAGE_DATA_URL_TRANSFORM: UrlTransform = (url, key, node) => {

@@ -3,11 +3,13 @@ import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './FailReasonCarousel.css';
+import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import MarkdownImage from './MarkdownImage';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
-  hasMarkdownDataImage,
+  extractRenderableMarkdownImages,
+  isImageDataUrl,
   REMARK_PLUGINS,
 } from './markdown-config';
 
@@ -37,12 +39,21 @@ const FailReasonCarousel = ({
     }),
     [onImageClick],
   );
+  const normalizedCurrentIndex = failReasons.length > 0 ? currentIndex % failReasons.length : 0;
+  const currentReason = failReasons[normalizedCurrentIndex] ?? '';
+  const dataImages = useMemo(
+    () =>
+      currentReason.includes('![')
+        ? extractRenderableMarkdownImages(currentReason).filter((image) =>
+            isImageDataUrl(image.source),
+          )
+        : [],
+    [currentReason],
+  );
 
   if (failReasons.length < 1) {
     return null;
   }
-
-  const normalizedCurrentIndex = currentIndex % failReasons.length;
 
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : failReasons.length - 1));
@@ -51,8 +62,6 @@ const FailReasonCarousel = ({
   const handleNext = () => {
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
-  const currentReason = failReasons[normalizedCurrentIndex];
-  const shouldRenderMarkdown = renderMarkdown || hasMarkdownDataImage(currentReason ?? '');
 
   return (
     <div className="fail-reason">
@@ -77,7 +86,7 @@ const FailReasonCarousel = ({
           </button>
         </span>
       )}
-      {currentReason && shouldRenderMarkdown ? (
+      {currentReason && renderMarkdown ? (
         <MarkdownErrorBoundary fallback={currentReason}>
           <div className="whitespace-pre-wrap">
             <ReactMarkdown
@@ -88,6 +97,15 @@ const FailReasonCarousel = ({
               {currentReason.trim()}
             </ReactMarkdown>
           </div>
+        </MarkdownErrorBoundary>
+      ) : currentReason && dataImages.length > 0 ? (
+        <MarkdownErrorBoundary fallback={currentReason}>
+          <DataImagePreviewText
+            text={currentReason}
+            images={dataImages}
+            imageClassName="mt-2 block max-h-48 max-w-full object-contain"
+            onImageClick={onImageClick}
+          />
         </MarkdownErrorBoundary>
       ) : (
         currentReason

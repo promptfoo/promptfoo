@@ -14,7 +14,7 @@ describe('VariableMarkdownCell', () => {
     });
 
     it('skips ordinary text parsing and parses image syntax once', () => {
-      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImageSources');
+      const extractSpy = vi.spyOn(markdownConfig, 'extractRenderableMarkdownImages');
 
       try {
         const ordinaryRender = render(
@@ -33,6 +33,27 @@ describe('VariableMarkdownCell', () => {
       } finally {
         extractSpy.mockRestore();
       }
+    });
+
+    it('preserves literal Markdown around forced data-image previews', () => {
+      const dataUri = 'data:image/png;base64,AA==';
+      const value = [
+        '**literal emphasis**',
+        '[diagnostic]: https://example.com/debug',
+        `![Preview](${dataUri})`,
+        '![Remote](https://attacker.example/collect)',
+      ].join('\n');
+
+      const { container } = render(
+        <VariableMarkdownCell value={value} maxTextLength={100} dataImagesOnly />,
+      );
+
+      expect(container).toHaveTextContent('**literal emphasis**');
+      expect(container).toHaveTextContent('[diagnostic]: https://example.com/debug');
+      expect(container).toHaveTextContent('![Remote](https://attacker.example/collect)');
+      expect(container.querySelector('strong')).not.toBeInTheDocument();
+      expect(container.querySelector('a')).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Preview' })).toHaveAttribute('src', dataUri);
     });
 
     it('renders markdown bold text', () => {

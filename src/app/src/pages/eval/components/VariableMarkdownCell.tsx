@@ -1,11 +1,11 @@
 import React from 'react';
 
 import ReactMarkdown from 'react-markdown';
+import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import MarkdownImage from './MarkdownImage';
 import {
-  DATA_IMAGE_ONLY_URL_TRANSFORM,
-  extractRenderableMarkdownImageSources,
+  extractRenderableMarkdownImages,
   IMAGE_DATA_URL_TRANSFORM,
   isImageDataUrl,
   REMARK_PLUGINS,
@@ -49,34 +49,42 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
     }),
     [onImageClick],
   );
-  const renderableMarkdownImageSources = React.useMemo(
-    () => (value.includes('![') ? extractRenderableMarkdownImageSources(value) : []),
+  const renderableMarkdownImages = React.useMemo(
+    () => (value.includes('![') ? extractRenderableMarkdownImages(value) : []),
     [value],
   );
-  const shouldRenderMarkdown =
-    !dataImagesOnly || renderableMarkdownImageSources.some(isImageDataUrl);
+  const dataImages = React.useMemo(
+    () => renderableMarkdownImages.filter((image) => isImageDataUrl(image.source)),
+    [renderableMarkdownImages],
+  );
+  const hasRenderedImage = dataImagesOnly
+    ? dataImages.length > 0
+    : renderableMarkdownImages.length > 0;
 
   return (
     <MarkdownErrorBoundary fallback={value}>
       <TruncatedText
         text={
-          shouldRenderMarkdown ? (
+          dataImagesOnly && dataImages.length > 0 ? (
+            <DataImagePreviewText
+              text={value}
+              images={dataImages}
+              imageClassName="max-h-48 max-w-full object-contain"
+              onImageClick={onImageClick}
+            />
+          ) : dataImagesOnly ? (
+            value
+          ) : (
             <ReactMarkdown
               components={markdownComponents}
               remarkPlugins={REMARK_PLUGINS}
-              urlTransform={
-                dataImagesOnly ? DATA_IMAGE_ONLY_URL_TRANSFORM : IMAGE_DATA_URL_TRANSFORM
-              }
+              urlTransform={IMAGE_DATA_URL_TRANSFORM}
             >
               {value}
             </ReactMarkdown>
-          ) : (
-            value
           )
         }
-        maxLength={
-          shouldRenderMarkdown && renderableMarkdownImageSources.length > 0 ? 0 : maxTextLength
-        }
+        maxLength={hasRenderedImage ? 0 : maxTextLength}
       />
     </MarkdownErrorBoundary>
   );

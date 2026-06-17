@@ -866,6 +866,45 @@ describe('ResultsTable Metrics Display', () => {
       expect(screen.queryByRole('button', { name: 'Close image preview' })).not.toBeInTheDocument();
     });
 
+    it('renders numeric and boolean variables when Markdown is disabled', () => {
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: false,
+      }));
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {},
+              vars: [3, true],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['count', 'enabled'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('true')).toBeInTheDocument();
+    });
+
     it('renders variable video from file metadata', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},

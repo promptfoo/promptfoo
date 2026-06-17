@@ -33,17 +33,18 @@ import {
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
+import DataImagePreviewText from './DataImagePreviewText';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
 import MarkdownImage from './MarkdownImage';
 import {
-  DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractMarkdownImageSources as extractRawMarkdownImageSources,
-  extractRenderableMarkdownImageSources as extractRawRenderableMarkdownImageSources,
+  extractRenderableMarkdownImages,
   IDENTITY_URL_TRANSFORM,
   isImageDataUrl,
   REMARK_PLUGINS,
+  type RenderableMarkdownImage,
 } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -169,6 +170,15 @@ function addImageSrcComparisonKeys(keys: Set<string>, src: string) {
   }
 }
 
+function addRenderedMarkdownImageSrcComparisonKeys(keys: Set<string>, src: string) {
+  const normalized = src.trim();
+  keys.add(normalized);
+  const dataUriKey = getImageDataUriComparisonKey(normalized);
+  if (dataUriKey) {
+    keys.add(dataUriKey);
+  }
+}
+
 function hasImageSrcComparisonKey(keys: Set<string>, src: string): boolean {
   return getImageSrcComparisonKeys(src).some((key) => keys.has(key));
 }
@@ -177,16 +187,6 @@ export function extractMarkdownImageSources(markdown: string): string[] {
   const sources = new Set<string>();
 
   for (const source of extractRawMarkdownImageSources(markdown)) {
-    sources.add(normalizeImageSrcForComparison(source));
-  }
-
-  return [...sources];
-}
-
-function extractRenderableMarkdownImageSources(markdown: string): string[] {
-  const sources = new Set<string>();
-
-  for (const source of extractRawRenderableMarkdownImageSources(markdown)) {
     sources.add(normalizeImageSrcForComparison(source));
   }
 
@@ -404,21 +404,33 @@ function renderMarkdownOrJsonNode({
   text,
   normalizedText,
   renderMarkdown,
-  forceDataImagePreview,
+  dataImages,
   prettifyJson,
   markdownComponents,
+  onImageClick,
+  hasRenderedMarkdownImage,
 }: {
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
-  forceDataImagePreview: boolean;
+  dataImages: RenderableMarkdownImage[];
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
-}): { node?: React.ReactNode; renderedMarkdownOutput: boolean } {
-  const shouldRenderMarkdown = renderMarkdown || forceDataImagePreview;
+  onImageClick: (url?: string) => void;
+  hasRenderedMarkdownImage: boolean;
+}): {
+  node?: React.ReactNode;
+  renderedImagePreview: boolean;
+  renderedMarkdownOutput: boolean;
+} {
+  const canRenderFormattedOutput = renderMarkdown || dataImages.length > 0;
 
-  if (!prettifyJson && !shouldRenderMarkdown) {
-    return { node: undefined, renderedMarkdownOutput: false };
+  if (!prettifyJson && !canRenderFormattedOutput) {
+    return {
+      node: undefined,
+      renderedImagePreview: false,
+      renderedMarkdownOutput: false,
+    };
   }
 
   if (prettifyJson) {
@@ -427,6 +439,7 @@ function renderMarkdownOrJsonNode({
       if (typeof parsed === 'object' && parsed !== null) {
         return {
           node: <pre>{JSON.stringify(parsed, null, 2)}</pre>,
+          renderedImagePreview: false,
           renderedMarkdownOutput: false,
         };
       }
@@ -435,20 +448,39 @@ function renderMarkdownOrJsonNode({
     }
   }
 
-  if (!shouldRenderMarkdown) {
-    return { node: undefined, renderedMarkdownOutput: false };
+  if (renderMarkdown) {
+    return {
+      node: (
+        <ReactMarkdown
+          remarkPlugins={REMARK_PLUGINS}
+          urlTransform={IDENTITY_URL_TRANSFORM}
+          components={markdownComponents}
+        >
+          {normalizedText}
+        </ReactMarkdown>
+      ),
+      renderedImagePreview: hasRenderedMarkdownImage,
+      renderedMarkdownOutput: true,
+    };
+  }
+
+  if (dataImages.length === 0) {
+    return {
+      node: undefined,
+      renderedImagePreview: false,
+      renderedMarkdownOutput: false,
+    };
   }
 
   return {
     node: (
-      <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        urlTransform={renderMarkdown ? IDENTITY_URL_TRANSFORM : DATA_IMAGE_ONLY_URL_TRANSFORM}
-        components={markdownComponents}
-      >
-        {normalizedText}
-      </ReactMarkdown>
+      <DataImagePreviewText
+        text={normalizedText}
+        images={dataImages}
+        onImageClick={(src) => onImageClick(src)}
+      />
     ),
+    renderedImagePreview: true,
     renderedMarkdownOutput: true,
   };
 }
@@ -478,7 +510,7 @@ function renderStructuredImages({
   }
   if (renderedMarkdownOutput) {
     for (const source of renderedMarkdownImageSources) {
-      addImageSrcComparisonKeys(renderedImageSrcs, source);
+      addRenderedMarkdownImageSrcComparisonKeys(renderedImageSrcs, source);
     }
   }
 
@@ -525,7 +557,7 @@ function renderOutputNode({
   text,
   normalizedText,
   renderMarkdown,
-  forceDataImagePreview,
+  dataImages,
   prettifyJson,
   markdownComponents,
   renderedMarkdownImageSources,
@@ -541,15 +573,16 @@ function renderOutputNode({
   text: string;
   normalizedText: string;
   renderMarkdown: boolean;
-  forceDataImagePreview: boolean;
+  dataImages: RenderableMarkdownImage[];
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
   renderedMarkdownImageSources: string[];
   toggleLightbox: (url?: string) => void;
   outputAudioSource: ReturnType<typeof resolveAudioSource>;
   primaryRenderedImageSrc?: string;
-}): React.ReactNode | undefined {
+}): { node?: React.ReactNode; renderedImagePreview: boolean } {
   let node: React.ReactNode | undefined;
+  let renderedImagePreview = false;
   let renderedMarkdownOutput = false;
 
   if (showDiffs && firstOutput) {
@@ -581,22 +614,28 @@ function renderOutputNode({
       text,
       normalizedText,
       renderMarkdown,
-      forceDataImagePreview,
+      dataImages,
       prettifyJson,
       markdownComponents,
+      onImageClick: toggleLightbox,
+      hasRenderedMarkdownImage: renderedMarkdownImageSources.length > 0,
     });
     node = formattedNode.node;
+    renderedImagePreview = formattedNode.renderedImagePreview;
     renderedMarkdownOutput = formattedNode.renderedMarkdownOutput;
   }
 
-  return renderStructuredImages({
-    node,
-    output,
-    primaryRenderedImageSrc,
-    renderedMarkdownImageSources,
-    renderedMarkdownOutput,
-    toggleLightbox,
-  });
+  return {
+    node: renderStructuredImages({
+      node,
+      output,
+      primaryRenderedImageSrc,
+      renderedMarkdownImageSources,
+      renderedMarkdownOutput,
+      toggleLightbox,
+    }),
+    renderedImagePreview,
+  };
 }
 
 function getPassFailCounts(output: EvaluateTableOutput): {
@@ -1424,15 +1463,16 @@ function EvalOutputCell({
 
   const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
-  const { hasInlineMarkdownDataImage, renderedMarkdownImageSources } = useMemo(() => {
-    const sources = normalizedText.includes('![')
-      ? extractRenderableMarkdownImageSources(normalizedText)
+  const { dataImages, renderedMarkdownImageSources } = useMemo(() => {
+    const images = normalizedText.includes('![')
+      ? extractRenderableMarkdownImages(normalizedText)
       : [];
-    const hasDataImage = sources.some(isImageDataUrl);
+    const renderableDataImages = images.filter((image) => isImageDataUrl(image.source));
+    const renderedImages = renderMarkdown ? images : renderableDataImages;
 
     return {
-      hasInlineMarkdownDataImage: hasDataImage,
-      renderedMarkdownImageSources: renderMarkdown ? sources : sources.filter(isImageDataUrl),
+      dataImages: renderableDataImages,
+      renderedMarkdownImageSources: [...new Set(renderedImages.map((image) => image.source))],
     };
   }, [normalizedText, renderMarkdown]);
   const inlineImageSrc = resolveImageSource(text);
@@ -1448,7 +1488,7 @@ function EvalOutputCell({
     | undefined;
   const responseAudioSource = resolveAudioSource(responseAudio);
 
-  const node = renderOutputNode({
+  const { node, renderedImagePreview } = renderOutputNode({
     output,
     firstOutput,
     showDiffs,
@@ -1457,7 +1497,7 @@ function EvalOutputCell({
     text,
     normalizedText,
     renderMarkdown,
-    forceDataImagePreview: hasInlineMarkdownDataImage,
+    dataImages,
     prettifyJson,
     markdownComponents,
     renderedMarkdownImageSources,
@@ -1631,7 +1671,7 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            hasInlineMarkdownDataImage ||
+            renderedImagePreview ||
             (renderMarkdown &&
               (isImageProvider(output.provider) || isVideoProvider(output.provider)))
               ? 0
