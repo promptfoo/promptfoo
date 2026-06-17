@@ -2659,6 +2659,21 @@ describe('util', () => {
       expect(mixedCached).toBeCloseTo(0.0173, 10);
     });
 
+    it('should reprice cached DOCUMENT tokens at the image cache-read rate', () => {
+      // Google bills DOCUMENT (e.g. PDF) tokens at the image rate, so cached DOCUMENT
+      // tokens must use the textImageVideo cache-read rate rather than staying at the
+      // full input estimate. gemini-2.0-flash: input=0.1/1M, cacheRead=0.025/1M.
+      const full = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const documentCached = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, false, {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'DOCUMENT', tokenCount: 8000 }],
+      });
+      expect(full).toBeCloseTo(0.003, 10);
+      // cached cost = 8000 * 0.025/1M; uncached prompt = 2000 * 0.1/1M (same as TEXT).
+      expect(documentCached).toBeCloseTo(0.0024, 10);
+      expect(documentCached as number).toBeLessThan(full as number);
+    });
+
     it('should keep explicit cost overrides authoritative when cached tokens are present', () => {
       const config = { cost: 0.001 };
       const full = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000);

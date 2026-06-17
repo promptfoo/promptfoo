@@ -286,7 +286,11 @@ function getGoogleCacheReadUsage(
     }
     detailTokenCount += tokenCount;
 
-    const cacheReadRate = ['text', 'image', 'video'].includes(detail.modality?.toLowerCase() ?? '')
+    // Google bills DOCUMENT (e.g. PDF) tokens at the image rate, so they share the
+    // text/image/video cache-read rate. See https://ai.google.dev/gemini-api/docs/pricing.
+    const cacheReadRate = ['text', 'image', 'video', 'document'].includes(
+      detail.modality?.toLowerCase() ?? '',
+    )
       ? cost.cacheRead.textImageVideo
       : undefined;
 
