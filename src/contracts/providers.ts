@@ -19,6 +19,7 @@ export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
+  tokenUsage?: TokenUsage;
 }
 
 export interface GuardrailResponse {
