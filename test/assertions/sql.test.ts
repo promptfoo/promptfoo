@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
@@ -130,6 +130,32 @@ describe('is-sql assertion', () => {
         reason: 'SQL statement does not conform to the provided MySQL database syntax.',
         score: 0,
       });
+    });
+
+    it.each([
+      'PostgreSQL',
+      'TransactSQL',
+      'BigQuery',
+    ])('should not treat MySQL-only modifiers as modifiers in %s', async (databaseType) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString: 'SELECT SQL_NO_CACHE name FROM users',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('should preserve MySQL-family modifiers for MariaDB', async () => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'MariaDB' },
+        outputString: 'SELECT SQL_NO_CACHE name FROM users',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
     it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
@@ -667,8 +693,13 @@ describe('is-sql assertion', () => {
 });
 
 describe('is-sql parser loading', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
   afterEach(() => {
     vi.doUnmock('node-sql-parser');
+    vi.resetModules();
   });
 
   it('should report when node-sql-parser cannot be imported', async () => {

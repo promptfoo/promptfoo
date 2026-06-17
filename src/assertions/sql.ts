@@ -3,13 +3,31 @@ import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-const SELECT_MODIFIER_PATTERN =
+const STANDARD_SELECT_MODIFIER_PATTERN = '(?:all|distinct)';
+const MYSQL_SELECT_MODIFIER_PATTERN =
   '(?:all|distinct(?:row)?|high_priority|straight_join|sql_(?:big_result|buffer_result|cache|calc_found_rows|no_cache|small_result))';
 const IDENTIFIER_PATTERN = '[A-Za-z_][A-Za-z0-9_]*';
-const LIKELY_MISSING_COMMA_PATTERN = new RegExp(
-  String.raw`\bselect\s+(?:${SELECT_MODIFIER_PATTERN}\s+)*(?!${SELECT_MODIFIER_PATTERN}\b)${IDENTIFIER_PATTERN}\s+${IDENTIFIER_PATTERN}\s+from\b`,
-  'i',
+
+function createLikelyMissingCommaPattern(selectModifierPattern: string): RegExp {
+  return new RegExp(
+    String.raw`\bselect\s+(?:${selectModifierPattern}\s+)*(?!${selectModifierPattern}\b)${IDENTIFIER_PATTERN}\s+${IDENTIFIER_PATTERN}\s+from\b`,
+    'i',
+  );
+}
+
+const STANDARD_LIKELY_MISSING_COMMA_PATTERN = createLikelyMissingCommaPattern(
+  STANDARD_SELECT_MODIFIER_PATTERN,
 );
+const MYSQL_LIKELY_MISSING_COMMA_PATTERN = createLikelyMissingCommaPattern(
+  MYSQL_SELECT_MODIFIER_PATTERN,
+);
+const MYSQL_FAMILY_DATABASES = new Set(['MySQL', 'MariaDB']);
+
+function getLikelyMissingCommaPattern(databaseType: string): RegExp {
+  return MYSQL_FAMILY_DATABASES.has(databaseType)
+    ? MYSQL_LIKELY_MISSING_COMMA_PATTERN
+    : STANDARD_LIKELY_MISSING_COMMA_PATTERN;
+}
 const DOLLAR_QUOTE_DELIMITER_PATTERN = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/;
 
 function readDollarQuoteDelimiter(sql: string, start: number): string | undefined {
@@ -150,7 +168,8 @@ export const handleIsSql = async ({
   // SELECT modifiers and SQL-looking text inside literals or comments, then check
   // the first two column tokens.
   const sqlForHeuristics = stripIgnoredSqlText(normalizedSql);
-  if (LIKELY_MISSING_COMMA_PATTERN.test(sqlForHeuristics)) {
+  const likelyMissingCommaPattern = getLikelyMissingCommaPattern(databaseType);
+  if (likelyMissingCommaPattern.test(sqlForHeuristics)) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
