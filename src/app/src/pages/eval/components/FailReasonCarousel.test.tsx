@@ -45,15 +45,17 @@ describe('FailReasonCarousel', () => {
     expect(renderedReason).toHaveTextContent('[diagnostic]: https://example.com');
   });
 
-  it('does not render remote image sources from failure reasons', () => {
-    render(
-      <FailReasonCarousel
-        failReasons={['![probe](https://attacker.example/collect)']}
-        renderMarkdown={true}
-      />,
+  it.each([
+    ['remote', '![probe](https://attacker.example/collect)'],
+    ['relative', '![screenshot](./failure.png)'],
+    ['unsafe-scheme', '![probe](javascript:alert%281%29)'],
+  ])('renders blocked %s image sources as literal text', (_label, reason) => {
+    const { container } = render(
+      <FailReasonCarousel failReasons={[reason]} renderMarkdown={true} />,
     );
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container).toHaveTextContent(reason);
   });
 
   it('renders data images and forwards clicks to the lightbox callback', async () => {

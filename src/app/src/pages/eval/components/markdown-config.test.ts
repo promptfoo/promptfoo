@@ -6,6 +6,7 @@ import {
   IDENTITY_URL_TRANSFORM,
   IMAGE_DATA_URL_TRANSFORM,
   isImageDataUrl,
+  PRESERVE_IMAGE_URL_TRANSFORM,
   REMARK_PLUGINS,
 } from './markdown-config';
 
@@ -117,6 +118,24 @@ describe('markdown-config', () => {
       expect(DATA_IMAGE_ONLY_URL_TRANSFORM('data:image/png;base64,AA==', 'href', linkNode)).toBe(
         '',
       );
+    });
+  });
+
+  describe('PRESERVE_IMAGE_URL_TRANSFORM', () => {
+    it('preserves image sources for the custom safety renderer', () => {
+      expect(PRESERVE_IMAGE_URL_TRANSFORM('https://example.com/image.png', 'src', imageNode)).toBe(
+        'https://example.com/image.png',
+      );
+      expect(PRESERVE_IMAGE_URL_TRANSFORM('javascript:alert(1)', 'src', imageNode)).toBe(
+        'javascript:alert(1)',
+      );
+    });
+
+    it('still sanitizes non-image URLs', () => {
+      expect(PRESERVE_IMAGE_URL_TRANSFORM('https://example.com', 'href', linkNode)).toBe(
+        'https://example.com',
+      );
+      expect(PRESERVE_IMAGE_URL_TRANSFORM('javascript:alert(1)', 'href', linkNode)).toBe('');
     });
   });
 

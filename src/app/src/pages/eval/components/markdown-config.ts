@@ -177,3 +177,12 @@ export const DATA_IMAGE_ONLY_URL_TRANSFORM: UrlTransform = (url, key, node) => {
 
   return defaultUrlTransform(url);
 };
+
+/** Preserve image sources for custom renderers while sanitizing every other URL. */
+export const PRESERVE_IMAGE_URL_TRANSFORM: UrlTransform = (url, key, node) => {
+  if (key === 'src' && node.tagName === 'img') {
+    return url;
+  }
+
+  return defaultUrlTransform(url);
+};

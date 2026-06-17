@@ -7,9 +7,10 @@ import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import MarkdownImage from './MarkdownImage';
 import {
-  DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractRenderableMarkdownImages,
+  isImageDataUrl,
   isInlineDataImage,
+  PRESERVE_IMAGE_URL_TRANSFORM,
   REMARK_PLUGINS,
 } from './markdown-config';
 
@@ -27,14 +28,17 @@ const FailReasonCarousel = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const markdownComponents = useMemo<React.ComponentProps<typeof ReactMarkdown>['components']>(
     () => ({
-      img: ({ src, alt }) => (
-        <MarkdownImage
-          src={src}
-          alt={alt}
-          onImageClick={onImageClick}
-          className="mt-2 block max-h-48 max-w-full object-contain"
-        />
-      ),
+      img: ({ src, alt }) =>
+        src && isImageDataUrl(src) ? (
+          <MarkdownImage
+            src={src}
+            alt={alt}
+            onImageClick={onImageClick}
+            className="mt-2 block max-h-48 max-w-full object-contain"
+          />
+        ) : (
+          <span>{`![${alt ?? ''}](${src ?? ''})`}</span>
+        ),
       p: ({ children }) => <p className="m-0">{children}</p>,
     }),
     [onImageClick],
@@ -90,7 +94,7 @@ const FailReasonCarousel = ({
             <ReactMarkdown
               components={markdownComponents}
               remarkPlugins={REMARK_PLUGINS}
-              urlTransform={DATA_IMAGE_ONLY_URL_TRANSFORM}
+              urlTransform={PRESERVE_IMAGE_URL_TRANSFORM}
             >
               {currentReason.trim()}
             </ReactMarkdown>

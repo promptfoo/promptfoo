@@ -866,7 +866,7 @@ describe('ResultsTable Metrics Display', () => {
       expect(screen.queryByRole('button', { name: 'Close image preview' })).not.toBeInTheDocument();
     });
 
-    it('renders numeric and boolean variables when Markdown is disabled', () => {
+    it('renders primitive variables and leaves missing variables blank', () => {
       vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
         inComparisonMode: false,
         renderMarkdown: false,
@@ -885,7 +885,7 @@ describe('ResultsTable Metrics Display', () => {
           ],
           head: {
             prompts: [{}],
-            vars: ['count', 'enabled'],
+            vars: ['count', 'enabled', 'missing'],
           },
         },
         version: 4,
@@ -903,6 +903,7 @@ describe('ResultsTable Metrics Display', () => {
 
       expect(screen.getByText('3')).toBeInTheDocument();
       expect(screen.getByText('true')).toBeInTheDocument();
+      expect(screen.queryByText('undefined')).not.toBeInTheDocument();
     });
 
     it('renders variable video from file metadata', () => {
