@@ -89,6 +89,100 @@ function hasDoctypeInternalSubset(doctype: string): boolean {
   return false;
 }
 
+function isXmlWhitespace(char: string | undefined): boolean {
+  return char === ' ' || char === '\t' || char === '\r' || char === '\n';
+}
+
+function skipXmlWhitespace(input: string, start: number): number {
+  let index = start;
+  while (isXmlWhitespace(input[index])) {
+    index++;
+  }
+  return index;
+}
+
+function readQuotedLiteral(
+  input: string,
+  start: number,
+): { value: string; end: number } | undefined {
+  const quote = input[start];
+  if (quote !== '"' && quote !== "'") {
+    return undefined;
+  }
+
+  const closingQuote = input.indexOf(quote, start + 1);
+  if (closingQuote === -1) {
+    return undefined;
+  }
+
+  return {
+    value: input.slice(start + 1, closingQuote),
+    end: closingQuote + 1,
+  };
+}
+
+function isValidPublicId(value: string): boolean {
+  return /^[\x20\r\na-zA-Z0-9'()+,./:=?;!*#@$_%-]*$/.test(value);
+}
+
+function isValidSystemId(value: string): boolean {
+  return !value.includes('#');
+}
+
+function hasValidSystemLiteral(input: string, start: number): boolean {
+  const literalStart = skipXmlWhitespace(input, start);
+  if (literalStart === start) {
+    return false;
+  }
+  const literal = readQuotedLiteral(input, literalStart);
+  return Boolean(
+    literal &&
+      isValidSystemId(literal.value) &&
+      skipXmlWhitespace(input, literal.end) === input.length,
+  );
+}
+
+function isWellFormedDoctype(doctype: string): boolean {
+  let index = skipXmlWhitespace(doctype, 0);
+  if (index === 0) {
+    return false;
+  }
+
+  const name = readXmlName(doctype, index);
+  if (!name) {
+    return false;
+  }
+
+  index = name.end;
+  const externalIdStart = skipXmlWhitespace(doctype, index);
+  if (externalIdStart === doctype.length) {
+    return true;
+  }
+  if (externalIdStart === index) {
+    return false;
+  }
+  index = externalIdStart;
+
+  if (doctype.startsWith('SYSTEM', index)) {
+    return hasValidSystemLiteral(doctype, index + 'SYSTEM'.length);
+  }
+
+  if (doctype.startsWith('PUBLIC', index)) {
+    index += 'PUBLIC'.length;
+    const publicLiteralStart = skipXmlWhitespace(doctype, index);
+    if (publicLiteralStart === index) {
+      return false;
+    }
+    const publicLiteral = readQuotedLiteral(doctype, publicLiteralStart);
+    if (!publicLiteral || !isValidPublicId(publicLiteral.value)) {
+      return false;
+    }
+    return hasValidSystemLiteral(doctype, publicLiteral.end);
+  }
+
+  return false;
+}
+
 function findTagEnd(input: string, start: number): number {
   let quote: string | undefined;
 
@@ -355,10 +449,6 @@ function getMissingElements(parsedXml: unknown, requiredElements: string[] | und
 }
 
 function validateXmlCandidate(xmlString: string, requiredElements?: string[]): XmlValidationResult {
-  if (!xmlString.startsWith('<')) {
-    return { isValid: false, reason: 'XML is missing opening tag', isWellFormed: false };
-  }
-
   const parser = new XMLParser({
     allowBooleanAttributes: true,
     ignoreAttributes: false,
@@ -401,12 +491,17 @@ export function validateXml(
   // contains-xml intentionally remains lenient because it accepts fragments
   // embedded in otherwise non-XML output.
   let unsupportedReason: string | undefined;
+  let doctypeParseError: string | undefined;
   try {
     const parser = new SaxesParser();
     parser.on('doctype', (doctype) => {
       if (hasDoctypeInternalSubset(doctype)) {
         unsupportedReason = 'DTD internal subsets are not supported by is-xml validation';
         throw new Error(unsupportedReason);
+      }
+      if (!isWellFormedDoctype(doctype)) {
+        doctypeParseError = 'Malformed DOCTYPE declaration';
+        throw new Error(doctypeParseError);
       }
     });
     parser.write(xmlString).close();
@@ -416,7 +511,7 @@ export function validateXml(
     if (unsupportedReason) {
       return { isValid: false, reason: unsupportedReason };
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = doctypeParseError ?? (err instanceof Error ? err.message : String(err));
     return { isValid: false, reason: `XML parsing failed: ${message}` };
   }
   const result = validateXmlCandidate(xmlString, requiredElements);

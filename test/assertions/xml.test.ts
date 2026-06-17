@@ -25,9 +25,13 @@ describe('validateXml', () => {
   it('should validate well-formed XML edge cases', () => {
     for (const valid of [
       '<root/>',
+      '  <root/>\n',
+      '\uFEFF<root/>',
+      '\n<!-- before --><root/>',
       '<!-- before --><root/><!-- after -->',
       '<𐀀>astral name</𐀀>',
       '<!DOCTYPE root><root/>',
+      '<!DOCTYPE 𐀀><𐀀/>',
     ]) {
       expect(validateXml(valid)).toEqual({
         isValid: true,
@@ -75,16 +79,37 @@ describe('validateXml', () => {
     }
   });
 
-  it('should accept external DOCTYPEs whose quoted identifiers contain brackets', () => {
-    // The `[` lives inside a quoted SYSTEM/PUBLIC literal, so it must not be
+  it('should accept external DOCTYPEs whose quoted system identifiers contain brackets', () => {
+    // The `[` lives inside a quoted SYSTEM literal, so it must not be
     // mistaken for the start of an internal subset and rejected.
     for (const xml of [
       '<!DOCTYPE root SYSTEM "weird[name].dtd"><root/>',
-      '<!DOCTYPE root PUBLIC "-//x//[bracket]//EN" "sys.dtd"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN" "weird[bracket].dtd"><root/>',
     ]) {
       expect(validateXml(xml)).toEqual({
         isValid: true,
         reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should reject malformed external DOCTYPE declarations', () => {
+    for (const xml of [
+      '<!DOCTYPE><root/>',
+      '<!DOCTYPEroot><root/>',
+      '<!DOCTYPE 123><root/>',
+      '<!DOCTYPE root junk><root/>',
+      '<!DOCTYPE root SYSTEM><root/>',
+      '<!DOCTYPE root SYSTEM "sys.dtd" junk><root/>',
+      '<!DOCTYPE root SYSTEM "sys.dtd#fragment"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN" "sys.dtd#fragment"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//[invalid]//EN" "sys.dtd"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//\tinvalid//EN" "sys.dtd"><root/>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: false,
+        reason: 'XML parsing failed: Malformed DOCTYPE declaration',
       });
     }
   });
