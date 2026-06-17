@@ -394,6 +394,27 @@ describe('parseRateLimitHeaders', () => {
       expect(result.limitTokens).toBeUndefined();
     });
 
+    it('should ignore non-finite numeric values', () => {
+      const overflowingNumber = '9'.repeat(400);
+      const headers = {
+        'x-ratelimit-remaining-requests': overflowingNumber,
+        'x-ratelimit-reset': 'Infinity',
+        'retry-after-ms': overflowingNumber,
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.remainingRequests).toBeUndefined();
+      expect(result.resetAt).toBeUndefined();
+      expect(result.retryAfterMs).toBeUndefined();
+    });
+
+    it('should ignore negative reset values', () => {
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': '-1' });
+
+      expect(result.resetAt).toBeUndefined();
+    });
+
     it('should ignore negative values', () => {
       const headers = {
         'x-ratelimit-remaining-requests': '-5',
@@ -577,6 +598,11 @@ describe('parseRetryAfter', () => {
       const result = parseRetryAfter('invalid');
 
       expect(result).toBeNull();
+    });
+
+    it('should reject non-finite seconds', () => {
+      expect(parseRetryAfter('Infinity')).toBeNull();
+      expect(parseRetryAfter('9'.repeat(400))).toBeNull();
     });
 
     it('should return null for empty string', () => {
