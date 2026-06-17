@@ -613,8 +613,10 @@ export class WatsonXProvider implements ApiProvider {
       }
 
       const textGenResponse = parsedResponse.data;
-      const textGenResult = textGenResponse.results[0];
+      // convertResponse throws if results is empty, so textGenResult is guaranteed
+      // to be defined below.
       const providerResponse = convertResponse(textGenResponse);
+      const textGenResult = textGenResponse.results[0];
 
       providerResponse.cost = await calculateWatsonXCost(
         this.modelName,

@@ -849,6 +849,33 @@ describe('WatsonXProvider', () => {
       });
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
     });
+
+    it('should surface a clean error when the API returns no results', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+
+      const cache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as any);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
+
+      expect(response.error).toContain('No results returned from text generation API.');
+      expect(response.cost).toBeUndefined();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
   });
 
   describe('calculateWatsonXCost', () => {
