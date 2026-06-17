@@ -1,19 +1,28 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import {
+  createDiagnostic,
+  createHygieneCorpus,
+  createHygieneFile,
+  formatDiagnostic,
+  type HygieneDiagnostic,
+  type HygieneFile,
+  sortDiagnostics,
+} from './hygiene/engine';
 
 type TestControlKind = 'only' | 'skip' | 'skipIf';
 
 type TestControlUsage = {
   column: number;
+  diagnostic: HygieneDiagnostic;
   expression: string;
   file: string;
   kind: TestControlKind;
   line: number;
-  fullLineText: string;
   trimmedLineText: string;
 };
 
@@ -28,8 +37,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const testDir = path.join(repoRoot, 'test');
 const biomeConfigPath = path.join(repoRoot, 'biome.jsonc');
 const thisFile = fileURLToPath(import.meta.url);
-const testFilePattern = /\.(?:test|spec)\.(?:ts|tsx)$/;
 const testApiNames = new Set(['describe', 'it', 'suite', 'test']);
+const rootCorpus = createHygieneCorpus({ rootDir: testDir, excludeFiles: [thisFile] });
 const directProcessEnvMutationPluginPath = './tools/biome/no-direct-process-env-mutation.grit';
 const directProcessEnvMutationPluginIncludes = [
   '*.js',
@@ -268,35 +277,24 @@ const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\
 const globalMockResetPattern = /\bvi\.resetAllMocks\s*\(/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
-function findTestFiles(dir: string): string[] {
-  // Use withFileTypes so entry type comes from the directory record itself rather
-  // than a follow-up stat() call. Other test files (e.g. python/workerPool.test.ts)
-  // create and delete fixtures in beforeAll/afterAll, and parallel test execution
-  // can delete an entry between readdir() and stat(), causing a flaky ENOENT.
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = path.join(dir, entry.name);
+function findHoistedPersistentMockWithoutReset(file: HygieneFile): number | undefined {
+  if (
+    !hoistedMockPattern.test(file.source) ||
+    !persistentMockImplementationPattern.test(file.source) ||
+    mockImplementationResetPattern.test(file.source)
+  ) {
+    return undefined;
+  }
 
-    if (entry.isDirectory()) {
-      return findTestFiles(fullPath);
-    }
-
-    return testFilePattern.test(fullPath) ? [fullPath] : [];
-  });
-}
-
-function findRootTestFiles(): string[] {
-  return findTestFiles(testDir).filter((file) => file !== thisFile);
-}
-
-function toPosixRelativePath(file: string) {
-  return path.relative(testDir, file).replace(/\\/g, '/');
+  const start = file.source.search(hoistedMockPattern);
+  return start === -1 ? undefined : start;
 }
 
 function hasHoistedPersistentMockWithoutReset(source: string) {
   return (
-    hoistedMockPattern.test(source) &&
-    persistentMockImplementationPattern.test(source) &&
-    !mockImplementationResetPattern.test(source)
+    findHoistedPersistentMockWithoutReset(
+      createHygieneFile({ file: 'fixture.test.ts', source }),
+    ) !== undefined
   );
 }
 
@@ -327,18 +325,18 @@ function isViMockCall(node: ts.Node): node is ts.CallExpression {
   );
 }
 
-// True if `node` synchronously evaluates a call ending in a persistent mock
-// setter (mockReturnValue/mockResolvedValue/etc). Skips bodies of function
-// literals — both nested and at the root — since those only run when the
-// callback fires. Pass `enterRootFunction: true` for the body of a vi.mock(...)
-// factory, which IS executed synchronously at module load.
-function evaluatesPersistentMockSetter(
+// Returns the first call ending in a persistent mock setter that `node`
+// synchronously evaluates (mockReturnValue/mockResolvedValue/etc). Skips
+// function-literal bodies since those only run when the callback fires. Pass
+// `enterRootFunction: true` for a vi.mock(...) factory, which executes at
+// module load.
+function findEvaluatedPersistentMockSetter(
   node: ts.Node,
   opts: { enterRootFunction?: boolean } = {},
-): boolean {
-  let found = false;
+): ts.CallExpression | undefined {
+  let finding: ts.CallExpression | undefined;
   function visit(current: ts.Node, isRoot: boolean) {
-    if (found) {
+    if (finding) {
       return;
     }
     // Stop at function literal boundaries — their bodies don't run at module
@@ -352,85 +350,83 @@ function evaluatesPersistentMockSetter(
       ts.isPropertyAccessExpression(current.expression) &&
       persistentMockMethodNames.has(current.expression.name.text)
     ) {
-      found = true;
+      finding = current;
       return;
     }
     ts.forEachChild(current, (child) => visit(child, false));
   }
   visit(node, true);
-  return found;
+  return finding;
 }
 
-function hasSleepPromise(source: string) {
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
-  let found = false;
-
-  function isSleepNewExpression(node: ts.Node): boolean {
-    if (
-      !ts.isNewExpression(node) ||
-      !ts.isIdentifier(node.expression) ||
-      node.expression.text !== 'Promise' ||
-      !node.arguments?.length
-    ) {
-      return false;
-    }
-    const executor = node.arguments[0];
-    if (!ts.isArrowFunction(executor) && !ts.isFunctionExpression(executor)) {
-      return false;
-    }
-    if (executor.parameters.length === 0) {
-      return false;
-    }
-    const first = executor.parameters[0];
-    if (!ts.isIdentifier(first.name)) {
-      return false;
-    }
-    const resolveName = first.name.text;
-    let inner = false;
-    function visit(node: ts.Node) {
-      if (inner) {
-        return;
-      }
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === 'setTimeout' &&
-        node.arguments.length >= 1 &&
-        ts.isIdentifier(node.arguments[0]) &&
-        node.arguments[0].text === resolveName
-      ) {
-        inner = true;
-        return;
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(executor.body);
-    return inner;
+function isSleepNewExpression(node: ts.Node): node is ts.NewExpression {
+  if (
+    !ts.isNewExpression(node) ||
+    !ts.isIdentifier(node.expression) ||
+    node.expression.text !== 'Promise' ||
+    !node.arguments?.length
+  ) {
+    return false;
   }
-
-  function visit(node: ts.Node) {
+  const executor = node.arguments[0];
+  if (!ts.isArrowFunction(executor) && !ts.isFunctionExpression(executor)) {
+    return false;
+  }
+  if (executor.parameters.length === 0) {
+    return false;
+  }
+  const first = executor.parameters[0];
+  if (!ts.isIdentifier(first.name)) {
+    return false;
+  }
+  const resolveName = first.name.text;
+  let found = false;
+  function visit(current: ts.Node) {
     if (found) {
       return;
     }
-    if (isSleepNewExpression(node)) {
+    if (
+      ts.isCallExpression(current) &&
+      ts.isIdentifier(current.expression) &&
+      current.expression.text === 'setTimeout' &&
+      current.arguments.length >= 1 &&
+      ts.isIdentifier(current.arguments[0]) &&
+      current.arguments[0].text === resolveName
+    ) {
       found = true;
+      return;
+    }
+    ts.forEachChild(current, visit);
+  }
+  visit(executor.body);
+  return found;
+}
+
+function findSleepPromise(file: HygieneFile): ts.NewExpression | undefined {
+  let finding: ts.NewExpression | undefined;
+
+  function visit(node: ts.Node) {
+    if (finding) {
+      return;
+    }
+    if (isSleepNewExpression(node)) {
+      finding = node;
       return;
     }
     ts.forEachChild(node, visit);
   }
-  visit(sourceFile);
-  return found;
+  visit(file.sourceFile);
+  return finding;
 }
 
-function hasModuleScopePersistentMockWithoutReset(source: string) {
-  if (globalMockResetPattern.test(source)) {
-    return false;
-  }
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+function hasSleepPromise(source: string) {
+  return Boolean(findSleepPromise(createHygieneFile({ file: 'fixture.test.ts', source })));
+}
 
-  // Build a lookup for module-scope variable / function declarations whose
-  // value is a function literal, so that `vi.mock('x', factory)` with a
-  // factory passed by identifier can be resolved back to its body and scanned.
+// Build a lookup for module-scope variable / function declarations whose
+// value is a function literal, so that `vi.mock('x', factory)` with a factory
+// passed by identifier can be resolved back to its body and scanned.
+function findModuleFactories(sourceFile: ts.SourceFile): Map<string, ts.Node> {
   const moduleFactoryByName = new Map<string, ts.Node>();
   for (const stmt of sourceFile.statements) {
     if (ts.isVariableStatement(stmt)) {
@@ -447,54 +443,104 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
       moduleFactoryByName.set(stmt.name.text, stmt);
     }
   }
+  return moduleFactoryByName;
+}
 
-  function resolveViMockFactoryArg(arg: ts.Expression): ts.Node {
-    if (ts.isIdentifier(arg) && moduleFactoryByName.has(arg.text)) {
-      return moduleFactoryByName.get(arg.text) as ts.Node;
-    }
-    return arg;
-  }
-
-  for (const stmt of sourceFile.statements) {
-    if (ts.isExpressionStatement(stmt)) {
-      if (ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) {
-        // vi.mock(path, factory): the factory body runs at module load. Resolve
-        // identifier-style factories back to their declaration first.
-        if (stmt.expression.arguments.length >= 2) {
-          const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1]);
-          if (evaluatesPersistentMockSetter(factoryNode, { enterRootFunction: true })) {
-            return true;
-          }
-        }
-        continue;
-      }
-      if (evaluatesPersistentMockSetter(stmt.expression)) {
-        return true;
-      }
-    }
-    if (
-      ts.isVariableStatement(stmt) &&
-      stmt.declarationList.declarations.some(
-        (decl) => decl.initializer && evaluatesPersistentMockSetter(decl.initializer),
-      )
-    ) {
-      return true;
-    }
-    // Class declarations: static blocks execute at module load when the class
-    // is evaluated, so any persistent setter inside one leaks across tests.
-    if (ts.isClassDeclaration(stmt)) {
-      for (const member of stmt.members) {
-        if (
-          ts.isClassStaticBlockDeclaration(member) &&
-          evaluatesPersistentMockSetter(member.body)
-        ) {
-          return true;
-        }
-      }
+function resolveViMockFactoryArg(
+  arg: ts.Expression,
+  moduleFactoryByName: ReadonlyMap<string, ts.Node>,
+): ts.Node {
+  if (ts.isIdentifier(arg)) {
+    const factory = moduleFactoryByName.get(arg.text);
+    if (factory) {
+      return factory;
     }
   }
+  return arg;
+}
 
-  return false;
+function findExpressionStatementPersistentMock(
+  stmt: ts.Statement,
+  moduleFactoryByName: ReadonlyMap<string, ts.Node>,
+): ts.Node | undefined {
+  if (!ts.isExpressionStatement(stmt)) {
+    return undefined;
+  }
+
+  if (!isViMockCall(stmt.expression)) {
+    return findEvaluatedPersistentMockSetter(stmt.expression);
+  }
+
+  // vi.mock(path, factory): the factory body runs at module load. Resolve
+  // identifier-style factories back to their declaration first.
+  if (stmt.expression.arguments.length < 2) {
+    return undefined;
+  }
+  const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1], moduleFactoryByName);
+  return findEvaluatedPersistentMockSetter(factoryNode, { enterRootFunction: true });
+}
+
+function findVariableStatementPersistentMock(stmt: ts.Statement): ts.Node | undefined {
+  if (!ts.isVariableStatement(stmt)) {
+    return undefined;
+  }
+
+  for (const declaration of stmt.declarationList.declarations) {
+    if (!declaration.initializer) {
+      continue;
+    }
+    const finding = findEvaluatedPersistentMockSetter(declaration.initializer);
+    if (finding) {
+      return finding;
+    }
+  }
+  return undefined;
+}
+
+function findClassStaticBlockPersistentMock(stmt: ts.Statement): ts.Node | undefined {
+  if (!ts.isClassDeclaration(stmt)) {
+    return undefined;
+  }
+
+  // Static blocks execute at module load when the class is evaluated, so any
+  // persistent setter inside one leaks across tests.
+  for (const member of stmt.members) {
+    if (!ts.isClassStaticBlockDeclaration(member)) {
+      continue;
+    }
+    const finding = findEvaluatedPersistentMockSetter(member.body);
+    if (finding) {
+      return finding;
+    }
+  }
+  return undefined;
+}
+
+function findModuleScopePersistentMockWithoutReset(file: HygieneFile): ts.Node | undefined {
+  if (globalMockResetPattern.test(file.source)) {
+    return undefined;
+  }
+  const moduleFactoryByName = findModuleFactories(file.sourceFile);
+
+  for (const stmt of file.sourceFile.statements) {
+    const finding =
+      findExpressionStatementPersistentMock(stmt, moduleFactoryByName) ??
+      findVariableStatementPersistentMock(stmt) ??
+      findClassStaticBlockPersistentMock(stmt);
+    if (finding) {
+      return finding;
+    }
+  }
+
+  return undefined;
+}
+
+function hasModuleScopePersistentMockWithoutReset(source: string) {
+  return Boolean(
+    findModuleScopePersistentMockWithoutReset(
+      createHygieneFile({ file: 'fixture.test.ts', source }),
+    ),
+  );
 }
 
 function isProcessIdentifier(node: ts.Node): node is ts.Identifier {
@@ -559,100 +605,107 @@ function isProcessEnvMutationCall(node: ts.CallExpression): boolean {
   );
 }
 
-function hasDirectProcessEnvMutation(source: string) {
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
-  let found = false;
+function isDirectProcessEnvMutationNode(node: ts.Node): boolean {
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+    node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+    containsProcessEnvMutationTarget(node.left)
+  ) {
+    return true;
+  }
+
+  if (
+    ts.isDeleteExpression(node) &&
+    (isProcessEnvExpression(node.expression) || isProcessEnvMemberExpression(node.expression))
+  ) {
+    return true;
+  }
+
+  if (
+    (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+    (node.operator === ts.SyntaxKind.PlusPlusToken ||
+      node.operator === ts.SyntaxKind.MinusMinusToken) &&
+    isProcessEnvMemberExpression(node.operand)
+  ) {
+    return true;
+  }
+
+  return ts.isCallExpression(node) && isProcessEnvMutationCall(node);
+}
+
+function findDirectProcessEnvMutation(file: HygieneFile): ts.Node | undefined {
+  let finding: ts.Node | undefined;
 
   function visit(node: ts.Node) {
-    if (found) {
+    if (finding) {
       return;
     }
 
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-      containsProcessEnvMutationTarget(node.left)
-    ) {
-      found = true;
-      return;
-    }
-
-    if (
-      ts.isDeleteExpression(node) &&
-      (isProcessEnvExpression(node.expression) || isProcessEnvMemberExpression(node.expression))
-    ) {
-      found = true;
-      return;
-    }
-
-    if (
-      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-      (node.operator === ts.SyntaxKind.PlusPlusToken ||
-        node.operator === ts.SyntaxKind.MinusMinusToken) &&
-      isProcessEnvMemberExpression(node.operand)
-    ) {
-      found = true;
-      return;
-    }
-
-    if (ts.isCallExpression(node) && isProcessEnvMutationCall(node)) {
-      found = true;
+    if (isDirectProcessEnvMutationNode(node)) {
+      finding = node;
       return;
     }
 
     ts.forEachChild(node, visit);
   }
 
-  visit(sourceFile);
-  return found;
+  visit(file.sourceFile);
+  return finding;
+}
+
+function hasDirectProcessEnvMutation(source: string) {
+  return Boolean(
+    findDirectProcessEnvMutation(createHygieneFile({ file: 'fixture.test.ts', source })),
+  );
+}
+
+function isSnapshotIdentifier(node: ts.Node): boolean {
+  return ts.isIdentifier(node) && processEnvSnapshotIdentifierPattern.test(node.text);
+}
+
+function isProcessEnvReferenceSnapshotNode(node: ts.Node): boolean {
+  if (
+    ts.isVariableDeclaration(node) &&
+    isSnapshotIdentifier(node.name) &&
+    node.initializer &&
+    isProcessEnvExpression(node.initializer)
+  ) {
+    return true;
+  }
+
+  return (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    isSnapshotIdentifier(node.left) &&
+    isProcessEnvExpression(node.right)
+  );
+}
+
+function findProcessEnvReferenceSnapshot(file: HygieneFile): ts.Node | undefined {
+  let finding: ts.Node | undefined;
+
+  function visit(node: ts.Node) {
+    if (finding) {
+      return;
+    }
+
+    if (isProcessEnvReferenceSnapshotNode(node)) {
+      finding = node;
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(file.sourceFile);
+  return finding;
 }
 
 function hasProcessEnvReferenceSnapshot(source: string) {
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
-  let found = false;
-
-  function isSnapshotIdentifier(node: ts.Node): boolean {
-    return ts.isIdentifier(node) && processEnvSnapshotIdentifierPattern.test(node.text);
-  }
-
-  function visit(node: ts.Node) {
-    if (found) {
-      return;
-    }
-
-    if (
-      ts.isVariableDeclaration(node) &&
-      isSnapshotIdentifier(node.name) &&
-      node.initializer &&
-      isProcessEnvExpression(node.initializer)
-    ) {
-      found = true;
-      return;
-    }
-
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-      isSnapshotIdentifier(node.left) &&
-      isProcessEnvExpression(node.right)
-    ) {
-      found = true;
-      return;
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return found;
-}
-
-function findFilesMatchingPolicy(predicate: (source: string) => boolean): string[] {
-  return findRootTestFiles()
-    .filter((file) => predicate(readFileSync(file, 'utf8')))
-    .map(toPosixRelativePath)
-    .sort();
+  return Boolean(
+    findProcessEnvReferenceSnapshot(createHygieneFile({ file: 'fixture.test.ts', source })),
+  );
 }
 
 function findBiomeDirectProcessEnvMutationPluginIncludes(): string[] {
@@ -713,47 +766,64 @@ function hasTestApiBase(expression: ts.Expression): boolean {
   }
 }
 
-function findTestControlUsages(file: string, source: string): TestControlUsage[] {
-  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
-  const sourceLines = source.split(/\r?\n/);
+function findTestControlUsage(
+  file: HygieneFile,
+  node: ts.Node,
+  sourceLines: readonly string[],
+): TestControlUsage | undefined {
+  if (
+    !ts.isPropertyAccessExpression(node) ||
+    !isTestControlKind(node.name.text) ||
+    !hasTestApiBase(node.expression)
+  ) {
+    return undefined;
+  }
+
+  const start = node.getStart(file.sourceFile);
+  const position = file.sourceFile.getLineAndCharacterOfPosition(start);
+  const fullLineText = sourceLines[position.line] ?? '';
+  const trimmedLineText = fullLineText.trim();
+  const expression = node.getText(file.sourceFile).replace(/\s+/g, ' ');
+
+  return {
+    column: position.character + 1,
+    diagnostic: createDiagnostic(file, {
+      ruleId: 'test-control',
+      start,
+      message: `${node.name.text} is not allowed`,
+      snippet: trimmedLineText || expression,
+    }),
+    expression,
+    file: file.file,
+    kind: node.name.text,
+    line: position.line + 1,
+    trimmedLineText,
+  };
+}
+
+function findTestControlUsagesInFile(file: HygieneFile): TestControlUsage[] {
+  const sourceLines = file.source.split(/\r?\n/);
   const usages: TestControlUsage[] = [];
 
   function visit(node: ts.Node) {
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      isTestControlKind(node.name.text) &&
-      hasTestApiBase(node.expression)
-    ) {
-      const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      const fullLineText = sourceLines[position.line] ?? '';
-      const trimmedLineText = fullLineText.trim();
-
-      usages.push({
-        column: position.character + 1,
-        expression: node.getText(sourceFile).replace(/\s+/g, ' '),
-        file,
-        kind: node.name.text,
-        line: position.line + 1,
-        fullLineText,
-        trimmedLineText,
-      });
+    const usage = findTestControlUsage(file, node, sourceLines);
+    if (usage) {
+      usages.push(usage);
     }
 
     ts.forEachChild(node, visit);
   }
 
-  visit(sourceFile);
+  visit(file.sourceFile);
   return usages;
 }
 
-function findRootTestControlUsages(): TestControlUsage[] {
-  return findRootTestFiles().flatMap((file) =>
-    findTestControlUsages(toPosixRelativePath(file), readFileSync(file, 'utf8')),
-  );
+function findTestControlUsages(file: string, source: string): TestControlUsage[] {
+  return findTestControlUsagesInFile(createHygieneFile({ file, source }));
 }
 
 function formatUsage(usage: TestControlUsage) {
-  return `${usage.file}:${usage.line}:${usage.column}: ${usage.kind} is not allowed: ${usage.trimmedLineText || usage.expression}`;
+  return formatDiagnostic(usage.diagnostic);
 }
 
 function isAllowedSkip(usage: TestControlUsage) {
@@ -765,8 +835,134 @@ function isAllowedSkip(usage: TestControlUsage) {
   );
 }
 
+type SyntaxPolicyResults = {
+  directProcessEnvMutation?: ts.Node;
+  processEnvReferenceSnapshot?: ts.Node;
+  sleepPromise?: ts.NewExpression;
+  testControlUsages: TestControlUsage[];
+};
+
+function scanSyntaxPolicies(file: HygieneFile): SyntaxPolicyResults {
+  const results: SyntaxPolicyResults = { testControlUsages: [] };
+  const sourceLines = file.source.split(/\r?\n/);
+
+  function visit(node: ts.Node) {
+    const testControlUsage = findTestControlUsage(file, node, sourceLines);
+    if (testControlUsage) {
+      results.testControlUsages.push(testControlUsage);
+    }
+    if (!results.directProcessEnvMutation && isDirectProcessEnvMutationNode(node)) {
+      results.directProcessEnvMutation = node;
+    }
+    if (!results.processEnvReferenceSnapshot && isProcessEnvReferenceSnapshotNode(node)) {
+      results.processEnvReferenceSnapshot = node;
+    }
+    if (!results.sleepPromise && isSleepNewExpression(node)) {
+      results.sleepPromise = node;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(file.sourceFile);
+  return results;
+}
+
+type RootPolicyResults = {
+  directProcessEnvMutation: HygieneDiagnostic[];
+  hoistedPersistentMock: HygieneDiagnostic[];
+  moduleScopePersistentMock: HygieneDiagnostic[];
+  processEnvReferenceSnapshot: HygieneDiagnostic[];
+  sleepPromise: HygieneDiagnostic[];
+  testControlUsages: TestControlUsage[];
+};
+
+function addPolicyDiagnostic(
+  diagnostics: HygieneDiagnostic[],
+  file: HygieneFile,
+  finding: number | ts.Node | undefined,
+  ruleId: string,
+  message: string,
+) {
+  if (finding === undefined) {
+    return;
+  }
+
+  const start = typeof finding === 'number' ? finding : finding.getStart(file.sourceFile);
+  diagnostics.push(
+    createDiagnostic(file, {
+      ruleId,
+      start,
+      message,
+      snippet: typeof finding === 'number' ? undefined : finding.getText(file.sourceFile),
+    }),
+  );
+}
+
+function scanRootCorpus(): RootPolicyResults {
+  const results: RootPolicyResults = {
+    directProcessEnvMutation: [],
+    hoistedPersistentMock: [],
+    moduleScopePersistentMock: [],
+    processEnvReferenceSnapshot: [],
+    sleepPromise: [],
+    testControlUsages: [],
+  };
+
+  for (const file of rootCorpus.files) {
+    const syntaxResults = scanSyntaxPolicies(file);
+    results.testControlUsages.push(...syntaxResults.testControlUsages);
+    addPolicyDiagnostic(
+      results.hoistedPersistentMock,
+      file,
+      findHoistedPersistentMockWithoutReset(file),
+      'hoisted-persistent-mock-reset',
+      'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
+    );
+    addPolicyDiagnostic(
+      results.directProcessEnvMutation,
+      file,
+      syntaxResults.directProcessEnvMutation,
+      'direct-process-env-mutation',
+      'use mockProcessEnv() or vi.stubEnv() instead of direct process.env mutation',
+    );
+    addPolicyDiagnostic(
+      results.processEnvReferenceSnapshot,
+      file,
+      syntaxResults.processEnvReferenceSnapshot,
+      'process-env-reference-snapshot',
+      'snapshot process.env with { ...process.env } instead of by reference',
+    );
+    addPolicyDiagnostic(
+      results.sleepPromise,
+      file,
+      syntaxResults.sleepPromise,
+      'set-timeout-sleep-wait',
+      "replace 'await new Promise(r => setTimeout(r, ms))' with vi.useFakeTimers() + vi.runAllTimersAsync(), or testing-library waitFor()",
+    );
+    addPolicyDiagnostic(
+      results.moduleScopePersistentMock,
+      file,
+      findModuleScopePersistentMockWithoutReset(file),
+      'module-scope-persistent-mock-reset',
+      'module-scope persistent mock setters (mockReturnValue/mockResolvedValue/etc) must be paired with mockReset() or vi.resetAllMocks() in beforeEach to survive random test order',
+    );
+  }
+
+  return {
+    ...results,
+    directProcessEnvMutation: sortDiagnostics(results.directProcessEnvMutation),
+    hoistedPersistentMock: sortDiagnostics(results.hoistedPersistentMock),
+    moduleScopePersistentMock: sortDiagnostics(results.moduleScopePersistentMock),
+    processEnvReferenceSnapshot: sortDiagnostics(results.processEnvReferenceSnapshot),
+    sleepPromise: sortDiagnostics(results.sleepPromise),
+  };
+}
+
+const rootPolicyResults = scanRootCorpus();
+
 describe('root test hygiene', () => {
-  const rootUsages = findRootTestControlUsages();
+  const rootUsages = rootPolicyResults.testControlUsages;
 
   it.each([
     ['describe.only("suite", () => {})', 'only', 'describe.only'],
@@ -927,18 +1123,17 @@ describe('root test hygiene', () => {
   });
 
   it('keeps new root tests from adding hoisted persistent mocks without reset', () => {
-    const unapprovedFiles = findFilesMatchingPolicy(hasHoistedPersistentMockWithoutReset)
-      .filter((file) => !legacyHoistedPersistentMockFiles.has(file))
-      .map(
-        (file) =>
-          `${file}: hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()`,
-      );
+    const unapprovedFiles = rootPolicyResults.hoistedPersistentMock
+      .filter((diagnostic) => !legacyHoistedPersistentMockFiles.has(diagnostic.file))
+      .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
   });
 
   it('keeps the legacy hoisted mock allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasHoistedPersistentMockWithoutReset));
+    const activeFiles = new Set(
+      rootPolicyResults.hoistedPersistentMock.map((diagnostic) => diagnostic.file),
+    );
     const staleFiles = Array.from(legacyHoistedPersistentMockFiles)
       .filter((file) => !activeFiles.has(file))
       .sort();
@@ -947,26 +1142,23 @@ describe('root test hygiene', () => {
   });
 
   it('keeps new root tests from adding direct process.env mutations', () => {
-    const unapprovedFiles = findFilesMatchingPolicy(hasDirectProcessEnvMutation)
-      .filter((file) => !legacyDirectProcessEnvMutationFiles.has(file))
-      .map(
-        (file) =>
-          `${file}: use mockProcessEnv() or vi.stubEnv() instead of direct process.env mutation`,
-      );
+    const unapprovedFiles = rootPolicyResults.directProcessEnvMutation
+      .filter((diagnostic) => !legacyDirectProcessEnvMutationFiles.has(diagnostic.file))
+      .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
   });
 
   it('keeps new root tests from snapshotting process.env by reference', () => {
-    const unapprovedFiles = findFilesMatchingPolicy(hasProcessEnvReferenceSnapshot).map(
-      (file) => `${file}: snapshot process.env with { ...process.env } instead of by reference`,
-    );
+    const unapprovedFiles = rootPolicyResults.processEnvReferenceSnapshot.map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
   });
 
   it('keeps the legacy process.env mutation allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasDirectProcessEnvMutation));
+    const activeFiles = new Set(
+      rootPolicyResults.directProcessEnvMutation.map((diagnostic) => diagnostic.file),
+    );
     const staleFiles = Array.from(legacyDirectProcessEnvMutationFiles)
       .filter((file) => !activeFiles.has(file))
       .sort();
@@ -1008,18 +1200,17 @@ describe('root test hygiene', () => {
   });
 
   it('keeps new root tests from adding setTimeout-based sleep waits', () => {
-    const unapprovedFiles = findFilesMatchingPolicy(hasSleepPromise)
-      .filter((file) => !legacySleepPromiseFiles.has(file))
-      .map(
-        (file) =>
-          `${file}: replace 'await new Promise(r => setTimeout(r, ms))' with vi.useFakeTimers() + vi.runAllTimersAsync(), or testing-library waitFor()`,
-      );
+    const unapprovedFiles = rootPolicyResults.sleepPromise
+      .filter((diagnostic) => !legacySleepPromiseFiles.has(diagnostic.file))
+      .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
   });
 
   it('keeps the legacy sleep-wait allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasSleepPromise));
+    const activeFiles = new Set(
+      rootPolicyResults.sleepPromise.map((diagnostic) => diagnostic.file),
+    );
     const staleFiles = Array.from(legacySleepPromiseFiles)
       .filter((file) => !activeFiles.has(file))
       .sort();
@@ -1161,18 +1352,17 @@ describe('root test hygiene', () => {
   });
 
   it('keeps new root tests from adding unreset module-scope persistent mocks', () => {
-    const unapprovedFiles = findFilesMatchingPolicy(hasModuleScopePersistentMockWithoutReset)
-      .filter((file) => !legacyModuleScopePersistentMockFiles.has(file))
-      .map(
-        (file) =>
-          `${file}: module-scope persistent mock setters (mockReturnValue/mockResolvedValue/etc) must be paired with mockReset() or vi.resetAllMocks() in beforeEach to survive random test order`,
-      );
+    const unapprovedFiles = rootPolicyResults.moduleScopePersistentMock
+      .filter((diagnostic) => !legacyModuleScopePersistentMockFiles.has(diagnostic.file))
+      .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
   });
 
   it('keeps the legacy module-scope persistent mock allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasModuleScopePersistentMockWithoutReset));
+    const activeFiles = new Set(
+      rootPolicyResults.moduleScopePersistentMock.map((diagnostic) => diagnostic.file),
+    );
     const staleFiles = Array.from(legacyModuleScopePersistentMockFiles)
       .filter((file) => !activeFiles.has(file))
       .sort();
