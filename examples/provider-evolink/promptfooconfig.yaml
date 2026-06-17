@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Evaluate EvoLink smart routing
+
+prompts:
+  - 'Answer in one sentence: {{question}}'
+
+providers:
+  - id: openai:chat:evolink/auto
+    label: EvoLink Auto
+    config:
+      apiBaseUrl: https://direct.evolink.ai/v1
+      apiKey: '{{env.EVOLINK_API_KEY}}'
+      temperature: 0.2
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
