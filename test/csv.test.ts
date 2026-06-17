@@ -459,6 +459,10 @@ describe('assertionFromString', () => {
     'contains-all',
     'icontains-any',
     'icontains-all',
+    'not-contains-any',
+    'not-contains-all',
+    'not-icontains-any',
+    'not-icontains-all',
   ])('should preserve quoted commas in a %s assertion read from a CSV row', (type) => {
     const [row] = parseCsv<CsvRow>(`__expected\n"${type}:""hello, world"",foo"`, {
       columns: true,
@@ -483,9 +487,9 @@ describe('assertionFromString', () => {
 
   // csv.ts intentionally keeps a private copy of the contains-assertion value
   // parser (it cannot import the assertion handlers without bundling backend code
-  // into the frontend; see the comment in src/csv.ts). This drift guard fails if
-  // the two implementations ever diverge so the copies are kept byte-for-byte
-  // equivalent.
+  // into the frontend; see the comment in src/csv.ts). This drift guard covers
+  // representative valid and malformed inputs so changes to either implementation
+  // have to preserve the same behavior.
   it.each([
     '"hello, world",foo',
     String.raw`"say \"hi\"",b`,
