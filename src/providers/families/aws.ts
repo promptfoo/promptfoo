@@ -95,6 +95,18 @@ export const awsProviderFactories: ProviderFactory[] = [
         }
       }
 
+      // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
+      // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models
+      // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
+      // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
+      if (modelType === 'mantle') {
+        const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
+        return createBedrockMantleChatProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+
       // Handle Converse API
       if (modelType === 'converse') {
         return new AwsBedrockConverseProvider(modelName, providerOptions);

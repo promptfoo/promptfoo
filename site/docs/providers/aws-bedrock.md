@@ -1148,6 +1148,42 @@ providers:
 
 :::
 
+### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
+
+The Bedrock **Mantle** engine also exposes an OpenAI-compatible **Chat Completions** API at
+`https://bedrock-mantle.<region>.api.aws/v1/chat/completions`. Use the **`bedrock:mantle:<id>`**
+prefix to talk to it. This is the only way to reach mantle-served chat models that the native
+`InvokeModel`/`Converse` APIs don't serve — so they don't appear in
+`aws bedrock list-foundation-models` — for example `zai.glm-4.6`, `deepseek.v3.1`,
+`google.gemma-4-*`, and the mantle-namespaced Qwen `*-instruct` IDs.
+
+Like the other mantle paths, it authenticates with an **Amazon Bedrock API key**
+(`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`):
+
+```yaml
+providers:
+  - id: bedrock:mantle:zai.glm-4.6
+    config:
+      region: us-west-2
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      max_tokens: 1024
+```
+
+:::note
+
+- **The mantle catalog is regional.** List the models available in a Region with
+  `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
+  the default is `us-east-1`.
+- Use the bare `bedrock:openai.gpt-5.5` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
+  frontier and Grok models: those go through the **Responses API** and surface reasoning
+  tokens. `bedrock:mantle:` is the **Chat Completions** path, which the same models also
+  support but without reasoning-token output.
+- Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
+  [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
+  reached via `bedrock:<id>` or `bedrock:converse:<id>`.
+
+:::
+
 ### Qwen Models
 
 Qwen model IDs include `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,
@@ -1239,7 +1275,7 @@ providers:
       tool_choice: auto
 ```
 
-### OpenAI-compatible Models (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra)
+### OpenAI-compatible Models (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra) {#openai-compatible-models}
 
 Several newer Bedrock families speak the OpenAI Chat Completions schema over `InvokeModel`
 (`{ messages, max_tokens, ... }` → `{ choices: [{ message: { content } }] }`), so they share

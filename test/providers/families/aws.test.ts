@@ -56,6 +56,29 @@ describe('aws bedrock provider factory routing', () => {
     );
   });
 
+  it('routes bedrock:mantle:<id> to the Chat Completions provider on the mantle /v1 endpoint', async () => {
+    // Mantle-only chat models (zai.glm-4.6, deepseek.v3.1, gemma-4, qwen *-instruct ids) are not
+    // served by InvokeModel/Converse; bedrock:mantle:<id> reaches them via Chat Completions.
+    const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:zai.glm-4.6',
+      { config: { region: 'us-west-2', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
+    expect((provider as any).config.apiBaseUrl).toBe('https://bedrock-mantle.us-west-2.api.aws/v1');
+    expect(provider.id()).toBe('bedrock:mantle:zai.glm-4.6');
+  });
+
+  it('preserves a colon-containing model id after the mantle: subtype', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:openai.gpt-oss-20b-1:0',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect((provider as any).modelName).toBe('openai.gpt-oss-20b-1:0');
+  });
+
   it('routes gpt-oss ids to the InvokeModel completion provider', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:openai.gpt-oss-120b-1:0',

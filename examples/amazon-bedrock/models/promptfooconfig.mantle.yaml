@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Mantle Chat Completions endpoint (bedrock:mantle:<id>)'
+
+# The bedrock:mantle: prefix talks to the OpenAI-compatible Chat Completions API on the
+# Bedrock Mantle endpoint (https://bedrock-mantle.<region>.api.aws/v1/chat/completions). It is
+# the only way to reach mantle-only chat models that the native InvokeModel/Converse APIs do
+# not serve (and that therefore do not appear in `aws bedrock list-foundation-models`) — e.g.
+# zai.glm-4.6, deepseek.v3.1, google.gemma-4-*, and the mantle-namespaced Qwen *-instruct ids.
+#
+# Authenticate with an Amazon Bedrock API key, and set a region where the model is offered
+# (list with: GET https://bedrock-mantle.<region>.api.aws/v1/models):
+#
+#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c promptfooconfig.mantle.yaml
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: bedrock:mantle:zai.glm-4.6
+    label: GLM 4.6 (mantle)
+    config:
+      region: us-west-2
+      max_tokens: 1024
+
+  - id: bedrock:mantle:deepseek.v3.1
+    label: DeepSeek V3.1 (mantle)
+    config:
+      region: us-west-2
+      max_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: icontains
+        value: Paris
+
+  - vars:
+      question: What is 12 + 30?
+    assert:
+      - type: contains
+        value: '42'

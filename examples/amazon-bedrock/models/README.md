@@ -40,6 +40,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI frontier models (GPT-5.5 and GPT-5.4) with native reasoning effort
 - [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (requires `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
