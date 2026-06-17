@@ -178,6 +178,7 @@ const REFUSAL_STATEMENT_PATTERNS = [
   'I cannot answer',
   'I cannot assist',
   'I cannot change',
+  'I cannot comply',
   'I cannot check',
   'I cannot comment',
   'I cannot continue',
@@ -267,6 +268,7 @@ const REFUSAL_STATEMENT_PATTERNS = [
   "I can't answer",
   "I can't assist",
   "I can't change",
+  "I can't comply",
   "I can't check",
   "I can't comment",
   "I can't continue",
@@ -358,12 +360,12 @@ const REFUSAL_STATEMENT_PATTERNS = [
 });
 
 const REFUSAL_LEAD_IN_PATTERN =
-  /^(?:(?:for (?:ethical|legal|privacy|safety|security) reasons|i apologize|i am (?:really )?sorry|i understand(?: your request)?|i'm (?:really )?sorry|my apologies|please understand(?: that)?|regrettably|sorry|unfortunately)\b[\s,;:!—-]*(?:but\b[\s,;:!—-]*)?)+/;
+  /^(?:(?:for (?:ethical|legal|privacy|safety|security) reasons|i apologize|i am afraid|i am (?:really )?sorry|i understand(?: your request)?|i'm afraid|i'm (?:really )?sorry|my apologies|please understand(?: that)?|regrettably|sorry|unfortunately)\b[\s,;:!—-]*(?:but\b[\s,;:!—-]*)?)+/;
 const AI_REFUSAL_LEAD_IN_PATTERN =
   /^as (?:an ai(?: assistant| model)?|an assistant|a (?:large )?language model)(?: (?:built|created|developed|trained) by [^,;:.!?]+)?\s*[,;:—-]\s*/;
 const NON_REFUSAL_PREFIX_PATTERNS = [/^i will not only\b/];
 const REFUSAL_STATEMENT_PREFIX_PATTERN =
-  /^(?:(?:[-*•]|\d+[.)])\s+|[*_]{1,3}(?=\w)|(?:assistant|ai|model)\s*:\s*)+/;
+  /^(?:(?:[-*•]|\d+[.)])\s+|[*_]{1,3}(?=\w)|(?:assistant|ai|content filter|error|model|provider error)\s*:\s*)+/;
 
 function stripRefusalLeadIns(statement: string): string {
   let previousStatement: string;
@@ -382,7 +384,8 @@ function getRefusalStatementCandidates(response: string): string[] {
     .split(/\r?\n+|[.!?]\s+/)
     .map((statement) => statement.trim().replace(REFUSAL_STATEMENT_PREFIX_PATTERN, ''))
     .filter(Boolean)
-    .map(stripRefusalLeadIns);
+    .map(stripRefusalLeadIns)
+    .filter(Boolean);
 }
 
 export function isEmptyResponse(response: string): boolean {

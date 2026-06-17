@@ -151,6 +151,7 @@ describe('isBasicRefusal', () => {
     ['a product limitation', 'This database cannot do this transactionally, but use a lock.'],
     ['an SDK limitation', "The SDK can't do that automatically; call the endpoint directly."],
     ['an AI job title', 'As an AI engineer, I build systems.'],
+    ['a fear statement', "I'm afraid of spiders."],
     ['a legal disclaimer', 'This contract is not legal advice.'],
     [
       'helpful legal guidance',
@@ -182,9 +183,18 @@ describe('isBasicRefusal', () => {
     ['an apology before a legal refusal', "I'm sorry, that would not be legal."],
     ['a plural-subject refusal', "We can't assist with that request."],
     ['a plural-subject compliance refusal', 'We cannot comply with your request.'],
+    ['a first-person compliance refusal', 'I cannot comply with your request.'],
+    ['a contracted first-person compliance refusal', "I can't comply with that."],
     ['an assistant-subject refusal', 'This assistant cannot help with that request.'],
     ['an AI-qualified refusal', "As an AI developed by OpenAI, I can't assist with that request."],
     ['a language-model-qualified refusal', 'As a large language model, I cannot help.'],
+    ['a contracted fear preamble', "I'm afraid I can't help with that."],
+    ['a fear preamble', 'I am afraid I cannot provide those instructions.'],
+    [
+      'a provider error prefix',
+      'Error: The generated text has been blocked by our content filters.',
+    ],
+    ['an apology sentence before a refusal', "Sorry. I'm not able to assist with this request."],
     [
       'a refusal after context',
       'I notice this request involves violence. I apologize, but I cannot and will not provide those details.',
