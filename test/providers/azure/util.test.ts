@@ -131,4 +131,23 @@ describe('AZURE_MODELS cost coverage', () => {
   ])('prices the %s family (%s)', (id) => {
     expect(calculateAzureCost(id, {}, 1000, 1000)).toBeGreaterThan(0);
   });
+
+  // Exact per-1M input/output rates for entries added/corrected from the Azure Retail Prices API.
+  // Probing input and output separately catches a swapped input/output or a transcription typo.
+  it.each([
+    ['gpt-5.5', 5, 30],
+    ['gpt-5.2', 1.75, 14],
+    ['gpt-5.1-codex-max', 1.25, 10],
+    ['grok-4.3', 1.25, 2.5],
+    ['grok-4-1-fast-reasoning', 0.2, 0.5],
+    ['Kimi-K2-Thinking', 0.6, 2.5],
+    ['Kimi-K2.6', 0.95, 4],
+    ['DeepSeek-V3.2', 0.58, 1.68],
+    ['DeepSeek-V4-Pro', 1.74, 3.48],
+    ['gpt-oss-120b', 0.15, 0.6],
+    ['Phi-3-medium-4k-instruct', 0.17, 0.68],
+  ])('prices %s at exactly %d in / %d out per 1M', (id, inputPerM, outputPerM) => {
+    expect(calculateAzureCost(id, {}, 1_000_000, 0)).toBeCloseTo(inputPerM as number, 9);
+    expect(calculateAzureCost(id, {}, 0, 1_000_000)).toBeCloseTo(outputPerM as number, 9);
+  });
 });
