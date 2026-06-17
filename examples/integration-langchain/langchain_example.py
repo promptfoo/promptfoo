@@ -11,7 +11,8 @@ if len(sys.argv) < 2:
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
-    raise ValueError("OPENAI_API_KEY environment variable is required.")
+    print("OPENAI_API_KEY environment variable is required.", file=sys.stderr)
+    sys.exit(1)
 
 llm = OpenAI(temperature=0, api_key=api_key)
 math_chain = (
