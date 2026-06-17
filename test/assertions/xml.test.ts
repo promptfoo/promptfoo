@@ -66,9 +66,11 @@ describe('validateXml', () => {
       '<!DOCTYPE root [<!ENTITY bad "<a>">]><root>&bad;</root>',
       '<!DOCTYPE root [<!ELEMENT root (child>]><root/>',
     ]) {
+      // A DTD internal subset is a deliberate policy rejection, so the reason
+      // is reported verbatim rather than wrapped as an "XML parsing failed" error.
       expect(validateXml(xml)).toEqual({
         isValid: false,
-        reason: expect.stringContaining('DTD internal subsets are not supported'),
+        reason: 'DTD internal subsets are not supported by is-xml validation',
       });
     }
   });

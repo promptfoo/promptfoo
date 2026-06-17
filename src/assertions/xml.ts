@@ -400,15 +400,22 @@ export function validateXml(
   // document with a well-formedness parser before extracting its values.
   // contains-xml intentionally remains lenient because it accepts fragments
   // embedded in otherwise non-XML output.
+  let unsupportedReason: string | undefined;
   try {
     const parser = new SaxesParser();
     parser.on('doctype', (doctype) => {
       if (hasDoctypeInternalSubset(doctype)) {
-        throw new Error('DTD internal subsets are not supported by is-xml validation');
+        unsupportedReason = 'DTD internal subsets are not supported by is-xml validation';
+        throw new Error(unsupportedReason);
       }
     });
     parser.write(xmlString).close();
   } catch (err) {
+    // A populated `unsupportedReason` is a deliberate policy rejection, not a
+    // parse failure, so report it without the "XML parsing failed" prefix.
+    if (unsupportedReason) {
+      return { isValid: false, reason: unsupportedReason };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { isValid: false, reason: `XML parsing failed: ${message}` };
   }
