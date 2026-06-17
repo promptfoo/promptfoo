@@ -409,6 +409,12 @@ describe('parseRateLimitHeaders', () => {
       expect(result.retryAfterMs).toBeUndefined();
     });
 
+    it('should ignore a duration string whose total overflows to non-finite', () => {
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': `${'9'.repeat(400)}h` });
+
+      expect(result.resetAt).toBeUndefined();
+    });
+
     it('should ignore negative reset values', () => {
       const result = parseRateLimitHeaders({ 'x-ratelimit-reset': '-1' });
 
