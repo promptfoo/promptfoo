@@ -86,6 +86,41 @@ tests:
 Promptfoo sends this provider to `/v1/embeddings`. Check the selected model's documentation before
 setting `dimensions` or other model-specific fields.
 
+## Transcription
+
+EmpirioLabs exposes OpenAI-compatible audio transcription. Use the `openai:transcription:<model>`
+provider format with the EmpirioLabs base URL, and pass the path to an audio file as the prompt:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://sample-audio.mp3
+
+providers:
+  - id: openai:transcription:whisper-large-v3-turbo
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+
+  - id: openai:transcription:openai-whisper-1
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+
+  - id: openai:transcription:deepgram-nova-3
+    config:
+      apiBaseUrl: https://api.empiriolabs.ai/v1
+      apiKeyEnvar: EMPIRIOLABS_API_KEY
+
+tests:
+  - assert:
+      - type: contains
+        value: expected transcript content
+```
+
+Promptfoo sends this provider to `/v1/audio/transcriptions`. Transcription models charge per minute
+of audio, so confirm the current rate with `GET https://api.empiriolabs.ai/v1/models/<model>` before
+using cost as a release gate.
+
 ## Model-specific request fields
 
 EmpirioLabs models expose different reasoning and tool controls. Use `passthrough` for fields that
