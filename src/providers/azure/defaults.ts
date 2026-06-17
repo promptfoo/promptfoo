@@ -97,44 +97,44 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-5.4-nano-2026-03-17',
     cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
   },
-  // gpt-5.5 / gpt-5.2 / gpt-5.3 are offered on Azure (see `az cognitiveservices model list`) and
-  // follow the gpt-5.x Azure rate (full 2.5/10, pro 5/20); verify current rates at
-  // https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/.
+  // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
+  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 uses the short-context
+  // Global Standard tier (long-context is 10/45). gpt-5.2/5.3 chat and codex share 1.75/14.
   {
     id: 'gpt-5.5',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 5 / 1000000, output: 30 / 1000000 },
   },
   {
     id: 'gpt-5.5-2026-04-23',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
-  },
-  {
-    id: 'gpt-5.5-pro',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 5 / 1000000, output: 30 / 1000000 },
   },
   {
     id: 'gpt-5.2',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
     id: 'gpt-5.2-2025-12-11',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
     id: 'gpt-5.2-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
     id: 'gpt-5.2-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
     id: 'gpt-5.3-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
     id: 'gpt-5.3-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  {
+    id: 'gpt-5.1-codex-max',
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-mini',
@@ -710,6 +710,39 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'DeepSeek-V3.1',
     cost: { input: 0.27 / 1000000, output: 1.1 / 1000000 },
   },
+  // DeepSeek V3.2 / V4 — Global Standard rates from the Azure Retail Prices API (prices.azure.com).
+  {
+    id: 'DeepSeek-V3.2',
+    cost: { input: 0.58 / 1000000, output: 1.68 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V3.2-Speciale',
+    cost: { input: 0.58 / 1000000, output: 1.68 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V4-Flash',
+    cost: { input: 0.19 / 1000000, output: 0.51 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V4-Pro',
+    cost: { input: 1.74 / 1000000, output: 3.48 / 1000000 },
+  },
+
+  // =============================================================================
+  // MoonshotAI Kimi Models (via Azure AI Foundry) — Global Standard (prices.azure.com)
+  // =============================================================================
+  {
+    id: 'Kimi-K2-Thinking',
+    cost: { input: 0.6 / 1000000, output: 2.5 / 1000000 },
+  },
+  {
+    id: 'Kimi-K2.5',
+    cost: { input: 0.6 / 1000000, output: 3 / 1000000 },
+  },
+  {
+    id: 'Kimi-K2.6',
+    cost: { input: 0.95 / 1000000, output: 4 / 1000000 },
+  },
 
   // =============================================================================
   // xAI Grok Models (via Azure AI Foundry)
@@ -737,6 +770,21 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'grok-code-fast-1',
     cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+  },
+  // Newer Grok on Azure — Global Standard from the Azure Retail Prices API (prices.azure.com).
+  // (grok-4-20 is intentionally omitted: its catalog id maps ambiguously to either the "Grok 4.2"
+  // meter ($1.25/$2.50) or base "Grok-4" ($3/$15), so it is left unpriced rather than guessed.)
+  {
+    id: 'grok-4.3',
+    cost: { input: 1.25 / 1000000, output: 2.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-1-fast-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-1-fast-non-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
   },
 
   // =============================================================================
@@ -785,6 +833,30 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'Phi-3-mini-128k-instruct',
     cost: { input: 0.026 / 1000000, output: 0.026 / 1000000 },
+  },
+  // Phi-3 4K/8K context variants — same Global Standard rate as their 128K counterparts per the
+  // Azure Retail Prices API (prices.azure.com).
+  {
+    id: 'Phi-3-medium-4k-instruct',
+    cost: { input: 0.17 / 1000000, output: 0.68 / 1000000 },
+  },
+  {
+    id: 'Phi-3-mini-4k-instruct',
+    cost: { input: 0.13 / 1000000, output: 0.52 / 1000000 },
+  },
+  {
+    id: 'Phi-3-small-8k-instruct',
+    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+  },
+
+  // =============================================================================
+  // OpenAI open-weight (gpt-oss) via Azure AI Foundry — Global Standard (prices.azure.com).
+  // gpt-oss-20b is intentionally omitted: Azure exposes only fine-tuning meters for it, with no
+  // base Global Standard inference rate, so it is left unpriced rather than guessed.
+  // =============================================================================
+  {
+    id: 'gpt-oss-120b',
+    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
   },
 
   // =============================================================================
