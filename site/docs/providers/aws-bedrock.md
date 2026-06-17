@@ -1208,6 +1208,60 @@ providers:
       tool_choice: auto
 ```
 
+### OpenAI-compatible Models (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra)
+
+Several newer Bedrock families speak the OpenAI Chat Completions schema over `InvokeModel`
+(`{ messages, max_tokens, ... }` → `{ choices: [{ message: { content } }] }`), so they share
+one handler and the same configuration options. They also work through the [Converse API](#converse-api)
+(`bedrock:converse:<id>`).
+
+| Family          | Example model IDs                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------- |
+| Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                             |
+| MiniMax         | `minimax.minimax-m2`, `minimax.minimax-m2.1`, `minimax.minimax-m2.5`                        |
+| Moonshot Kimi   | `moonshotai.kimi-k2.5`, `moonshot.kimi-k2-thinking`                                         |
+| NVIDIA Nemotron | `nvidia.nemotron-nano-9b-v2`, `nvidia.nemotron-nano-12b-v2`, `nvidia.nemotron-super-3-120b` |
+| Google Gemma 3  | `google.gemma-3-4b-it`, `google.gemma-3-12b-it`, `google.gemma-3-27b-it`                    |
+| Writer Palmyra  | `us.writer.palmyra-x5-v1:0`, `us.writer.palmyra-x4-v1:0`, `writer.palmyra-vision-7b`        |
+
+```yaml
+providers:
+  - id: bedrock:zai.glm-5
+    config:
+      region: us-east-1
+      max_tokens: 1024 # Maximum number of tokens to generate
+      temperature: 0.7 # Optional — omit to use the model's own default
+      top_p: 0.9 # Optional nucleus sampling
+      stop: ['END'] # Optional stop sequences
+      reasoning_effort: high # Optional, reasoning models only ('low' | 'medium' | 'high')
+      showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
+      tools: [...] # Optional OpenAI-format tool definitions
+      tool_choice: 'auto' # Optional tool selection strategy
+```
+
+:::note
+
+- **Writer Palmyra** is served for on-demand throughput only through its `us.` inference
+  profile (`bedrock:us.writer.palmyra-x5-v1:0`); the bare `writer.palmyra-x*` IDs reject
+  on-demand `InvokeModel`.
+- **Reasoning models** (MiniMax M2, Kimi K2 Thinking) emit a `<think>` or `<reasoning>`
+  block. By default it is returned verbatim; set `showThinking: false` to return only the
+  final answer. Give reasoning models a larger `max_tokens` budget so the answer is not
+  truncated by the reasoning.
+- **NVIDIA Nemotron** reasons in-line without tags, so `showThinking` cannot strip it.
+  Disable its reasoning with NVIDIA's `/no_think` system directive instead (add a
+  `system` message of `/no_think` to your prompt) for a direct answer.
+- This handler does not force a `temperature`/`top_p` default, so each model uses its
+  provider-recommended sampling unless you set them explicitly.
+
+:::
+
+**Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home)
+or run `aws bedrock list-foundation-models` to confirm which of these models are enabled in
+your target region — availability varies by model and region. TwelveLabs Pegasus
+(`twelvelabs.pegasus-1-2-v1:0`, video understanding) is also available through the Converse
+API, and TwelveLabs Marengo (`twelvelabs.marengo-embed-*`) is an [embeddings](#embeddings) model.
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.

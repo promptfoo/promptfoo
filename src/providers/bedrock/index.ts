@@ -65,7 +65,13 @@ export type BedrockModelFamily =
   | 'titan'
   | 'deepseek'
   | 'openai'
-  | 'qwen';
+  | 'qwen'
+  | 'zai'
+  | 'minimax'
+  | 'moonshot'
+  | 'nvidia'
+  | 'writer'
+  | 'gemma';
 
 /**
  * Extended Bedrock options for InvokeModel API
@@ -443,6 +449,57 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
   stop?: string[];
   frequency_penalty?: number;
   presence_penalty?: number;
+  tools?: {
+    type: 'function';
+    function: {
+      name: string;
+      description: string;
+      parameters: any;
+    };
+  }[];
+  tool_choice?:
+    | 'auto'
+    | 'none'
+    | {
+        type: 'function';
+        function: {
+          name: string;
+        };
+      };
+}
+
+/**
+ * Options for the shared OpenAI-compatible InvokeModel handler.
+ *
+ * Several newer Bedrock model families — Z.AI (GLM), MiniMax, Moonshot (Kimi), NVIDIA
+ * (Nemotron), Google (Gemma), and Writer (Palmyra) — expose the OpenAI Chat Completions
+ * wire format over `InvokeModel`: the request body is `{ messages, max_tokens, ... }` and
+ * the response is `{ choices: [{ message: { content } }], usage }`. This is the same shape
+ * as the Qwen/DeepSeek-v3/gpt-oss handlers, so they share one handler.
+ *
+ * Unlike the gpt-oss handler (`BedrockOpenAIGenerationOptions`), these models use the
+ * standard `max_tokens` field — Writer Palmyra in particular rejects `max_completion_tokens`
+ * — so this handler always sends `max_tokens`.
+ */
+interface BedrockOpenAICompatGenerationOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  stop?: string[];
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  /**
+   * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
+   * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
+   */
+  reasoning_effort?: 'low' | 'medium' | 'high';
+  /**
+   * Controls whether a reasoning/thinking block the model emits (either `<think>…</think>`
+   * or `<reasoning>…</reasoning>`) is surfaced. Unset (default) returns the raw output so an
+   * eval framework never hides application-visible content; `false` strips the block and
+   * returns only the final answer.
+   */
+  showThinking?: boolean;
   tools?: {
     type: 'function';
     function: {
@@ -2311,6 +2368,135 @@ ${prompt}
       };
     },
   },
+  /**
+   * Shared handler for newer Bedrock model families that speak the OpenAI Chat Completions
+   * wire format over InvokeModel: Z.AI (GLM), MiniMax, Moonshot (Kimi), NVIDIA (Nemotron),
+   * Google (Gemma), and Writer (Palmyra). Request body is `{ messages, max_tokens, ... }`
+   * and the response is `{ choices: [{ message: { content } }], usage }`.
+   *
+   * Differs from the gpt-oss `OPENAI` handler by sending `max_tokens` (not
+   * `max_completion_tokens`, which Writer Palmyra rejects) and by not forcing a
+   * `temperature`/`top_p` default, so each model uses its provider-recommended sampling
+   * defaults unless the user overrides them.
+   */
+  OPENAI_COMPAT: {
+    params: async (
+      config: BedrockOpenAICompatGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      _modelName?: string,
+      vars?: Record<string, VarValue>,
+    ) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      const params: any = { messages };
+
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        undefined,
+      );
+      // No forced temperature/top_p default: reasoning-oriented models in this group (e.g.
+      // MiniMax M2) recommend their own sampling settings, so only send these when set.
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'));
+      // Prefer the call-level `stop` only when it is non-empty; an explicit empty array must
+      // not shadow a configured `config.stop` (an empty array is truthy).
+      const effectiveStop = stop && stop.length > 0 ? stop : config?.stop;
+      if (effectiveStop && effectiveStop.length > 0) {
+        addConfigParam(params, 'stop', effectiveStop, getEnvString('AWS_BEDROCK_STOP'));
+      }
+      addConfigParam(
+        params,
+        'frequency_penalty',
+        config?.frequency_penalty,
+        getEnvFloat('AWS_BEDROCK_FREQUENCY_PENALTY'),
+      );
+      addConfigParam(
+        params,
+        'presence_penalty',
+        config?.presence_penalty,
+        getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
+      );
+      addConfigParam(params, 'reasoning_effort', config?.reasoning_effort, undefined, undefined);
+      addConfigParam(
+        params,
+        'tools',
+        await maybeLoadToolsFromExternalFile(config?.tools, vars),
+        undefined,
+        undefined,
+      );
+      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`Bedrock API error: ${responseJson.error}`);
+      }
+
+      const choice = responseJson.choices?.[0];
+
+      // Surface tool calls (OpenAI format) the same way the Qwen handler does. Use optional
+      // chaining so a malformed tool_call entry (missing `.function`) degrades gracefully
+      // instead of throwing inside output().
+      if (choice?.message?.tool_calls && Array.isArray(choice.message.tool_calls)) {
+        const toolCalls = choice.message.tool_calls
+          .map(
+            (toolCall: any) =>
+              `Called function ${toolCall.function?.name} with arguments: ${toolCall.function?.arguments}`,
+          )
+          .join('\n');
+        return choice.message.content ? `${choice.message.content}\n\n${toolCalls}` : toolCalls;
+      }
+
+      const content = choice?.message?.content;
+      if (typeof content !== 'string') {
+        return content;
+      }
+
+      // Optionally strip a leading reasoning block. These models emit either
+      // `<think>…</think>` (Qwen-style) or `<reasoning>…</reasoning>` (gpt-oss-style);
+      // handle both. Default (showThinking unset) returns the raw output.
+      if (config.showThinking === false) {
+        for (const tag of ['think', 'reasoning']) {
+          const close = `</${tag}>`;
+          if (content.includes(`<${tag}>`) && content.includes(close)) {
+            const stripped = content.slice(content.indexOf(close) + close.length).trim();
+            // If the model returned only a reasoning block (no trailing answer), fall back to
+            // the raw content rather than silently emitting an empty string — matching the
+            // gpt-oss handler so assertions/graders never see a dropped response.
+            return stripped === '' ? content : stripped;
+          }
+        }
+      }
+
+      return content;
+    },
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
+          numRequests: 1,
+        };
+      }
+
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -2482,6 +2668,41 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'qwen.qwen3-235b-a22b-2507-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-32b-v1:0': BEDROCK_MODEL.QWEN,
 
+  // OpenAI Chat Completions-compatible families served via Bedrock InvokeModel. These all
+  // use `{ messages, max_tokens, ... }` -> `{ choices: [{ message: { content } }] }`, so they
+  // share BEDROCK_MODEL.OPENAI_COMPAT. Verified available via `aws bedrock list-foundation-models`.
+
+  // Z.AI GLM
+  'zai.glm-5': BEDROCK_MODEL.OPENAI_COMPAT,
+  'zai.glm-4.7': BEDROCK_MODEL.OPENAI_COMPAT,
+  'zai.glm-4.7-flash': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // MiniMax
+  'minimax.minimax-m2': BEDROCK_MODEL.OPENAI_COMPAT,
+  'minimax.minimax-m2.1': BEDROCK_MODEL.OPENAI_COMPAT,
+  'minimax.minimax-m2.5': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // Moonshot AI (Kimi) — note the two provider prefixes Bedrock uses (`moonshot.`/`moonshotai.`)
+  'moonshotai.kimi-k2.5': BEDROCK_MODEL.OPENAI_COMPAT,
+  'moonshot.kimi-k2-thinking': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // NVIDIA Nemotron
+  'nvidia.nemotron-nano-9b-v2': BEDROCK_MODEL.OPENAI_COMPAT,
+  'nvidia.nemotron-nano-12b-v2': BEDROCK_MODEL.OPENAI_COMPAT,
+  'nvidia.nemotron-nano-3-30b': BEDROCK_MODEL.OPENAI_COMPAT,
+  'nvidia.nemotron-super-3-120b': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // Google Gemma 3 (open models; text + image input)
+  'google.gemma-3-4b-it': BEDROCK_MODEL.OPENAI_COMPAT,
+  'google.gemma-3-12b-it': BEDROCK_MODEL.OPENAI_COMPAT,
+  'google.gemma-3-27b-it': BEDROCK_MODEL.OPENAI_COMPAT,
+
+  // Writer Palmyra — on-demand throughput is served only through the `us.` inference profile,
+  // so register those ids (the bare `writer.palmyra-x*` ids reject on-demand InvokeModel).
+  'us.writer.palmyra-x5-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us.writer.palmyra-x4-v1:0': BEDROCK_MODEL.OPENAI_COMPAT,
+  'writer.palmyra-vision-7b': BEDROCK_MODEL.OPENAI_COMPAT,
+
   // Global cross-region inference models (Nova 2)
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
 
@@ -2523,7 +2744,7 @@ export function getHandlerForModel(
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma',
       );
     }
 
@@ -2567,6 +2788,13 @@ export function getHandlerForModel(
         return BEDROCK_MODEL.QWEN;
       case 'nova2':
         return BEDROCK_MODEL.AMAZON_NOVA_2;
+      case 'zai':
+      case 'minimax':
+      case 'moonshot':
+      case 'nvidia':
+      case 'writer':
+      case 'gemma':
+        return BEDROCK_MODEL.OPENAI_COMPAT;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
@@ -2621,6 +2849,20 @@ export function getHandlerForModel(
   }
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
+  }
+  // Newer OpenAI Chat Completions-compatible families served via InvokeModel. `.includes`
+  // (not `.startsWith`) so geo/global inference profiles like `us.writer.palmyra-x5-v1:0`
+  // also match. `moonshot` covers both Bedrock prefixes (`moonshot.`/`moonshotai.`).
+  const OPENAI_COMPAT_MARKERS = [
+    'zai.',
+    'minimax',
+    'moonshot',
+    'nvidia.nemotron',
+    'writer.palmyra',
+    'google.gemma',
+  ];
+  if (OPENAI_COMPAT_MARKERS.some((marker) => modelName.includes(marker))) {
+    return BEDROCK_MODEL.OPENAI_COMPAT;
   }
   // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
   // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the

@@ -2400,6 +2400,32 @@ Third line`;
 
       expect(result.cost).toBeUndefined();
     });
+
+    // OpenAI-compatible families. 10k input + 5k output tokens; cost = in/1M*inRate + out/1M*outRate.
+    // Covers geo-prefixed (`us.`) and version-suffixed (`-m2.5`) ids to lock in the
+    // order-sensitive `includes()` pricing-key matching.
+    it.each([
+      { id: 'zai.glm-5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
+      { id: 'us.zai.glm-5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
+      { id: 'minimax.minimax-m2', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
+      { id: 'minimax.minimax-m2.5', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
+      { id: 'moonshotai.kimi-k2.5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
+      { id: 'moonshot.kimi-k2-thinking', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
+      { id: 'nvidia.nemotron-super-3-120b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.6 },
+      { id: 'google.gemma-3-12b-it', expected: (10000 / 1e6) * 0.1 + (5000 / 1e6) * 0.3 },
+      { id: 'us.writer.palmyra-x5-v1:0', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 6 },
+    ])('should calculate cost for OpenAI-compatible model $id', async ({ id, expected }) => {
+      const provider = new AwsBedrockConverseProvider(id, { config: { region: 'us-east-1' } });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeCloseTo(expected, 6);
+    });
   });
 
   describe('caching', () => {

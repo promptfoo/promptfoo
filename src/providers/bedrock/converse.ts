@@ -224,6 +224,15 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // Writer Palmyra
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
+  // Newer OpenAI Chat-compatible families. Pricing is estimated — AWS does not publish
+  // per-token rates for all of these on the public pricing page; verify current rates at
+  // https://aws.amazon.com/bedrock/pricing/ . `includes()` matching tolerates geo prefixes
+  // (e.g. `us.zai.glm-5`) and version suffixes (e.g. `minimax.minimax-m2.5`).
+  'zai.glm': { input: 0.6, output: 2.2 },
+  'minimax.minimax-m2': { input: 0.3, output: 1.2 },
+  moonshot: { input: 0.6, output: 2.5 },
+  'nvidia.nemotron': { input: 0.15, output: 0.6 },
+  'google.gemma': { input: 0.1, output: 0.3 },
   // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
   // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
   // Responses API (see src/providers/bedrock/openaiResponses.ts).

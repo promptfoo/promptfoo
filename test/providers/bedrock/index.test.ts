@@ -4383,3 +4383,238 @@ describe('coerceStrToNum', () => {
     expect(Number.isNaN(coerceStrToNum('not-a-number') as number)).toBe(true);
   });
 });
+
+describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
+  const modelHandler = BEDROCK_MODEL.OPENAI_COMPAT;
+
+  describe('params', () => {
+    it('sends max_tokens (not max_completion_tokens) with the OpenAI chat schema', async () => {
+      const params = await modelHandler.params(
+        { max_tokens: 256, temperature: 0.4, top_p: 0.9 },
+        'Hello there',
+        ['STOP'],
+      );
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Hello there' }],
+        max_tokens: 256,
+        temperature: 0.4,
+        top_p: 0.9,
+        stop: ['STOP'],
+      });
+      expect(params).not.toHaveProperty('max_completion_tokens');
+    });
+
+    it('omits temperature and top_p when not configured', async () => {
+      const params = await modelHandler.params({}, 'Hi', []);
+      expect(params).toEqual({ messages: [{ role: 'user', content: 'Hi' }] });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+    });
+
+    it('passes through reasoning_effort and OpenAI-format tools', async () => {
+      const tools = [
+        {
+          type: 'function' as const,
+          function: { name: 'calc', description: 'do math', parameters: { type: 'object' } },
+        },
+      ];
+      const params = await modelHandler.params(
+        { reasoning_effort: 'high', tools, tool_choice: 'auto' },
+        'compute',
+        [],
+      );
+      expect(params.reasoning_effort).toBe('high');
+      expect(params.tools).toEqual(tools);
+      expect(params.tool_choice).toBe('auto');
+    });
+
+    it('does not let an explicit empty stop array shadow config.stop', async () => {
+      const params = await modelHandler.params({ stop: ['CONFIG_STOP'] }, 'Hi', []);
+      expect(params.stop).toEqual(['CONFIG_STOP']);
+    });
+
+    it('applies env-var fallbacks for max_tokens/temperature/top_p when not configured', async () => {
+      const restore = mockProcessEnv({
+        AWS_BEDROCK_MAX_TOKENS: '512',
+        AWS_BEDROCK_TEMPERATURE: '0.2',
+        AWS_BEDROCK_TOP_P: '0.8',
+      });
+      try {
+        const params = await modelHandler.params({}, 'Hi', []);
+        expect(params).toEqual({
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 512,
+          temperature: 0.2,
+          top_p: 0.8,
+        });
+      } finally {
+        restore();
+      }
+    });
+  });
+
+  describe('output', () => {
+    it('extracts content from the chat-completion response', () => {
+      expect(modelHandler.output({}, { choices: [{ message: { content: 'final answer' } }] })).toBe(
+        'final answer',
+      );
+    });
+
+    it('returns reasoning verbatim by default and strips it when showThinking is false', () => {
+      const withThink = { choices: [{ message: { content: '<think>steps</think>answer' } }] };
+      const withReasoning = {
+        choices: [{ message: { content: '<reasoning>steps</reasoning>answer' } }],
+      };
+      // Default: raw output preserved.
+      expect(modelHandler.output({}, withThink)).toBe('<think>steps</think>answer');
+      expect(modelHandler.output({}, withReasoning)).toBe('<reasoning>steps</reasoning>answer');
+      // showThinking: false strips either tag style.
+      expect(modelHandler.output({ showThinking: false }, withThink)).toBe('answer');
+      expect(modelHandler.output({ showThinking: false }, withReasoning)).toBe('answer');
+    });
+
+    it('falls back to raw content when stripping a reasoning-only response would empty it', () => {
+      // A reasoning-only/truncated turn must not become an empty string under showThinking:false.
+      const reasoningOnly = {
+        choices: [{ message: { content: '<think>only reasoning</think>' } }],
+      };
+      expect(modelHandler.output({ showThinking: false }, reasoningOnly)).toBe(
+        '<think>only reasoning</think>',
+      );
+    });
+
+    it('does not strip an unclosed reasoning tag', () => {
+      const unclosed = { choices: [{ message: { content: '<think>truncated reasoning' } }] };
+      expect(modelHandler.output({ showThinking: false }, unclosed)).toBe(
+        '<think>truncated reasoning',
+      );
+    });
+
+    it('returns non-string content (e.g. multimodal blocks) unchanged', () => {
+      const blocks = [{ type: 'text', text: 'hi' }];
+      expect(modelHandler.output({}, { choices: [{ message: { content: blocks } }] })).toBe(blocks);
+    });
+
+    it('returns undefined when the response has no choices', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+    });
+
+    it('renders tool calls', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Called function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('concatenates assistant content with tool calls when both are present', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: 'Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('does not throw on a malformed tool_call missing its function field', () => {
+      const response = { choices: [{ message: { content: '', tool_calls: [{ id: 'x' }] } }] };
+      expect(() => modelHandler.output({}, response)).not.toThrow();
+      expect(modelHandler.output({}, response)).toContain('Called function');
+    });
+
+    it('throws on an error response', () => {
+      expect(() => modelHandler.output({}, { error: 'boom' })).toThrow('Bedrock API error: boom');
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('extracts usage from the OpenAI usage object', () => {
+      expect(
+        modelHandler.tokenUsage!(
+          { usage: { prompt_tokens: 11, completion_tokens: 22, total_tokens: 33 } },
+          'prompt',
+        ),
+      ).toEqual({ prompt: 11, completion: 22, total: 33, numRequests: 1 });
+    });
+
+    it('returns undefined counts when usage is absent', () => {
+      expect(modelHandler.tokenUsage!({}, 'prompt')).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('getHandlerForModel routing for OpenAI-compatible families', () => {
+  it.each([
+    'zai.glm-5',
+    'zai.glm-4.7-flash',
+    'us.zai.glm-5',
+    'minimax.minimax-m2',
+    'minimax.minimax-m2.5',
+    'moonshotai.kimi-k2.5',
+    'moonshot.kimi-k2-thinking',
+    'nvidia.nemotron-nano-9b-v2',
+    'nvidia.nemotron-super-3-120b',
+    'google.gemma-3-12b-it',
+    'writer.palmyra-x5-v1:0',
+    'us.writer.palmyra-x5-v1:0',
+    'writer.palmyra-vision-7b',
+  ])('routes %s to OPENAI_COMPAT', (modelName) => {
+    expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+  });
+
+  it.each([
+    'zai.glm-5',
+    'zai.glm-4.7',
+    'zai.glm-4.7-flash',
+    'minimax.minimax-m2',
+    'minimax.minimax-m2.1',
+    'minimax.minimax-m2.5',
+    'moonshotai.kimi-k2.5',
+    'moonshot.kimi-k2-thinking',
+    'nvidia.nemotron-nano-9b-v2',
+    'nvidia.nemotron-nano-12b-v2',
+    'nvidia.nemotron-nano-3-30b',
+    'nvidia.nemotron-super-3-120b',
+    'google.gemma-3-4b-it',
+    'google.gemma-3-12b-it',
+    'google.gemma-3-27b-it',
+    'us.writer.palmyra-x5-v1:0',
+    'us.writer.palmyra-x4-v1:0',
+    'writer.palmyra-vision-7b',
+  ])('registers %s in AWS_BEDROCK_MODELS', (modelName) => {
+    expect(AWS_BEDROCK_MODELS[modelName]).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+  });
+
+  it.each([
+    'zai',
+    'minimax',
+    'moonshot',
+    'nvidia',
+    'writer',
+    'gemma',
+  ] as const)('maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT', (inferenceModelType) => {
+    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
+    expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+  });
+});
