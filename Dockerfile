@@ -57,6 +57,8 @@ COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
 RUN ln -s /app /app/node_modules/promptfoo && \
     chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \
+    ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo && \
+    ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && \
     mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo
 
 ENV API_PORT=3000
