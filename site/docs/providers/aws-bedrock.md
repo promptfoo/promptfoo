@@ -505,7 +505,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-opus-20240229-v1:0
+  - id: bedrock:us.anthropic.claude-opus-4-8
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -887,7 +887,15 @@ This is useful when you want to use thinking for better reasoning but don't want
 
 ### Titan Models
 
-For Titan models (e.g., `amazon.titan-text-express-v1`), you can use the following configuration options:
+:::warning Retired
+
+Amazon **Titan text** models (`amazon.titan-text-express/lite/premier`) have been retired on
+Bedrock and are no longer available in any Region. Use [Amazon Nova](#amazon-nova-models)
+instead. Titan **embeddings** models remain available (see [Embeddings](#embeddings)).
+
+:::
+
+For the (legacy) Titan text models, you can use the following configuration options:
 
 ```yaml
 config:
@@ -965,7 +973,7 @@ The Converse API uses the same prompt format shown above for [Nova Vision](#nova
 
 ### Cohere Models
 
-For Cohere models (e.g., `cohere.command-text-v14`), you can use the following configuration options:
+For Cohere models (e.g., `cohere.command-r-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:

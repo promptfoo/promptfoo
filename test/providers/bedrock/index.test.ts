@@ -3475,12 +3475,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-opus-20240229-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-20250514-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3507,6 +3501,43 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
+  it('does not list models that are EOL on Bedrock (removed from all regions)', () => {
+    // Verified via `aws bedrock list-foundation-models` across all commercial regions: these
+    // are no longer offered anywhere, so they must not appear in the supported-models list.
+    // (Claude 3.5/3.7 Sonnet are intentionally kept — still offered in APAC regions.)
+    for (const id of [
+      'amazon.titan-text-express-v1',
+      'amazon.titan-text-lite-v1',
+      'amazon.titan-text-premier-v1:0',
+      'anthropic.claude-3-opus-20240229-v1:0',
+      'us.anthropic.claude-3-opus-20240229-v1:0',
+      'anthropic.claude-opus-4-20250514-v1:0',
+      'us.anthropic.claude-opus-4-20250514-v1:0',
+      'anthropic.claude-instant-v1',
+      'anthropic.claude-v1',
+      'anthropic.claude-v2',
+      'anthropic.claude-v2:1',
+      'cohere.command-text-v14',
+      'cohere.command-light-text-v14',
+      'meta.llama2-13b-chat-v1',
+      'meta.llama2-70b-chat-v1',
+    ]) {
+      expect(AWS_BEDROCK_MODELS[id]).toBeUndefined();
+    }
+  });
+
+  it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
   });
