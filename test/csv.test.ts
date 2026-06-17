@@ -1,5 +1,6 @@
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseCommaSeparatedValues } from '../src/assertions/contains';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 
@@ -478,6 +479,55 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString('icontains-any: alpha, , beta,, ');
 
     expect(result.value).toEqual(['alpha', 'beta']);
+  });
+
+  // csv.ts intentionally keeps a private copy of the contains-assertion value
+  // parser (it cannot import the assertion handlers without bundling backend code
+  // into the frontend; see the comment in src/csv.ts). This drift guard fails if
+  // the two implementations ever diverge so the copies are kept byte-for-byte
+  // equivalent.
+  it.each([
+    '"hello, world",foo',
+    String.raw`"say \"hi\"",b`,
+    'a ""quoted"" value, plain',
+    'alpha, , beta,, ',
+    '  spaced  ,  next  ',
+    '"only one"',
+    'no-quotes-at-all',
+    '"trailing"   ',
+    'a,b,c',
+    '""',
+    '" ",x',
+    'x,"y,z"',
+    '"a","b"',
+    '"a" , "b"',
+    String.raw`"\n",x`,
+    String.raw`"\\",x`,
+    'a,',
+    ',a',
+    ',,,',
+    '"comma,inside","another, one"',
+    'mix,"quoted, field",bare',
+    '"a""b""c"',
+    '"a"b,c',
+    '"unterminated',
+  ])('csv parser matches the canonical contains parser for %j', (input) => {
+    const parseViaCsv = () => assertionFromString(`contains-any:${input}`).value;
+    const parseViaContains = () => parseCommaSeparatedValues(input);
+
+    let canonical: string[] | undefined;
+    let canonicalError: Error | undefined;
+    try {
+      canonical = parseViaContains();
+    } catch (error) {
+      canonicalError = error as Error;
+    }
+
+    if (canonicalError) {
+      expect(parseViaCsv).toThrow(canonicalError.message);
+    } else {
+      expect(parseViaCsv()).toEqual(canonical);
+    }
   });
 
   it('should reject malformed quoted contains assertion values', () => {
