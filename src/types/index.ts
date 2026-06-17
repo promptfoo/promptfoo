@@ -309,6 +309,12 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
 
+/** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Normalized value of --filter-providers or --filter-targets. */
+  providerFilter?: string;
+};
+
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
@@ -1434,7 +1440,7 @@ export interface OutputFile {
   shareableUrl: string | null;
   metadata?: OutputMetadata;
   vars?: string[];
-  runtimeOptions?: Partial<EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   traces?: TraceData[];
   blobAssets?: ExportedBlobAsset[];
 }

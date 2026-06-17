@@ -196,7 +196,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           const values = value
             .split(/(?<!\\),/)
             .map((v) => v.trim())
-            .map((v) => v.replace('\\,', ','));
+            .map((v) => v.replace(/\\,/g, ','));
           metadata[arrayKey] = values;
         }
       } else {

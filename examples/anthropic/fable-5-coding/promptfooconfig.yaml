@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Fable 5 advanced coding with xhigh effort and always-on adaptive thinking
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  - id: anthropic:messages:claude-fable-5
+    config:
+      # Fable 5 always uses adaptive thinking — there is no `thinking` block to
+      # set. Manual budgets (`type: enabled`) are converted to adaptive and
+      # `type: disabled` is omitted because thinking cannot be turned off.
+      #
+      # Fable 5 also rejects manual sampling controls (temperature/top_p/top_k)
+      # at the model level — promptfoo omits them automatically, so don't set
+      # them here.
+      effort: xhigh # Recommended starting point for coding/agentic work (between high and max)
+      # Always-on adaptive thinking consumes output tokens before any visible
+      # text. Budget max_tokens generously — at xhigh effort a tight budget can
+      # be spent entirely on thinking, yielding an empty response.
+      max_tokens: 16000
+
+tests:
+  # Distributed-systems debugging with incomplete information
+  - vars:
+      task: |
+        A payment service intermittently double-charges customers. Here's what you know:
+
+        1. The charge endpoint is idempotent — it checks for an existing charge by idempotency key before creating one
+        2. The idempotency check reads from a Postgres replica; writes go to the primary
+        3. Replication lag spikes to 2-3 seconds during peak traffic
+        4. Clients retry on timeout with the same idempotency key
+        5. Double charges only happen during peak hours
+        6. Each double charge shows two rows with the same idempotency key but different charge IDs
+
+        Diagnose the root cause and propose a fix. Explain why the idempotency check fails despite using the same key.
+    assert:
+      - type: contains-any
+        value: ['replica', 'replication lag', 'read-after-write', 'primary', 'race']
+        reason: Should identify the stale-replica read as the root cause
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Identify the root cause (idempotency check reads a lagging replica, so a retry during the lag window misses the in-flight charge)
+          2. Explain why it only happens at peak (replication lag exceeds the client retry interval)
+          3. Propose concrete fixes (read idempotency checks from the primary, unique constraint on idempotency key, or insert-first/conflict-based idempotency)
+          4. Note that a unique constraint is the only fix that closes the race completely
+
+  # Production-quality code generation with concurrency concerns
+  - vars:
+      task: |
+        Write a TypeScript class implementing a token-bucket rate limiter that:
+        1. Supports a configurable capacity and refill rate
+        2. Is safe to call concurrently from async code
+        3. Exposes acquire() that resolves when a token is available (with optional timeout)
+        4. Avoids busy-waiting and timer leaks
+
+        Include proper typing and comments explaining design decisions.
+    assert:
+      - type: contains
+        value: 'class'
+        reason: Should define a TypeScript class
+      - type: contains-any
+        value: ['Promise', 'async', 'await']
+        reason: Should use async primitives
+      - type: llm-rubric
+        value: |
+          The code should:
+          1. Implement correct token-bucket math (refill proportional to elapsed time, capped at capacity)
+          2. Queue waiters instead of busy-waiting
+          3. Clean up timers when acquire() times out or resolves
+          4. Use precise TypeScript types (no `any`)
+          5. Include comments explaining the concurrency-safety reasoning
+          6. Be production-ready (not a toy example)
+
+  # Code review with prioritized, nuanced feedback
+  - vars:
+      task: |
+        Review this Express handler and provide feedback:
+
+        ```js
+        app.post('/upload', async (req, res) => {
+          const file = req.files.document;
+          const dest = path.join('/uploads', req.body.filename);
+          await file.mv(dest);
+          const meta = JSON.parse(req.body.metadata);
+          db.query(`INSERT INTO uploads (path, owner) VALUES ('${dest}', '${meta.owner}')`);
+          res.json({ ok: true, path: dest });
+        });
+        ```
+
+        Identify issues, suggest improvements, and explain the reasoning behind each suggestion. Prioritize by severity.
+    assert:
+      - type: contains-any
+        value: ['injection', 'traversal', 'sanitize', 'parameterized']
+        reason: Should identify the SQL injection and path traversal vulnerabilities
+      - type: llm-rubric
+        value: |
+          The review should identify multiple issues, prioritized by severity:
+          1. SQL injection via string-interpolated query (critical)
+          2. Path traversal via user-controlled filename (critical)
+          3. Unhandled JSON.parse exception on malformed metadata
+          4. No validation that req.files.document exists
+          5. Unawaited/unchecked db.query result
+
+          For each issue, it should:
+          - Explain why it's a problem
+          - Suggest specific improvements (parameterized queries, basename/allowlist for paths)
+          - Provide example code where helpful

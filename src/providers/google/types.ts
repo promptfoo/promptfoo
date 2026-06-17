@@ -110,8 +110,8 @@ export interface Tool {
 }
 
 export type ClaudeThinkingConfig =
-  | { type: 'enabled'; budget_tokens?: number }
-  | { type: 'adaptive' }
+  | { type: 'enabled'; budget_tokens?: number; display?: 'summarized' | 'omitted' }
+  | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
   | { type: 'disabled' };
 
 export interface CompletionOptions {

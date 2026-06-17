@@ -128,6 +128,11 @@ jobs:
         run: npx -y npm@11.11.0 ci
 
       - name: Test
+        # Treat a post-run forks-worker crash (all tests already passed, then the
+        # worker dies on teardown -> "Worker exited unexpectedly") as non-fatal in
+        # CI. Real test/assertion failures still fail; see vitest.config.ts.
+        env:
+          PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
 
       - name: Check Backend Coverage Ratchets
@@ -208,7 +213,7 @@ jobs:
           fi
 
       - name: Test Package Artifact
-        if: matrix.node == '20.20'
+        if: matrix.node == '20.20' || matrix.node == '26.x'
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact

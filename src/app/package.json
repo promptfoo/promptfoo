@@ -21,7 +21,7 @@
     "build-storybook": "storybook build"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
+    "@babel/core": "^7.29.6",
     "@chromatic-com/storybook": "^5.2.1",
     "@kurkle/color": "^0.4.0",
     "@storybook/addon-a11y": "^10.4.0",
@@ -59,7 +59,7 @@
     "jsdom": "^29.0.0",
     "lucide-react": "^1.0.0",
     "postcss": "^8.5.10",
-    "posthog-js": "^1.343.0",
+    "posthog-js": "1.379.1",
     "prismjs": "^1.30.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -76,7 +76,7 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "use-debounce": "^10.1.0",
-    "vite": "^8.0.5",
+    "vite": "^8.0.16",
     "vitest": "^4.1.0",
     "zustand": "^5.0.12"
   },

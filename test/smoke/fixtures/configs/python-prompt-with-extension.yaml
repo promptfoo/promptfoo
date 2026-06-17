@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Python prompt function with Python extension hook (issue #9653)'
+
+extensions:
+  - file://../scripts/extension_hook.py:extension_hook
+
+prompts:
+  - id: file://../prompts/create_prompt.py:create_prompt
+    label: hooked-prompt
+
+providers:
+  - echo
+
+tests:
+  - vars:
+      topic: Linear Algebra
