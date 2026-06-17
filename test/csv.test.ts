@@ -396,6 +396,28 @@ describe('testCaseFromCsvRow', () => {
     // would clobber that inheritance (NaN ?? x === NaN), so the key must be omitted entirely.
     expect(result).not.toHaveProperty('threshold');
   });
+
+  it.each([
+    ['integer', '5', 5],
+    ['decimal', '0.8', 0.8],
+    ['leading-dot decimal', '.5', 0.5],
+    ['negative', '-1', -1],
+    ['exponent', '1e3', 1000],
+    ['surrounding whitespace', '  0.8  ', 0.8],
+  ])('should parse a %s __threshold cell to %s', (_label, thresholdValue, expected) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // Pins the numeric contract of parseFiniteNumber: complete numeric literals
+    // (including negatives, exponents, and leading-dot decimals) are accepted and
+    // trimmed. This is intentionally wider than a bare integer parse, so the behavior
+    // is locked down here to catch any future regression in the shared parser.
+    expect(result.threshold).toBe(expected);
+  });
 });
 
 describe('assertionFromString', () => {
