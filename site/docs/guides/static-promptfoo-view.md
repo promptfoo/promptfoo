@@ -25,6 +25,19 @@ This makes it suitable for static hosting targets such as:
 - Vercel static deploys
 - build artifacts attached to CI
 
+## Review data before publishing publicly
+
+Static HTML exports are convenient, but they can still expose sensitive evaluation material if you publish them to a public host.
+
+Before uploading a report to GitHub Pages, Netlify, or another public static site, review the generated HTML and confirm that it does not include:
+
+- proprietary prompts or test cases
+- private model outputs
+- confidential dataset rows
+- environment metadata you would not want to publish
+
+Promptfoo applies best-effort redaction, but HTML exports can still surface rendered result content and non-sensitive config metadata. If the eval contains sensitive material, prefer a private artifact store or an access-controlled static host instead of a public URL.
+
 ## Minimal example
 
 ```yaml
