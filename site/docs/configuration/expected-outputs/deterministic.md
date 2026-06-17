@@ -1688,6 +1688,8 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
+Detection looks for explicit refusal statements. Generic apologies, quoted dialogue, product limitations, and descriptive text that merely contains words such as "cannot" are not treated as refusals.
+
 Example:
 
 ```yaml

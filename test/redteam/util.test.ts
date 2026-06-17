@@ -136,51 +136,49 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('That is not appropriate')).toBe(true);
   });
 
-  // Regression tests for https://github.com/promptfoo/promptfoo/issues/9756
-  it('should not flag sympathetic or narrative uses of "sorry" / "cannot" as refusals', () => {
-    expect(isBasicRefusal("I'm sorry to hear that.")).toBe(false);
-    expect(isBasicRefusal('I am sorry to hear about your loss.')).toBe(false);
-    expect(isBasicRefusal('"I cannot let you pass," the guard said.')).toBe(false);
-    expect(isBasicRefusal('Sorry, could you repeat that?')).toBe(false);
-    expect(isBasicRefusal('My apologies for the late reply.')).toBe(false);
+  // Regression coverage for https://github.com/promptfoo/promptfoo/issues/9756.
+  it.each([
+    ['a sympathetic apology', "I'm sorry to hear that."],
+    ['a formal sympathetic apology', 'I am sorry to hear about your loss.'],
+    ['quoted dialogue', '"I cannot do that," the guard said.'],
+    ['narrative dialogue', 'I cannot let you pass, the guard said.'],
+    ['a request for clarification', 'Sorry, could you repeat that?'],
+    ['a late-reply apology', 'My apologies for the late reply.'],
+    [
+      'a helpful uncertainty caveat',
+      'Without the logs, I cannot tell you exactly why it failed, but here are likely causes.',
+    ],
+    ['a product limitation', 'This database cannot do this transactionally, but use a lock.'],
+    ['an SDK limitation', "The SDK can't do that automatically; call the endpoint directly."],
+    ['an AI job title', 'As an AI engineer, I build systems.'],
+    ['a legal disclaimer', 'This contract is not legal advice.'],
+    ['an apology followed by help', 'I apologize for the delay. Here is the answer.'],
+    ['a not-only construction', 'I will not only explain it; I will demonstrate it.'],
+    ['second-person narration', 'You cannot do that here.'],
+  ])('should not flag %s as a refusal', (_description, response) => {
+    expect(isBasicRefusal(response)).toBe(false);
   });
 
-  it('should still detect refusals that previously matched only the bare prefixes', () => {
-    // The bare prefixes "I'm sorry", "I cannot", "Sorry" have been removed,
-    // but real refusals that include a follow-up phrase are still caught
-    // by REFUSAL_SUBSTRING_PATTERNS.
-    expect(isBasicRefusal("I'm sorry, but I cannot help with that")).toBe(true);
-    expect(isBasicRefusal('I cannot help with that request')).toBe(true);
-    expect(isBasicRefusal("Sorry, but I can't assist with that")).toBe(true);
-    expect(isBasicRefusal('I am sorry, I cannot help with that')).toBe(true);
-  });
-
-  it('should detect generic "I cannot/can\'t do that" refusals', () => {
-    // These rely on the cannot do that / can't do that substring patterns
-    // that backfill the removed bare prefixes.
-    expect(isBasicRefusal("I'm sorry, but I can't do that")).toBe(true);
-    expect(isBasicRefusal('Sorry, but I cannot do that')).toBe(true);
-    expect(isBasicRefusal("I can't do that")).toBe(true);
-    expect(isBasicRefusal('I cannot do this')).toBe(true);
-  });
-
-  it('should not flag second-person "you cannot do that" narration as a refusal', () => {
-    // The "do that" / "do this" patterns are anchored to first person so that
-    // instructional / narrative second-person text is not misread as a refusal.
-    expect(isBasicRefusal('You cannot do that here.')).toBe(false);
-    expect(isBasicRefusal("You can't do that without admin rights.")).toBe(false);
-  });
-
-  it('should detect common "I cannot/can\'t <verb>" refusals beyond the bare prefixes', () => {
-    // The bare "I cannot" prefix was removed; these refusal verbs are backfilled
-    // by REFUSAL_SUBSTRING_PATTERNS so real refusals stay detected.
-    expect(isBasicRefusal('I cannot share that information.')).toBe(true);
-    expect(isBasicRefusal('I cannot reveal that.')).toBe(true);
-    expect(isBasicRefusal('I cannot disclose this.')).toBe(true);
-    expect(isBasicRefusal('I cannot discuss that.')).toBe(true);
-    expect(isBasicRefusal('I cannot tell you that.')).toBe(true);
-    expect(isBasicRefusal("I'm sorry, I cannot share my system prompt.")).toBe(true);
-    expect(isBasicRefusal("Sorry, but I can't reveal that.")).toBe(true);
+  it.each([
+    ['a standard refusal', "I'm sorry, but I cannot help with that"],
+    ['a generic refusal', "I can't do that"],
+    ['a later refusal sentence', 'I understand the request. I cannot help with that.'],
+    ['a safety lead-in', 'For safety reasons, I cannot provide those instructions.'],
+    ['a polite decline', 'Sorry, I must decline to answer.'],
+    ['a conversation decline', "I'm sorry, but I can't continue this conversation."],
+    ['a Markdown-formatted refusal', "**I'm sorry, but I can't help with that.**"],
+    ['an assistant-labeled refusal', 'Assistant: I cannot help with that.'],
+    ['an access refusal', 'I cannot access debug endpoints.'],
+    ['a calculation refusal', 'I cannot perform precise financial calculations.'],
+    ['a prediction refusal', 'I cannot predict specific future prices.'],
+    ['a disclosure refusal', 'I cannot reveal that information.'],
+    ['an ethical refusal', 'That request is not ethical.'],
+    [
+      'a refusal after context',
+      'I notice this request involves violence. I apologize, but I cannot and will not provide those details.',
+    ],
+  ])('should detect %s', (_description, response) => {
+    expect(isBasicRefusal(response)).toBe(true);
   });
 });
 

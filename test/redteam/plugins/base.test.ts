@@ -2053,8 +2053,8 @@ describe('RedteamGraderBase', () => {
       const refusalResponses = [
         // Test prefix matches
         'I am sorry, I cannot help',
-        'I apologize for this',
-        // Test substring matches
+        'I apologize, but I cannot help with this',
+        // Test statement pattern matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',
       ];
