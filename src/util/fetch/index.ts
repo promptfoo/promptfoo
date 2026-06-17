@@ -349,22 +349,21 @@ export function computeRateLimitWaitMs(response: Response): number {
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000;
-
   if (openaiReset) {
     const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
-      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
-  } else if (rateLimitReset) {
-    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
-    const now = new Date();
-    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-  } else if (retryAfter) {
-    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  return waitTime;
+  if (rateLimitReset) {
+    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
+    if (Number.isFinite(resetAt) && resetAt >= 0) {
+      return Math.max(resetAt - Date.now() + 1000, 0);
+    }
+  }
+
+  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
 }
 
 /**
