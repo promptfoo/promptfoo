@@ -24,11 +24,6 @@ export type HygieneFile = {
   sourceFile: ts.SourceFile;
 };
 
-export type HygieneCorpus = {
-  files: readonly HygieneFile[];
-  rootDir: string;
-};
-
 export type ReadDirectory = (directory: string) => readonly DirectoryEntry[];
 export type ReadSource = (file: string) => string;
 export type ParseSource = (file: string, source: string) => ts.SourceFile;
@@ -38,11 +33,19 @@ export type DiscoverTestFilesOptions = {
   testFilePattern?: RegExp;
 };
 
-export type CreateHygieneCorpusOptions = DiscoverTestFilesOptions & {
+export type HygieneScanSummary = {
+  discoveredFiles: number;
+  excludedFiles: number;
+  missingFiles: number;
+  scannedFiles: number;
+};
+
+export type ScanHygieneFilesOptions = DiscoverTestFilesOptions & {
   excludeFiles?: readonly string[];
   parseSource?: ParseSource;
   readFile?: ReadSource;
   rootDir: string;
+  scanFile: (file: HygieneFile) => void;
 };
 
 type DiagnosticInput = {
@@ -146,12 +149,14 @@ export function createHygieneFile({
   };
 }
 
-export function createHygieneCorpus(options: CreateHygieneCorpusOptions): HygieneCorpus {
+export function scanHygieneFiles(options: ScanHygieneFilesOptions): HygieneScanSummary {
   const rootDir = path.resolve(options.rootDir);
   const excludeFiles = new Set((options.excludeFiles ?? []).map((file) => path.resolve(file)));
   const readFile = options.readFile ?? defaultReadSource;
   const parseSource = options.parseSource ?? defaultParseSource;
-  const files: HygieneFile[] = [];
+  let excludedFiles = 0;
+  let missingFiles = 0;
+  let scannedFiles = 0;
 
   const discoveredFiles = discoverTestFiles(rootDir, {
     readDirectory: options.readDirectory,
@@ -160,6 +165,7 @@ export function createHygieneCorpus(options: CreateHygieneCorpusOptions): Hygien
 
   for (const absolutePath of discoveredFiles) {
     if (excludeFiles.has(path.resolve(absolutePath))) {
+      excludedFiles += 1;
       continue;
     }
 
@@ -168,16 +174,26 @@ export function createHygieneCorpus(options: CreateHygieneCorpusOptions): Hygien
       source = readFile(absolutePath);
     } catch (error) {
       if (isMissingPathError(error)) {
+        missingFiles += 1;
         continue;
       }
       throw error;
     }
 
     const file = toPosixRelativePath(rootDir, absolutePath);
-    files.push(createHygieneFile({ absolutePath, file, parseSource, source }));
+    // Keep the parsed file scoped to this callback. Callers should retain only
+    // primitive diagnostics or counters so the source and parent-linked AST
+    // become collectible before the next file is processed.
+    options.scanFile(createHygieneFile({ absolutePath, file, parseSource, source }));
+    scannedFiles += 1;
   }
 
-  return { files, rootDir };
+  return {
+    discoveredFiles: discoveredFiles.length,
+    excludedFiles,
+    missingFiles,
+    scannedFiles,
+  };
 }
 
 export function normalizeSnippet(

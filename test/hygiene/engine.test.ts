@@ -6,11 +6,11 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDiagnostic,
-  createHygieneCorpus,
   createHygieneFile,
   discoverTestFiles,
   type HygieneDiagnostic,
   normalizeSnippet,
+  scanHygieneFiles,
   sortDiagnostics,
   toPosixRelativePath,
 } from './engine';
@@ -139,7 +139,7 @@ describe('hygiene engine', () => {
     expect(diagnostics[0].ruleId).toBe('z-rule');
   });
 
-  it('reads and parses every included test file exactly once', () => {
+  it('streams included test files in deterministic order with one read and parse each', () => {
     const rootDir = makeTempDirectory();
     const nestedDir = path.join(rootDir, 'nested');
     mkdirSync(nestedDir);
@@ -155,16 +155,64 @@ describe('hygiene engine', () => {
     const parseSource = vi.fn((file: string, source: string) =>
       ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true),
     );
+    const scannedFiles: string[] = [];
 
-    const corpus = createHygieneCorpus({
+    const summary = scanHygieneFiles({
       rootDir,
       excludeFiles: [excludedFile],
       readFile,
       parseSource,
+      scanFile(file) {
+        scannedFiles.push(file.file);
+      },
     });
 
-    expect(corpus.files.map(({ file }) => file)).toEqual(['a.test.ts', 'nested/b.spec.ts']);
+    expect(scannedFiles).toEqual(['a.test.ts', 'nested/b.spec.ts']);
     expect(readFile.mock.calls).toEqual([[firstFile], [secondFile]]);
     expect(parseSource.mock.calls.map(([file]) => file)).toEqual(['a.test.ts', 'nested/b.spec.ts']);
+    expect(summary).toEqual({
+      discoveredFiles: 3,
+      excludedFiles: 1,
+      missingFiles: 0,
+      scannedFiles: 2,
+    });
+  });
+
+  it('skips a test file that disappears between discovery and reading', () => {
+    const rootDir = makeTempDirectory();
+    const missingFile = path.join(rootDir, 'a-missing.test.ts');
+    const stableFile = path.join(rootDir, 'b-stable.test.ts');
+    writeFileSync(missingFile, 'const missing = true;');
+    writeFileSync(stableFile, 'const stable = true;');
+
+    const readFile = vi.fn((file: string) => {
+      if (file === missingFile) {
+        throw Object.assign(new Error('file disappeared'), { code: 'ENOENT' });
+      }
+      return readFileSync(file, 'utf8');
+    });
+    const parseSource = vi.fn((file: string, source: string) =>
+      ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true),
+    );
+    const scannedFiles: string[] = [];
+
+    const summary = scanHygieneFiles({
+      rootDir,
+      readFile,
+      parseSource,
+      scanFile(file) {
+        scannedFiles.push(file.file);
+      },
+    });
+
+    expect(readFile.mock.calls).toEqual([[missingFile], [stableFile]]);
+    expect(parseSource).toHaveBeenCalledOnce();
+    expect(scannedFiles).toEqual(['b-stable.test.ts']);
+    expect(summary).toEqual({
+      discoveredFiles: 2,
+      excludedFiles: 0,
+      missingFiles: 1,
+      scannedFiles: 1,
+    });
   });
 });
