@@ -98,6 +98,24 @@ function getVertexApiHost(
   );
 }
 
+/**
+ * Remove Gemini context-cache read details from a token usage object served from
+ * promptfoo's disk cache. `cacheReadInputTokens` reflects a read against Gemini's
+ * server-side context cache, which only happens on a live request. A disk-cache hit
+ * replays a stored payload without contacting Google, so re-surfacing this field would
+ * double-count reads that never occurred (aggregate usage/traces sum it per result).
+ * Reasoning/prediction details are left intact since they describe the cached response.
+ */
+function stripCachedContextReadDetails(tokenUsage: TokenUsage): void {
+  const { completionDetails } = tokenUsage;
+  if (completionDetails && 'cacheReadInputTokens' in completionDetails) {
+    delete completionDetails.cacheReadInputTokens;
+    if (Object.keys(completionDetails).length === 0) {
+      delete tokenUsage.completionDetails;
+    }
+  }
+}
+
 function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): string {
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
   return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
@@ -579,6 +597,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
+          // A disk-cache hit serves a stored payload without contacting Google, so no
+          // Gemini context-cache read occurred. Strip the persisted cacheReadInputTokens
+          // so repeated cache-served evals don't keep re-reporting reads that never
+          // happened (aggregate usage/traces sum these per result).
+          stripCachedContextReadDetails(tokenUsage);
         }
         logger.debug('Returning cached Vertex Gemini response', {
           model: this.modelName,
