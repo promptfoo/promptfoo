@@ -314,6 +314,12 @@ describe('HttpRateLimitError', () => {
     expect(err.statusText).toBe('Too Many Requests');
   });
 
+  it('defaults empty statusText to "Too Many Requests"', () => {
+    const err = new HttpRateLimitError({ status: 429, statusText: '' });
+    expect(err.statusText).toBe('Too Many Requests');
+    expect(formatRateLimitErrorMessage(err)).toContain('Too Many Requests');
+  });
+
   it('produces a message containing the substrings legacy classifiers match on', () => {
     const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' });
     const lowered = err.message.toLowerCase();
@@ -340,6 +346,16 @@ describe('HttpRateLimitError', () => {
   it('rejects negative retryAfterMs', () => {
     const err = new HttpRateLimitError({ status: 429, retryAfterMs: -100 });
     expect(err.retryAfterMs).toBeUndefined();
+  });
+
+  it('rejects resetAt metadata paired with negative retryAfterMs', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: -100,
+      resetAt: Date.now() + 30_000,
+    });
+    expect(err.retryAfterMs).toBeUndefined();
+    expect(err.resetAt).toBeUndefined();
   });
 });
 

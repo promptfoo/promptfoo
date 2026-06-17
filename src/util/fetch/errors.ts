@@ -106,11 +106,17 @@ export class HttpRateLimitError extends Error {
 
   constructor(init: HttpRateLimitErrorInit) {
     const status = init.status;
-    const statusText = init.statusText ?? 'Too Many Requests';
+    const statusText = init.statusText || 'Too Many Requests';
     const retryAfterMs =
       typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
         ? init.retryAfterMs
         : undefined;
+    const resetAt =
+      retryAfterMs === undefined && init.retryAfterMs !== undefined
+        ? undefined
+        : typeof init.resetAt === 'number' && init.resetAt >= 0
+          ? init.resetAt
+          : undefined;
 
     // A hard-quota body code normally implies `kind: 'quota'`. But Azure
     // OpenAI is known to return `insufficient_quota` for per-minute
@@ -133,7 +139,7 @@ export class HttpRateLimitError extends Error {
     this.status = status;
     this.statusText = statusText;
     this.retryAfterMs = retryAfterMs;
-    this.resetAt = init.resetAt;
+    this.resetAt = resetAt;
     this.code = init.code;
     this.kind = kind;
     // Shallow-copy reference fields so post-construction mutations on the
