@@ -373,6 +373,18 @@ describe('HttpRateLimitError', () => {
     });
     expect(err.resetAt).toBeUndefined();
   });
+
+  it('drops non-finite retry metadata', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      retryAfterMs: Number.POSITIVE_INFINITY,
+      resetAt: Number.POSITIVE_INFINITY,
+    });
+
+    expect(err.retryAfterMs).toBeUndefined();
+    expect(err.resetAt).toBeUndefined();
+    expect(formatRateLimitDetail(err)).toBe('');
+  });
 });
 
 describe('formatRateLimitDetail', () => {

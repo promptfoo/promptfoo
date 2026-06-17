@@ -64,13 +64,13 @@ export interface HttpRateLimitErrorInit {
   status: number;
   statusText?: string;
   /**
-   * Parsed `Retry-After` (or equivalent) in milliseconds, if known. Negative or
-   * non-numeric values are rejected (treated as absent).
+   * Parsed `Retry-After` (or equivalent) in milliseconds, if known. Negative,
+   * non-finite, or non-numeric values are rejected (treated as absent).
    */
   retryAfterMs?: number;
   /**
    * Absolute reset timestamp (ms since epoch), if known. Validated independently
-   * of {@link retryAfterMs}; negative or non-numeric values are rejected.
+   * of {@link retryAfterMs}; negative, non-finite, or non-numeric values are rejected.
    */
   resetAt?: number;
   /** Body-level error code (e.g. `insufficient_quota`, `rate_limit_exceeded`). */
@@ -82,12 +82,11 @@ export interface HttpRateLimitErrorInit {
 }
 
 /**
- * Normalize a caller-supplied millisecond duration / timestamp: a non-negative
- * number passes through; anything else (negative, `NaN`, or — for untyped
- * callers — a non-number) maps to `undefined`.
+ * Normalize a caller-supplied millisecond duration / timestamp: a finite,
+ * non-negative number passes through; anything else maps to `undefined`.
  */
 function normalizeNonNegativeMs(value: number | undefined): number | undefined {
-  return typeof value === 'number' && value >= 0 ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 /**
@@ -122,9 +121,8 @@ export class HttpRateLimitError extends Error {
   constructor(init: HttpRateLimitErrorInit) {
     const status = init.status;
     const statusText = init.statusText || 'Too Many Requests';
-    // `retryAfterMs` (Retry-After) and `resetAt` (X-RateLimit-Reset) come from
-    // independent headers, so each is validated on its own merits — a malformed
-    // value in one must not discard a valid value in the other.
+    // These are independent metadata fields, so each is validated on its own
+    // merits — a malformed value in one must not discard a valid value in the other.
     const retryAfterMs = normalizeNonNegativeMs(init.retryAfterMs);
     const resetAt = normalizeNonNegativeMs(init.resetAt);
 

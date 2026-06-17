@@ -619,7 +619,7 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject([])).toEqual([]);
     });
 
-    it('should handle arrays with functions', () => {
+    it('should replace functions in arrays with null during JSON serialization', () => {
       const input = [
         1,
         function test() {
@@ -629,7 +629,7 @@ describe('sanitizeObject', () => {
       ];
       const result = sanitizeObject(input);
       expect(result[0]).toBe(1);
-      // Functions are omitted during JSON.parse/stringify cycle
+      // JSON serialization preserves the array slot by replacing the function with null.
       expect(result[1]).toBeNull();
       expect(result[2]).toBe(3);
     });
