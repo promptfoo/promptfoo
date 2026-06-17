@@ -44,7 +44,7 @@ Anthropic's Claude models are available with the following versions:
 
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
-promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
+Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 5 models; promptfoo includes that premium in
@@ -357,7 +357,7 @@ Express mode is automatic when an API key is available. If you need OAuth/ADC fe
 
 #### Environment Variables
 
-promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
+Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
 ```bash
 # .env

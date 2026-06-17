@@ -75,13 +75,13 @@ Python providers use persistent worker processes. Your script is loaded once whe
 
 When Promptfoo evaluates a test case with a Python provider:
 
-1. **promptfoo** prepares the prompt based on your configuration
-2. **promptfoo** invokes `call_api` in your Python script with three parameters:
+1. **Promptfoo** prepares the prompt based on your configuration
+2. **Promptfoo** invokes `call_api` in your Python script with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
 3. **Your Code** processes the prompt and returns a response
-4. **promptfoo** validates the response and continues evaluation
+4. **Promptfoo** validates the response and continues evaluation
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
@@ -569,7 +569,7 @@ npx promptfoo@latest eval
 
 #### Python Detection Process
 
-promptfoo automatically detects your Python installation in this priority order:
+Promptfoo automatically detects your Python installation in this priority order:
 
 1. **Provider config**: `pythonExecutable` in your config
 2. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
@@ -683,7 +683,7 @@ pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-prot
 
 **Enable tracing:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:

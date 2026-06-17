@@ -55,7 +55,7 @@ prompts:
   - 'What is 2+2?'
 ```
 
-### Step 3: Run the eval
+### Step 3: Run the evaluation
 
 ```bash
 npx promptfoo@latest eval
@@ -472,7 +472,7 @@ npx promptfoo@latest eval
 
 #### Ruby Detection Process
 
-promptfoo automatically detects your Ruby installation in this priority order:
+Promptfoo automatically detects your Ruby installation in this priority order:
 
 1. **Provider config**: `rubyExecutable` in your config
 2. **Environment variable**: `PROMPTFOO_RUBY` (if set)

@@ -143,7 +143,7 @@ Cloudflare is constantly adding new models. See their [official model catalog](h
 
 ### Basic Chat Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
     config:
@@ -154,7 +154,7 @@ providers:
 
 ### Advanced Configuration with Multiple Models
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct
     config:
@@ -174,7 +174,7 @@ providers:
 
 ### Embedding Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
     config:

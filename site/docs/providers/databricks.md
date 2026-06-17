@@ -34,7 +34,7 @@ export DATABRICKS_TOKEN=your-token-here
 
 Access pre-configured Foundation Model endpoints with simple configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: databricks:databricks-meta-llama-3-3-70b-instruct
     config:
@@ -87,7 +87,7 @@ The Databricks provider extends the [OpenAI configuration options](/docs/provide
 
 ### Advanced Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: databricks:databricks-claude-3-7-sonnet
     config:

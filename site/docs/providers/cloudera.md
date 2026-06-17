@@ -26,7 +26,7 @@ export CDP_TOKEN=your-token-here
 
 Here's a basic example of how to use the Cloudera provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudera:your-model-name
     config:

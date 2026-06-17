@@ -8,7 +8,7 @@ keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorizatio
 
 # QuiverAI
 
-The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. promptfoo also indexes valid single-SVG outputs in the Media Library while preserving the original SVG text for assertions and exports.
+The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. Promptfoo also indexes valid single-SVG outputs in the Media Library while preserving the original SVG text for assertions and exports.
 
 Two endpoints are supported:
 
@@ -117,7 +117,7 @@ Accepted prompt forms:
 
 When using an inline data URL in a YAML config, pass it through a variable such as
 `'{{image_data}}'` or set `config.image.base64`. A bare `data:` string in
-`prompts:` is interpreted by promptfoo's prompt loader before the QuiverAI
+`prompts:` is interpreted by Promptfoo's prompt loader before the QuiverAI
 provider sees it.
 
 You can also provide the image directly in the config and use the prompt for unrelated context:
@@ -152,7 +152,7 @@ Streaming is on by default. The provider receives `generating`, `reasoning`, and
 
 ## Billing and metadata
 
-QuiverAI bills in **credits**, not USD. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). promptfoo exposes both fields via response metadata:
+QuiverAI bills in **credits**, not USD. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
 
 ```ts
 result.metadata.responseId; // server-generated request/output id

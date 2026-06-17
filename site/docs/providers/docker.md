@@ -55,8 +55,7 @@ docker:hf.co/<model_name>             # Defaults to chat
 
 Configure the provider in your promptfoo configuration file:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: docker:ai/smollm3:Q4_K_M
     config:

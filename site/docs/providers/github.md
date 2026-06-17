@@ -65,7 +65,7 @@ providers:
 
 ### With Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
     config:
@@ -76,7 +76,7 @@ providers:
 
 ### Multiple Models
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: github:openai/gpt-5-nano
     config:

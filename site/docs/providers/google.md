@@ -50,7 +50,7 @@ Create a `.env` file in your project root:
 GOOGLE_API_KEY=your_api_key_here
 ```
 
-promptfoo automatically loads environment variables from `.env` files in your project directory. Make sure to add `.env` to your `.gitignore` file.
+Promptfoo automatically loads environment variables from `.env` files in your project directory. Make sure to add `.env` to your `.gitignore` file.
 
 #### Option 3: Provider Configuration
 
@@ -683,7 +683,7 @@ System instructions support Nunjucks templating and can be loaded from external 
 
 ### Role Mapping Configuration
 
-Gemini models require specific role names in chat messages. By default, promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
 
 ```yaml
 providers:
@@ -812,7 +812,7 @@ You can override providers in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -1045,7 +1045,7 @@ For complete working examples of the search grounding, code execution, and url c
 
 ## Google Live API
 
-promptfoo supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+Promptfoo supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
 ### Using the Live Provider
 

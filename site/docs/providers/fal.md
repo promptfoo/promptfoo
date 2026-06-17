@@ -65,7 +65,7 @@ Provider config values are sent to the fal model as input, except for `apiKey` a
 
 For example, `@fal-ai/client` proxy URLs are browser-only when passed as a string. To route promptfoo's Node.js CLI requests through a proxy, use the object form and set `when: always`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/schnell
     config:
@@ -87,7 +87,7 @@ Configuration parameters vary by model. For example, `fast-sdxl` supports additi
 
 ### Basic Setup
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/schnell
     config:
@@ -101,7 +101,7 @@ providers:
 
 ### Advanced Options
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: fal:image:fal-ai/flux/dev
     config:

@@ -76,7 +76,7 @@ Requires `gateway.http.endpoints.chatCompletions.enabled=true`.
 - `openclaw:main` - Explicitly targets the main agent
 - `openclaw:<agent-id>` - Targets a specific agent by ID
 
-promptfoo sends OpenClaw's slash-style model id (`openclaw/<agent-id>`) to the gateway
+Promptfoo sends OpenClaw's slash-style model id (`openclaw/<agent-id>`) to the gateway
 while keeping the `openclaw:<agent-id>` promptfoo provider syntax for compatibility.
 
 ### Responses
@@ -113,7 +113,7 @@ target, and `config.backend_model` can override the backend embedding model with
 ### WebSocket Agent
 
 Uses the native OpenClaw WebSocket RPC protocol for full agent streaming. Connects directly to the gateway's WS port without requiring HTTP endpoint enablement.
-promptfoo includes a stable device identity, signs the gateway `connect.challenge` nonce, persists
+Promptfoo includes a stable device identity, signs the gateway `connect.challenge` nonce, persists
 issued `hello-ok.auth.deviceToken` values, and retries once with a cached device token when the
 gateway reports an `AUTH_TOKEN_MISMATCH`.
 
@@ -154,7 +154,7 @@ includes:
 - `gateway.tls.enabled` for `https://` / `wss://`
 - `gateway.mode=remote` via `gateway.remote.url`
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw:main
 ```
@@ -163,7 +163,7 @@ providers:
 
 Override auto-detection with explicit config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw:main
     config:
@@ -189,7 +189,7 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - openclaw:main
 ```
@@ -301,22 +301,22 @@ tests:
 Use `backend_model` when you want the selected OpenClaw agent to run a specific provider/model for
 this eval without changing the agent's normal default model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openclaw:main
     config:
       backend_model: openai/gpt-5.4
 ```
 
-For billing, OpenClaw's visible `model` remains the agent target (`openclaw/<agent-id>`). promptfoo
+For billing, OpenClaw's visible `model` remains the agent target (`openclaw/<agent-id>`). Promptfoo
 can estimate OpenAI token spend only when `backend_model` or `model_override` names the actual
 OpenAI backend model, such as `openai/gpt-5.4` or `gpt-5.4`. If the backend model is selected only
-inside OpenClaw's own agent config, promptfoo leaves `cost` unset because the gateway response does
+inside OpenClaw's own agent config, Promptfoo leaves `cost` unset because the gateway response does
 not expose enough information to price that request safely.
 
 ### WebSocket Agent
 
-promptfoo uses an isolated session key per call unless you set `session_key` explicitly.
+Promptfoo uses an isolated session key per call unless you set `session_key` explicitly.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

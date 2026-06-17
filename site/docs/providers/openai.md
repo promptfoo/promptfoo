@@ -56,7 +56,7 @@ providers:
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -81,7 +81,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 The `providers` list takes a `config` key that allows you to set parameters like `temperature` for non-reasoning models, `max_tokens`, `max_completion_tokens` for GPT-5 family chat models, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -293,7 +293,7 @@ GPT-5.1 introduces several improvements over GPT-5:
 
 Fast, low-latency responses:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -304,7 +304,7 @@ providers:
 
 Complex coding and reasoning tasks:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -347,7 +347,7 @@ GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -358,7 +358,7 @@ providers:
 
 For latency-insensitive tasks requiring maximum quality:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -419,7 +419,7 @@ Standard GPT-5.2 variants are available via both the Chat Completions API and Re
 
 **Chat Completions API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.2-chat-latest
     config:
@@ -434,7 +434,7 @@ providers:
 
 **Responses API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.2-codex
     config:
@@ -450,7 +450,7 @@ providers:
 
 Fast, low-latency responses (no reasoning):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Chat API
   - id: openai:chat:gpt-5.2
@@ -468,7 +468,7 @@ providers:
 
 GPT-5.2-pro (including dated snapshots) is best used via the Responses API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.2-pro
     config:
@@ -510,7 +510,7 @@ GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.3-chat-latest
     config:
@@ -553,7 +553,7 @@ GPT-5.5 is a GPT-5 family model for high-capability reasoning, professional work
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.5
     config:
@@ -602,7 +602,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -646,7 +646,7 @@ Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large
 
 When using reasoning models, there are important differences in how tokens are handled:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:o1
     config:
@@ -734,7 +734,7 @@ See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo
 
 GPT Image 2 is OpenAI's image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-2
     config:
@@ -775,7 +775,7 @@ These are output image estimates. Input text tokens may also apply, and OpenAI m
 
 GPT Image 1.5 is a high-quality image generation model with strong instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1.5
     config:
@@ -810,7 +810,7 @@ GPT Image 1.5 uses token-based pricing at $5/1M input text tokens, $10/1M output
 
 GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1
     config:
@@ -843,7 +843,7 @@ providers:
 
 GPT Image 1 Mini is a cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1-mini
     config:
@@ -898,7 +898,7 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models in
 
 ### Basic Usage
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1007,7 +1007,7 @@ The OpenAI Responses API supports both the standard `web_search` tool and the `w
 
 To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add either the standard `web_search` tool or the preview `web_search_preview` tool to your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -1167,7 +1167,7 @@ Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-open
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1277,7 +1277,7 @@ Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1310,14 +1310,14 @@ Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
 You can also use a pattern to load multiple files:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_*.yaml
 ```
@@ -1366,7 +1366,7 @@ prompts:
 
 #### Provider config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -1806,7 +1806,7 @@ Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several 
 
 To use the OpenAI Realtime API, use the provider format `openai:realtime:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
@@ -1869,7 +1869,7 @@ The Realtime API supports function calling via tools, similar to the Chat API. H
 
 Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. The native Realtime format matches the OpenAI docs: function tools use top-level fields, and `tool_choice` is passed through in the Realtime shape you provide.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
@@ -2003,7 +2003,7 @@ The Responses API supports a wide range of models, including:
 
 To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2036,7 +2036,7 @@ The Responses API supports OpenAI's MCP integration, allowing models to use remo
 
 To use MCP tools with the Responses API, add them to the `tools` array:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2062,7 +2062,7 @@ providers:
 
 Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2079,7 +2079,7 @@ providers:
 
 To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2095,7 +2095,7 @@ providers:
 
 By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # Never require approval for all tools
 providers:
   - id: openai:responses:gpt-5
@@ -2154,7 +2154,7 @@ npx promptfoo@latest init --example openai-mcp
 
 When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2185,7 +2185,7 @@ For current specifications and pricing information, refer to [OpenAI's pricing p
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2221,7 +2221,7 @@ All deep research models:
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
@@ -2232,7 +2232,7 @@ providers:
 
 #### Advanced Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3-deep-research
     config:
@@ -2425,7 +2425,7 @@ The `include` option requests extra structured payloads in the raw Responses obj
 For example, `web_search_call.results` returns search results when you need to inspect
 them in assertions or downstream tooling:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.5
     config:
@@ -2440,7 +2440,7 @@ providers:
 
 The Responses API supports tool and function calling, similar to the Chat API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:

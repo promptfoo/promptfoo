@@ -7,7 +7,7 @@ description: Use Novita's OpenAI-compatible API in Promptfoo to evaluate chat, c
 
 # Novita
 
-The `novita` provider routes promptfoo's OpenAI-compatible provider stack to [Novita](https://novita.ai).
+The `novita` provider routes Promptfoo's OpenAI-compatible provider stack to [Novita](https://novita.ai).
 
 ## Setup
 

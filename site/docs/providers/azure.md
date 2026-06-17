@@ -514,7 +514,7 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME=text-embedding-3-small
 
 This deployment will automatically be used whenever embeddings are required, such as for similarity comparisons or dataset generation. You can also override the embedding provider in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -618,7 +618,7 @@ The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not 
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -661,7 +661,7 @@ tests:
 
 When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Azure deployments for each type using the **provider type map** pattern:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -684,7 +684,7 @@ The `similar` assertion type requires an embedding model such as `text-embedding
 
 For example, override the embedding deployment in your config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -858,7 +858,7 @@ If you encounter this error with `azure:chat` or `azure:completion`:
 API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
 ```
 
-For a custom or aliased reasoning deployment, this commonly means promptfoo is not
+For a custom or aliased reasoning deployment, this commonly means Promptfoo is not
 treating it as a reasoning model because `isReasoningModel: true` is missing. Update
 your config as shown above.
 
@@ -932,7 +932,7 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and Anthropic list pricing (note that Bedrock regional/geo endpoints and non-global Vertex regions carry a 10% premium for Claude 5 models):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-4-8
     config:
@@ -947,7 +947,7 @@ Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseU
 
 The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:claude-opus-4-7
     config:
@@ -1026,7 +1026,7 @@ tests:
 
 Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
     config:
@@ -1052,7 +1052,7 @@ Azure AI supports DeepSeek models such as DeepSeek-R1. Like other reasoning mode
 2. Use `max_completion_tokens` instead of `max_tokens`
 3. Set API version to '2025-04-01-preview' (or latest available)
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:DeepSeek-R1
     config:
@@ -1133,7 +1133,7 @@ MAI text models run through the standard `azure:chat` provider. **Availability i
 
 promptfoo auto-detects `MAI-Thinking-1` and `MAI-DS-R1` as reasoning models by name: it sends `max_completion_tokens` (instead of `max_tokens`) and drops `temperature`. It still sends default `top_p`/`presence_penalty`/`frequency_penalty` unless you set `omitDefaults: true` — do that if a deployment rejects those sampling parameters. `MAI-Code-1-Flash` is treated as a standard chat model.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: azure:chat:mai-thinking-1
     config:

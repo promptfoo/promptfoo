@@ -33,8 +33,7 @@ For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https
 
 ## Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openrouter:openai/gpt-5.4
     config:
@@ -55,7 +54,7 @@ If you route OpenRouter traffic through a proxy or OpenRouter-compatible gateway
 
 The same pattern applies to `apiKeyEnvar` — set it to read your API key from a custom environment variable name (default `OPENROUTER_API_KEY`).
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openrouter:openai/gpt-5.4
     config:
@@ -75,7 +74,7 @@ providers:
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:

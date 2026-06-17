@@ -36,14 +36,14 @@ providers:
       apiKeyRequired: false
 ```
 
-When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, promptfoo loads the Claude Code OAuth credential from:
+When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Promptfoo loads the Claude Code OAuth credential from:
 
 1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
 2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
 
-promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
+Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
 
-If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
+If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
 
 This also enables [model-graded assertions](#model-graded-tests) such as `llm-rubric` to run without a separate Anthropic Console key — see [the example below](#model-graded-tests).
 
@@ -207,7 +207,7 @@ providers:
 
 The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -339,7 +339,7 @@ This configuration allows the model to first search for relevant information, th
 
 ##### Memory Tool
 
-Anthropic's `memory_20250818` tool can be included in `tools`. promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. promptfoo does not manage Anthropic memory stores or run local memory handlers for you.
+Anthropic's `memory_20250818` tool can be included in `tools`. Promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. Promptfoo does not manage Anthropic memory stores or run local memory handlers for you.
 
 ```yaml
 providers:
@@ -377,7 +377,7 @@ providers:
 
 The Anthropic Messages provider can connect to any [MCP server](https://modelcontextprotocol.io) — stdio, SSE, or streamable HTTP — and execute the model's `tool_use` blocks against that server, feeding the `tool_result` back into the conversation until Claude produces a final reply.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
@@ -526,13 +526,13 @@ tests:
 
 ### Claude Fable 5 and Mythos 5 notes
 
-Fable 5 and Mythos 5 use always-on adaptive thinking. promptfoo omits unsupported
+Fable 5 and Mythos 5 use always-on adaptive thinking. Promptfoo omits unsupported
 `temperature`, `top_p`, and `top_k` values, converts legacy
 `thinking: { type: 'enabled', budget_tokens: N }` configs to adaptive thinking, and
 omits `thinking: { type: 'disabled' }` because thinking cannot be disabled.
 Set `thinking: { type: 'adaptive', display: 'summarized' }` to include a readable
 thinking summary; the default `display: 'omitted'` returns an empty thinking block,
-which promptfoo excludes from the output.
+which Promptfoo excludes from the output.
 
 Both models use a 1M-token context window, support up to 128K output tokens, and are
 priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
@@ -564,7 +564,7 @@ The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Verte
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Adaptive thinking (recommended for Claude Opus 4.7)
   - id: anthropic:messages:claude-opus-4-7
@@ -654,7 +654,7 @@ Example response with thinking enabled:
 
 By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -841,7 +841,7 @@ defaultTest:
         apiKeyRequired: false
 ```
 
-See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers promptfoo sets.
+See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers Promptfoo sets.
 
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 
@@ -849,7 +849,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider: anthropic:messages:claude-sonnet-4-5-20250929
@@ -883,7 +883,7 @@ tests:
 
 ### Additional Capabilities
 
-- **Caching**: promptfoo caches previous LLM requests by default.
+- **Caching**: Promptfoo caches previous LLM requests by default.
 - **Token Usage Tracking**: Provides detailed information on the number of tokens used in each request, aiding in usage monitoring and optimization.
 - **Cost Calculation**: Calculates the cost of each request based on the number of tokens generated and the specific model used.
 

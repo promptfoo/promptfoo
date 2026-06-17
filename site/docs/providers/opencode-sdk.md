@@ -35,7 +35,7 @@ npm install @opencode-ai/sdk
 
 :::note
 
-promptfoo treats the SDK package as an optional runtime dependency, so it only needs to be installed if you want to use the OpenCode SDK provider.
+Promptfoo treats the SDK package as an optional runtime dependency, so it only needs to be installed if you want to use the OpenCode SDK provider.
 
 :::
 
@@ -57,7 +57,7 @@ If promptfoo starts the OpenCode server for you, you can also set `config.apiKey
 
 :::note
 
-If you connect to an existing OpenCode server with `baseUrl`, that server is responsible for authentication, MCP setup, and custom agents. promptfoo can still send per-request options like `model`, `tools`, `format`, and `workspace`, but it cannot reconfigure the remote server.
+If you connect to an existing OpenCode server with `baseUrl`, that server is responsible for authentication, MCP setup, and custom agents. Promptfoo can still send per-request options like `model`, `tools`, `format`, and `workspace`, but it cannot reconfigure the remote server.
 
 :::
 
@@ -377,7 +377,7 @@ Additional tools added by future OpenCode releases can be configured using the s
 
 :::note
 
-promptfoo converts the object form above into the `PermissionRuleset` array the OpenCode v2 API expects (`[{ permission: "bash", pattern: "*", action: "allow" }, ...]`). You configure permissions in the friendly object form and the provider handles the conversion per request.
+Promptfoo converts the object form above into the `PermissionRuleset` array the OpenCode v2 API expects (`[{ permission: "bash", pattern: "*", action: "allow" }, ...]`). You configure permissions in the friendly object form and the provider handles the conversion per request.
 
 :::
 
@@ -393,8 +393,7 @@ OpenCode loads Agent Skills through its native `skill` tool. Enable the tool for
 the eval, point `working_dir` at a repo that contains skills OpenCode can
 discover, and allow the skill permission if you want a non-interactive run:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: opencode:sdk
     config:
@@ -410,7 +409,7 @@ tests:
         value: review-standards
 ```
 
-promptfoo normalizes OpenCode's native `skill` tool parts into
+Promptfoo normalizes OpenCode's native `skill` tool parts into
 `response.metadata.skillCalls`, so [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used)
 works the same way it does for Claude Agent SDK. Each normalized entry keeps the
 requested skill name and tool input, records tool failures with `is_error: true`,

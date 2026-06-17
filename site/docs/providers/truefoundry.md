@@ -69,8 +69,7 @@ The TrueFoundry provider supports all standard OpenAI configuration options:
 
 For self-hosted or enterprise deployments, you can specify a custom API base URL:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/gpt-5
     config:
@@ -84,8 +83,7 @@ If not specified, the default URL `https://llm-gateway.truefoundry.com` is used.
 
 TrueFoundry provides additional configuration options for metadata tracking and logging:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/gpt-5
     config:
@@ -149,8 +147,7 @@ providers:
 
 TrueFoundry supports embedding models through the same unified API:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/text-embedding-3-large
     config:
@@ -169,8 +166,7 @@ tests:
 
 When using Cohere models, you must specify the `input_type` parameter:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:cohere-main/embed-english-v3.0
     config:
@@ -183,8 +179,7 @@ providers:
 
 TrueFoundry supports multimodal embeddings for images and videos through Vertex AI:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:vertex-ai-main/multimodalembedding@001
     config:

@@ -115,8 +115,7 @@ Check the [Groq Console](https://console.groq.com/docs/models) for the full list
 
 Groq supports tool use, allowing models to call predefined functions. Configure tools in your provider settings:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: groq:llama-3.3-70b-versatile
     config:

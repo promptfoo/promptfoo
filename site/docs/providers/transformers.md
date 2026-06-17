@@ -93,8 +93,7 @@ providers:
 
 Use local embeddings as a grading provider for `similar` assertions:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 defaultTest:
   options:
     provider:

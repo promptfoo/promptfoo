@@ -52,7 +52,7 @@ Supported environment variables:
 
 To pass configuration options to Ollama, use the `config` key like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: ollama:chat:llama3.3
     config:
@@ -64,7 +64,7 @@ providers:
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: ollama:chat:llama3.3
     config:
@@ -115,8 +115,7 @@ tests:
 
 Ollama can be used as a local grading provider for assertions that require language model evaluation. When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 defaultTest:
   options:
     provider:
@@ -150,14 +149,13 @@ tests:
         threshold: 0.85
 ```
 
-When running with `--max-concurrency 1` and no per-eval timeout, promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
+When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
 Ollama's embedding models can be used with the `similar` assertion to check semantic similarity between outputs and expected values:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - ollama:chat:llama3.2
 
@@ -180,7 +178,7 @@ tests:
 
 You can also set the embedding provider globally for all similarity assertions:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:

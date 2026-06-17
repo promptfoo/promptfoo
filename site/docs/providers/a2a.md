@@ -11,7 +11,7 @@ The `a2a` provider allows you to use agents that implement the
 promptfoo. This is useful for testing agentic applications that expose an A2A interface for
 message-based interaction, streaming responses, and asynchronous task execution.
 
-promptfoo sends each test prompt as an A2A message, waits for the agent to respond or complete a
+Promptfoo sends each test prompt as an A2A message, waits for the agent to respond or complete a
 task, and extracts the final text from the A2A response. When an Agent Card is available, promptfoo
 can also use it to discover the agent endpoint and add advertised skills to red team generation
 context.
@@ -32,7 +32,7 @@ JSON-RPC, gRPC, and push-notification webhooks are not supported in this provide
 
 The simplest configuration points promptfoo at the base URL for the A2A HTTP+JSON interface:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: a2a:https://agent.example.com/a2a/v1
     config:
@@ -41,7 +41,7 @@ providers:
         token: '{{ env.A2A_API_KEY }}'
 ```
 
-The `a2a:<url>` shorthand sets `config.url`. promptfoo appends the operation paths, such as
+The `a2a:<url>` shorthand sets `config.url`. Promptfoo appends the operation paths, such as
 `/message:send`, `/message:stream`, and `/tasks/{id}`, to this base URL.
 
 ## Agent Card Discovery
@@ -49,7 +49,7 @@ The `a2a:<url>` shorthand sets `config.url`. promptfoo appends the operation pat
 If your agent publishes an Agent Card, you can configure `agentCardUrl` instead of hardcoding the
 A2A endpoint:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: a2a
     config:
@@ -89,7 +89,7 @@ context, similar to how the MCP provider uses discovered tools.
 
 ## Authentication
 
-Use `auth` for common authentication schemes. promptfoo applies it to both Agent Card discovery
+Use `auth` for common authentication schemes. Promptfoo applies it to both Agent Card discovery
 requests and A2A operation requests. Values support Nunjucks variables, so use the `env` global for
 environment variables, such as `{{ env.A2A_API_KEY }}`.
 
@@ -386,7 +386,7 @@ A2A targets work with normal promptfoo red team configuration. When `agentCardUr
 the provider can add Agent Card skills and capabilities to the generated attack context, helping
 promptfoo produce probes that are specific to the target agent.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 description: A2A travel agent red team
 
 providers:

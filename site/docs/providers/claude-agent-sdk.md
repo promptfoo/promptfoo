@@ -43,7 +43,7 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable promptfoo's upfront API key check:
+If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable Promptfoo's upfront API key check:
 
 ```yaml
 providers:
@@ -139,7 +139,7 @@ prompts:
 | Parameter                            | Type             | Description                                                                                                  | Default                  |
 | ------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
 | `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
-| `apiKeyRequired`                     | boolean          | Require promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
+| `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
@@ -1069,7 +1069,7 @@ assert:
       return grepCall?.output?.includes('expected match');
 ```
 
-For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
+For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
 By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
 

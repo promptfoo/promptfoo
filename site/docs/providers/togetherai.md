@@ -15,8 +15,7 @@ Together AI's API is compatible with OpenAI's API, which means all parameters av
 
 Configure a Together AI model in your promptfoo configuration:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: togetherai:meta-llama/Llama-4-Scout-Instruct
     config:
@@ -113,8 +112,7 @@ For a complete list of all 200+ available models and their specifications, refer
 
 ## Example Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: togetherai:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
     config:

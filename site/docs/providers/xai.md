@@ -16,7 +16,7 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. xAI does not expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. xAI does not expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
@@ -107,8 +107,7 @@ You can also use specific versioned models:
 
 The provider supports all [OpenAI provider](/docs/providers/openai) configuration options plus Grok-specific options. Example usage:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -167,8 +166,7 @@ Grok 4.1 Fast is xAI's frontier model specifically optimized for agentic tool ca
 - **Low latency and cost**: $0.20/1M input tokens, $0.50/1M output tokens with fast inference
 - **Unsupported parameters**: Same restrictions as Grok-4 (no presence_penalty, frequency_penalty, stop, reasoning_effort)
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4-1-fast-reasoning
     config:
@@ -184,8 +182,7 @@ Grok-4 Fast models offer the same capabilities as Grok-4 but with faster inferen
 - **2M context window**: Same large context as Grok 4.1 Fast
 - **Same parameter restrictions as Grok-4**: No presence_penalty, frequency_penalty, stop, or reasoning_effort
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4-fast-reasoning
     config:
@@ -206,8 +203,7 @@ Grok-4 introduces changes compared to previous Grok models:
 - **Larger context window**: 256,000 tokens compared to 131,072 for Grok-3 models
 - **Uses `max_completion_tokens`**: As a reasoning model, Grok-4 uses `max_completion_tokens` instead of `max_tokens`
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4
     config:
@@ -225,8 +221,7 @@ The Grok Code Fast models are optimized for agentic coding workflows and offer s
 - **Tool Integration**: Excellent support for function calling, tool usage, and web search
 - **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-code-fast-1
     # or use the alias:
@@ -257,7 +252,7 @@ xAI's public regional docs say the global endpoint automatically routes requests
 
 :::warning
 
-xAI's documentation recommends the Responses API for server-side tools. promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
+xAI's documentation recommends the Responses API for server-side tools. Promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
 
 :::
 
@@ -269,7 +264,7 @@ Legacy configs can still pass a `search_parameters` object. The `mode` field con
 
 Additional fields like `sources`, `from_date`, `to_date`, and `return_citations` may also be provided.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-3-beta
     config:
@@ -286,7 +281,7 @@ For a full list of options see the [xAI documentation](https://docs.x.ai/docs).
 
 Use the `xai:responses:<model>` provider to access xAI's Agent Tools API, which enables autonomous server-side tool execution for web search, X search, code execution, collections search, and remote MCP tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:responses:grok-4.3
     config:
@@ -346,8 +341,7 @@ tools:
 
 #### Complete Example
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:responses:grok-4.3
     config:
@@ -445,7 +439,7 @@ xAI offers [Deferred Chat Completions](https://docs.x.ai/docs/guides/deferred-ch
 
 xAI supports standard OpenAI-compatible function calling for client-side tool execution:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-4-1-fast-reasoning
     config:
@@ -468,7 +462,7 @@ providers:
 
 xAI supports structured outputs via JSON schema:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-4
     config:
@@ -592,7 +586,7 @@ prompts:
 
 #### Pricing
 
-promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
 
 ### Video Generation
 
@@ -679,7 +673,7 @@ Reference-to-video requires a non-empty prompt, cannot be combined with `image` 
 
 #### Pricing
 
-promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, promptfoo falls back to the video provider's local duration-based estimate.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
 
 ### Voice Agent API
 
@@ -692,8 +686,7 @@ providers:
 
 #### Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:voice:grok-voice-think-fast-1.0
     config:
@@ -759,7 +752,7 @@ tools:
 
 You can define custom function tools inline or load them from external files:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:voice:grok-voice-think-fast-1.0
     config:

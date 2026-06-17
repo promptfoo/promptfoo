@@ -23,8 +23,7 @@ The Snowflake Cortex provider uses this format:
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: snowflake:mistral-large2
     config:

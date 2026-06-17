@@ -78,8 +78,7 @@ providers:
 
 Force structured JSON output:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: mistral:mistral-large-latest
     config:
@@ -269,8 +268,7 @@ Mistral offers vision-capable models that can process both text and images:
 
 Use a current multimodal chat model such as `mistral-large-2512`:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: mistral:mistral-large-2512
     config:
@@ -293,8 +291,7 @@ tests:
 
 Mistral models support advanced function calling for building AI agents and tools:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: mistral:mistral-large-latest
     config:
@@ -336,8 +333,7 @@ Mistral's Codestral models excel at code generation across 80+ programming langu
 
 ### Fill-in-the-Middle (FIM)
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: mistral:codestral-latest
     config:
@@ -454,8 +450,7 @@ tests:
 
 ### Example 3: Multimodal Document Analysis
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 description: 'Analyze documents with text and images'
 
 providers:

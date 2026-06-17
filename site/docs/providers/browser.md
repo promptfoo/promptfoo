@@ -148,7 +148,7 @@ providers:
 
 **Key options:**
 
-- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, promptfoo runs it with concurrency `1`.
+- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns)
 
 This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
@@ -279,8 +279,7 @@ Use the `transformResponse` config option to extract specific data from the resu
 
 You can use Nunjucks templating in your configuration, including the `{{prompt}}` variable and any other variables passed in the test context.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: browser
     config:

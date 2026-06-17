@@ -438,7 +438,7 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ### Provider Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI

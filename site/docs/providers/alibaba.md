@@ -21,8 +21,7 @@ export DASHSCOPE_API_KEY=your_api_key_here
 
 The provider supports all [OpenAI provider](/docs/providers/openai) configuration options. Example usage:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - alibaba:qwen-max # Simple usage
   - id: alibaba:qwen-plus # Aliases: alicloud:, aliyun:, dashscope:

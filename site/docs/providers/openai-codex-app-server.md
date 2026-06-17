@@ -20,7 +20,7 @@ providers:
   - openai:codex-desktop:gpt-5.5
 ```
 
-`openai:codex-desktop` is an alias for the same app-server protocol. promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
+`openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
 
 ## Codex SDK vs App Server vs Desktop App
 
@@ -50,7 +50,7 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
 | WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
 
-When `service_tier: fast` is used, promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
+When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
 
 ## Setup
 
@@ -73,7 +73,7 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:codex-app-server
     config:
@@ -109,7 +109,7 @@ For downstream coding-agent checks, `raw` also includes SDK-compatible `items` a
 
 ## Safety Defaults
 
-The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. promptfoo defaults to deterministic eval behavior:
+The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. Promptfoo defaults to deterministic eval behavior:
 
 | Option                | Default       |
 | --------------------- | ------------- |
@@ -212,7 +212,7 @@ providers:
 
 ### Goals and Subagents
 
-Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
+Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which Promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
 
 ```yaml
 providers:
@@ -348,7 +348,7 @@ Command output, tool arguments, and approval metadata are sanitized before they 
 
 ## Tracing
 
-promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
+Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
 
 To verify that an app-server protocol turn was traced, count the turn markers:
 
@@ -366,7 +366,7 @@ generations and tool execution. App-server notifications do not expose those int
 model-generation boundaries, so these markers cannot distinguish batched from
 sequential tool calls inside a turn.
 
-Enable deeper app-server tracing by setting `deep_tracing: true` with promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
+Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 
 ## Local Verification
 
