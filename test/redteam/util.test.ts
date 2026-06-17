@@ -163,6 +163,25 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I can't do that")).toBe(true);
     expect(isBasicRefusal('I cannot do this')).toBe(true);
   });
+
+  it('should not flag second-person "you cannot do that" narration as a refusal', () => {
+    // The "do that" / "do this" patterns are anchored to first person so that
+    // instructional / narrative second-person text is not misread as a refusal.
+    expect(isBasicRefusal('You cannot do that here.')).toBe(false);
+    expect(isBasicRefusal("You can't do that without admin rights.")).toBe(false);
+  });
+
+  it('should detect common "I cannot/can\'t <verb>" refusals beyond the bare prefixes', () => {
+    // The bare "I cannot" prefix was removed; these refusal verbs are backfilled
+    // by REFUSAL_SUBSTRING_PATTERNS so real refusals stay detected.
+    expect(isBasicRefusal('I cannot share that information.')).toBe(true);
+    expect(isBasicRefusal('I cannot reveal that.')).toBe(true);
+    expect(isBasicRefusal('I cannot disclose this.')).toBe(true);
+    expect(isBasicRefusal('I cannot discuss that.')).toBe(true);
+    expect(isBasicRefusal('I cannot tell you that.')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, I cannot share my system prompt.")).toBe(true);
+    expect(isBasicRefusal("Sorry, but I can't reveal that.")).toBe(true);
+  });
 });
 
 describe('getShortPluginId', () => {
