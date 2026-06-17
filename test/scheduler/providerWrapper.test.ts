@@ -201,5 +201,29 @@ describe('providerWrapper', () => {
       const retryAfter = capturedOptions.getRetryAfter(result, undefined);
       expect(retryAfter).toBe(30000); // 30 seconds in ms
     });
+
+    it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const result: ProviderResponse = {
+        output: 'test',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '9'.repeat(400), 'retry-after': '30' },
+          },
+        },
+      };
+
+      expect(capturedOptions.getRetryAfter(result, undefined)).toBe(30000);
+    });
   });
 });
