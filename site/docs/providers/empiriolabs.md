@@ -93,7 +93,7 @@ provider format with the EmpirioLabs base URL, and pass the path to an audio fil
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - file://sample-audio.mp3
+  - '{{audio_file}}'
 
 providers:
   - id: openai:transcription:whisper-large-v3-turbo
@@ -112,7 +112,10 @@ providers:
       apiKeyEnvar: EMPIRIOLABS_API_KEY
 
 tests:
-  - assert:
+  - vars:
+      # Use a literal path here. The transcription provider reads this file directly.
+      audio_file: sample-audio.mp3
+    assert:
       - type: contains
         value: expected transcript content
 ```

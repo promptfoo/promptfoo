@@ -21,8 +21,8 @@ providers:
       max_tokens: 1000
 
   # EmpirioLabs also serves OpenAI-compatible audio transcription. Point a
-  # transcription provider at the same base URL and pass an audio file path as the
-  # prompt (for example, prompts: [file://sample-audio.mp3]).
+  # transcription provider at the same base URL. In a separate config, use
+  # prompts: ['{{audio_file}}'] and set tests[].vars.audio_file to a literal path.
   # - id: openai:transcription:whisper-large-v3-turbo
   #   config:
   #     apiBaseUrl: https://api.empiriolabs.ai/v1
