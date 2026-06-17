@@ -52,10 +52,13 @@ RUN npm run build
 FROM base AS server
 WORKDIR /app
 COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules
+COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json
 COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
-RUN npm link promptfoo && \
-    chown promptfoo:promptfoo /app/node_modules/promptfoo && \
+RUN ln -s /app /app/node_modules/promptfoo && \
+    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \
+    ln -s /app/dist/src/entrypoint.js /usr/local/bin/promptfoo && \
+    ln -s /app/dist/src/entrypoint.js /usr/local/bin/pf && \
     mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo
 
 ENV API_PORT=3000
