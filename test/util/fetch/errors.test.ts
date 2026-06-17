@@ -151,6 +151,11 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case ECONNRESET messages', () => {
+    const error = new Error('EConnReset');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for EPIPE errors', () => {
     const error = new Error('Broken pipe') as Error & { code?: string };
     error.code = 'EPIPE';
@@ -162,13 +167,45 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case socket hang up errors', () => {
+    const error = new Error('Socket Hang Up');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns true for bad record mac errors', () => {
     const error = new Error('bad record mac');
     expect(isTransientConnectionError(error)).toBe(true);
   });
 
+  it('returns true for mixed-case bad record mac errors', () => {
+    const error = new Error('Bad Record MAC');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('returns true for standalone eproto errors', () => {
+    const error = new Error('eproto');
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns false for permanent TLS config errors', () => {
     const error = new Error('eproto self signed certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto unable-to-verify TLS errors', () => {
+    // Must include `eproto` to enter the permanent-error exclusion; otherwise the
+    // message has no transient marker and would return false trivially.
+    const error = new Error('write EPROTO unable to verify the first certificate');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto unknown ca TLS errors', () => {
+    const error = new Error('write EPROTO tlsv1 alert unknown ca');
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('returns false for eproto certificate verify TLS errors', () => {
+    const error = new Error('write EPROTO certificate verify failed');
     expect(isTransientConnectionError(error)).toBe(false);
   });
 
