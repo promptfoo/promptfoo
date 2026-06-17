@@ -154,6 +154,15 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("Sorry, but I can't assist with that")).toBe(true);
     expect(isBasicRefusal('I am sorry, I cannot help with that')).toBe(true);
   });
+
+  it('should detect generic "I cannot/can\'t do that" refusals', () => {
+    // These rely on the cannot do that / can't do that substring patterns
+    // that backfill the removed bare prefixes.
+    expect(isBasicRefusal("I'm sorry, but I can't do that")).toBe(true);
+    expect(isBasicRefusal('Sorry, but I cannot do that')).toBe(true);
+    expect(isBasicRefusal("I can't do that")).toBe(true);
+    expect(isBasicRefusal('I cannot do this')).toBe(true);
+  });
 });
 
 describe('getShortPluginId', () => {
