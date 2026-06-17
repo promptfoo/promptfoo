@@ -39,6 +39,7 @@ Start with the usual outcome checks:
 ```yaml
 assert:
   - type: factuality
+    value: The answer should be factually correct.
   - type: answer-relevance
 ```
 
@@ -54,10 +55,11 @@ Examples:
 assert:
   - type: trajectory:tool-used
     value: search_docs
-  - type: trajectory:tool-not-used
+  - type: not-trajectory:tool-used
     value: delete_user
   - type: trajectory:step-count
-    threshold: 12
+    value:
+      max: 12
 ```
 
 Use trajectory assertions when your provider or tracing setup emits tool-call spans or equivalent metadata.
@@ -72,8 +74,8 @@ Add explicit checks for unresolved requests or fallback-heavy behavior:
 assert:
   - type: javascript
     value: |
-      const output = JSON.parse(outputText);
-      return output.status !== 'unresolved';
+      const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+      return parsed.status !== 'unresolved';
 ```
 
 Or capture the same signal in metadata and compare it across runs.
