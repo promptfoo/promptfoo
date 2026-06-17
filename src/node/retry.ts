@@ -9,7 +9,12 @@ import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import { resolveConfigs } from '../util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
+import {
+  filterProviders,
+  getPersistedProviderFilterOptions,
+  getProviderFilterRegexError,
+} from '../util/eval/filterProviders';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -36,6 +41,61 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
   return (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
     (path): path is string => typeof path === 'string' && getOutputFileFormat(path) === 'jsonl',
   );
+}
+
+function assertRetryProviderFilterMatched(
+  providerFilter: string | undefined,
+  providerCount: number,
+  configPath?: string,
+): void {
+  if (!providerFilter || providerCount > 0) {
+    return;
+  }
+
+  const configDescription = configPath ? `retry config "${configPath}"` : 'saved evaluation config';
+  throw new ConfigResolutionError(
+    `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
+  );
+}
+
+async function resolveRetryConfigs(
+  originalEval: Eval,
+  cmdObj: RetryCommandOptions,
+): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+  const providerFilterOptions = getPersistedProviderFilterOptions(
+    originalEval.runtimeOptions?.providerFilter,
+  );
+  const providerFilter = providerFilterOptions.filterProviders;
+
+  // Validate the stored pattern up front so a regex failure is attributed to the filter,
+  // while unrelated resolution errors (missing prompt files, provider load failures)
+  // propagate unchanged with their original class and stack.
+  const regexError = providerFilter ? getProviderFilterRegexError(providerFilter) : undefined;
+  if (providerFilter && regexError) {
+    const configDescription = cmdObj.config
+      ? `retry config "${cmdObj.config}"`
+      : 'saved evaluation config';
+    throw new ConfigResolutionError(
+      `Could not resolve the ${configDescription} using stored provider filter "${providerFilter}": ${regexError}. Existing ERROR results were preserved.`,
+    );
+  }
+
+  const configs = cmdObj.config
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    : await resolveConfigs(providerFilterOptions, originalEval.config);
+
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label in doEval. Replay both stages so the retried provider
+  // set matches the original even when an instantiated id or label diverges from its
+  // raw config reference.
+  configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
+
+  assertRetryProviderFilterMatched(
+    providerFilter,
+    configs.testSuite.providers.length,
+    cmdObj.config,
+  );
+  return configs;
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -294,22 +354,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  let testSuite;
-  let commandLineOptions: Record<string, unknown> | undefined;
-  let config: Record<string, unknown> | undefined;
-  if (cmdObj.config) {
-    // Load configuration from the provided config file
-    const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  } else {
-    // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  }
+  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:

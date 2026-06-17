@@ -1,9 +1,8 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { getAndCheckProvider } from './providers';
+import { getAndCheckProvider, getRemoteGradingContext, shouldUseRemoteGrading } from './providers';
 import {
   cosineSimilarity,
   dotProduct,
@@ -184,7 +183,7 @@ export async function matchesSimilarity(
   if (
     metric === 'cosine' &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ requireEmbeddingProvider: true })
+    shouldUseRemoteGrading({ requireEmbeddingProvider: true })
   ) {
     try {
       return await doRemoteGrading({
@@ -193,6 +192,7 @@ export async function matchesSimilarity(
         output,
         threshold,
         inverse,
+        ...getRemoteGradingContext(),
       });
     } catch (error) {
       return similarityProviderFail(`Could not perform remote grading: ${error}`);

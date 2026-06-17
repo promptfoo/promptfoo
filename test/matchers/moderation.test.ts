@@ -112,6 +112,8 @@ describe('matchesModeration', () => {
       pass: false,
       score: 0,
       reason: 'Moderation API error: provider unavailable',
+      // Tagged so inverse-aware callers (not-moderation) don't flip a transport
+      // error into a spurious pass.
       metadata: { graderError: true },
     });
   });

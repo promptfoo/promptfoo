@@ -40,6 +40,31 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 5:**
+
+- `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
+
+Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for Fable 5.
+Regional and multi-region Vertex endpoints carry a
+[10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
+over the global endpoint for Claude 5 models; promptfoo includes that premium in
+cost calculations unless `config.region` is `global`.
+
+Claude 5 models also require provider data sharing on Vertex — without it requests
+fail with a 403 asking you to set `PublisherModelConfig.data_sharing_enabled_provider`.
+Enable it once per project (in addition to Model Garden access):
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  "https://aiplatform.googleapis.com/v1beta1/projects/PROJECT_ID/locations/global/publishers/anthropic/models/claude-fable-5:setPublisherModelConfig" \
+  -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
+```
+
+Mythos 5 is limited availability; contact your Google Cloud account team for access
+and the model ID because Google does not publish one in its public model catalog.
+
 **Claude 4.8:**
 
 - `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
@@ -75,7 +100,7 @@ Anthropic's Claude models are available with the following versions:
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
 :::
 
-Note: Claude models support up to 200,000 tokens context length and include built-in safety features.
+Note: Claude context limits vary by model. Fable 5 and Mythos 5 support up to 1 million input tokens.
 
 ### Llama Models
 

@@ -80,7 +80,74 @@ describe('handleModeration', () => {
     });
   });
 
-  it('preserves matcher metadata', async () => {
+  it('should pass not-moderation when content IS flagged (inverse)', async () => {
+    // matchesModeration reports a flagged output as { pass: false, score: 0 }.
+    mockedMatchesModeration.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Moderation flags detected: harassment',
+    });
+
+    const result = await handleModeration({
+      ...baseParams,
+      inverse: true,
+      providerResponse: { output: 'output' },
+    });
+
+    // Before the fix the handler ignored `inverse` and returned pass: false,
+    // making not-moderation behave identically to moderation.
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Moderation flags detected: harassment',
+      assertion: mockAssertion,
+    });
+  });
+
+  it('should fail not-moderation when content is clean (inverse)', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'No moderation flags detected',
+    });
+
+    const result = await handleModeration({
+      ...baseParams,
+      inverse: true,
+      providerResponse: { output: 'output' },
+    });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No moderation flags detected',
+      assertion: mockAssertion,
+    });
+  });
+
+  it('should fail moderation (non-inverse) when content is flagged', async () => {
+    // Regression guard for the let/inverse refactor: the non-inverse path must
+    // still report a flagged result as a failure, byte-for-byte unchanged.
+    mockedMatchesModeration.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Moderation flags detected: harassment',
+    });
+
+    const result = await handleModeration({ ...baseParams, inverse: false });
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Moderation flags detected: harassment',
+      assertion: mockAssertion,
+    });
+  });
+
+  it('preserves matcher metadata and does not flip moderation API errors for not-moderation', async () => {
+    // A provider/transport error is tagged metadata.graderError. The inverse flip
+    // must propagate it verbatim (fail closed) rather than turning an unchecked
+    // output into a spurious "was flagged" pass.
     mockedMatchesModeration.mockResolvedValue({
       pass: false,
       score: 0,
@@ -90,6 +157,7 @@ describe('handleModeration', () => {
 
     const result = await handleModeration({
       ...baseParams,
+      inverse: true,
       providerResponse: { output: 'output' },
     });
 
