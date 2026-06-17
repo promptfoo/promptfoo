@@ -236,8 +236,8 @@ describe('providerWrapper', () => {
       const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
       await wrappedProvider.callApi('test');
 
-      // 400-digit value overflows to Infinity once multiplied to ms.
-      const error = new Error(`retry after ${'9'.repeat(400)}`);
+      const overflowingRetryAfter = `retry after ${'9'.repeat(400)}`;
+      const error = new Error(overflowingRetryAfter);
       expect(capturedOptions.getRetryAfter(undefined, error)).toBeUndefined();
     });
   });

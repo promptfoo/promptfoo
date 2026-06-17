@@ -410,7 +410,8 @@ describe('parseRateLimitHeaders', () => {
     });
 
     it('should ignore a duration string whose total overflows to non-finite', () => {
-      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': `${'9'.repeat(400)}h` });
+      const overflowingDuration = `${'9'.repeat(400)}h`;
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': overflowingDuration });
 
       expect(result.resetAt).toBeUndefined();
     });

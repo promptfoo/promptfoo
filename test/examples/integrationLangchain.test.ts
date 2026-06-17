@@ -35,9 +35,7 @@ function findPythonPath(): string | undefined {
 
 const PYTHON_PATH = findPythonPath();
 
-// Skip (rather than hard-fail) when no Python interpreter is available, matching
-// the repo precedent for interpreter-gated suites. CI always provides Python, so
-// these cases still run there.
+// Skip these subprocess cases when no Python interpreter is available (CI always has one).
 const itPy = PYTHON_PATH ? it : it.skip;
 
 describe('integration-langchain example', () => {
