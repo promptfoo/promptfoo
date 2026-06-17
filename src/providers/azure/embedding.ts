@@ -53,14 +53,15 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       if (!embedding) {
         throw new Error('No embedding returned');
       }
-      const ret = {
+      const ret: ProviderEmbeddingResponse = {
         embedding,
+        cached, // surface the cache hit so downstream skips rate-limit delays / metrics are accurate
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 }
+          ? { cached: data?.usage?.total_tokens, total: data?.usage?.total_tokens, numRequests: 1 }
           : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
+              total: data?.usage?.total_tokens,
+              prompt: data?.usage?.prompt_tokens,
+              completion: data?.usage?.completion_tokens,
               numRequests: 1,
             },
       };
@@ -70,8 +71,8 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
         tokenUsage: cached
           ? {
-              cached: data.usage.total_tokens,
-              total: data.usage.total_tokens,
+              cached: data?.usage?.total_tokens,
+              total: data?.usage?.total_tokens,
               numRequests: 1,
             }
           : {
