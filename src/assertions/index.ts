@@ -344,6 +344,167 @@ export function renderMetricName(
   }
 }
 
+function getProviderDisplayName(provider?: ApiProvider): string {
+  if (provider?.label) {
+    return provider.label;
+  }
+
+  try {
+    return provider?.id() || 'unknown provider';
+  } catch {
+    return 'unknown provider';
+  }
+}
+
+function getProviderIdentifiers(provider?: ApiProvider): string[] {
+  const identifiers = new Set<string>();
+
+  if (provider?.label) {
+    identifiers.add(provider.label);
+  }
+
+  try {
+    const providerId = provider?.id();
+    if (providerId) {
+      identifiers.add(providerId);
+    }
+  } catch {
+    // Ignore providers with non-callable or failing id implementations.
+  }
+
+  return Array.from(identifiers);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
+function providerIdentifierMatches(pattern: string, identifier: string): boolean {
+  if (pattern === identifier) {
+    return true;
+  }
+
+  if (!pattern.includes('*') && !pattern.includes('?')) {
+    return false;
+  }
+
+  const wildcardRegex = new RegExp(
+    `^${escapeRegExp(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`,
+  );
+  return wildcardRegex.test(identifier);
+}
+
+function getXFailProviderPatterns(assertion: Assertion): string[] | undefined {
+  const { xfail } = assertion;
+
+  if (xfail === true) {
+    return undefined;
+  }
+  if (!xfail) {
+    return [];
+  }
+  if (typeof xfail === 'string') {
+    return [xfail];
+  }
+  if (Array.isArray(xfail)) {
+    return xfail;
+  }
+  return Array.isArray(xfail.providers) ? xfail.providers : [xfail.providers];
+}
+
+function getXFailReason(assertion: Assertion): string | undefined {
+  const { xfail } = assertion;
+  return xfail && typeof xfail === 'object' && !Array.isArray(xfail) ? xfail.reason : undefined;
+}
+
+function getProviderXFailMatch(
+  assertion: Assertion,
+  provider?: ApiProvider,
+): { provider: string; pattern?: string; reason?: string } | undefined {
+  const patterns = getXFailProviderPatterns(assertion);
+  const reason = getXFailReason(assertion);
+
+  if (!patterns) {
+    return { provider: getProviderDisplayName(provider), reason };
+  }
+  if (patterns.length === 0) {
+    return undefined;
+  }
+
+  const identifiers = getProviderIdentifiers(provider);
+  const pattern = patterns.find(
+    (pattern) =>
+      pattern === '*' ||
+      identifiers.some((identifier) => providerIdentifierMatches(pattern, identifier)),
+  );
+
+  return pattern ? { provider: getProviderDisplayName(provider), pattern, reason } : undefined;
+}
+
+function applyProviderXFail(
+  assertion: Assertion,
+  result: GradingResult,
+  provider?: ApiProvider,
+): GradingResult {
+  if (assertion.weight === 0) {
+    return result;
+  }
+  if (
+    result.metadata?.graderError === true ||
+    result.metadata?.scriptError === true ||
+    result.metadata?.webhookError === true ||
+    result.metadata?.similarityProviderError === true
+  ) {
+    return result;
+  }
+
+  const match = getProviderXFailMatch(assertion, provider);
+  if (!match) {
+    return result;
+  }
+
+  const reasonSuffix = match.reason ? ` (${match.reason})` : '';
+  const normalizedNamedScores = result.namedScores
+    ? {
+        namedScores: Object.fromEntries(
+          Object.keys(result.namedScores).map((metric) => [metric, result.pass ? 0 : 1]),
+        ),
+      }
+    : {};
+  const metadata = {
+    ...result.metadata,
+    xfail: {
+      expected: true,
+      originalPass: result.pass,
+      originalReason: result.reason,
+      originalScore: result.score,
+      provider: match.provider,
+      ...(match.pattern && { pattern: match.pattern }),
+      ...(match.reason && { reason: match.reason }),
+    },
+  };
+
+  if (result.pass) {
+    return {
+      ...result,
+      ...normalizedNamedScores,
+      pass: false,
+      score: 0,
+      reason: `Assertion was expected to fail for provider "${match.provider}"${reasonSuffix}, but passed`,
+      metadata,
+    };
+  }
+
+  return {
+    ...result,
+    ...normalizedNamedScores,
+    pass: true,
+    score: 1,
+    reason: `Assertion failed as expected for provider "${match.provider}"${reasonSuffix}: ${result.reason}`,
+    metadata,
+  };
+}
+
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
  * or "not-contains" is inverse of "contains".
@@ -425,6 +586,8 @@ export async function runAssertion({
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  const applyXFail = (result: GradingResult) => applyProviderXFail(assertion, result, provider);
+
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -640,7 +803,7 @@ export async function runAssertion({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return applyXFail(await handleRedteam(assertionParams));
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -660,13 +823,13 @@ export async function runAssertion({
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
-      return {
+      return applyXFail({
         ...result,
         pass: true, // Force pass for weight=0 assertions
-      };
+      });
     }
 
-    return result;
+    return applyXFail(result);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);

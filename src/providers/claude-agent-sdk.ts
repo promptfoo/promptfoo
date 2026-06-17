@@ -73,6 +73,8 @@ export interface ToolCallEntry {
   parentToolUseId: string | null;
 }
 
+export type ClaudeAssistantMessageError = SDKAssistantMessageError | 'overloaded';
+
 /**
  * Error reported by an assistant message during a Claude Agent SDK session. The
  * SDK started populating `SDKAssistantMessage.error` with discriminated codes
@@ -81,7 +83,7 @@ export interface ToolCallEntry {
  * `response.metadata.assistantErrors` after a session completes.
  */
 export interface AssistantErrorEntry {
-  error: SDKAssistantMessageError;
+  error: ClaudeAssistantMessageError;
   uuid: string;
   parentToolUseId: string | null;
   request_id?: string;
@@ -1423,12 +1425,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
               }
             }
-            if (msg.error) {
+            const assistantError = msg.error as ClaudeAssistantMessageError | undefined;
+            if (assistantError) {
               // The SDK exposes discriminated codes like `model_not_found` /
               // `rate_limit` on failed assistant messages. Surface them so
               // trace assertions can spot failed rounds instead of silently
               // reporting them as OK.
-              attributes['gen_ai.turn.error'] = msg.error;
+              attributes['gen_ai.turn.error'] = assistantError;
             }
             // A turn marker is a point-in-time event, so start and end at the same instant.
             const now = Date.now();
@@ -1438,7 +1441,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               startTime: now,
               endTime: now,
               attributes,
-              errorMessage: msg.error,
+              errorMessage: assistantError,
               logLabel: 'ClaudeAgentSDK',
             });
             return index;
@@ -1502,9 +1505,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   toolTurnIndex.set(block.id, turnIndex);
                 }
               }
-              if (msg.error) {
+              const assistantError = msg.error as ClaudeAssistantMessageError | undefined;
+              if (assistantError) {
                 assistantErrors.push({
-                  error: msg.error,
+                  error: assistantError,
                   uuid: msg.uuid,
                   parentToolUseId: msg.parent_tool_use_id,
                   ...(msg.request_id ? { request_id: msg.request_id } : {}),

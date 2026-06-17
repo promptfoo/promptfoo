@@ -164,6 +164,27 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('does not require web search verification');
   });
 
+  it('does not invert grader errors for inverse assertions', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Contains outdated information',
+    };
+
+    const originalResult: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: search unavailable',
+      metadata: { graderError: true },
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue(originalResult);
+
+    const result = await handleSearchRubric(params);
+
+    expect(result).toEqual(originalResult);
+  });
+
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = createMockProvider();
 

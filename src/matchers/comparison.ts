@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -51,7 +51,7 @@ export async function matchesSelectBest(
   );
   if (resp.error || !resp.output) {
     return Array.from({ length: outputs.length }, () =>
-      fail(resp.error || 'No output', resp.tokenUsage),
+      graderFail(resp.error || 'No output', resp.tokenUsage),
     );
   }
 
@@ -62,7 +62,7 @@ export async function matchesSelectBest(
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return Array.from({ length: outputs.length }, () =>
-      fail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
+      graderFail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
     );
   }
 

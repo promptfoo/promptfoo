@@ -180,6 +180,131 @@ describe('handleConversationRelevance with reason generation', () => {
     expect(result.tokensUsed!.total).toBeGreaterThan(0);
   });
 
+  it('should propagate grader errors without scoring conversation windows', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        error: 'conversation grader unavailable',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const params: AssertionParams = {
+      baseType: 'conversation-relevance' as const,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0.8,
+      },
+      assertionValueContext: {
+        vars: {},
+        test: {} as AtomicTestCase,
+        prompt: 'test',
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: { output: 'test' },
+      },
+      output: 'test',
+      outputString: 'test',
+      providerResponse: { output: 'test' },
+      test: {
+        vars: { _conversation: [{ input: 'Question 1', output: 'Answer 1' }] },
+        options: { provider: mockProvider },
+      } as AtomicTestCase,
+      inverse: false,
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result).toMatchObject({
+      assertion: params.assertion,
+      pass: false,
+      score: 0,
+      reason: 'conversation grader unavailable',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should preserve prior token usage when a later conversation window has a grader error', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi
+        .fn()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ verdict: 'yes' }),
+          tokenUsage: { total: 10, prompt: 6, completion: 4, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'not json',
+          tokenUsage: { total: 7, prompt: 3, completion: 4, cached: 0 },
+        }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const params: AssertionParams = {
+      baseType: 'conversation-relevance' as const,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0.8,
+      },
+      assertionValueContext: {
+        vars: {},
+        test: {} as AtomicTestCase,
+        prompt: 'test',
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: { output: 'test' },
+      },
+      output: 'test',
+      outputString: 'test',
+      providerResponse: { output: 'test' },
+      test: {
+        vars: {
+          _conversation: [
+            { input: 'Question 1', output: 'Answer 1' },
+            { input: 'Question 2', output: 'Answer 2' },
+          ],
+        },
+        options: { provider: mockProvider },
+      } as AtomicTestCase,
+      inverse: false,
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result).toMatchObject({
+      assertion: params.assertion,
+      pass: false,
+      score: 0,
+      reason: 'Error parsing output: No JSON object found in response',
+      metadata: { graderError: true },
+      tokensUsed: {
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+      },
+    });
+  });
+
   it('should handle empty conversations gracefully', async () => {
     const mockProvider = {
       id: () => 'mock-provider',

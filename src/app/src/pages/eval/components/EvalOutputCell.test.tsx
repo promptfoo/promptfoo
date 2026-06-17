@@ -1951,6 +1951,103 @@ describe('EvalOutputCell provider override', () => {
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
     expect(container.querySelector('.provider.pill')).not.toBeInTheDocument();
   });
+
+  it('shows expected-fail badge when an assertion was xfail-rewritten from a real failure', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        pass: true,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'xfail',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Assertion failed as expected',
+              assertion: { type: 'equals', value: 'foo' },
+              metadata: {
+                xfail: {
+                  expected: true,
+                  originalPass: false,
+                  originalScore: 0,
+                  originalReason: 'Expected output "foo" to equal "bar"',
+                  provider: 'openai:gpt-4',
+                  reason: 'Known regression',
+                },
+              },
+            },
+          ],
+        },
+      },
+    } as unknown as MockEvalOutputCellProps;
+
+    const { getByTestId } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(getByTestId('xfail-expected-badge')).toHaveTextContent('expected fail');
+  });
+
+  it('does not show expected-fail badge for plain passes', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        pass: true,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'all good',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'matches',
+              assertion: { type: 'equals', value: 'foo' },
+            },
+          ],
+        },
+      },
+    } as unknown as MockEvalOutputCellProps;
+
+    const { queryByTestId } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(queryByTestId('xfail-expected-badge')).not.toBeInTheDocument();
+  });
+
+  it('does not show expected-fail badge for xfail xpass (unexpected pass) results', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        pass: false,
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'xpass',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Assertion was expected to fail but passed',
+              assertion: { type: 'equals', value: 'foo' },
+              metadata: {
+                xfail: {
+                  expected: true,
+                  originalPass: true,
+                  originalScore: 1,
+                  originalReason: 'matches',
+                  provider: 'openai:gpt-4',
+                },
+              },
+            },
+          ],
+        },
+      },
+    } as unknown as MockEvalOutputCellProps;
+
+    const { queryByTestId } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(queryByTestId('xfail-expected-badge')).not.toBeInTheDocument();
+  });
 });
 
 describe('EvalOutputCell cell highlighting styling', () => {

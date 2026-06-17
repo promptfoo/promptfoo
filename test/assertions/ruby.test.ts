@@ -183,6 +183,32 @@ describe('Ruby assertions', () => {
     });
   });
 
+  it.each([
+    [
+      'preserved indentation',
+      'if output == "Expected output"\n  return true\nend',
+      '  if output == "Expected output"\n    return true\n  end',
+    ],
+    ['default indentation', 'return true\nreturn false', '  return true\n  return false'],
+  ])('should build multiline Ruby assertions with %s', async (_name, value, generatedBody) => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce(true);
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'ruby', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRubyCode).toHaveBeenCalledWith(
+      expect.stringContaining(generatedBody),
+      'main',
+      expect.any(Array),
+    );
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
+
   it('should pass provider metadata shortcut to a ruby assert', async () => {
     vi.mocked(path.resolve).mockReturnValue('/path/to/assert.rb');
     vi.mocked(path.extname).mockReturnValue('.rb');
@@ -236,5 +262,29 @@ describe('Ruby assertions', () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("output.include?('{{secret}}')");
     expect(result.reason).not.toContain('sk-test-secret-123');
+  });
+
+  it('should not xfail Ruby execution errors', async () => {
+    vi.mocked(runRubyCode).mockRejectedValueOnce(new Error('boom'));
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'ruby',
+        value: 'raise "boom"',
+        xfail: true,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Ruby code execution failed: boom',
+      metadata: { scriptError: true },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
   });
 });

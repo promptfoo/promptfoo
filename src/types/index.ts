@@ -569,6 +569,15 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set when custom assertion code fails to execute. Expected-failure
+    // handling must not turn broken assertion logic into a passing result.
+    scriptError?: true;
+    // Set when webhook assertion transport, response status, or parsing fails.
+    // Expected-failure handling must not turn broken assertion services into passes.
+    webhookError?: true;
+    // Set when similarity assertions cannot get usable embedding/similarity
+    // provider output. Expected-failure handling must not hide grader outages.
+    similarityProviderError?: true;
     [key: string]: any;
   };
 }
@@ -701,43 +710,75 @@ export const AssertionSetSchema = z.object({
   // An external mapping of arbitrary strings to values that is defined
   // for every assertion in the set and passed into each assert
   config: z.record(z.string(), z.any()).optional(),
+  xfail: z.never().optional(),
 });
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const AssertionXFailProviderSchema = z.union([z.string(), z.array(z.string())]);
+
+const AssertionXFailSchema = z.union([
+  z.boolean(),
+  AssertionXFailProviderSchema,
+  z.object({
+    providers: AssertionXFailProviderSchema,
+    reason: z.string().optional(),
+  }),
+]);
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: AssertionTypeSchema,
+export const AssertionSchema = z
+  .object({
+    // Type of assertion
+    type: AssertionTypeSchema,
 
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
+    // The expected value, if applicable
+    value: z.custom<AssertionValue>().optional(),
 
-  // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom asserts
-  config: z.record(z.string(), z.any()).optional(),
+    // An external mapping of arbitrary strings to values that is passed
+    // to the assertion for custom asserts
+    config: z.record(z.string(), z.any()).optional(),
 
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold: z.number().optional(),
+    // The threshold value, only applicable for similarity (cosine distance)
+    threshold: z.number().optional(),
 
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
+    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+    weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
+    // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
+    provider: z.custom<GradingConfig['provider']>().optional(),
 
-  // Override the grading rubric
-  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+    // Override the grading rubric
+    rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
+    // Tag this assertion result as a named metric
+    metric: z.string().optional(),
 
-  // Process the output before running the assertion
-  transform: StringOrFunctionSchema.optional(),
+    // Process the output before running the assertion
+    transform: StringOrFunctionSchema.optional(),
 
-  // Extract context from the output using a transform
-  contextTransform: StringOrFunctionSchema.optional(),
-});
+    // Extract context from the output using a transform
+    contextTransform: StringOrFunctionSchema.optional(),
+
+    // Mark this assertion as expected to fail for matching providers
+    xfail: AssertionXFailSchema.optional(),
+  })
+  .superRefine((assertion, ctx) => {
+    const assertionType = assertion.type as string;
+    if (
+      assertion.xfail !== undefined &&
+      (assertionType.startsWith('select-') ||
+        assertionType === 'assert-set' ||
+        assertionType === 'max-score' ||
+        assertionType === 'human')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['xfail'],
+        message: `xfail is not supported for ${assertion.type} assertions`,
+      });
+    }
+  });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 

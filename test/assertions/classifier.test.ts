@@ -104,6 +104,31 @@ describe('handleClassifier', () => {
     );
   });
 
+  it('does not invert grader errors for inverse assertions', async () => {
+    mockedMatchesClassification.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'classification unavailable',
+      metadata: { graderError: true },
+    });
+    const params = createParams({
+      assertion: {
+        type: 'not-classifier',
+        value: undefined,
+      },
+      renderedValue: undefined,
+      inverse: true,
+    });
+
+    await expect(handleClassifier(params)).resolves.toEqual({
+      assertion: params.assertion,
+      pass: false,
+      score: 0,
+      reason: 'classification unavailable',
+      metadata: { graderError: true },
+    });
+  });
+
   it('rejects non-string classifier assertion values', async () => {
     const params = createParams({
       renderedValue: { label: 'safe' },

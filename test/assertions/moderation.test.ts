@@ -144,7 +144,7 @@ describe('handleModeration', () => {
     });
   });
 
-  it('should NOT flip a moderation API error into a pass for not-moderation (inverse)', async () => {
+  it('preserves matcher metadata and does not flip moderation API errors for not-moderation', async () => {
     // A provider/transport error is tagged metadata.graderError. The inverse flip
     // must propagate it verbatim (fail closed) rather than turning an unchecked
     // output into a spurious "was flagged" pass.

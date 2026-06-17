@@ -103,9 +103,9 @@ export const handleModeration = async ({
     score = 1 - score;
   }
   return {
+    ...moderationResult,
     pass,
     score,
-    reason: moderationResult.reason,
     assertion,
   };
 };

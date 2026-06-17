@@ -1879,7 +1879,40 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'Webhook error: Webhook response status: 500',
+      metadata: {
+        webhookError: true,
+      },
     });
+  });
+
+  it('should not xfail webhook transport errors', async () => {
+    const output = 'Expected output';
+
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response('', {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { ...webhookAssertion, xfail: true },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Webhook error: Webhook response status: 500',
+      metadata: {
+        webhookError: true,
+      },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
   });
 
   // Test for rouge-n assertion
@@ -2788,6 +2821,43 @@ describe('runAssertion', () => {
       });
     });
 
+    it('should not xfail similarity provider errors', async () => {
+      const output = 'Test output';
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        if (text === 'Similar output') {
+          return Promise.resolve({
+            error: 'Embedding provider unavailable',
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        }
+        return Promise.resolve({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: 'Similar output',
+          xfail: true,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Embedding provider unavailable',
+        metadata: {
+          similarityProviderError: true,
+        },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
     it('should pass for a similar assertion with an array of string values', async () => {
       const output = 'Test output';
 
@@ -2823,6 +2893,70 @@ describe('runAssertion', () => {
         pass: false,
         reason: 'None of the provided values met the similarity threshold',
       });
+    });
+  });
+
+  describe('Grader provider errors with xfail', () => {
+    it('should not xfail classification provider errors', async () => {
+      const classificationProvider = Object.assign(
+        createMockProvider({ id: 'classification-provider' }),
+        {
+          callClassificationApi: vi.fn().mockResolvedValue({ error: 'classification unavailable' }),
+        },
+      );
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        assertion: {
+          type: 'classifier',
+          value: 'safe',
+          xfail: true,
+        },
+        test: {
+          options: {
+            provider: classificationProvider,
+          },
+        } as AtomicTestCase,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'classification unavailable',
+        metadata: { graderError: true },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
+    it('should not xfail moderation provider errors', async () => {
+      const moderationProvider = Object.assign(createMockProvider({ id: 'moderation-provider' }), {
+        callModerationApi: vi.fn().mockResolvedValue({ error: 'moderation unavailable' }),
+      });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        assertion: {
+          type: 'moderation',
+          xfail: true,
+        },
+        test: {
+          options: {
+            provider: moderationProvider,
+          },
+        } as AtomicTestCase,
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Moderation API error: moderation unavailable',
+        metadata: { graderError: true },
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
     });
   });
 

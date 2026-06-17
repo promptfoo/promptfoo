@@ -231,11 +231,33 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
+      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
       }),
+    });
+  });
+
+  it('should mark malformed factuality responses as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          output: 'not a factuality verdict',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Factuality checker output did not match expected format: not a factuality verdict',
+      metadata: { graderError: true },
     });
   });
 
@@ -313,6 +335,27 @@ The submitted answer may either be a subset or superset of the expert answer, or
     await expect(matchesFactuality(input, expected, output, grading)).rejects.toThrow(
       'An error occurred',
     );
+  });
+
+  it('should mark provider errors as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          error: 'grader unavailable',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesFactuality(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grader unavailable',
+      metadata: { graderError: true },
+    });
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {

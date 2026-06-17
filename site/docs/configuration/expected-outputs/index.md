@@ -43,18 +43,81 @@ tests:
 
 ## Assertion properties
 
-| Property         | Type               | Required | Description                                                                                                                                                                                                                                                                                                                                        |
-| ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                                                                                  |
-| value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
-| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
-| weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
-| provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
-| rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                                                                            |
-| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python/ruby assertions                                                                                                                                                                                                                                                 |
-| transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
-| metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
-| contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+| Property         | Type                                    | Required | Description                                                                                                                                                                                                                                                                                                                                        |
+| ---------------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string                                  | Yes      | Type of assertion                                                                                                                                                                                                                                                                                                                                  |
+| value            | string                                  | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
+| threshold        | number                                  | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
+| weight           | number                                  | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
+| provider         | string                                  | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
+| rubricPrompt     | string \| string[]                      | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                                                                            |
+| config           | object                                  | No       | External mapping of arbitrary strings to values passed to custom javascript/python/ruby assertions                                                                                                                                                                                                                                                 |
+| transform        | string \| Function                      | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
+| metric           | string                                  | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
+| contextTransform | string \| Function                      | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+| xfail            | boolean \| string \| string[] \| object | No       | Mark this assertion as expected to fail. Strings are provider id or label patterns; objects include `providers` and optional `reason`.                                                                                                                                                                                                             |
+
+## Expected provider failures
+
+Use `xfail` when an assertion is expected to fail for specific providers but should remain visible in eval output. A matching failed assertion is recorded as an expected failure and receives full score. If it passes, promptfoo fails it as an unexpected pass so you know to remove the exception (the same convention pytest uses for `xfail`/`xpass`).
+
+The original pass/fail and the reason are preserved on the result under `componentResult.metadata.xfail` so dashboards and exports can still show the underlying failure. The Web UI marks rewritten passes with an "expected fail" badge next to the pass indicator.
+
+```yaml
+providers:
+  - openai:gpt-5-mini
+  - anthropic:claude-sonnet-4-5-20250929
+
+tests:
+  - vars:
+      question: 'What is the warranty period?'
+    assert:
+      - type: contains
+        value: 'two years'
+        xfail:
+          providers:
+            - anthropic:*
+          reason: 'Provider does not include warranty duration yet'
+```
+
+### Accepted shapes
+
+`xfail` accepts several shapes for convenience:
+
+- `xfail: true` — equivalent to `xfail: { providers: '*' }`; the assertion is expected to fail for every provider.
+- `xfail: 'openai:*'` — a single provider pattern (string).
+- `xfail: ['openai:*', 'anthropic:*']` — an array of provider patterns.
+- `xfail: { providers: '...', reason: '...' }` — the full form, with an optional `reason` recorded in the result.
+
+### Provider patterns
+
+Patterns are matched against both the provider's `id()` and its `label`, and support `*` and `?` wildcards. Use `providers: '*'` to match every provider while keeping a `reason`. The `xfail` marker is not supported on comparison assertions (`select-best`, `max-score`) or on `human` assertions, and the schema will reject those configurations.
+
+### Per-provider xfail blocks
+
+A common pattern is to keep one assertion and pin the exception to a specific model:
+
+```yaml
+providers:
+  - openai:gpt-5-mini
+  - id: anthropic:claude-sonnet-4-5-20250929
+    label: claude-prod
+
+tests:
+  - vars:
+      question: 'Summarize the policy.'
+    assert:
+      - type: llm-rubric
+        value: 'Mentions cancellation policy.'
+        xfail:
+          providers:
+            - claude-prod
+          reason: 'Tracked in PF-1234 — re-evaluate after prompt tweak'
+```
+
+### Script execution errors
+
+Script-style assertions (`type: javascript`, `type: python`, `type: ruby`, and external `file://` handlers) treat thrown exceptions and non-zero exits as real evaluation errors. Those errors are not rewritten by `xfail` — the result surfaces as an error so you can fix the script rather than masking it as an expected failure. Only deterministic pass/fail outcomes from the assertion (and model-graded results) participate in the xfail rewrite.
 
 ## Grouping assertions via Assertion Sets
 

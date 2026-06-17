@@ -44,6 +44,10 @@ import type { AnthropicMessageOptions } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
 
+type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
+  output_tokens_details?: { thinking_tokens?: number | null } | null;
+};
+
 type AnthropicMessageStream = {
   finalMessage(): Promise<Anthropic.Messages.Message>;
   on?(
@@ -214,7 +218,9 @@ function coerceMcpToolInput(input: unknown): Record<string, unknown> {
 function mergeAnthropicUsage(
   messages: Anthropic.Messages.Message[],
 ): Anthropic.Messages.Message['usage'] | undefined {
-  const usageEntries = messages.map((message) => message.usage).filter((usage) => usage != null);
+  const usageEntries = messages
+    .map((message) => message.usage as AnthropicUsageWithOutputDetails | undefined)
+    .filter((usage): usage is AnthropicUsageWithOutputDetails => usage != null);
 
   if (usageEntries.length === 0) {
     return undefined;
@@ -222,7 +228,7 @@ function mergeAnthropicUsage(
 
   const [firstUsage, ...remainingUsageEntries] = usageEntries;
 
-  return remainingUsageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
+  return remainingUsageEntries.reduce<AnthropicUsageWithOutputDetails>(
     (acc, usage) => ({
       ...usage,
       input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),

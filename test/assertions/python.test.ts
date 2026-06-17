@@ -454,6 +454,30 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(result.reason).not.toContain('sk-test-secret-123');
   });
 
+  it('should not xfail Python execution errors', async () => {
+    vi.mocked(runPythonCode).mockRejectedValueOnce(new Error('boom'));
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'python',
+        value: 'raise RuntimeError("boom")',
+        xfail: true,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Python code execution failed: boom',
+      metadata: { scriptError: true },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
+  });
+
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],

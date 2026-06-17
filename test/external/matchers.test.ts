@@ -87,6 +87,40 @@ describe('matchesConversationRelevance', () => {
     expect(result.reason).toBe('Response is completely unrelated to the question');
   });
 
+  it('should mark provider errors as grader errors', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        error: 'conversation grader unavailable',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    const messages = [
+      {
+        input: 'What is the capital of France?',
+        output: 'The capital of France is Paris.',
+      },
+    ];
+
+    await expect(matchesConversationRelevance(messages, 0.5)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'conversation grader unavailable',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should consider conversation context', async () => {
     const messages = [
       {
@@ -194,6 +228,7 @@ describe('matchesConversationRelevance', () => {
     const result = await matchesConversationRelevance(messages, 0.5);
     expect(result.pass).toBe(false);
     expect(result.reason).toMatch(/Error parsing output/);
+    expect(result.metadata).toEqual({ graderError: true });
   });
 
   it('should use custom rubric prompt with {{ messages }} (safe templating boundary)', async () => {

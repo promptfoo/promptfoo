@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -92,10 +92,10 @@ export async function matchesSearchRubric(
 
   if (resp.error || !resp.output) {
     return {
-      pass: false,
-      score: 0,
-      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
+      ...graderFail(
+        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+        resp.tokenUsage,
+      ),
       assertion,
     };
   }

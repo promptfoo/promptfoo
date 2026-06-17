@@ -22,7 +22,7 @@ export async function handleClassifier({
     test.options,
   );
 
-  if (inverse) {
+  if (inverse && classificationResult.metadata?.graderError !== true) {
     classificationResult.pass = !classificationResult.pass;
     classificationResult.score = 1 - classificationResult.score;
   }

@@ -26,7 +26,7 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
-  if (inverse) {
+  if (inverse && result.metadata?.graderError !== true) {
     result.pass = !result.pass;
     result.reason = result.pass
       ? `Output does not require web search verification: ${result.reason}`

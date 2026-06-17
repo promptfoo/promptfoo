@@ -1405,12 +1405,12 @@ describe('AnthropicMessagesProvider', () => {
           ],
           stop_reason: 'tool_use',
           usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
+        } as unknown as Anthropic.Messages.Message)
         .mockResolvedValueOnce({
           content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
           stop_reason: 'end_turn',
           usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
       const result = await provider.callApi('Find clean energy companies');
 
@@ -1486,7 +1486,7 @@ describe('AnthropicMessagesProvider', () => {
             output_tokens_details: { thinking_tokens: 3 },
             server_tool_use: null,
           },
-        } as Anthropic.Messages.Message)
+        } as unknown as Anthropic.Messages.Message)
         .mockResolvedValueOnce({
           content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
           stop_reason: 'end_turn',
@@ -1496,7 +1496,7 @@ describe('AnthropicMessagesProvider', () => {
             output_tokens_details: { thinking_tokens: 2 },
             server_tool_use: null,
           },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
       const result = await provider.callApi('Find clean energy companies');
 

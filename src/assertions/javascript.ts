@@ -258,6 +258,7 @@ Stack Trace: ${(err as Error).stack}`,
         renderedValue,
       ),
       assertion: normalizeResultAssertion(undefined, assertion),
+      metadata: { scriptError: true },
     };
   }
 };

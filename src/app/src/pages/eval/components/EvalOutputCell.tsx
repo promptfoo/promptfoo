@@ -700,6 +700,40 @@ function getCombinedContextText(output: EvaluateTableOutput): string {
     .join('\n\n');
 }
 
+function getXFailExpectedBadge(output: EvaluateTableOutput): React.ReactNode {
+  const componentResults = output.gradingResult?.componentResults;
+  if (!componentResults?.length) {
+    return null;
+  }
+
+  const expectedFailures = componentResults.filter(
+    (result) =>
+      result?.metadata?.xfail?.expected === true && result.metadata.xfail.originalPass === false,
+  );
+
+  if (expectedFailures.length === 0) {
+    return null;
+  }
+
+  const reasons = expectedFailures
+    .map((result) => (result.metadata?.xfail as { reason?: string } | undefined)?.reason)
+    .filter((reason): reason is string => typeof reason === 'string' && reason.length > 0);
+  const tooltipText = reasons.length
+    ? `Expected fail: ${reasons[0]}`
+    : 'Assertion failed as expected (xfail)';
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="provider pill" data-testid="xfail-expected-badge">
+          expected fail
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltipText}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function getProviderOverrideBadge(output: EvaluateTableOutput): React.ReactNode {
   const testCaseProvider = output.testCase?.provider;
   const providerId =
@@ -939,6 +973,7 @@ function renderStatusBlock({
   passFailText,
   scoreString,
   providerOverride,
+  xfailBadge,
   failReasons,
   showMetricPills,
   showPassReasons,
@@ -950,6 +985,7 @@ function renderStatusBlock({
   passFailText: React.ReactNode;
   scoreString: string;
   providerOverride: React.ReactNode;
+  xfailBadge: React.ReactNode;
   failReasons: string[];
   showMetricPills: boolean;
   showPassReasons: boolean;
@@ -966,6 +1002,7 @@ function renderStatusBlock({
           {passFailText}
           {scoreString && <span className="score"> {scoreString}</span>}
         </div>
+        {xfailBadge}
         {providerOverride}
       </div>
       {showMetricPills && <CustomMetrics lookup={namedScores} />}
@@ -1575,6 +1612,7 @@ function EvalOutputCell({
 
   const scoreString = scoreToString(output.score);
   const providerOverride = getProviderOverrideBadge(output);
+  const xfailBadge = getXFailExpectedBadge(output);
   const commentTextToDisplay = getCommentTextToDisplay(commentText);
 
   const shiftKeyPressed = useShiftKey();
@@ -1590,6 +1628,7 @@ function EvalOutputCell({
         passFailText,
         scoreString,
         providerOverride,
+        xfailBadge,
         failReasons,
         showMetricPills,
         showPassReasons,
