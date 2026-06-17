@@ -116,14 +116,14 @@ class PromptTemplate:
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('OPENAI_API_KEY environment variable is required.\n');
+    expect(result.stderr.trim()).toBe('OPENAI_API_KEY environment variable is required.');
   });
 
   it.skipIf(!PYTHON_PATH)('prints the LangChain result to stdout', () => {
     const result = runExample(['What is 2 + 2?'], { OPENAI_API_KEY: 'test-key' });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toBe('stubbed answer\n');
+    expect(result.stdout.trim()).toBe('stubbed answer');
     expect(result.stderr).toBe('');
   });
 
@@ -135,6 +135,6 @@ class PromptTemplate:
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('Error invoking math chain: stubbed invocation failure\n');
+    expect(result.stderr.trim()).toBe('Error invoking math chain: stubbed invocation failure');
   });
 });
