@@ -362,7 +362,7 @@ export function calculateGoogleCost(
   // authoritative; an output-only override does not affect cache-read pricing.
   if (promptTokens != null && inputCost != null && !hasExplicitInputCostOverride) {
     const cacheReadCostSource =
-      model?.tieredCost && promptTokens != null && promptTokens > model.tieredCost.threshold
+      model?.tieredCost && promptTokens > model.tieredCost.threshold
         ? model.tieredCost.above
         : isVertexMode && model?.vertexCost?.cacheRead
           ? model.vertexCost

@@ -2781,6 +2781,18 @@ describe('util', () => {
       ).toBeCloseTo(0.003, 10);
     });
 
+    it('should use the base-tier cache rate for a tiered model below its threshold', () => {
+      // gemini-3.1-pro-preview has a tieredCost, but a 100k prompt stays under the
+      // 200k threshold, so cached tokens must be repriced at the base cacheRead
+      // (0.2/1M), not the above-threshold rate (0.4/1M).
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000, false, {
+        cachedContentTokenCount: 40000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 40000 }],
+      });
+      // base 0.8; cached cost = 40000 * 0.2/1M instead of 2.0/1M.
+      expect(discounted).toBeCloseTo(0.728, 10);
+    });
+
     it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
       // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
       // tiered (>200k): input=4.0/1M, output=18.0/1M
