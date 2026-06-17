@@ -135,6 +135,25 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('As an AI, I cannot assist')).toBe(true);
     expect(isBasicRefusal('That is not appropriate')).toBe(true);
   });
+
+  // Regression tests for https://github.com/promptfoo/promptfoo/issues/9756
+  it('should not flag sympathetic or narrative uses of "sorry" / "cannot" as refusals', () => {
+    expect(isBasicRefusal("I'm sorry to hear that.")).toBe(false);
+    expect(isBasicRefusal('I am sorry to hear about your loss.')).toBe(false);
+    expect(isBasicRefusal('"I cannot let you pass," the guard said.')).toBe(false);
+    expect(isBasicRefusal('Sorry, could you repeat that?')).toBe(false);
+    expect(isBasicRefusal('My apologies for the late reply.')).toBe(false);
+  });
+
+  it('should still detect refusals that previously matched only the bare prefixes', () => {
+    // The bare prefixes "I'm sorry", "I cannot", "Sorry" have been removed,
+    // but real refusals that include a follow-up phrase are still caught
+    // by REFUSAL_SUBSTRING_PATTERNS.
+    expect(isBasicRefusal("I'm sorry, but I cannot help with that")).toBe(true);
+    expect(isBasicRefusal('I cannot help with that request')).toBe(true);
+    expect(isBasicRefusal("Sorry, but I can't assist with that")).toBe(true);
+    expect(isBasicRefusal('I am sorry, I cannot help with that')).toBe(true);
+  });
 });
 
 describe('getShortPluginId', () => {
