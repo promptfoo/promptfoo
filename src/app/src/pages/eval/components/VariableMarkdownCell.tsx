@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { cn } from '@app/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import MarkdownImage from './MarkdownImage';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractRenderableMarkdownImageSources,
@@ -38,16 +38,14 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
 }: VariableMarkdownCellProps) {
   const markdownComponents = React.useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) =>
-        src ? (
-          <img
-            src={src}
-            alt={alt || ''}
-            loading="lazy"
-            onClick={() => onImageClick?.(src)}
-            className={cn('max-h-48 max-w-full object-contain', onImageClick && 'cursor-pointer')}
-          />
-        ) : null,
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <MarkdownImage
+          src={src}
+          alt={alt}
+          onImageClick={onImageClick}
+          className="max-h-48 max-w-full object-contain"
+        />
+      ),
     }),
     [onImageClick],
   );

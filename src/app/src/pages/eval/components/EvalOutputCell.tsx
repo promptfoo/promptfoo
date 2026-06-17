@@ -36,6 +36,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
+import MarkdownImage from './MarkdownImage';
 import {
   DATA_IMAGE_ONLY_URL_TRANSFORM,
   extractMarkdownImageSources as extractRawMarkdownImageSources,
@@ -1344,17 +1345,27 @@ function EvalOutputCell({
     }
   };
 
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
 
-  // Memoized to maintain stable reference across renders, preventing
-  // unnecessary re-renders of markdown components that use this callback.
-  // Uses functional update to avoid stale closure issues.
+  // A URL opens or switches the preview; omitting it closes the preview.
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const toggleLightbox = useCallback((url?: string) => {
     setLightboxImage(url ?? null);
-    setLightboxOpen((prev) => !prev);
   }, []);
+
+  React.useEffect(() => {
+    if (!lightboxImage) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        toggleLightbox();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxImage, toggleLightbox]);
 
   // Memoized components object for ReactMarkdown to prevent re-renders.
   // Creating this inline would cause ReactMarkdown to re-render on every
@@ -1362,16 +1373,9 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) =>
-        src ? (
-          <img
-            loading="lazy"
-            src={src}
-            alt={alt}
-            onClick={() => toggleLightbox(src)}
-            style={{ cursor: 'pointer' }}
-          />
-        ) : null,
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <MarkdownImage src={src} alt={alt} onImageClick={toggleLightbox} />
+      ),
     }),
     [toggleLightbox],
   );
@@ -1675,10 +1679,15 @@ function EvalOutputCell({
         handlePromptClose,
         setActionsHovered,
       })}
-      {lightboxOpen && lightboxImage && (
-        <div className="lightbox" onClick={() => toggleLightbox()}>
+      {lightboxImage && (
+        <button
+          type="button"
+          className="lightbox border-0 p-0"
+          aria-label="Close image preview"
+          onClick={() => toggleLightbox()}
+        >
           <img src={lightboxImage} alt="Lightbox" />
-        </div>
+        </button>
       )}
       {commentDialogOpen && (
         <CommentDialog

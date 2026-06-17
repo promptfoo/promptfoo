@@ -856,9 +856,14 @@ describe('ResultsTable Metrics Display', () => {
       expect(image).toHaveAttribute('src', dataUri);
       expect(screen.queryByRole('img', { name: 'Remote image' })).not.toBeInTheDocument();
 
-      await user.click(image);
+      await user.click(screen.getByRole('button', { name: 'Open image preview: Preview image' }));
 
       expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', dataUri);
+      expect(screen.getByRole('button', { name: 'Close image preview' })).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('button', { name: 'Close image preview' })).not.toBeInTheDocument();
     });
 
     it('renders variable video from file metadata', () => {

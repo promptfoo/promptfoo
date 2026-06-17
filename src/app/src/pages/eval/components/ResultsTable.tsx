@@ -1636,8 +1636,8 @@ function ResultsTable({
     [head.prompts, columnVisibility],
   );
 
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const lightboxOpen = lightboxImage !== null;
   const [markdownLightboxImage, setMarkdownLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
@@ -1661,12 +1661,25 @@ function ResultsTable({
 
   const toggleLightbox = React.useCallback((url?: string) => {
     setLightboxImage(url || null);
-    setLightboxOpen((open) => !open);
   }, []);
 
   const toggleMarkdownLightbox = React.useCallback((url?: string) => {
-    setMarkdownLightboxImage((current) => (url && current !== url ? url : null));
+    setMarkdownLightboxImage(url || null);
   }, []);
+
+  useEffect(() => {
+    if (!markdownLightboxImage) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        toggleMarkdownLightbox();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [markdownLightboxImage, toggleMarkdownLightbox]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
@@ -2528,9 +2541,14 @@ function ResultsTable({
         </table>
       </div>
       {markdownLightboxImage && (
-        <div className="lightbox" onClick={() => toggleMarkdownLightbox()}>
+        <button
+          type="button"
+          className="lightbox border-0 p-0"
+          aria-label="Close image preview"
+          onClick={() => toggleMarkdownLightbox()}
+        >
           <img src={markdownLightboxImage} alt="Lightbox" />
-        </div>
+        </button>
       )}
       <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
