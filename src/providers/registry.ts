@@ -214,6 +214,32 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('pi:') || providerPath === 'pi',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { PiProvider } = await import('./pi');
+
+      // pi - uses pi's configured default model
+      // pi:<provider>/<model> - explicit model pattern (e.g. pi:anthropic/claude-sonnet-4-5)
+      // join(':') preserves pi's optional :<thinking> suffix (e.g. pi:sonnet:high)
+      const modelPattern = providerPath.split(':').slice(1).join(':');
+      return new PiProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: {
+          ...providerOptions.config,
+          ...(modelPattern ? { model: modelPattern } : {}),
+        },
+        // loadApiProvider merges any provider-level `env` block into
+        // providerOptions.env; let those overrides win over the suite-level env.
+        env: { ...context.env, ...providerOptions.env },
+      });
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),

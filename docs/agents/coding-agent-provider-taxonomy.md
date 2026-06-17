@@ -24,6 +24,7 @@ The main providers in this family today are:
 | OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process  |
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library   |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server |
+| Pi Coding Agent         | `pi`, `pi:<provider>/<model>`                         | Local `pi --mode json` one-shot process    |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -161,8 +162,10 @@ The coding-agent providers already share several practical patterns:
 - Session or thread caches are keyed by provider config.
 - Provider-level config is stricter than prompt-level merged config.
 - Tool and skill usage are surfaced through metadata where possible.
-- Tracing is supported for Codex and is partially shared through OpenAI agent
-  tracing helpers.
+- A top-level GenAI `callApi` span is shared across providers via `withGenAISpan`
+  (Pi emits this span too). Deep tracing into the agent runtime — child OTEL
+  spans linked by `traceparent` — is implemented for Codex and the Claude Agent
+  SDK; Pi has no native OpenTelemetry, so the provider-level span is its boundary.
 
 Useful files:
 
@@ -171,6 +174,7 @@ Useful files:
 - `src/providers/opencode-sdk.ts`
 - `src/providers/openai/codex-sdk.ts`
 - `src/providers/openai/codex-app-server.ts`
+- `src/providers/pi.ts`
 - `src/providers/registry.ts`
 
 ### OpenAI Codex SDK
@@ -327,6 +331,69 @@ Docs and examples:
 
 - `site/docs/providers/opencode-sdk.md`
 - `examples/provider-opencode-sdk/`
+
+### Pi Coding Agent
+
+Status: implemented and documented.
+
+Provider IDs:
+
+- `pi`
+- `pi:<provider>/<model>` (pi model pattern, optional `:<thinking>` suffix)
+
+Implemented capabilities:
+
+- Spawns the `pi` CLI per call in one-shot JSON event-stream mode
+  (`--mode json --no-session`), so no npm package import is required.
+- Resolves the CLI from `pi_path`, a project-local
+  `@earendil-works/pi-coding-agent` install, or `PATH`, with actionable install
+  guidance when missing.
+- Supports provider/model selection, thinking levels, and system prompt
+  replacement or extension.
+- Supports temporary or configured working directories with OpenCode-style safe
+  defaults: chat-only without `working_dir`, read-only tools (`read`, `grep`,
+  `find`, `ls`) with it.
+- Disables extension/skill/prompt-template/context-file discovery by default for
+  reproducible evals; each is opt-in.
+- Maps per-message usage to summed `tokenUsage` and USD `cost`, and surfaces tool
+  activity in `metadata.toolCalls`.
+- Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
+  JSON mode even when the run fails.
+- Emits a top-level GenAI `callApi` span (system, model, token usage, cost,
+  cache-hit) linked to the eval trace via `traceparent`, matching the other
+  agentic providers.
+
+Important limits:
+
+- Pi has no built-in permission or sandbox system; write-capable tools execute
+  with the user's privileges and are opt-in only.
+- The spawned pi process inherits promptfoo's full environment (pi resolves
+  provider credentials from env vars); isolate via container or stripped env
+  when evaluating untrusted prompts with tools enabled.
+- Sessions are always ephemeral (`--no-session`); there is no resume support.
+- Uses the user's `~/.pi/agent` config dir by default so subscription auth and
+  custom models work; set `agent_dir` to isolate.
+- Pi has no native OpenTelemetry support, so there is no deep tracing into the pi
+  runtime (no OTEL env injection); the provider-level `callApi` span is the trace
+  boundary. Pi's own install telemetry is disabled by the default `--offline`.
+- Project-local file trust (`.pi/settings.json`, project extensions/skills/
+  templates, `.pi/SYSTEM.md`) is off by default (`--no-approve`) and is a
+  separate axis from `load_*` discovery; opt in with `trust_project_files`
+  (`--approve`), which is all-or-nothing.
+- Prompts are delivered via pi's piped stdin, which trims surrounding whitespace
+  (an all-whitespace prompt becomes empty), so whitespace-exact prompts are not
+  faithfully represented; stdin is used to keep large prompts off argv.
+- Caching fingerprints only the `working_dir` tree, so a tool-enabled run that
+  reads files outside it (pi has no sandbox) can return a stale cached result if
+  those external files change; use `--no-cache` for such runs.
+- On pi auto-retry, reported `tokenUsage`/`cost` reflect the final attempt; pi
+  drops the failed attempt's message from its terminal `agent_end`, so discarded
+  attempts' tokens are not counted.
+
+Docs and examples:
+
+- `site/docs/providers/pi.md`
+- `examples/provider-pi/`
 
 ## Current Naming Guidance
 

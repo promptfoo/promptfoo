@@ -1264,4 +1264,64 @@ describe('Provider Registry', () => {
       );
     });
   });
+
+  describe('pi: prefix routing', () => {
+    const bareOptions: ProviderOptions = { config: {} };
+    const bareContext: LoadApiProviderContext = {
+      basePath: '/test',
+      options: bareOptions,
+    };
+
+    it.each([
+      'pi',
+      'pi:anthropic/claude-sonnet-4-5',
+    ])('routes %s to the Pi provider', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const { PiProvider } = await import('../../src/providers/pi');
+      expect(provider).toBeInstanceOf(PiProvider);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it('passes the provider path model pattern into config', async () => {
+      const providerPath = 'pi:openai/gpt-4o-mini:high';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config.model).toBe('openai/gpt-4o-mini:high');
+    });
+
+    it('does not let bare pi set a model pattern', async () => {
+      const factory = (await getProviderFactories('pi')).find((f) => f.test('pi'));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create('pi', bareOptions, bareContext);
+      expect((provider as any).config.model).toBeUndefined();
+    });
+
+    it('does not match other pi-prefixed provider names', async () => {
+      const factory = (await getProviderFactories('pi')).find((f) => f.test('pi'));
+      expect(factory).toBeDefined();
+      expect(factory!.test('pinecone:index')).toBe(false);
+      expect(factory!.test('pipeline')).toBe(false);
+    });
+
+    it('preserves provider-level env over suite-level context env', async () => {
+      const providerPath = 'pi:openai/gpt-4o-mini';
+      const optionsWithEnv: ProviderOptions = {
+        config: {},
+        env: { OPENAI_BASE_URL: 'http://provider-proxy' } as any,
+      };
+      const contextWithEnv: LoadApiProviderContext = {
+        basePath: '/test',
+        options: optionsWithEnv,
+        env: { OPENAI_BASE_URL: 'http://suite-proxy', SUITE_ONLY: 'x' } as any,
+      };
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, optionsWithEnv, contextWithEnv);
+      // Provider-level env wins; suite-level keys are still merged in.
+      expect((provider as any).env.OPENAI_BASE_URL).toBe('http://provider-proxy');
+      expect((provider as any).env.SUITE_ONLY).toBe('x');
+    });
+  });
 });
