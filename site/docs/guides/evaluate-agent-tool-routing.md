@@ -156,9 +156,16 @@ return {
 
 Promptfoo measures latency around the provider call. The top-level `cost` value powers the cost assertion; `context_tokens` is application telemetry scored by the JavaScript assertion.
 
-If your agent emits traces, remove the `correct_tool` and `safe_action` JavaScript assertions from `defaultTest` and add row-specific trajectory assertions instead:
+If your agent exports tool spans to Promptfoo's injected trace context, enable the local OTLP receiver, remove the `correct_tool` and `safe_action` JavaScript assertions from `defaultTest`, and add row-specific trajectory assertions instead:
 
 ```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
 tests:
   - description: Weather lookup routes to weather tool
     vars:
