@@ -1,7 +1,6 @@
 import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 
-import WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
@@ -21,6 +20,7 @@ import {
   stripExecutableToolFileReferences,
   validateFunctionCall,
 } from './util';
+import type WebSocket from 'ws';
 
 import type {
   ApiProvider,
@@ -265,6 +265,10 @@ export class GoogleLiveProvider implements ApiProvider {
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
 
+    // Lazy-load the `ws` implementation so merely importing this module stays cheap;
+    // the Live provider is itself dynamically imported by the Google provider family.
+    const WebSocketCtor = (await import('ws')).default;
+
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       const usesRealtimeTextInput = this.modelName.startsWith('gemini-3.1-flash-live');
@@ -293,7 +297,7 @@ export class GoogleLiveProvider implements ApiProvider {
         logger.debug('Using API key for Google Live API authentication (may not be supported)');
       }
 
-      const ws = new WebSocket(url);
+      const ws = new WebSocketCtor(url);
 
       let response_text_total = '';
       let response_audio_total = '';
@@ -329,7 +333,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         hasFinalized = true;
 
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocketCtor.OPEN) {
           ws.close();
         }
         clearTimeout(timeout);

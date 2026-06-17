@@ -21,6 +21,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -62,8 +63,12 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
+
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -96,6 +101,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  targetId?: string;
   maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
@@ -147,6 +153,7 @@ export default class GoatProvider implements ApiProvider {
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
       inputs?: Inputs;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -169,6 +176,7 @@ export default class GoatProvider implements ApiProvider {
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
       inputs: options.inputs,
+      targetId: options.targetId,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -272,6 +280,7 @@ export default class GoatProvider implements ApiProvider {
             lastResponse: previousTargetOutput,
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             purpose: context?.test?.metadata?.purpose,
+            targetId: this.config.targetId,
           });
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -294,6 +303,7 @@ export default class GoatProvider implements ApiProvider {
                 this.perTurnLayers,
                 Strategies,
                 {
+                  targetId: this.config.targetId,
                   evaluationId: context?.evaluationId,
                   testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
                   purpose: context?.test?.metadata?.purpose as string | undefined,
@@ -348,6 +358,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            ...remoteGenerationContextPayload(this.config.targetId),
             modifiers: context?.test?.metadata?.modifiers,
             traceSummary: previousTraceSummary,
           });
@@ -379,6 +390,7 @@ export default class GoatProvider implements ApiProvider {
             : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
+          ...remoteGenerationContextPayload(this.config.targetId),
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
@@ -499,6 +511,7 @@ export default class GoatProvider implements ApiProvider {
             this.perTurnLayers,
             Strategies,
             {
+              targetId: this.config.targetId,
               evaluationId: context?.evaluationId,
               testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
               purpose: context?.test?.metadata?.purpose as string | undefined,
@@ -655,19 +668,21 @@ export default class GoatProvider implements ApiProvider {
         if (targetResponse.error) {
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
+        const hasTargetImages = Boolean(targetResponse.images?.length);
         invariant(
-          targetResponse.output,
-          `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
+          targetResponse.output || hasTargetImages,
+          `[GOAT] Expected target response output or images to be set, but got: ${safeJsonStringify(targetResponse)}`,
         );
 
         const stringifiedOutput =
           typeof targetResponse.output === 'string'
             ? targetResponse.output
             : safeJsonStringify(targetResponse.output);
-        const finalOutput = stringifiedOutput;
+        const finalOutput =
+          stringifiedOutput || (hasTargetImages ? ATTACHED_IMAGE_OUTPUT_PLACEHOLDER : '');
         const finalResponse = targetResponse;
 
-        if (!stringifiedOutput) {
+        if (!stringifiedOutput && !hasTargetImages) {
           logger.debug('[GOAT] Target response output is not a string or JSON', {
             response: targetResponse,
           });
@@ -676,7 +691,7 @@ export default class GoatProvider implements ApiProvider {
 
         messages.push({
           role: 'assistant',
-          content: stringifiedOutput,
+          content: finalOutput,
         });
 
         // Store this turn in redteamHistory with audio/image data if present
@@ -684,7 +699,7 @@ export default class GoatProvider implements ApiProvider {
           prompt: attackerMessage.content,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
-          output: stringifiedOutput,
+          output: finalOutput,
           outputAudio:
             targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
@@ -703,27 +718,17 @@ export default class GoatProvider implements ApiProvider {
           : undefined;
 
         previousTraceSummary = attackTraceSummary;
-        previousTargetOutput = stringifiedOutput;
+        previousTargetOutput = finalOutput;
 
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
-          // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          // Build grading context with image outputs, tracing, and exfil tracking data.
+          let gradingContext: RedteamGradingContext | undefined = {
+            providerResponse: finalResponse,
+            ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
+          };
 
           // First try to get exfil data from provider response metadata (Playwright provider)
           if (finalResponse.metadata?.wasExfiltrated === undefined) {
@@ -739,6 +744,7 @@ export default class GoatProvider implements ApiProvider {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
                 gradingContext = {
+                  ...(gradingContext ?? {}),
                   ...(tracingOptions.includeInGrading
                     ? {
                         traceContext: targetResponse.traceContext,
@@ -754,6 +760,7 @@ export default class GoatProvider implements ApiProvider {
           } else {
             logger.debug('[GOAT] Using exfil data from provider response metadata');
             gradingContext = {
+              ...(gradingContext ?? {}),
               ...(tracingOptions.includeInGrading
                 ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
                 : {}),
@@ -764,8 +771,9 @@ export default class GoatProvider implements ApiProvider {
           }
 
           // Fallback to just tracing context if no exfil data found
-          if (!gradingContext && tracingOptions.includeInGrading) {
+          if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
             gradingContext = {
+              ...(gradingContext ?? {}),
               traceContext: targetResponse.traceContext,
               traceSummary: gradingTraceSummary,
             };
@@ -793,7 +801,7 @@ export default class GoatProvider implements ApiProvider {
           this.successfulAttacks.push({
             turn,
             prompt: attackerMessage.content,
-            response: stringifiedOutput,
+            response: finalOutput,
             traceSummary: attackTraceSummary,
           });
 

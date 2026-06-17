@@ -1,12 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
+  resolveDiscoveryProviderContext,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
 
+const { mockProgressBar, mockSingleBar } = vi.hoisted(() => ({
+  mockProgressBar: {
+    increment: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  },
+  mockSingleBar: vi.fn(),
+}));
+
+vi.mock('cli-progress', () => ({
+  default: {
+    SingleBar: mockSingleBar,
+  },
+}));
 vi.mock('../../../src/util/fetch/index');
 
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
@@ -23,6 +42,53 @@ describe('ArgsSchema', () => {
     const { success, error } = ArgsSchema.safeParse(args);
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
+  });
+});
+
+describe('resolveDiscoveryProviderContext', () => {
+  it('derives target context from a Cloud provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(providerPath, 'id: promptfoo://provider/cloud-target-123\n');
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('cloud-target-123');
+      expect(result.providers).toEqual([{ id: 'promptfoo://provider/cloud-target-123' }]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('derives linked target context from a local provider in a file reference', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-discover-'));
+    const providerPath = path.join(tempDir, 'targets.yaml');
+
+    try {
+      await fs.writeFile(
+        providerPath,
+        [
+          'id: openai:gpt-4.1-mini',
+          'config:',
+          '  linkedTargetId: promptfoo://provider/linked-target-123',
+          '',
+        ].join('\n'),
+      );
+
+      const result = resolveDiscoveryProviderContext(`file://${providerPath}`);
+
+      expect(result.cloudTargetId).toBe('linked-target-123');
+      expect(result.providers).toEqual([
+        {
+          id: 'openai:gpt-4.1-mini',
+          config: { linkedTargetId: 'promptfoo://provider/linked-target-123' },
+        },
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -102,7 +168,13 @@ describe('normalizeTargetPurposeDiscoveryResult', () => {
 
 describe('doTargetPurposeDiscovery', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockSingleBar.mockImplementation(function () {
+      return mockProgressBar;
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should handle empty prompt', async () => {
@@ -158,7 +230,15 @@ describe('doTargetPurposeDiscovery', () => {
       bustCache: true,
     });
 
+    expect(mockSingleBar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'Mapping the target {bar} {percentage}% | {value}/{total} turns',
+      }),
+    );
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+    expect(mockProgressBar.start).toHaveBeenCalledWith(5, 0);
+    expect(mockProgressBar.increment).toHaveBeenCalledTimes(2);
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
 
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
@@ -172,6 +252,105 @@ describe('doTargetPurposeDiscovery', () => {
       ],
       user: 'Test user',
     });
+  });
+
+  it('should include Cloud target context in discovery requests', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: null,
+            tools: [],
+            user: null,
+          },
+          state: {
+            currentQuestionIndex: 0,
+            answers: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ id: 'test', response: { output: 'unused' } });
+
+    await doTargetPurposeDiscovery(target, undefined, false, 'cloud-target-123');
+
+    const request = mockedFetchWithProxy.mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    expect(JSON.parse(request!.body as string)).toMatchObject({
+      task: 'target-purpose-discovery',
+      targetId: 'cloud-target-123',
+    });
+  });
+
+  it('should stop when the maximum turn count is reached', async () => {
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            done: false,
+            question: 'What else should I know?',
+            state: {
+              currentQuestionIndex: 0,
+              answers: [],
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      ),
+    );
+
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'Another answer' },
+    });
+
+    await expect(doTargetPurposeDiscovery(target)).rejects.toThrow('Too many retries, giving up.');
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(10);
+    expect(target.callApi).toHaveBeenCalledTimes(9);
+    expect(mockProgressBar.start).toHaveBeenCalledWith(5, 0);
+    expect(mockProgressBar.increment).toHaveBeenCalledTimes(10);
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
+    expect(mockProgressBar.increment.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      mockProgressBar.stop.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('delegates auth to the fetch layer and never sends an Authorization header itself', async () => {
+    // Single done=true turn so exactly one remote-generation request is made.
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: {
+            purpose: 'Test purpose',
+            limitations: 'Test limitations',
+            tools: [],
+            user: 'Test user',
+          },
+          state: { currentQuestionIndex: 0, answers: [] },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const target = createMockProvider({ id: 'test', response: { output: 'ok' } });
+    await doTargetPurposeDiscovery(target);
+
+    // discover.ts must not attach the cloud token itself: the centralized fetch layer
+    // injects it only for the configured cloud origin, so a custom
+    // PROMPTFOO_REMOTE_GENERATION_URL can never receive the saved credential.
+    expect(mockedFetchWithProxy).toHaveBeenCalled();
+    for (const call of mockedFetchWithProxy.mock.calls) {
+      const headers = (call[1]?.headers ?? {}) as Record<string, string>;
+      const headerKeys = Object.keys(headers).map((key) => key.toLowerCase());
+      expect(headerKeys).not.toContain('authorization');
+    }
   });
 
   it('should render the prompt if passed in', async () => {
@@ -313,7 +492,7 @@ describe('doTargetPurposeDiscovery', () => {
       callApi: vi.fn(),
     };
 
-    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    const error = await doTargetPurposeDiscovery(target).catch((e) => e);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain(
       'Remote server returned HTTP 400: Unknown task: target-purpose-discovery',
@@ -322,6 +501,8 @@ describe('doTargetPurposeDiscovery', () => {
     // Should not retry — fetch should only be called once
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
     expect(target.callApi).not.toHaveBeenCalled();
+    expect(mockProgressBar.increment).toHaveBeenCalledOnce();
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
   });
 
   it('should surface an auth hint on 401 responses', async () => {

@@ -480,13 +480,7 @@ export const DATASET_EXEMPT_PLUGINS = [
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = [
-  'cca',
-  'cross-session-leak',
-  'special-token-injection',
-  'system-prompt-override',
-  'ascii-smuggling',
-] as const;
+export const MULTI_INPUT_EXCLUDED_PLUGINS = ['cca', 'cross-session-leak'] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset

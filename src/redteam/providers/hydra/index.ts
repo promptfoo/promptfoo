@@ -20,6 +20,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -106,6 +107,7 @@ interface HydraResponse extends ProviderResponse {
 interface HydraConfig {
   injectVar: string;
   scanId?: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
@@ -187,6 +189,7 @@ export class HydraProvider implements ApiProvider {
       task: 'hydra-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(this.config.targetId),
       // Pass inputs schema for multi-input mode
       inputs: this.config.inputs,
     });
@@ -550,6 +553,7 @@ export class HydraProvider implements ApiProvider {
           this.perTurnLayers,
           Strategies,
           {
+            targetId: this.config.targetId,
             evaluationId: context?.evaluationId,
             testCaseId: test?.metadata?.testCaseId as string | undefined,
             purpose: test?.metadata?.purpose as string | undefined,
@@ -815,9 +819,10 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with provider raw output, tracing, and exfil tracking data.
+          // Build grading context with image outputs, tracing, and exfil tracking data.
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
+            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
               : {}),

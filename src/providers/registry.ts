@@ -18,6 +18,7 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
+import { AzureImageProvider } from './azure/image';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
@@ -40,12 +41,6 @@ import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
-import { AIStudioChatProvider, AIStudioEmbeddingProvider } from './google/ai.studio';
-import { GeminiImageProvider } from './google/gemini-image';
-import { GoogleImageProvider } from './google/image';
-import { GoogleLiveProvider } from './google/live';
-import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GoogleVideoProvider } from './google/video';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -294,6 +289,18 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const deploymentName = splits[2];
 
+      // Azure model types that have no sensible default deployment must name one in
+      // the provider path (`azure:<type>:<name>`). Without this, the registry would
+      // build a provider with an undefined deployment that fails later with an opaque
+      // error (e.g. a `model: undefined` request body or `undefined.toLowerCase()`).
+      const requirePathSegment = (type: string, label: string, placeholder: string) => {
+        if (!deploymentName) {
+          throw new Error(
+            `Azure ${type} provider requires ${label}. Use azure:${type}:<${placeholder}>.`,
+          );
+        }
+      };
+
       if (modelType === 'moderation') {
         if (providerPath.startsWith('azureopenai:')) {
           throw new Error(
@@ -313,13 +320,28 @@ export const providerMap: ProviderFactory[] = [
         return new AzureModerationProvider(resolvedDeployment, providerOptions);
       }
       if (modelType === 'chat') {
+        requirePathSegment('chat', 'a deployment name', 'deployment');
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
       }
       if (modelType === 'assistant') {
+        requirePathSegment('assistant', 'an assistant ID', 'assistant-id');
         return new AzureAssistantProvider(deploymentName, providerOptions);
       }
       if (modelType === 'foundry-agent') {
+        requirePathSegment('foundry-agent', 'an agent ID', 'agent-id');
         return new AzureFoundryAgentProvider(deploymentName, providerOptions);
+      }
+      if (modelType === 'image') {
+        // MAI image models are Foundry-only (served from `/mai/v1/images` on a
+        // `*.services.ai.azure.com` endpoint), so the Azure OpenAI prefix must
+        // not silently route here. See providers/AGENTS.md "Provider Routing".
+        if (providerPath.startsWith('azureopenai:')) {
+          throw new Error(
+            'azureopenai:image is not supported. MAI image models are Microsoft Foundry models — use azure:image:<deployment> instead.',
+          );
+        }
+        requirePathSegment('image', 'a deployment name', 'deployment');
+        return new AzureImageProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
@@ -328,6 +350,7 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (modelType === 'completion') {
+        requirePathSegment('completion', 'a deployment name', 'deployment');
         return new AzureCompletionProvider(deploymentName, providerOptions);
       }
       if (modelType === 'responses') {
@@ -337,7 +360,7 @@ export const providerMap: ProviderFactory[] = [
         return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
@@ -1176,33 +1199,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('vertex:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const firstPart = splits[1];
-      if (firstPart === 'video') {
-        const modelName = splits.slice(2).join(':');
-        return new GoogleVideoProvider(modelName, {
-          ...providerOptions,
-          id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
-        });
-      }
-      if (firstPart === 'chat') {
-        return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
-      }
-      if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        return new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
-      }
-      // Default to chat provider
-      return new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
     create: async (
       providerPath: string,
@@ -1320,54 +1316,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new BrowserProvider(providerPath, providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-
-      if (splits.length >= 3) {
-        const serviceType = splits[1];
-        const modelName = splits.slice(2).join(':');
-
-        if (serviceType === 'live') {
-          // This is a Live API request
-          return new GoogleLiveProvider(modelName, providerOptions);
-        } else if (serviceType === 'image') {
-          // This is an Imagen image generation request
-          return new GoogleImageProvider(modelName, providerOptions);
-        } else if (serviceType === 'video') {
-          // This is a Veo video generation request
-          return new GoogleVideoProvider(modelName, {
-            ...providerOptions,
-            id: providerPath,
-          });
-        } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
-          if (!modelName) {
-            throw new Error(
-              `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
-            );
-          }
-          return new AIStudioEmbeddingProvider(modelName, providerOptions);
-        }
-      }
-
-      // Default to regular Google API
-      const modelName = splits[1];
-
-      // Check if this is a Gemini native image generation model
-      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image-preview)
-      if (modelName.includes('-image')) {
-        return new GeminiImageProvider(modelName, providerOptions);
-      }
-
-      return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
   {
@@ -1680,12 +1628,27 @@ function isAwsProviderPath(providerPath: string): boolean {
   );
 }
 
+function isGoogleProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('vertex:') ||
+    providerPath.startsWith('google:') ||
+    providerPath.startsWith('palm:')
+  );
+}
+
 const providerFamilies: ProviderFamily[] = [
   {
     canHandle: isAwsProviderPath,
     factories: async () => {
       const { awsProviderFactories } = await import('./families/aws');
       return awsProviderFactories;
+    },
+  },
+  {
+    canHandle: isGoogleProviderPath,
+    factories: async () => {
+      const { googleProviderFactories } = await import('./families/google');
+      return googleProviderFactories;
     },
   },
   {
@@ -1737,10 +1700,11 @@ export async function getProviderFactories(
     }),
   );
   // Family factories take precedence over the module-scoped providerMap so a
-  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:, redteam) is
-  // not first intercepted by a broader providerMap entry — notably the generic
-  // JS/TS-file factory (`isJavascriptFile`), which is a prefix-agnostic suffix
-  // match and would otherwise hijack any AWS path whose final segment ends in
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:,
+  // vertex:/google:/palm:, redteam) is not first intercepted by a broader
+  // providerMap entry — notably the generic JS/TS-file factory
+  // (`isJavascriptFile`), which is a prefix-agnostic suffix match and would
+  // otherwise hijack any such path whose final segment ends in
   // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
   // family is gated by `canHandle`, and the family prefixes are disjoint from
   // one another and from every concrete providerMap prefix, so prepending only

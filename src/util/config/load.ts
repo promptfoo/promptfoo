@@ -11,9 +11,6 @@ import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
-import { filterPrompts } from '../../commands/eval/filterPrompts';
-import { filterProviderConfigs, getProviderIdAndLabel } from '../../commands/eval/filterProviders';
-import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -32,6 +29,7 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
+  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -42,6 +40,9 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { filterPrompts } from '../eval/filterPrompts';
+import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
+import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
@@ -740,6 +741,7 @@ export async function resolveConfigs(
   config: Partial<UnifiedConfig>;
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
+  selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -1044,6 +1046,7 @@ export async function resolveConfigs(
   );
 
   cliState.config = config;
+  cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
@@ -1066,5 +1069,6 @@ export async function resolveConfigs(
     testSuite,
     basePath,
     commandLineOptions,
+    selectedProviderConfigs: filteredProviderConfigs,
   };
 }

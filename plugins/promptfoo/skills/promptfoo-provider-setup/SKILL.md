@@ -16,9 +16,12 @@ or target configuration. Prefer a working smoke test over a clever abstraction.
 
 Read `references/provider-patterns.md` when you need concrete YAML or provider
 wrapper examples.
-For OpenAPI specs, you can run
+For OpenAPI specs, you can run the bundled
 `scripts/openapi-operation-to-config.mjs` to draft a one-operation HTTP smoke
-config, then inspect and edit the result before probing. With `--token-env`, it
+config, then inspect and edit the result before probing. The script ships in this
+skill's `scripts/` directory; when the skill is installed as a plugin it lives in
+the plugin cache, not your project, so run it by its absolute path (or copy it in)
+rather than a bare `scripts/...` path. With `--token-env`, it
 infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth; use
 `--auth-header`/`--auth-prefix` to override.
 
