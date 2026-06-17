@@ -117,6 +117,7 @@ describe('is-sql assertion', () => {
       'SELECT a b FROM t',
       'SELECT DISTINCT first_name last_name FROM employees',
       'SELECT SQL_NO_CACHE first_name last_name FROM employees',
+      'SELECT first_name /* separator */ last_name FROM employees',
       'SELECT DISTINCTIVE name FROM users',
     ])('should fail a likely missing comma between columns: %s', async (outputString) => {
       const result: GradingResult = await handleIsSql({
@@ -152,6 +153,38 @@ describe('is-sql assertion', () => {
         assertion,
         renderedValue: { databaseType: 'MariaDB' },
         outputString: 'SELECT SQL_NO_CACHE name FROM users',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      'PostgreSQL',
+      'BigQuery',
+    ])('should preserve square-bracket subscripts in %s', async (databaseType) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString: 'SELECT arr[1] value FROM t',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      { databaseType: 'BigQuery', outputString: "SELECT r'hello' value FROM t" },
+      { databaseType: 'TransactSQL', outputString: "SELECT N'hello' value FROM t" },
+      { databaseType: 'Sqlite', outputString: "SELECT X'53514C697465' value FROM t" },
+    ])('should preserve prefixed literals in $databaseType', async ({
+      databaseType,
+      outputString,
+    }) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString,
         inverse: false,
       } as AssertionParams);
 

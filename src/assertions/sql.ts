@@ -22,6 +22,8 @@ const MYSQL_LIKELY_MISSING_COMMA_PATTERN = createLikelyMissingCommaPattern(
   MYSQL_SELECT_MODIFIER_PATTERN,
 );
 const MYSQL_FAMILY_DATABASES = new Set(['MySQL', 'MariaDB']);
+const BRACKET_IDENTIFIER_DATABASES = new Set(['TransactSQL', 'Sqlite']);
+const SQL_EXPRESSION_PLACEHOLDER = ' ? ';
 
 function getLikelyMissingCommaPattern(databaseType: string): RegExp {
   return MYSQL_FAMILY_DATABASES.has(databaseType)
@@ -54,17 +56,25 @@ function findQuotedTextEnd(sql: string, start: number, quote: string): number {
   return sql.length;
 }
 
-function stripIgnoredSqlText(sql: string): string {
+function stripIgnoredSqlText(sql: string, databaseType: string): string {
   const chunks: string[] = [];
+  const supportsBracketIdentifiers = BRACKET_IDENTIFIER_DATABASES.has(databaseType);
   let plainTextStart = 0;
   let cursor = 0;
 
   while (cursor < sql.length) {
     const character = sql[cursor];
     let ignoredTextEnd: number | undefined;
+    let replacement = ' ';
 
-    if (character === "'" || character === '"' || character === '`' || character === '[') {
+    if (
+      character === "'" ||
+      character === '"' ||
+      character === '`' ||
+      (character === '[' && supportsBracketIdentifiers)
+    ) {
       ignoredTextEnd = findQuotedTextEnd(sql, cursor, character);
+      replacement = SQL_EXPRESSION_PLACEHOLDER;
     } else if ((character === '-' && sql[cursor + 1] === '-') || character === '#') {
       ignoredTextEnd = cursor + 1;
       while (
@@ -82,6 +92,7 @@ function stripIgnoredSqlText(sql: string): string {
       if (delimiter) {
         const quoteEnd = sql.indexOf(delimiter, cursor + delimiter.length);
         ignoredTextEnd = quoteEnd === -1 ? sql.length : quoteEnd + delimiter.length;
+        replacement = SQL_EXPRESSION_PLACEHOLDER;
       }
     }
 
@@ -90,7 +101,7 @@ function stripIgnoredSqlText(sql: string): string {
       continue;
     }
 
-    chunks.push(sql.slice(plainTextStart, cursor), ' ');
+    chunks.push(sql.slice(plainTextStart, cursor), replacement);
     cursor = ignoredTextEnd;
     plainTextStart = cursor;
   }
@@ -167,7 +178,7 @@ export const handleIsSql = async ({
   // node-sql-parser accepts a missing comma as implicit aliasing. Ignore leading
   // SELECT modifiers and SQL-looking text inside literals or comments, then check
   // the first two column tokens.
-  const sqlForHeuristics = stripIgnoredSqlText(normalizedSql);
+  const sqlForHeuristics = stripIgnoredSqlText(normalizedSql, databaseType);
   const likelyMissingCommaPattern = getLikelyMissingCommaPattern(databaseType);
   if (likelyMissingCommaPattern.test(sqlForHeuristics)) {
     failureReasons.push(
