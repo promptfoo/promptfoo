@@ -651,6 +651,18 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
     });
 
+    it('falls back to full input pricing when the model has no cache-read rate', () => {
+      // grok-2-1212 has input: 2.0/1e6, output: 10.0/1e6, and no cache_read rate.
+      // Cached tokens reported by the provider must not produce a NaN cost or a
+      // phantom discount; they bill at the full input rate exactly as if no cache
+      // tokens were reported.
+      const withCache = calculateXAICost('grok-2-1212', {}, 1000, 500, 0, 800);
+      const withoutCache = calculateXAICost('grok-2-1212', {}, 1000, 500);
+      // (2.0/1e6 * 1000) + (10.0/1e6 * 500) = 0.002 + 0.005 = 0.007
+      expect(withCache).toBeCloseTo(0.007, 10);
+      expect(withCache).toBe(withoutCache);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
