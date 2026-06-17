@@ -158,6 +158,12 @@ jobs:
             exit 1
           fi
 
+          echo "Checking pf alias:"
+          if ! docker exec promptfoo-container pf --version; then
+            echo "pf alias check failed"
+            exit 1
+          fi
+
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
