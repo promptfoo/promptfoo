@@ -149,6 +149,48 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should unescape every escaped comma within an array metadata value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should split on unescaped commas while unescaping multiple escaped commas per value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c,d\\,e',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c', 'd,e'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
   it('should handle single value metadata', () => {
     const row: CsvRow = {
       '__metadata:category': 'test-category',
@@ -362,7 +404,7 @@ describe('assertionFromString', () => {
     );
   });
 
-  it('should create an contains-json assertion', () => {
+  it('should create a contains-json assertion', () => {
     const expected = 'contains-json';
 
     const result: Assertion = assertionFromString(expected);
@@ -667,6 +709,24 @@ describe('assertionFromString', () => {
       expect(result.type).toBe(type);
       expect(result.value).toBe('Expected output');
       expect(result.threshold).toBe(0.75);
+    }
+  });
+
+  it('should return complete assertion object structure for representative threshold-based assertion types', () => {
+    // All three genuinely consume `threshold` in their handlers (unlike e.g.
+    // starts-with, which receives the 0.75 default but ignores it), so the
+    // parsed default is meaningful for these types.
+    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
+
+    for (const type of representativeAssertions) {
+      const expected = `${type}:Expected output`;
+      const result: Assertion = assertionFromString(expected);
+
+      expect(result).toEqual({
+        type,
+        value: 'Expected output',
+        threshold: 0.75,
+      });
     }
   });
 

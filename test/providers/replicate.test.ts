@@ -499,6 +499,14 @@ describe('ReplicateProvider', () => {
 
 describe('ReplicateModerationProvider', () => {
   const mockApiKey = 'test-api-key';
+  const reportedTokenUsage = {
+    total: 10,
+    prompt: 6,
+    completion: 4,
+    cached: 0,
+    numRequests: 1,
+    completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+  };
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -506,6 +514,7 @@ describe('ReplicateModerationProvider', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     enableCache();
   });
 
@@ -527,6 +536,74 @@ describe('ReplicateModerationProvider', () => {
 
     const result = await provider.callModerationApi('safe prompt', 'safe response');
     expect(result.flags).toEqual([]);
+  });
+
+  it('should forward non-zero token usage reported by the underlying completion', async () => {
+    // Prove that callModerationApi preserves provider-reported usage unchanged.
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'unsafe\nS1',
+      tokenUsage: reportedTokenUsage,
+    });
+
+    const result = await provider.callModerationApi('unsafe prompt', 'unsafe response');
+    expect(result.flags).toHaveLength(1);
+    expect(result.tokenUsage).toEqual(reportedTokenUsage);
+  });
+
+  it('should forward token usage from the LlamaGuard completion path', async () => {
+    // Exercise callApiInternal and verify the moderation wrapper preserves the
+    // provider response's tokenUsage object without inferring different values.
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'unsafe\nS1',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callModerationApi('unsafe prompt', 'unsafe response');
+    expect(result.flags).toHaveLength(1);
+    expect(result.tokenUsage).toEqual(createEmptyTokenUsage());
+  });
+
+  it('should forward provider-reported token usage with upstream errors', async () => {
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      error: 'provider unavailable',
+      tokenUsage: reportedTokenUsage,
+    });
+
+    await expect(provider.callModerationApi('unsafe prompt', 'unsafe response')).resolves.toEqual({
+      error: 'provider unavailable',
+      tokenUsage: reportedTokenUsage,
+    });
+  });
+
+  it('should forward provider-reported token usage with invalid outputs', async () => {
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: null,
+      tokenUsage: reportedTokenUsage,
+    });
+
+    await expect(provider.callModerationApi('unsafe prompt', 'unsafe response')).resolves.toEqual({
+      error: 'Invalid moderation response: null',
+      tokenUsage: reportedTokenUsage,
+    });
   });
 
   it('should handle unsafe content with categories', async () => {
