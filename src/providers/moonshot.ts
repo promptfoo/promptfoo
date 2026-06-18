@@ -189,9 +189,18 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     if (config.frequency_penalty === undefined) {
       delete body.frequency_penalty;
     }
-    if (config.max_tokens === undefined && config.max_completion_tokens === undefined) {
+    // The base provider always injects max_tokens (default 1024) for non-OpenAI
+    // models and only forwards max_completion_tokens for OpenAI reasoning models.
+    // Moonshot's field is max_tokens, so honor an explicit max_tokens (or a
+    // max_completion_tokens, mapped across) and otherwise drop the injected 1024
+    // default so reasoning can use Moonshot's 32k server budget.
+    const maxTokens = config.max_tokens ?? config.max_completion_tokens;
+    if (maxTokens === undefined) {
       delete body.max_tokens;
+    } else {
+      body.max_tokens = maxTokens;
     }
+    delete body.max_completion_tokens;
     return result;
   }
 

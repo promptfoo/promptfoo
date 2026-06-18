@@ -169,6 +169,19 @@ describe('MoonshotProvider sampling-param handling', () => {
     expect(body.max_tokens).toBe(2048);
   });
 
+  it('maps max_completion_tokens to Moonshot max_tokens for Kimi (not the injected 1024 default)', async () => {
+    const provider = asChat(
+      createMoonshotProvider('moonshot:kimi-k2.6', {
+        config: { config: { max_completion_tokens: 4096 } },
+      }),
+    );
+    const { body } = await provider.getOpenAiBody('Hello');
+    // The base drops max_completion_tokens for non-reasoning models and injects
+    // max_tokens: 1024; map the caller's value onto Moonshot's max_tokens field.
+    expect(body.max_tokens).toBe(4096);
+    expect(body.max_completion_tokens).toBeUndefined();
+  });
+
   it('does not leak OPENAI_* sampling env defaults into Kimi requests', async () => {
     const restore = mockProcessEnv({
       OPENAI_TOP_P: '0.5',
