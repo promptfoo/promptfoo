@@ -1338,8 +1338,10 @@ providers:
 :::
 
 **Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home)
-or run `aws bedrock list-foundation-models` to confirm which of these models are enabled in
-your target region — availability varies by model and region. TwelveLabs Pegasus
+or AWS model cards to confirm which of these models are enabled in your target region. Use
+`aws bedrock list-foundation-models` for direct foundation model IDs and
+`aws bedrock list-inference-profiles` for inference profiles such as Writer Palmyra's `us.`
+route — availability varies by model and region. TwelveLabs Pegasus
 (`twelvelabs.pegasus-1-2-v1:0`, video understanding) is also available through the Converse
 API, and TwelveLabs Marengo (`twelvelabs.marengo-embed-*`) is an [embeddings](#embeddings) model.
 

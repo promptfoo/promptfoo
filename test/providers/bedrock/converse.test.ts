@@ -2440,7 +2440,7 @@ Third line`;
       expect(result.cost).toBeCloseTo(expected, 6);
     });
 
-    it('does not report US-only OpenAI-compatible rates outside US regions', async () => {
+    it('uses published regional OpenAI-compatible rates outside US regions', async () => {
       const provider = new AwsBedrockConverseProvider('google.gemma-3-12b-it', {
         config: { region: 'eu-west-2' },
       });
@@ -2452,12 +2452,27 @@ Third line`;
 
       const result = await provider.callApi('Test');
 
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.14 + (5000 / 1e6) * 0.45, 6);
     });
 
-    it('does not report commercial US rates in GovCloud regions', async () => {
+    it('uses published GovCloud OpenAI-compatible rates', async () => {
       const provider = new AwsBedrockConverseProvider('nvidia.nemotron-super-3-120b', {
         config: { region: 'us-gov-west-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.18 + (5000 / 1e6) * 0.78, 6);
+    });
+
+    it('does not invent regional rates where AWS does not list a model', async () => {
+      const provider = new AwsBedrockConverseProvider('zai.glm-4.7', {
+        config: { region: 'eu-west-2' },
       });
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('Response', {

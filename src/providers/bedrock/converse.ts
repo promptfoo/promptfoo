@@ -225,11 +225,11 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'writer.palmyra-vision': { input: 0.15, output: 0.6 },
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
-  // Newer OpenAI Chat-compatible families (US-region on-demand rates per
-  // https://aws.amazon.com/bedrock/pricing/ ; verify there as rates change). Keys are
-  // variant-specific because rates differ within a family, and `includes()` matches the
-  // first key in insertion order — so list more specific ids first (e.g. `glm-4.7-flash`
-  // before `glm-4.7`). `includes()` also tolerates geo prefixes (e.g. `us.zai.glm-5`).
+  // Newer OpenAI Chat-compatible families (base rates from https://aws.amazon.com/bedrock/pricing/;
+  // verify there as rates change). Keys are variant-specific because rates differ within a
+  // family, and `includes()` matches the first key in insertion order — so list more specific
+  // ids first (e.g. `glm-4.7-flash` before `glm-4.7`). `includes()` also tolerates geo prefixes
+  // (e.g. `us.zai.glm-5`). Region-specific overrides are applied below where AWS publishes them.
   // Z.AI GLM
   'zai.glm-5': { input: 1.0, output: 3.2 },
   'zai.glm-4.7-flash': { input: 0.07, output: 0.4 },
@@ -255,21 +255,173 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
 };
 
-const BEDROCK_CONVERSE_US_PRICING_MODEL_PREFIXES = [
+type BedrockConversePricing = { input: number; output: number };
+
+const BEDROCK_CONVERSE_REGION_PRICING_MODEL_PREFIXES = [
   'zai.glm-',
   'minimax.minimax-',
   'kimi-k2',
   'nemotron-',
   'gemma-3-',
-  'writer.palmyra-vision',
 ] as const;
 
-function hasUsOnlyBedrockConversePricing(modelId: string): boolean {
-  return BEDROCK_CONVERSE_US_PRICING_MODEL_PREFIXES.some((prefix) => modelId.includes(prefix));
-}
+const BEDROCK_CONVERSE_REGION_PRICING: Record<string, Record<string, BedrockConversePricing>> = {
+  'ap-northeast-1': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'zai.glm-4.7': { input: 0.72, output: 2.64 },
+    'minimax.minimax-m2': { input: 0.36, output: 1.45 },
+    'kimi-k2.5': { input: 0.72, output: 3.6 },
+    'kimi-k2-thinking': { input: 0.73, output: 3.03 },
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.73 },
+    'nemotron-nano-3-30b': { input: 0.07, output: 0.29 },
+    'nemotron-nano': { input: 0.07, output: 0.28 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+    'gemma-3-4b': { input: 0.05, output: 0.1 },
+    'gemma-3-12b': { input: 0.11, output: 0.35 },
+    'gemma-3-27b': { input: 0.28, output: 0.46 },
+  },
+  'ap-south-1': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'zai.glm-4.7': { input: 0.72, output: 2.64 },
+    'minimax.minimax-m2': { input: 0.35, output: 1.41 },
+    'kimi-k2.5': { input: 0.72, output: 3.6 },
+    'kimi-k2-thinking': { input: 0.71, output: 2.94 },
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
+    'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
+    'nemotron-nano': { input: 0.07, output: 0.27 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+    'gemma-3-4b': { input: 0.05, output: 0.09 },
+    'gemma-3-12b': { input: 0.11, output: 0.34 },
+    'gemma-3-27b': { input: 0.27, output: 0.45 },
+  },
+  'ap-southeast-2': {
+    'zai.glm-5': { input: 1.03, output: 3.3 },
+    'zai.glm-4.7-flash': { input: 0.0721, output: 0.412 },
+    'zai.glm-4.7': { input: 0.618, output: 2.266 },
+    'minimax.minimax-m2': { input: 0.309, output: 1.236 },
+    'kimi-k2.5': { input: 0.618, output: 3.09 },
+    'kimi-k2-thinking': { input: 0.618, output: 2.575 },
+    'nemotron-nano-12b-v2': { input: 0.206, output: 0.618 },
+    'nemotron-nano-3-30b': { input: 0.0618, output: 0.2472 },
+    'nemotron-nano': { input: 0.0618, output: 0.2369 },
+    'nemotron-super': { input: 0.15, output: 0.67 },
+    'gemma-3-4b': { input: 0.0412, output: 0.0824 },
+    'gemma-3-12b': { input: 0.0927, output: 0.2987 },
+    'gemma-3-27b': { input: 0.2369, output: 0.3914 },
+  },
+  'ap-southeast-3': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'zai.glm-4.7': { input: 0.72, output: 2.64 },
+    'minimax.minimax-m2': { input: 0.36, output: 1.44 },
+    'kimi-k2.5': { input: 0.72, output: 3.6 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+  },
+  'eu-central-1': {
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'minimax.minimax-m2': { input: 0.36, output: 1.44 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+  },
+  'eu-north-1': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'zai.glm-4.7': { input: 0.72, output: 2.64 },
+    'minimax.minimax-m2': { input: 0.36, output: 1.44 },
+    'kimi-k2.5': { input: 0.72, output: 3.6 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+  },
+  'eu-south-1': {
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'minimax.minimax-m2': { input: 0.35, output: 1.41 },
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
+    'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
+    'nemotron-nano': { input: 0.07, output: 0.27 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+    'gemma-3-4b': { input: 0.05, output: 0.09 },
+    'gemma-3-12b': { input: 0.11, output: 0.34 },
+    'gemma-3-27b': { input: 0.27, output: 0.45 },
+  },
+  'eu-west-1': {
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'minimax.minimax-m2': { input: 0.35, output: 1.41 },
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
+    'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
+    'nemotron-nano': { input: 0.07, output: 0.27 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+    'gemma-3-4b': { input: 0.05, output: 0.09 },
+    'gemma-3-12b': { input: 0.11, output: 0.34 },
+    'gemma-3-27b': { input: 0.27, output: 0.45 },
+  },
+  'eu-west-2': {
+    'zai.glm-5': { input: 1.55, output: 4.96 },
+    'zai.glm-4.7-flash': { input: 0.11, output: 0.62 },
+    'minimax.minimax-m2': { input: 0.47, output: 1.86 },
+    'nemotron-nano-12b-v2': { input: 0.31, output: 0.93 },
+    'nemotron-nano-3-30b': { input: 0.09, output: 0.37 },
+    'nemotron-nano': { input: 0.09, output: 0.36 },
+    'nemotron-super': { input: 0.23, output: 1.01 },
+    'gemma-3-4b': { input: 0.06, output: 0.12 },
+    'gemma-3-12b': { input: 0.14, output: 0.45 },
+    'gemma-3-27b': { input: 0.36, output: 0.59 },
+  },
+  'sa-east-1': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
+    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+    'zai.glm-4.7': { input: 0.72, output: 2.64 },
+    'minimax.minimax-m2': { input: 0.36, output: 1.45 },
+    'kimi-k2.5': { input: 0.72, output: 3.6 },
+    'kimi-k2-thinking': { input: 0.73, output: 3.03 },
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.73 },
+    'nemotron-nano-3-30b': { input: 0.07, output: 0.29 },
+    'nemotron-nano': { input: 0.07, output: 0.28 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+    'gemma-3-4b': { input: 0.05, output: 0.1 },
+    'gemma-3-12b': { input: 0.11, output: 0.35 },
+    'gemma-3-27b': { input: 0.28, output: 0.46 },
+  },
+  'us-gov-east-1': {
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
+    'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
+    'nemotron-nano': { input: 0.072, output: 0.276 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+  },
+  'us-gov-west-1': {
+    'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
+    'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
+    'nemotron-nano': { input: 0.072, output: 0.276 },
+    'nemotron-super': { input: 0.18, output: 0.78 },
+  },
+};
 
-function isUsBedrockRegion(region: string): boolean {
-  return ['us-east-1', 'us-east-2', 'us-west-2'].includes(region);
+function getBedrockConversePricing(
+  modelId: string,
+  region?: string,
+): BedrockConversePricing | undefined {
+  const normalizedModelId = modelId.toLowerCase();
+  const regionPricing = region ? BEDROCK_CONVERSE_REGION_PRICING[region.toLowerCase()] : undefined;
+  if (regionPricing) {
+    for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
+      if (normalizedModelId.includes(modelPrefix)) {
+        return pricing;
+      }
+    }
+    if (
+      BEDROCK_CONVERSE_REGION_PRICING_MODEL_PREFIXES.some((prefix) =>
+        normalizedModelId.includes(prefix),
+      )
+    ) {
+      return undefined;
+    }
+  }
+
+  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
+    if (normalizedModelId.includes(modelPrefix)) {
+      return pricing;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -287,13 +439,9 @@ function calculateBedrockConverseCost(
     return undefined;
   }
 
-  // Find matching pricing
   const normalizedModelId = modelId.toLowerCase();
-  if (
-    region !== undefined &&
-    !isUsBedrockRegion(region.toLowerCase()) &&
-    hasUsOnlyBedrockConversePricing(normalizedModelId)
-  ) {
+  const pricing = getBedrockConversePricing(normalizedModelId, region);
+  if (!pricing) {
     return undefined;
   }
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
@@ -305,18 +453,12 @@ function calculateBedrockConverseCost(
     isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
       ? CLAUDE_5_REGIONAL_PREMIUM
       : 1;
-  for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
-    if (normalizedModelId.includes(modelPrefix)) {
-      const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
-      const inputCost = normalizedModelId.includes('anthropic.claude')
-        ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
-        : promptTokens * inputRate;
-      const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
-      return inputCost + outputCost;
-    }
-  }
-
-  return undefined;
+  const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
+  const inputCost = normalizedModelId.includes('anthropic.claude')
+    ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
+    : promptTokens * inputRate;
+  const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
+  return inputCost + outputCost;
 }
 
 /**

@@ -1,14 +1,25 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import {
   BedrockMantleChatProvider,
   createBedrockMantleChatProvider,
   getBedrockMantleChatBaseUrl,
 } from '../../../src/providers/bedrock/mantleChat';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 
 describe('bedrock mantle Chat Completions provider', () => {
   let restoreEnv: (() => void) | undefined;
+
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
 
   afterEach(() => {
     restoreEnv?.();
@@ -117,6 +128,77 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(`${provider.getApiUrl()}/chat/completions`).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
       );
+    });
+
+    it('calls the mantle chat endpoint and tracks token usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Mantle output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 7, prompt_tokens: 4, completion_tokens: 3 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+      });
+
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toBe('Mantle output');
+      expect(result.tokenUsage).toEqual({ total: 7, prompt: 4, completion: 3, numRequests: 1 });
+    });
+
+    it('returns HTTP errors from the mantle chat endpoint', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: { message: 'server exploded' } },
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('API error: 500 Internal Server Error');
+    });
+
+    it('preserves structured rate limit errors from the mantle chat endpoint', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValue(
+        new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' }),
+      );
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+    });
+
+    it('surfaces mantle chat request timeout failures', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Request timed out'));
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('API call error: Error: Request timed out');
     });
 
     it('uses the OpenAI-compatible chat endpoint and capabilities for Grok', async () => {
