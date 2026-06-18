@@ -55,17 +55,18 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.stringContaining('/responses'),
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-key',
-          'X-OpenAI-Originator': 'promptfoo',
-        }),
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
+
+    const [, requestOptions] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const requestHeaders = requestOptions?.headers as Headers;
+    expect(requestHeaders.get('content-type')).toBe('application/json');
+    expect(requestHeaders.get('authorization')).toBe('Bearer test-key');
+    expect(requestHeaders.get('x-openai-originator')).toBe('promptfoo');
 
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('This is a test response');
@@ -115,7 +116,7 @@ describe('OpenAiResponsesProvider request building', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
   });
@@ -360,7 +361,7 @@ describe('OpenAiResponsesProvider request building', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
   });

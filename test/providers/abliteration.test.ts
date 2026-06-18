@@ -230,18 +230,17 @@ describe('AbliterationProvider', () => {
       'https://api.abliteration.ai/v1/chat/completions',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-ablit-key',
-          'Content-Type': 'application/json',
-        }),
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
-    const request = mockFetchWithCache.mock.calls[0][1] as { headers: Record<string, string> };
-    expect(request.headers).not.toHaveProperty('OpenAI-Organization');
+    const request = mockFetchWithCache.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(request.headers);
+    expect(headers.get('authorization')).toBe('Bearer test-ablit-key');
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.has('openai-organization')).toBe(false);
     expect(result.output).toBe('Abliterated output');
     expect(result.tokenUsage).toEqual({ total: 12, prompt: 7, completion: 5, numRequests: 1 });
   });

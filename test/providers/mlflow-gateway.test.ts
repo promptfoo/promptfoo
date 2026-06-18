@@ -285,18 +285,14 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     });
     const result = await provider.callApi('Hello gateway');
 
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'http://localhost:5000/gateway/mlflow/v1/chat/completions',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      }),
-      expect.any(Number),
-      'json',
-      undefined,
-      undefined,
-    );
-    const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
+    const [url, rawRequest] = vi.mocked(fetchWithCache).mock.calls[0];
+    const request = rawRequest as RequestInit;
+    expect(url).toBe('http://localhost:5000/gateway/mlflow/v1/chat/completions');
+    expect(request.method).toBe('POST');
+    const headers = new Headers(request.headers);
+    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.get('authorization')).toBeNull();
+    expect(headers.get('openai-organization')).toBeNull();
     expect(JSON.parse(request.body as string)).toMatchObject({ model: 'my-chat-endpoint' });
     expect(result.output).toBe('gateway output');
     expect(result.tokenUsage).toEqual({ total: 7, prompt: 4, completion: 3, numRequests: 1 });
@@ -318,11 +314,8 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     });
     await provider.callApi('Hello gateway');
 
-    expect(vi.mocked(fetchWithCache).mock.calls[0][1]).toEqual(
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Basic dXNlcjpwYXNz' }),
-      }),
-    );
+    const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
+    expect(new Headers(request.headers).get('authorization')).toBe('Basic dXNlcjpwYXNz');
   });
 
   it('should return gateway HTTP errors from the configured endpoint', async () => {

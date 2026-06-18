@@ -38,6 +38,11 @@ interface ChatKitPoolConfig {
   serverPort?: number;
 }
 
+type ChatKitTemplateRegistration = {
+  html: string;
+  createClientSecret?: () => Promise<string>;
+};
+
 /**
  * Singleton browser pool for ChatKit evaluations.
  * Supports high concurrency by reusing browser contexts.
@@ -53,7 +58,7 @@ export class ChatKitBrowserPool {
   private pages: PooledPage[] = [];
   private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
   private config: ChatKitPoolConfig;
-  private templates: Map<string, string> = new Map(); // templateKey -> HTML
+  private templates: Map<string, ChatKitTemplateRegistration> = new Map();
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -151,24 +156,37 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Generate a template key from workflow configuration.
-   * This ensures different workflows get isolated pages.
+   * Generate a template key from workflow and provider configuration.
+   * The provider namespace keeps session factories isolated without putting
+   * credentials or endpoint details into the key.
    */
-  static generateTemplateKey(workflowId: string, version?: string, userId?: string): string {
-    // Use a simple concatenation - workflowId is the primary differentiator
-    // version and userId are included for completeness but workflowId is key
-    return `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+  static generateTemplateKey(
+    workflowId: string,
+    version?: string,
+    userId?: string,
+    providerNamespace?: string,
+  ): string {
+    const workflowKey = `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+    return providerNamespace ? `${workflowKey}:${providerNamespace}` : workflowKey;
   }
 
   /**
    * Register a template for a workflow configuration
    */
-  setTemplate(templateKey: string, html: string): void {
+  setTemplate(templateKey: string, html: string, createClientSecret?: () => Promise<string>): void {
     const existing = this.templates.get(templateKey);
-    if (existing !== html) {
-      this.templates.set(templateKey, html);
+    const htmlChanged = existing?.html !== html;
+    const createClientSecretChanged = existing?.createClientSecret !== createClientSecret;
+
+    if (htmlChanged || createClientSecretChanged) {
+      this.templates.set(templateKey, { html, createClientSecret });
       logger.debug('[ChatKitPool] Registered template', { templateKey });
-      // Mark pages with this template as needing refresh if template changed
+    }
+
+    if (htmlChanged || createClientSecretChanged) {
+      // The served page caches the minted client secret in-memory. Refresh
+      // pooled pages when either the page HTML or the secret factory changes so
+      // a page never replays credentials from an older provider/session.
       for (const page of this.pages) {
         if (page.templateKey === templateKey) {
           page.ready = false;
@@ -211,8 +229,23 @@ export class ChatKitBrowserPool {
         const template = this.templates.get(templateKey);
 
         if (template) {
+          if (req.method === 'POST' && pathParts[2] === 'session' && template.createClientSecret) {
+            void template
+              .createClientSecret()
+              .then((clientSecret) => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ client_secret: clientSecret }));
+              })
+              .catch((error) => {
+                logger.error('[ChatKitPool] Failed to create ChatKit client secret', { error });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
+              });
+            return;
+          }
+
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(template);
+          res.end(template.html);
           return;
         }
       }
@@ -226,7 +259,7 @@ export class ChatKitBrowserPool {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
+      this.server!.listen(this.config.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
@@ -483,7 +516,7 @@ export class ChatKitBrowserPool {
       const page = await context.newPage();
 
       // Navigate to the template-specific URL
-      const templateUrl = `http://localhost:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
+      const templateUrl = `http://127.0.0.1:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
       await page.goto(templateUrl, {
         waitUntil: 'domcontentloaded',
       });

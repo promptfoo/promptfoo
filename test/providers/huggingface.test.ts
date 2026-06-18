@@ -280,7 +280,7 @@ describe('HuggingfaceChatCompletionProvider', () => {
       await provider.callApi('test');
 
       const [, options] = mockFetch.mock.calls[0];
-      expect(options.headers.Authorization).toBe('Bearer my-secret-token');
+      expect(new Headers(options.headers).get('authorization')).toBe('Bearer my-secret-token');
     });
 
     it('handles structured message input', async () => {

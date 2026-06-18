@@ -148,8 +148,9 @@ export class FunctionCallbackHandler {
       };
     }
 
-    // Tool call format
-    if (call.type === 'function' && call.function?.name) {
+    // Tool call format. Chat Completions tool calls do not always carry
+    // `type: "function"`, so key off the nested function payload itself.
+    if (call.function?.name) {
       return {
         name: call.function.name,
         arguments: call.function.arguments,
@@ -192,9 +193,21 @@ export class FunctionCallbackHandler {
       this.loadedCallbacks[functionName] = callback;
     }
 
-    // Execute the callback
-    const result = await callback(args, context);
-    return typeof result === 'string' ? result : JSON.stringify(result);
+    // Execute the callback. Keep single-argument callbacks single-argument when
+    // no provider context exists; many Promptfoo configs use plain `(args) => ...`.
+    const result = context === undefined ? await callback(args) : await callback(args, context);
+    if (result === undefined || result === null) {
+      return '';
+    }
+    if (typeof result === 'object') {
+      try {
+        return JSON.stringify(result);
+      } catch (error) {
+        logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+        throw error;
+      }
+    }
+    return String(result);
   }
 
   /**
@@ -210,7 +223,12 @@ export class FunctionCallbackHandler {
       );
 
       const mod = await importModule(resolvedPath);
-      const func = functionName && mod[functionName] ? mod[functionName] : mod.default || mod;
+      const func =
+        typeof mod === 'function'
+          ? mod
+          : functionName && mod?.[functionName]
+            ? mod[functionName]
+            : mod.default || mod;
 
       if (typeof func !== 'function') {
         throw new Error(

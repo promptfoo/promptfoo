@@ -105,7 +105,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
 
@@ -274,7 +274,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         expect.any(Object),
         LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
-        undefined,
+        false,
         undefined,
       );
     });
@@ -312,7 +312,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         expect.any(Object),
         LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
-        undefined,
+        false,
         undefined,
       );
     });
@@ -349,7 +349,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         expect.any(Object),
         LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
-        undefined,
+        false,
         undefined,
       );
     });
@@ -389,7 +389,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         expect.any(Object),
         LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
-        undefined,
+        false,
         undefined,
       );
     });
@@ -426,7 +426,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         expect.any(Object),
         LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
-        undefined,
+        false,
         undefined,
       );
     });

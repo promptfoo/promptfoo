@@ -1,9 +1,9 @@
 import fs from 'fs';
 
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
-import { mockGlobal, mockProcessEnv } from '../../util/utils';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -52,37 +52,22 @@ vi.mock('fs/promises', () => {
   };
 });
 
-class MockFile {
-  constructor(
-    public parts: any[],
-    public name: string,
-    public options?: FilePropertyBag,
-  ) {}
+function getTranscriptionRequest() {
+  const calls = vi
+    .mocked(fetchWithCache)
+    .mock.calls.filter(([url]) => String(url).includes('/audio/transcriptions'));
+  const [url, init, timeout, responseType, bustCache, maxRetries] = calls.at(-1)!;
+  const requestInit = init as RequestInit;
+
+  return {
+    url: String(url),
+    timeout,
+    responseType,
+    bustCache,
+    maxRetries,
+    headers: new Headers(requestInit.headers),
+  };
 }
-
-class MockFormData {
-  private data: Map<string, any> = new Map();
-
-  append(key: string, value: any) {
-    this.data.set(key, value);
-  }
-
-  get(key: string) {
-    return this.data.get(key);
-  }
-
-  has(key: string) {
-    return this.data.has(key);
-  }
-}
-
-const restoreFile = mockGlobal('File', MockFile as unknown as typeof File);
-const restoreFormData = mockGlobal('FormData', MockFormData as unknown as typeof FormData);
-
-afterAll(() => {
-  restoreFormData();
-  restoreFile();
-});
 
 describe('OpenAiTranscriptionProvider', () => {
   const mockTranscriptionResponse = {
@@ -169,19 +154,12 @@ describe('OpenAiTranscriptionProvider', () => {
       const result = await provider.callApi('/path/to/audio.mp3');
 
       expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('/audio/transcriptions'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-            'X-OpenAI-Originator': 'promptfoo',
-          }),
-        }),
-        expect.any(Number),
-        'json',
-        undefined,
-      );
+      const request = getTranscriptionRequest();
+      expect(request.url).toContain('/audio/transcriptions');
+      expect(request.headers.get('authorization')).toBe('Bearer test-key');
+      expect(request.headers.get('x-openai-originator')).toBe('promptfoo');
+      expect(request.responseType).toBe('json');
+      expect(request.bustCache).toBe(false);
 
       expect(result).toEqual({
         output: 'This is a test transcription.',
@@ -316,6 +294,33 @@ describe('OpenAiTranscriptionProvider', () => {
         await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
           getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
         );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves custom Authorization headers when apiKeyRequired is false', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_TRANSCRIPTION_API_KEY',
+            apiBaseUrl: 'https://gateway.example.com/v1',
+            headers: {
+              Authorization: 'Bearer gateway-token',
+            },
+          },
+        });
+
+        const result = await provider.callApi('/path/to/audio.mp3');
+
+        expect(result.output).toBe('This is a test transcription.');
+        expect(getTranscriptionRequest().headers.get('authorization')).toBe('Bearer gateway-token');
       } finally {
         restoreEnv();
       }
@@ -547,17 +552,47 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'OpenAI-Organization': 'test-org',
-          }),
-        }),
-        expect.any(Number),
-        'json',
-        undefined,
-      );
+      expect(getTranscriptionRequest().headers.get('openai-organization')).toBe('test-org');
+    });
+
+    it('should forward custom headers from config to the SDK request', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          headers: {
+            'x-tenant-id': 'tenant-42',
+            'x-tracing-id': 'trace-abc',
+          },
+        },
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const headers = getTranscriptionRequest().headers;
+      expect(headers.get('x-tenant-id')).toBe('tenant-42');
+      expect(headers.get('x-tracing-id')).toBe('trace-abc');
+    });
+
+    it('should let prompt-level config.headers override provider headers', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          headers: { 'x-tenant-id': 'provider-default' },
+        },
+      });
+
+      const context = {
+        prompt: {
+          raw: '/path/to/audio.mp3',
+          config: { headers: { 'x-tenant-id': 'prompt-override' } },
+          label: 'test',
+        },
+        vars: {},
+      };
+
+      await provider.callApi('/path/to/audio.mp3', context);
+
+      expect(getTranscriptionRequest().headers.get('x-tenant-id')).toBe('prompt-override');
     });
 
     it('should merge prompt config with provider config', async () => {
@@ -591,13 +626,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        `${customApiUrl}/audio/transcriptions`,
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        undefined,
-      );
+      expect(getTranscriptionRequest().url).toBe(`${customApiUrl}/audio/transcriptions`);
     });
 
     it('should handle bustCache from context', async () => {
@@ -613,13 +642,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3', context);
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        true,
-      );
+      expect(getTranscriptionRequest().bustCache).toBe(true);
     });
 
     it('should handle debug mode from context', async () => {
@@ -635,13 +658,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3', context);
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        true,
-      );
+      expect(getTranscriptionRequest().bustCache).toBe(true);
     });
   });
 

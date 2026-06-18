@@ -1,9 +1,9 @@
-import { fetchWithCache } from '../../cache';
+import OpenAI from 'openai';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { formatOpenAiError } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -720,23 +720,6 @@ function getImageTokenUsage(data: any, cached: boolean): TokenUsage | undefined 
   };
 }
 
-export async function callOpenAiImageApi(
-  url: string,
-  body: Record<string, any>,
-  headers: Record<string, string>,
-  timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
-  return await fetchWithCache(
-    url,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    },
-    timeout,
-  );
-}
-
 export async function processApiResponse(
   data: any,
   prompt: string,
@@ -749,9 +732,10 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
+  deleteFromCache?: () => Promise<void>,
 ): Promise<ProviderResponse> {
   if (data.error) {
-    await data?.deleteFromCache?.();
+    await deleteFromCache?.();
     return {
       error: formatOpenAiError(data),
     };
@@ -781,7 +765,7 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await data?.deleteFromCache?.();
+    await deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
@@ -824,7 +808,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       };
     }
 
-    const endpoint = '/images/generations';
     const size = config.size || DEFAULT_SIZE;
 
     const requestValidation = validateImageRequestConfig(config, model, size as string);
@@ -834,48 +817,72 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
 
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-      ...this.getOpenAiRequestHeaders(config.headers),
-    };
-
-    let data, status, statusText;
+    let status = 200;
+    let statusText = 'OK';
     let cached = false;
     let latencyMs: number | undefined;
-    try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
-        body,
-        headers,
-        getRequestTimeoutMs(),
-      ));
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: this.getOpenAiRequestHeaders(config.headers),
+        bustCache: context?.bustCache ?? context?.debug,
+        maxRetries: this.config.maxRetries,
+      },
+      (client) =>
+        client.images.generate(
+          body as OpenAI.ImageGenerateParamsNonStreaming,
+        ) as Promise<OpenAI.ImagesResponse>,
+    );
+    const { requestMetadata } = request;
+
+    if (request.ok) {
+      const { data } = request;
+      cached = requestMetadata.cached;
+      latencyMs = requestMetadata.latencyMs;
+      status = requestMetadata.status ?? status;
+      statusText = requestMetadata.statusText ?? statusText;
 
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
-    } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      return processApiResponse(
+        data,
+        prompt,
+        responseFormat,
+        cached,
+        model,
+        size,
+        latencyMs,
+        config.quality,
+        config.n ?? 1,
+        'output_format' in config ? config.output_format : undefined,
+        config,
+        requestMetadata.deleteFromCache,
+      );
+    }
+
+    const apiCallError = unwrapOpenAiTransportError(request.error);
+    const errorData = requestMetadata.data;
+    const statusFromError = requestMetadata.status;
+    const statusTextFromError = requestMetadata.statusText ?? 'Error';
+
+    if (statusFromError && statusFromError >= 400) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API error: ${statusFromError} ${statusTextFromError}\n${
+          typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
+        }`,
       };
     }
 
-    return processApiResponse(
-      data,
-      prompt,
-      responseFormat,
-      cached,
-      model,
-      size,
-      latencyMs,
-      config.quality,
-      config.n ?? 1,
-      'output_format' in config ? config.output_format : undefined,
-      config,
-    );
+    logger.error(`API call error: ${String(apiCallError)}`);
+    await requestMetadata.deleteFromCache?.();
+    return {
+      error: `API call error: ${String(apiCallError)}`,
+    };
   }
 }

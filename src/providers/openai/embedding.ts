@@ -1,8 +1,7 @@
-import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -45,48 +44,39 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     const body = {
       input: text,
       model: this.modelName,
+      encoding_format: 'float' as const,
       ...(this.config.passthrough || {}),
     };
 
-    let data: any;
-    let status: number | undefined;
-    let statusText: string | undefined;
-    let deleteFromCache: (() => Promise<void>) | undefined;
-    let cached = false;
-    let latencyMs: number | undefined;
-    try {
-      const apiKey = this.getApiKey();
-      const response = await fetchWithCache(
-        `${this.getApiUrl()}/embeddings`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-            ...this.getOpenAiRequestHeaders(),
-          },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        false,
-        this.config.maxRetries,
-      );
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: this.getOpenAiRequestHeaders(this.config.headers),
+        maxRetries: this.config.maxRetries,
+      },
+      (client) => client.embeddings.create(body),
+    );
+    const { requestMetadata } = request;
+    if (!request.ok) {
+      const { data: errorData, status, statusText } = requestMetadata;
 
-      // Check HTTP status like chat provider
       if (status && (status < 200 || status >= 300)) {
         return {
-          error: `API error: ${status} ${statusText || 'Unknown error'}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          error: `API error: ${status} ${statusText || 'Unknown error'}\n${typeof errorData === 'string' ? errorData : JSON.stringify(errorData)}`,
         };
       }
-    } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
-      await deleteFromCache?.();
+
+      const apiCallError = unwrapOpenAiTransportError(request.error);
+      logger.error(`API call error: ${String(apiCallError)}`);
+      await requestMetadata.deleteFromCache?.();
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${String(apiCallError)}`,
       };
     }
+    const { data } = request;
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -97,15 +87,15 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       return {
         embedding,
-        latencyMs,
-        tokenUsage: getTokenUsage(data, cached),
+        latencyMs: requestMetadata.latencyMs,
+        tokenUsage: getTokenUsage(data, requestMetadata.cached),
         cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
-          cachedResponse: cached,
+          cachedResponse: requestMetadata.cached,
         }),
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
-      await deleteFromCache?.();
+      await requestMetadata.deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };

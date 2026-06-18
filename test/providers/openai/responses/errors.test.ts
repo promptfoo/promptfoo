@@ -213,7 +213,7 @@ describe('OpenAiResponsesProvider error handling', () => {
       expect.anything(),
       expect.anything(),
       'json',
-      undefined,
+      false,
       undefined,
     );
     expect(result.output).toBe('Test response');

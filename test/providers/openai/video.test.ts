@@ -9,7 +9,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
-import { mockProcessEnv } from '../../util/utils';
+import { createTempDir, mockProcessEnv, removeTempDir } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
@@ -24,7 +24,9 @@ const {
   mockStoreMedia: vi.fn(),
   mockMediaExists: vi.fn(),
   mockGetMediaStorage: vi.fn(),
-  mockGetConfigDirectoryPath: vi.fn(),
+  mockGetConfigDirectoryPath: vi.fn(
+    () => process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? '/tmp',
+  ),
 }));
 
 const fsPromiseMocks = vi.hoisted(() => ({
@@ -66,7 +68,42 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
 
+function jsonResponse(body: unknown, status = 200, statusText = 'OK') {
+  return new Response(JSON.stringify(body), {
+    status,
+    statusText,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function binaryResponse(byteLength: number, status = 200, statusText = 'OK') {
+  return new Response(new Uint8Array(byteLength), {
+    status,
+    statusText,
+  });
+}
+
+function findRequest(path: string) {
+  const call = mockFetchWithProxy.mock.calls.find(([url]) => String(url).includes(path));
+  expect(call).toBeDefined();
+  return call as [string, RequestInit];
+}
+
+function getRequestFormData(path: string) {
+  const [, options] = findRequest(path);
+  expect(options.body).toBeInstanceOf(FormData);
+  return options.body as FormData;
+}
+
+function getRequestJsonBody(path: string) {
+  const [, options] = findRequest(path);
+  expect(typeof options.body).toBe('string');
+  return JSON.parse(options.body as string) as Record<string, unknown>;
+}
+
 describe('OpenAiVideoProvider', () => {
+  let tempConfigDir: string | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchWithProxy.mockReset();
@@ -75,8 +112,8 @@ describe('OpenAiVideoProvider', () => {
     mockGetMediaStorage.mockReset();
     mockGetConfigDirectoryPath.mockReset();
 
-    // Default config directory path
-    mockGetConfigDirectoryPath.mockReturnValue('/test/config');
+    tempConfigDir = createTempDir('promptfoo-video-test-config-');
+    mockGetConfigDirectoryPath.mockReturnValue(tempConfigDir);
 
     vi.mocked(fsPromises.readFile).mockRejectedValue(
       Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
@@ -106,6 +143,8 @@ describe('OpenAiVideoProvider', () => {
   });
 
   afterEach(() => {
+    removeTempDir(tempConfigDir);
+    tempConfigDir = undefined;
     vi.resetAllMocks();
   });
 
@@ -237,34 +276,23 @@ describe('OpenAiVideoProvider', () => {
   describe('callApi', () => {
     const setupMocksForSuccess = () => {
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued', progress: 0 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'queued', progress: 0 }),
+      );
 
       // Mock polling - completed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'completed', progress: 100 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
 
       // Mock video download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
 
       // Mock thumbnail download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
 
       // Mock spritesheet download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage for each asset
       mockStoreMedia
@@ -319,14 +347,9 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.thumbnail).toContain('storageRef:');
       expect(result.video?.spritesheet).toContain('storageRef:');
       expect(result.cost).toBeGreaterThan(0);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringMatching(/\/videos$/),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-OpenAI-Originator': 'promptfoo',
-          }),
-        }),
-      );
+      const createRequest = mockFetchWithProxy.mock.calls.find(([url]) => /\/videos$/.test(url));
+      expect(createRequest).toBeDefined();
+      expect(new Headers(createRequest?.[1]?.headers).get('x-openai-originator')).toBe('promptfoo');
     });
 
     it('should handle invalid video size', async () => {
@@ -344,16 +367,28 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({ error: { message: 'Invalid prompt' } }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'Invalid prompt' } }, 400, 'Bad Request'),
+      );
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('Invalid prompt');
+      expect(result.error).toBe('API error 400: Invalid prompt');
+    });
+
+    it('should preserve structured status-check failures', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'temporarily unavailable' } }, 503, 'Service Unavailable'),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('Status check failed: temporarily unavailable');
     });
 
     it('should handle job failed status', async () => {
@@ -362,20 +397,16 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
 
       // Mock polling - failed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({
           id: 'video_123',
           status: 'failed',
           error: { message: 'Content policy violation' },
         }),
-      });
+      );
 
       const result = await provider.callApi('test prompt');
 
@@ -394,16 +425,14 @@ describe('OpenAiVideoProvider', () => {
         });
 
         // Mock job creation
-        mockFetchWithProxy.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ id: 'video_123', status: 'queued' }),
-        });
+        mockFetchWithProxy.mockResolvedValueOnce(
+          jsonResponse({ id: 'video_123', status: 'queued' }),
+        );
 
         // Always return in_progress to trigger timeout
-        mockFetchWithProxy.mockResolvedValue({
-          ok: true,
-          json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
-        });
+        mockFetchWithProxy.mockImplementation(() =>
+          Promise.resolve(jsonResponse({ id: 'video_123', status: 'in_progress', progress: 10 })),
+        );
 
         const resultPromise = provider.callApi('test prompt');
         await vi.runAllTimersAsync();
@@ -460,27 +489,37 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
 
       // Mock polling - completed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'completed', progress: 100 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
 
       // Mock video download failure
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('download failed'));
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('Failed to download video');
+      expect(result.error).toContain('Download error for video');
+    });
+
+    it('should preserve structured video download failures', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'asset missing' } }, 404, 'Not Found'),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('Failed to download video: 404 asset missing');
     });
 
     it('should use default model sora-2 when not specified', async () => {
@@ -492,13 +531,8 @@ describe('OpenAiVideoProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Verify the first fetch call (job creation) includes sora-2 model
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"model":"sora-2"'),
-        }),
-      );
+      const requestBody = getRequestFormData('/videos');
+      expect(requestBody.get('model')).toBe('sora-2');
       expect(result.video?.model).toBe('sora-2');
     });
 
@@ -511,18 +545,9 @@ describe('OpenAiVideoProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"1792x1024"'),
-        }),
-      );
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"seconds":"12"'),
-        }),
-      );
+      const requestBody = getRequestFormData('/videos');
+      expect(requestBody.get('size')).toBe('1792x1024');
+      expect(requestBody.get('seconds')).toBe('12');
       expect(result.video?.size).toBe('1792x1024');
       expect(result.video?.duration).toBe(12);
     });
@@ -533,28 +558,18 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
 
       // Mock polling - completed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'completed', progress: 100 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
 
       // Mock video download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
 
       // Mock spritesheet download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia
@@ -579,28 +594,18 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
 
       // Mock polling - completed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'completed', progress: 100 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
 
       // Mock video download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
 
       // Mock thumbnail download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
 
       // Mock storage
       mockStoreMedia
@@ -625,36 +630,25 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(jsonResponse({ id: 'video_123', status: 'queued' }));
 
       // Mock polling - completed
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'completed', progress: 100 }),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_123', status: 'completed', progress: 100 }),
+      );
 
       // Mock video download - success
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
 
       // Mock thumbnail download - failure
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'thumbnail missing' } }, 404, 'Not Found'),
+      );
 
       // Mock spritesheet download - failure
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ error: { message: 'spritesheet missing' } }, 404, 'Not Found'),
+      );
 
       // Mock storage for video only
       mockStoreMedia.mockResolvedValueOnce({
@@ -1002,26 +996,15 @@ describe('OpenAiVideoProvider', () => {
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       // Setup mocks for API calls (remix should make API calls)
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia.mockResolvedValue({
@@ -1050,26 +1033,15 @@ describe('OpenAiVideoProvider', () => {
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       // Setup mocks for success
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_img2vid', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_img2vid', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_img2vid', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_img2vid', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia.mockResolvedValue({
@@ -1079,16 +1051,38 @@ describe('OpenAiVideoProvider', () => {
 
       await provider.callApi('Animate this image');
 
-      // Verify the request body includes input_reference
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining('"input_reference":"base64EncodedImageData"'),
-        }),
-      );
+      const requestBody = getRequestFormData('/videos');
+      const inputReference = requestBody.get('input_reference');
+      expect(inputReference).toBeInstanceOf(File);
+      expect((inputReference as File).name).toBe('input-reference.png');
     });
 
-    it('should read and base64 encode file when input_reference starts with file://', async () => {
+    it('should send URL input_reference through SDK multipart image_url data', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: { apiKey: 'test-key', input_reference: 'https://example.com/frame.png' },
+      });
+
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_from_url', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_from_url', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
+      mockStoreMedia.mockResolvedValue({
+        ref: { provider: 'local', key: 'video/abc.mp4', contentHash: 'abc', metadata: {} },
+        deduplicated: false,
+      });
+
+      await provider.callApi('Animate this URL');
+
+      const requestBody = getRequestFormData('/videos');
+      expect(requestBody.get('input_reference[image_url]')).toBe('https://example.com/frame.png');
+    });
+
+    it('should read file input references into multipart uploads when using file://', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'file:///path/to/image.png' },
       });
@@ -1107,26 +1101,15 @@ describe('OpenAiVideoProvider', () => {
       });
 
       // Setup mocks for success
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_from_file', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_from_file', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_from_file', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'video_from_file', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia.mockResolvedValue({
@@ -1139,14 +1122,10 @@ describe('OpenAiVideoProvider', () => {
       // Verify the file was read
       expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/image.png');
 
-      // Verify the request body includes base64 encoded data
-      const expectedBase64 = Buffer.from('fake image data').toString('base64');
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/videos'),
-        expect.objectContaining({
-          body: expect.stringContaining(`"input_reference":"${expectedBase64}"`),
-        }),
-      );
+      const requestBody = getRequestFormData('/videos');
+      const inputReference = requestBody.get('input_reference');
+      expect(inputReference).toBeInstanceOf(File);
+      expect(await (inputReference as File).text()).toBe('fake image data');
     });
 
     it('should return error if input_reference file does not exist', async () => {
@@ -1204,26 +1183,15 @@ describe('OpenAiVideoProvider', () => {
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       // Setup mocks for remix
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia.mockResolvedValue({
@@ -1256,26 +1224,15 @@ describe('OpenAiVideoProvider', () => {
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       // Setup mocks for remix
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'queued' }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'remixed_video', status: 'completed', progress: 100 }),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(75),
-      });
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'queued' }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(
+        jsonResponse({ id: 'remixed_video', status: 'completed', progress: 100 }),
+      );
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(100));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(50));
+      mockFetchWithProxy.mockResolvedValueOnce(binaryResponse(75));
 
       // Mock storage
       mockStoreMedia.mockResolvedValue({
@@ -1286,14 +1243,12 @@ describe('OpenAiVideoProvider', () => {
       await provider.callApi('Change the style');
 
       // Get the first call (job creation for remix)
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      const body = getRequestJsonBody('/videos/original_video_789/remix');
 
       // Remix requests should not include size and seconds
       expect(body.size).toBeUndefined();
       expect(body.seconds).toBeUndefined();
-      // But should include model and prompt
-      expect(body.model).toBe('sora-2');
+      expect(body.model).toBeUndefined();
       expect(body.prompt).toBe('Change the style');
     });
   });

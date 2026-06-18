@@ -16,7 +16,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/logger', () => ({
-  default: { debug: vi.fn() },
+  default: { debug: vi.fn(), warn: vi.fn() },
 }));
 
 const mockImportModule = vi.mocked(importModule);
@@ -74,7 +74,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'callback result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', undefined);
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}');
     });
 
     it('should pass context to callback', async () => {
@@ -113,7 +113,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'tool result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}', undefined);
+      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}');
     });
 
     it('should stringify non-string callback results', async () => {
@@ -129,6 +129,26 @@ describe('FunctionCallbackHandler', () => {
         output: '{"result":"object"}',
         isError: false,
       });
+    });
+
+    it('should return the original call when callback results cannot be stringified', async () => {
+      const circularResult: Record<string, unknown> = {};
+      circularResult.self = circularResult;
+      const mockCallback = vi.fn().mockResolvedValue(circularResult);
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: mockCallback,
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: JSON.stringify(call),
+        isError: true,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Error stringifying result from function 'testFunction'"),
+      );
     });
 
     it('should return original call on callback error', async () => {
@@ -272,7 +292,7 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'path/to/function.js'),
       );
-      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}', undefined);
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}');
     });
 
     it('should load specific function from external file', async () => {
@@ -294,7 +314,28 @@ describe('FunctionCallbackHandler', () => {
         output: 'specific result',
         isError: false,
       });
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
+    });
+
+    it('should fall back to a default external function when a named export is missing', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('default result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://path/to/functions.js:missingFunction',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'default result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'path/to/functions.js'),
+      );
+      expect(mockDefaultFunction).toHaveBeenCalledWith('{}');
     });
 
     it('should load specific function from Windows-style external file paths', async () => {
@@ -319,7 +360,7 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'C:/path/to/functions.js'),
       );
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
     });
 
     it('should load default function from standard Windows file URLs on Windows', async () => {

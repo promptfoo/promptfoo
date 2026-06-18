@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import {
   cleanAssistantResponse,
+  generateChatKitHTML,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
@@ -27,127 +30,25 @@ vi.mock('playwright', () => ({
   },
 }));
 
+const mockServerRequestHandler = vi.hoisted(() => vi.fn());
+
 // Mock http server
 vi.mock('http', () => ({
-  createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
-    address: vi.fn().mockReturnValue({ port: 3000 }),
-    close: vi.fn(),
-    once: vi.fn(), // For error event handler
+  createServer: vi.fn((handler: (...args: any[]) => void) => {
+    mockServerRequestHandler.mockImplementation(handler);
+    return {
+      listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
+      address: vi.fn().mockReturnValue({ port: 3000 }),
+      close: vi.fn(),
+      once: vi.fn(), // For error event handler
+    };
   }),
 }));
-
-// Helper to access the generated HTML (we test via the provider's internal HTML generation)
-function getGeneratedHTML(provider: OpenAiChatKitProvider): string {
-  // Access private method via casting
-  const config = (provider as any).chatKitConfig;
-  const apiKey = 'test-key';
-  const workflowId = config.workflowId;
-  const version = config.version;
-  const userId = config.userId;
-
-  // Generate HTML the same way the provider does internally
-  const versionClause = version ? `, version: '${version}'` : '';
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>ChatKit Eval</title>
-</head>
-<body>
-  <openai-chatkit id="chatkit"></openai-chatkit>
-
-  <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"></script>
-
-  <script>
-    window.__state = { ready: false, responses: [], threadId: null, error: null, responding: false };
-
-    async function init() {
-      const chatkit = document.getElementById('chatkit');
-
-      // Wait for element to be ready
-      let attempts = 0;
-      while (typeof chatkit.setOptions !== 'function' && attempts < 100) {
-        await new Promise(r => setTimeout(r, 100));
-        attempts++;
-      }
-
-      if (typeof chatkit.setOptions !== 'function') {
-        window.__state.error = 'ChatKit component failed to initialize';
-        return;
-      }
-
-      let cachedSecret = null;
-
-      chatkit.setOptions({
-        api: {
-          getClientSecret: async (existing) => {
-            if (existing) return existing;
-            if (cachedSecret) return cachedSecret;
-
-            const res = await fetch('https://api.openai.com/v1/chatkit/sessions', {
-              method: 'POST',
-              headers: {
-                'Authorization': 'Bearer ${apiKey}',
-                'Content-Type': 'application/json',
-                'OpenAI-Beta': 'chatkit_beta=v1',
-                'X-OpenAI-Originator': 'promptfoo'
-              },
-              body: JSON.stringify({
-                workflow: { id: '${workflowId}'${versionClause} },
-                user: '${userId}'
-              })
-            });
-
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error('Session failed: ' + res.status + ' ' + text);
-            }
-
-            const data = await res.json();
-            cachedSecret = data.client_secret;
-            return cachedSecret;
-          }
-        },
-        header: { enabled: false },
-        history: { enabled: false },
-      });
-
-      chatkit.addEventListener('chatkit.ready', () => {
-        window.__state.ready = true;
-      });
-
-      chatkit.addEventListener('chatkit.error', (e) => {
-        window.__state.error = e.detail.error?.message || 'Unknown error';
-      });
-
-      chatkit.addEventListener('chatkit.thread.change', (e) => {
-        window.__state.threadId = e.detail.threadId;
-      });
-
-      chatkit.addEventListener('chatkit.response.start', () => {
-        window.__state.responding = true;
-      });
-
-      chatkit.addEventListener('chatkit.response.end', () => {
-        window.__state.responding = false;
-        window.__state.responses.push({ timestamp: Date.now() });
-      });
-
-      window.__chatkit = chatkit;
-    }
-
-    init().catch(e => {
-      window.__state.error = e.message;
-    });
-  </script>
-</body>
-</html>`;
-}
 
 describe('OpenAiChatKitProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServerRequestHandler.mockReset();
     disableCache();
   });
 
@@ -251,6 +152,50 @@ describe('OpenAiChatKitProvider', () => {
         restoreEnv();
       }
     });
+
+    it('should keep pooled session factories isolated by provider instance', async () => {
+      const registeredTemplates = new Map<string, () => Promise<string>>();
+      const setTemplate = vi.fn(
+        (templateKey: string, _html: string, createClientSecret: () => Promise<string>) => {
+          registeredTemplates.set(templateKey, createClientSecret);
+        },
+      );
+      const getInstanceSpy = vi.spyOn(ChatKitBrowserPool, 'getInstance').mockReturnValue({
+        setTemplate,
+        acquirePage: vi.fn().mockRejectedValue(new Error('stop after template registration')),
+        releasePage: vi.fn(),
+      } as unknown as ChatKitBrowserPool);
+      const sharedConfig = {
+        usePool: true,
+        workflowId: 'wf_shared',
+        userId: 'shared-user',
+      };
+      const firstProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'first-key' },
+      });
+      const secondProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'second-key' },
+      });
+
+      try {
+        await Promise.all([
+          firstProvider.callApi('first prompt'),
+          secondProvider.callApi('second prompt'),
+        ]);
+        await firstProvider.callApi('third prompt');
+
+        const [firstKey, secondKey, repeatedFirstKey] = setTemplate.mock.calls.map(
+          ([templateKey]) => templateKey,
+        );
+        expect(firstKey).toBe(repeatedFirstKey);
+        expect(firstKey).not.toBe(secondKey);
+        expect(registeredTemplates.size).toBe(2);
+        expect(firstKey).not.toContain('first-key');
+        expect(secondKey).not.toContain('second-key');
+      } finally {
+        getInstanceSpy.mockRestore();
+      }
+    });
   });
 
   describe('cleanup', () => {
@@ -284,12 +229,16 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('HTML template generation', () => {
-    it('should include responding state tracking in window.__state', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+    it('keeps session minting behind the local provider endpoint', () => {
+      const html = generateChatKitHTML('/api/chatkit/session');
 
-      const html = getGeneratedHTML(provider);
+      expect(html).toContain("fetch('/api/chatkit/session'");
+      expect(html).not.toContain('Authorization');
+      expect(html).not.toContain('https://api.openai.com/v1/chatkit/sessions');
+    });
+
+    it('should include responding state tracking in window.__state', () => {
+      const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the responding state is included
       expect(html).toContain('responding: false');
@@ -298,25 +247,70 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.start event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
-      const html = getGeneratedHTML(provider);
+      const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the response.start listener is included for multi-step workflow tracking
       expect(html).toContain("chatkit.addEventListener('chatkit.response.start'");
     });
 
     it('should have chatkit.response.end event listener', () => {
+      const html = generateChatKitHTML('/api/chatkit/session');
+
+      // Verify the response.end listener is included
+      expect(html).toContain("chatkit.addEventListener('chatkit.response.end'");
+    });
+  });
+
+  describe('session route', () => {
+    it('adds Promptfoo request headers when minting a client secret', async () => {
+      const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
+        new Response(JSON.stringify({ client_secret: 'secret-123' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
       const provider = new OpenAiChatKitProvider('wf_test123', {
         config: { apiKey: 'test-key' },
       });
 
-      const html = getGeneratedHTML(provider);
+      try {
+        const secret = await (provider as any).createChatKitClientSecret('wf_test123', 'user-123');
 
-      // Verify the response.end listener is included
-      expect(html).toContain("chatkit.addEventListener('chatkit.response.end'");
+        expect(secret).toBe('secret-123');
+        const [, requestInit] = fetchSpy.mock.calls[0];
+        expect(new Headers(requestInit?.headers).get('x-openai-originator')).toBe('promptfoo');
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('returns client secrets through the local provider route', async () => {
+      const provider = new OpenAiChatKitProvider('wf_test123', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.spyOn(provider as any, 'createChatKitClientSecret').mockResolvedValue('secret-123');
+
+      await (provider as any).initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: '/api/chatkit/session',
+        },
+        {
+          writeHead,
+          end,
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
+      expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'secret-123' }));
     });
   });
 

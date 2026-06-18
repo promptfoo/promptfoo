@@ -468,12 +468,13 @@ describe('CloudflareGateway Provider', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          headers: expect.objectContaining({
-            'cf-aig-authorization': 'Bearer gateway-token',
-            'X-Custom-Header': 'custom-value',
-          }),
+          method: 'POST',
         }),
       );
+      const [, requestOptions] = mockFetch.mock.calls[0];
+      const headers = new Headers(requestOptions.headers);
+      expect(headers.get('cf-aig-authorization')).toBe('Bearer gateway-token');
+      expect(headers.get('x-custom-header')).toBe('custom-value');
     });
   });
 

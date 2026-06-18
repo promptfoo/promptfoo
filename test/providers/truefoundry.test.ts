@@ -22,6 +22,10 @@ vi.mock('../../src/util/fetch/index.ts');
 
 describe('TrueFoundry', () => {
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
+  const getRequestHeaders = (callIndex = 0) => {
+    const [, requestOptions] = mockedFetchWithRetries.mock.calls[callIndex];
+    return new Headers(requestOptions?.headers);
+  };
 
   afterEach(async () => {
     await clearCache();
@@ -202,17 +206,15 @@ describe('TrueFoundry', () => {
 
         expect(mockedFetchWithRetries).toHaveBeenCalledWith(
           `${TRUEFOUNDRY_API_BASE}/chat/completions`,
-          {
+          expect.objectContaining({
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer test-key',
-            },
             body: JSON.stringify(expectedBody),
-          },
+          }),
           300000,
           undefined,
         );
+        expect(getRequestHeaders().get('content-type')).toBe('application/json');
+        expect(getRequestHeaders().get('authorization')).toBe('Bearer test-key');
 
         expect(result).toEqual({
           output: 'Test output',
@@ -262,8 +264,8 @@ describe('TrueFoundry', () => {
         if (!lastCall) {
           throw new Error('Expected fetch to have been called');
         }
-        const requestOptions = lastCall[1] as { headers: Record<string, string> };
-        expect(requestOptions.headers['X-TFY-METADATA']).toBe(
+        const requestHeaders = new Headers(lastCall[1]?.headers);
+        expect(requestHeaders.get('x-tfy-metadata')).toBe(
           JSON.stringify({
             user_id: 'test-user',
             custom_field: 'test-value',
@@ -298,8 +300,8 @@ describe('TrueFoundry', () => {
         if (!lastCall) {
           throw new Error('Expected fetch to have been called');
         }
-        const requestOptions = lastCall[1] as { headers: Record<string, string> };
-        expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
+        const requestHeaders = new Headers(lastCall[1]?.headers);
+        expect(requestHeaders.get('x-tfy-logging-config')).toBe(
           JSON.stringify({
             enabled: true,
           }),
@@ -332,13 +334,9 @@ describe('TrueFoundry', () => {
         if (!lastCall) {
           throw new Error('Expected fetch to have been called');
         }
-        const requestOptions = lastCall[1] as { headers: Record<string, string> };
-        expect(requestOptions.headers['X-TFY-METADATA']).toBe(
-          JSON.stringify({ user_id: 'test-user' }),
-        );
-        expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
-          JSON.stringify({ enabled: true }),
-        );
+        const requestHeaders = new Headers(lastCall[1]?.headers);
+        expect(requestHeaders.get('x-tfy-metadata')).toBe(JSON.stringify({ user_id: 'test-user' }));
+        expect(requestHeaders.get('x-tfy-logging-config')).toBe(JSON.stringify({ enabled: true }));
       });
 
       it('should use cache by default', async () => {
@@ -496,14 +494,12 @@ describe('TrueFoundry', () => {
         `${TRUEFOUNDRY_API_BASE}/embeddings`,
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
         }),
         300000,
         undefined,
       );
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer test-key');
 
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
@@ -555,13 +551,9 @@ describe('TrueFoundry', () => {
       if (!lastCall) {
         throw new Error('Expected fetch to have been called');
       }
-      const requestOptions = lastCall[1] as { headers: Record<string, string> };
-      expect(requestOptions.headers['X-TFY-METADATA']).toBe(
-        JSON.stringify({ user_id: 'test-user' }),
-      );
-      expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
-        JSON.stringify({ enabled: true }),
-      );
+      const requestHeaders = new Headers(lastCall[1]?.headers);
+      expect(requestHeaders.get('x-tfy-metadata')).toBe(JSON.stringify({ user_id: 'test-user' }));
+      expect(requestHeaders.get('x-tfy-logging-config')).toBe(JSON.stringify({ enabled: true }));
     });
 
     it('should handle embedding API errors', async () => {

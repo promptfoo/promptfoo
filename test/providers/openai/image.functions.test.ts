@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
 import {
   buildStructuredImageOutputs,
   calculateImageCost,
-  callOpenAiImageApi,
   DALLE2_COSTS,
   DALLE3_COSTS,
   formatOutput,
@@ -282,43 +280,11 @@ describe('OpenAI Image Provider Functions', () => {
     });
   });
 
-  describe('callOpenAiImageApi', () => {
-    it('should call fetchWithCache with correct parameters', async () => {
-      const mockResponse = {
-        data: { some: 'data' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-      const url = 'https://api.openai.com/v1/images/generations';
-      const body = { model: 'dall-e-3', prompt: 'test' };
-      const headers = { 'Content-Type': 'application/json' };
-      const timeout = 30000;
-
-      const result = await callOpenAiImageApi(url, body, headers, timeout);
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        url,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        },
-        timeout,
-      );
-      expect(result).toEqual(mockResponse);
-    });
-  });
-
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -329,6 +295,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
@@ -457,7 +428,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -468,6 +438,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
@@ -480,7 +455,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -491,6 +465,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');

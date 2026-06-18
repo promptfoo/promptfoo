@@ -83,8 +83,8 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
-      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
+      const requestHeaders = new Headers(mockFetchWithCache.mock.calls[0][1]?.headers);
+      expect(requestHeaders.get('x-openai-originator')).toBe('promptfoo');
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
@@ -1118,7 +1118,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'test/callbacks.js'),
-          'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
@@ -1184,7 +1183,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'C:/test/callbacks.js'),
-          'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
@@ -1318,7 +1316,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'nonexistent/module.js'),
-          'errorFunction',
         );
         // Should fall back to original function call object when loading fails
         expect(result.output).toEqual([
@@ -1461,7 +1458,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'deep/path/module.js'),
-          'deepExport.nestedFunction',
         );
         expect(mockParsedFunction).toHaveBeenCalledWith('{"data": "parsing_test"}');
         expect(result.output).toBe('Parsed successfully');
@@ -1547,7 +1543,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(mockInlineFunction).toHaveBeenCalledWith('{"inline": "test"}');
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'mixed/callbacks.js'),
-          'externalFunc',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"external": "test"}');
         expect(result.output).toBe('Inline result\nExternal result');
@@ -2060,6 +2055,53 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(body.prompt_cache_key).toBe('shared-prefix');
       expect(body.prompt_cache_retention).toBe('in_memory');
+    });
+
+    it('should let passthrough override standard chat request options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          top_p: 0.2,
+          response_format: { type: 'json_object' },
+          passthrough: {
+            top_p: 0.8,
+            response_format: { type: 'text' },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.top_p).toBe(0.8);
+      expect(body.response_format).toEqual({ type: 'text' });
+    });
+
+    it('should preserve explicit model-specific response options over passthrough', async () => {
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: {
+          verbosity: 'high',
+          passthrough: {
+            verbosity: 'low',
+          },
+        },
+      });
+      const { body: gpt5Body } = await gpt5Provider.getOpenAiBody('Test prompt');
+
+      expect(gpt5Body.verbosity).toBe('high');
+
+      const audioProvider = new OpenAiChatCompletionProvider('gpt-4o-audio-preview', {
+        config: {
+          modalities: ['audio'],
+          audio: { voice: 'alloy', format: 'wav' },
+          passthrough: {
+            modalities: ['text'],
+            audio: { voice: 'verse', format: 'mp3' },
+          },
+        },
+      });
+      const { body: audioBody } = await audioProvider.getOpenAiBody('Test prompt');
+
+      expect(audioBody.modalities).toEqual(['audio']);
+      expect(audioBody.audio).toEqual({ voice: 'alloy', format: 'wav' });
     });
 
     it('should not share config between provider instances', () => {
@@ -2760,6 +2802,48 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         if (originalOpenAIEnv !== undefined) {
           mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
         }
+      }
+    });
+
+    it('preserves custom Authorization headers when apiKeyRequired is false', async () => {
+      const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      const originalOpenAIEnv = process.env.OPENAI_API_KEY;
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+            headers: {
+              Authorization: 'Bearer gateway-token',
+            },
+          },
+        });
+
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'Response through gateway auth' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi(
+          JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+        );
+
+        expect(result.output).toBe('Response through gateway auth');
+        const callArgs = mockFetchWithCache.mock.calls[0];
+        const headers = new Headers(callArgs[1]?.headers);
+        expect(headers.get('authorization')).toBe('Bearer gateway-token');
+      } finally {
+        mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalCustomEnv });
+        mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
       }
     });
   });
