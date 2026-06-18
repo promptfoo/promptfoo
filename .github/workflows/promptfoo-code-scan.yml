@@ -30,10 +30,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
-      # request on Linux runners, dragging the scanner's uncached
-      # `npm install -g promptfoo` (~860 packages) into a 14-minute crawl that
-      # trips the job timeout. Revisit when a newer Node resolves it.
+      # Pin separately from .nvmrc so code scan runtime updates are deliberate.
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
