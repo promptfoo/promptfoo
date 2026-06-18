@@ -2439,6 +2439,21 @@ Third line`;
 
       expect(result.cost).toBeCloseTo(expected, 6);
     });
+
+    it('does not report US-only OpenAI-compatible rates outside US regions', async () => {
+      const provider = new AwsBedrockConverseProvider('google.gemma-3-12b-it', {
+        config: { region: 'eu-west-2' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
   });
 
   describe('caching', () => {

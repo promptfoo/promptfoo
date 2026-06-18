@@ -255,6 +255,23 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
 };
 
+const BEDROCK_CONVERSE_US_PRICING_MODEL_PREFIXES = [
+  'zai.glm-',
+  'minimax.minimax-',
+  'kimi-k2',
+  'nemotron-',
+  'gemma-3-',
+  'writer.palmyra-vision',
+] as const;
+
+function hasUsOnlyBedrockConversePricing(modelId: string): boolean {
+  return BEDROCK_CONVERSE_US_PRICING_MODEL_PREFIXES.some((prefix) => modelId.includes(prefix));
+}
+
+function isUsBedrockRegion(region: string): boolean {
+  return region.startsWith('us-');
+}
+
 /**
  * Calculate cost based on model and token usage
  */
@@ -264,6 +281,7 @@ function calculateBedrockConverseCost(
   completionTokens?: number,
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
+  region?: string,
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
@@ -271,6 +289,13 @@ function calculateBedrockConverseCost(
 
   // Find matching pricing
   const normalizedModelId = modelId.toLowerCase();
+  if (
+    region !== undefined &&
+    !isUsBedrockRegion(region.toLowerCase()) &&
+    hasUsOnlyBedrockConversePricing(normalizedModelId)
+  ) {
+    return undefined;
+  }
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
   // premium. The model ID may be a bare `global.` profile or an
   // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
@@ -1645,6 +1670,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       completionTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      this.getRegion(),
     );
 
     // Build metadata
@@ -1998,6 +2024,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.outputTokens,
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
+        this.getRegion(),
       );
 
       // Surface MCP failures via the response `error` field. If the model also

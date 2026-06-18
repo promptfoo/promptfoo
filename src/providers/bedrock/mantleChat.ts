@@ -30,11 +30,15 @@ export const DEFAULT_BEDROCK_MANTLE_CHAT_REGION = 'us-east-1';
 
 /**
  * Base URL for the mantle Chat Completions API. Most mantle chat models use the bare `/v1`
- * path, but Bedrock's OpenAI/xAI Chat Completions models use `/openai/v1`.
+ * path, but Bedrock's xAI Chat Completions models and non-gpt-oss OpenAI chat models use
+ * `/openai/v1`.
  */
 export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
   const path =
-    modelName?.startsWith('openai.') || modelName?.startsWith('xai.') ? 'openai/v1' : 'v1';
+    modelName?.startsWith('xai.') ||
+    (modelName?.startsWith('openai.') && !modelName.includes('gpt-oss'))
+      ? 'openai/v1'
+      : 'v1';
   return `${getBedrockMantleOrigin(region)}/${path}`;
 }
 
@@ -65,6 +69,10 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
       model.includes('/o4') ||
       this.isGPT5Model()
     );
+  }
+
+  protected supportsTemperature(): boolean {
+    return this.modelName.startsWith('xai.') || super.supportsTemperature();
   }
 
   protected getBillingModelName(): string {

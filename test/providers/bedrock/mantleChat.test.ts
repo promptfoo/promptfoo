@@ -25,12 +25,18 @@ describe('bedrock mantle Chat Completions provider', () => {
       );
     });
 
-    it('builds the /openai/v1 mantle endpoint for OpenAI and xAI chat models', () => {
+    it('builds the /openai/v1 mantle endpoint for frontier OpenAI and xAI chat models', () => {
       expect(getBedrockMantleChatBaseUrl('us-east-1', 'openai.gpt-5.5')).toBe(
         'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
       );
       expect(getBedrockMantleChatBaseUrl('us-west-2', 'xai.grok-4.3')).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    });
+
+    it('keeps open-weight gpt-oss chat models on the bare /v1 mantle endpoint', () => {
+      expect(getBedrockMantleChatBaseUrl('us-east-1', 'openai.gpt-oss-20b-1:0')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
       );
     });
 
@@ -116,7 +122,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
       expect(body.model).toBe('xai.grok-4.3');
       expect(body.reasoning_effort).toBe('high');
-      expect(body.temperature).toBeUndefined();
+      expect(body.temperature).toBe(0);
     });
 
     it('uses GPT-5 capabilities for Bedrock-prefixed OpenAI chat models', async () => {
