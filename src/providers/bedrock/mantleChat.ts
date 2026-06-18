@@ -5,7 +5,13 @@ import {
   resolveBedrockMantleRegion,
 } from './mantle';
 
-import type { CallApiContextParams, ProviderOptions } from '../../types/index';
+type BedrockMantleChatProviderOptions = Record<string, any> & {
+  config?: Record<string, any>;
+  id?: string;
+  env?: OpenAiChatCompletionProvider['env'];
+};
+type BedrockMantleChatBodyContext = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[1];
+type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[2];
 
 /**
  * The Bedrock **Mantle** engine exposes an OpenAI-compatible **Chat Completions** API at
@@ -80,7 +86,11 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return this.getCapabilityModelName();
   }
 
-  async getOpenAiBody(prompt: string, context?: CallApiContextParams, callApiOptions?: any) {
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockMantleChatBodyContext,
+    callApiOptions?: BedrockMantleChatCallApiOptions,
+  ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
     if (this.modelName.startsWith('xai.')) {
       delete result.body.presence_penalty;
@@ -109,7 +119,7 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
  */
 export function createBedrockMantleChatProvider(
   modelName: string,
-  providerOptions: ProviderOptions & { id?: string } = {},
+  providerOptions: BedrockMantleChatProviderOptions = {},
 ): OpenAiChatCompletionProvider {
   const config: Record<string, any> = providerOptions.config ?? {};
   const region = resolveBedrockMantleRegion(
