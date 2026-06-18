@@ -1135,8 +1135,8 @@ as shown above.
 xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
-`Converse`. It is offered in **`us-west-2`** (check `aws bedrock list-foundation-models` for
-current regional availability) and authenticates with an **Amazon Bedrock API key** (set
+`Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional
+availability) and authenticates with an **Amazon Bedrock API key** (set
 `AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
 
 ```yaml

@@ -3531,10 +3531,18 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it.each([
+    'anthropic.claude-3-opus-20240229-v1:0',
+    'us.anthropic.claude-3-opus-20240229-v1:0',
+    'anthropic.claude-opus-4-20250514-v1:0',
+    'us.anthropic.claude-opus-4-20250514-v1:0',
     'anthropic.claude-instant-v1',
     'anthropic.claude-v1',
     'anthropic.claude-v2',
     'anthropic.claude-v2:1',
+    'cohere.command-text-v14',
+    'cohere.command-light-text-v14',
+    'meta.llama2-13b-chat-v1',
+    'meta.llama2-70b-chat-v1',
   ])('rejects retired Claude direct model id %s', (modelName) => {
     expect(() => getHandlerForModel(modelName)).toThrow(
       `Unknown Amazon Bedrock model: ${modelName}`,

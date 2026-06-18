@@ -17,18 +17,12 @@ The AWS Bedrock Agents provider lets you test and evaluate AI agents built with 
 
 ## Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: bedrock-agent:YOUR_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS_ID # Required
       region: us-east-1
-```
-
-Then run the eval:
-
-```bash
-promptfoo eval -c promptfooconfig.yaml
 ```
 
 ## Full Configuration Options
