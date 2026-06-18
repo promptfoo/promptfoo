@@ -47,7 +47,18 @@ The provider accepts every option the [OpenAI provider](/docs/providers/openai/)
 - `stream`
 - `response_format` (JSON mode), `tools` / `tool_choice` (function calling)
 - `showThinking` — set to `false` to drop a thinking model's reasoning from the graded output (default `true`)
-- `cost`, `inputCost`, `outputCost`, `cacheReadCost` — Moonshot ships no built-in price table, so set these to track cost. `inputCost`/`outputCost` take precedence over the flat `cost`; `cacheReadCost` prices cached prompt tokens.
+- `cost`, `inputCost`, `outputCost`, `cacheReadCost` — Moonshot ships no built-in price table, so set these to track cost. Every override is in USD per token. Moonshot's [official pricing page](https://platform.kimi.ai/docs/pricing/chat) publishes rates in USD per 1 million tokens, so divide each published rate by `1,000,000` before configuring it. `inputCost`/`outputCost` take precedence over the flat `cost`; `cacheReadCost` prices cached prompt tokens.
+
+For example, these illustrative per-million rates convert to per-token overrides. Check the official pricing page for the current rates for your model before using them.
+
+```yaml
+providers:
+  - id: moonshot:kimi-k2.6
+    config:
+      inputCost: 0.00000095 # $0.95 per 1M tokens divided by 1,000,000
+      cacheReadCost: 0.00000016 # $0.16 per 1M tokens divided by 1,000,000
+      outputCost: 0.000004 # $4.00 per 1M tokens divided by 1,000,000
+```
 
 Any other parameter supported by the OpenAI provider is forwarded as-is.
 
