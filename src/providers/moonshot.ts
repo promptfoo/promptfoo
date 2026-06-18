@@ -25,11 +25,7 @@ type MoonshotConfig = OpenAiCompletionOptions & {
 };
 
 type MoonshotProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
-    config?: MoonshotConfig;
-    id?: string;
-    env?: EnvOverrides;
-  };
+  config?: MoonshotConfig;
 };
 
 function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
@@ -94,7 +90,7 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
   config: MoonshotConfig;
 
   constructor(modelName: string, providerOptions: MoonshotProviderOptions) {
-    const moonshotConfig = providerOptions.config?.config ?? {};
+    const moonshotConfig = providerOptions.config ?? {};
     const resolvedConfig: MoonshotConfig = {
       ...moonshotConfig,
       apiKeyEnvar: moonshotConfig.apiKeyEnvar ?? MOONSHOT_API_KEY_ENVAR,
@@ -104,8 +100,7 @@ class MoonshotProvider extends OpenAiChatCompletionProvider {
     };
 
     super(modelName, {
-      id: providerOptions.config?.id ?? providerOptions.id,
-      env: providerOptions.config?.env ?? providerOptions.env,
+      ...providerOptions,
       config: resolvedConfig,
     });
 

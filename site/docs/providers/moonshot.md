@@ -47,7 +47,7 @@ The provider accepts every option the [OpenAI provider](/docs/providers/openai/)
 - `stream`
 - `response_format` (JSON mode), `tools` / `tool_choice` (function calling)
 - `showThinking` — set to `false` to drop a thinking model's reasoning from the graded output (default `true`)
-- `cost`, `inputCost`, `outputCost`, `cacheReadCost` — Moonshot ships no built-in price table, so set these to track cost. `inputCost`/`outputCost` take precedence over the flat `cost`; `cacheReadCost` prices cached prompt tokens.
+- `cost`, `inputCost`, `outputCost`, `cacheReadCost` — Moonshot ships no built-in price table, so set these to track cost. Use Moonshot's pricing/billing docs (start at [Moonshot API docs](https://platform.kimi.ai/docs/api)) and your account billing page to find current per-model rates, including cached-token read pricing for `cacheReadCost`. `inputCost`/`outputCost` take precedence over the flat `cost`; `cacheReadCost` prices cached prompt tokens.
 
 Any other parameter supported by the OpenAI provider is forwarded as-is.
 
