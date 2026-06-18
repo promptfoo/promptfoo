@@ -73,7 +73,7 @@ export const awsProviderFactories: ProviderFactory[] = [
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
       const candidateMantleModel =
-        modelType === 'converse' || modelType === 'completion' || modelType === 'mantle'
+        modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.length === 2
             ? splits[1]
@@ -106,6 +106,12 @@ export const awsProviderFactories: ProviderFactory[] = [
       // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
       // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
       if (modelType === 'mantle') {
+        if (modelName.includes('.xai.')) {
+          throw new Error(
+            `Amazon Bedrock model "${modelName}" is not a valid Grok mantle id. ` +
+              `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+          );
+        }
         const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
         return createBedrockMantleChatProvider(modelName, {
           ...providerOptions,

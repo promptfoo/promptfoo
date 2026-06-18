@@ -90,6 +90,19 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:mantle:zai.glm-4.6');
   });
 
+  it('routes bedrock:mantle:xai.grok-4.3 to the Chat Completions provider', async () => {
+    const { BedrockMantleChatProvider } = await import('../../../src/providers/bedrock/mantleChat');
+    const provider = await bedrockFactory.create(
+      'bedrock:mantle:xai.grok-4.3',
+      { config: { apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockMantleChatProvider);
+    expect((provider as any).config.apiBaseUrl).toBe(
+      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+    );
+  });
+
   it('preserves a colon-containing model id after the mantle: subtype', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:mantle:openai.gpt-oss-20b-1:0',
