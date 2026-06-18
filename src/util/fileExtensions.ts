@@ -6,11 +6,15 @@ export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
 /**
  * Checks if a file is a JavaScript or TypeScript file based on its extension.
  *
+ * The match is case-insensitive so paths with uppercase extensions (e.g.
+ * `provider.JS`, `transform.TS`) are recognized on case-insensitive file
+ * systems, matching the behavior of `isImageFile`/`isVideoFile`/`isAudioFile`.
+ *
  * @param filePath - The path of the file to check.
  * @returns True if the file has a JavaScript or TypeScript extension, false otherwise.
  */
 export function isJavascriptFile(filePath: string): boolean {
-  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`).test(filePath);
+  return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`, 'i').test(filePath);
 }
 
 /**
