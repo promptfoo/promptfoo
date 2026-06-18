@@ -1165,8 +1165,8 @@ providers:
 ### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
 
 The Bedrock **Mantle** engine also exposes an OpenAI-compatible **Chat Completions** API. Most
-mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; xAI,
-Gemma 4, and non-gpt-oss OpenAI chat models use the `/openai/v1/chat/completions` variant. Use the
+mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; xAI and
+Gemma 4 chat models use the `/openai/v1/chat/completions` variant. Use the
 **`bedrock:mantle:<id>`** prefix to talk to it. This is the only way to reach mantle-served chat models that the native
 `InvokeModel`/`Converse` APIs don't serve — so they don't appear in
 `aws bedrock list-foundation-models` — for example `zai.glm-4.6`, `deepseek.v3.1`,
