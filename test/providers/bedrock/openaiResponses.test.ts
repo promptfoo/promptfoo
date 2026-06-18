@@ -274,6 +274,13 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('links Grok missing-key errors to the Grok docs section', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
+        'https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models',
+      );
+    });
+
     it('treats Grok as a reasoning model but does NOT mark it GPT-5', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});

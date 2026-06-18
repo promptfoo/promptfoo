@@ -3068,8 +3068,10 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           this.modelName,
           tokenUsage.prompt,
           tokenUsage.completion,
-          tokenUsage.completionDetails?.cacheReadInputTokens,
-          tokenUsage.completionDetails?.cacheCreationInputTokens,
+          tokenUsage.completionDetails?.cacheReadInputTokens ??
+            coerceStrToNum(output.usage?.cache_read_input_tokens),
+          tokenUsage.completionDetails?.cacheCreationInputTokens ??
+            coerceStrToNum(output.usage?.cache_creation_input_tokens),
           this.getRegion(),
         );
 

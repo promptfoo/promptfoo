@@ -73,7 +73,7 @@ export const awsProviderFactories: ProviderFactory[] = [
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
       const candidateMantleModel =
-        modelType === 'converse' || modelType === 'completion'
+        modelType === 'converse' || modelType === 'completion' || modelType === 'mantle'
           ? modelName
           : splits.length === 2
             ? splits[1]

@@ -3706,6 +3706,35 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo((10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2, 6);
   });
 
+  it('includes Claude Runtime cache token pricing in the fallback cost', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: {
+        input_tokens: 10000,
+        output_tokens: 5000,
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 2000,
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-opus-4-8', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(
+      (10000 / 1e6) * 5 + (1000 / 1e6) * 0.5 + (2000 / 1e6) * 6.25 + (5000 / 1e6) * 25,
+      6,
+    );
+  });
+
   it('should pass base config to model.params when context is not provided', async () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {

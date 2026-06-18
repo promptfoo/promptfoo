@@ -150,11 +150,12 @@ export function createBedrockOpenAiResponsesProvider(
   const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 
   if (!apiKey) {
+    const docsAnchor = isGrok ? '#xai-grok-models' : '#openai-models';
     throw new Error(
       `Amazon Bedrock model "${modelName}" is served through Bedrock's OpenAI-compatible ` +
         `Responses API on the mantle endpoint, which authenticates with an Amazon Bedrock API ` +
         `key. Set the AWS_BEARER_TOKEN_BEDROCK environment variable (or config.apiKey). See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models`,
+        `https://www.promptfoo.dev/docs/providers/aws-bedrock/${docsAnchor}`,
     );
   }
 
