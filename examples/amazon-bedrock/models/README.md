@@ -196,6 +196,12 @@ providers:
 - `titan` - Amazon Titan models
 - `deepseek` - DeepSeek models (with thinking capability)
 - `openai` - OpenAI GPT-OSS models
+- `zai` - Z.AI GLM models
+- `minimax` - MiniMax models
+- `moonshot` - Moonshot Kimi models
+- `nvidia` - NVIDIA Nemotron models
+- `writer` - Writer Palmyra models
+- `gemma` - Google Gemma models
 
 ### Running the Examples
 

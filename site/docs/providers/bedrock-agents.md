@@ -27,7 +27,7 @@ providers:
 
 ## Full Configuration Options
 
-:::tip
+:::note
 
 Most configs only need `agentId` (from the provider ID) and `agentAliasId`. The options below are optional — see [Features](#features) for per-feature walkthroughs.
 
