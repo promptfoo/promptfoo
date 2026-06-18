@@ -26,7 +26,7 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools, stripExecutableToolFileReferences } from './util';
+import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -110,6 +110,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.tools, vars);
   }
 
   /**

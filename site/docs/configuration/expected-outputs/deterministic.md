@@ -1210,6 +1210,10 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 
 ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
+:::note
+ROUGE is scored case-insensitively (inputs are lowercased before comparison), consistent with the other text-overlap metrics (BLEU, GLEU, METEOR). A difference in capitalization — for example `The Cat Sat` vs `the cat sat` — does not lower the score.
+:::
+
 Example:
 
 ```yaml

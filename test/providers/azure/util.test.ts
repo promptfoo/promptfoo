@@ -34,9 +34,25 @@ describe('calculateAzureCost', () => {
     expect(typeof cost).toBe('number');
   });
 
+  it('calculates cost for Claude Fable 5', () => {
+    expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
+  });
+
+  it('calculates cost for Microsoft MAI image models from output tokens', () => {
+    // MAI-Image-2.5 bills image output at $33/1M tokens; input is unused here.
+    const cost = calculateAzureCost('MAI-Image-2.5', {}, 0, 1000);
+    expect(cost).toBeCloseTo(0.033, 6);
+  });
+
+  it('calculates cost for the MAI-DS-R1 reasoning model', () => {
+    const cost = calculateAzureCost('MAI-DS-R1', {}, 100, 50);
+    expect(cost).toBeDefined();
+    expect(typeof cost).toBe('number');
   });
 
   it('returns undefined when tokens are undefined', () => {

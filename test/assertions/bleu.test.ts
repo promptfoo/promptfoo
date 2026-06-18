@@ -47,6 +47,96 @@ describe('BLEU score calculation', () => {
     expect(score).toBeGreaterThan(0.0);
   });
 
+  it('should score a perfect short match ~1.0 regardless of token count', () => {
+    // A candidate shorter than the 4-gram order has no 4-grams (and a 1-2 word
+    // candidate has no 3-/2-grams). Those unavailable orders must be dropped and
+    // the weights renormalized, not treated as zero-precision. Before the fix an
+    // exact 1-word match scored ~0.00001 and a 3-word match ~0.018, failing the
+    // default 0.5 threshold; only candidates of >= 4 tokens could ever pass.
+    expect(calculateBleuScore('cat', ['cat'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('good dog', ['good dog'])).toBeCloseTo(1, 5);
+    expect(calculateBleuScore('the good dog', ['the good dog'])).toBeCloseTo(1, 5);
+  });
+
+  it('should still penalize an imperfect short match', () => {
+    // 2-token candidate, one of two unigrams matches; only orders 1-2 exist.
+    // unigram precision = 1/2, bigram precision = 0 (smoothed to 1e-7), weights
+    // renormalized to 0.5 each over the two usable orders:
+    //   exp(0.5*ln(0.5) + 0.5*ln(1e-7)) ≈ 0.00022360679. Pin the exact value so
+    // the renormalization math is locked in; the old smoothed-zero behavior
+    // returned ~4.7e-6 (every missing order dragged the score down), so the
+    // > 1e-4 guard below fails on origin/main.
+    const score = calculateBleuScore('good cat', ['good dog']);
+    expect(score).toBeCloseTo(Math.exp(0.5 * Math.log(0.5) + 0.5 * Math.log(1e-7)), 10);
+    expect(score).toBeGreaterThan(1e-4);
+    expect(score).toBeLessThan(1.0);
+  });
+
+  it('should reduce a perfect short match to the brevity penalty when shorter than the reference', () => {
+    // Perfect n-gram precision on every usable order (product 1), so the score
+    // equals the brevity penalty alone. The candidate is shorter than the
+    // reference, so the penalty pulls it below 1 — but it no longer collapses to
+    // ~0 the way it did before short orders were dropped and renormalized.
+    expect(calculateBleuScore('cat', ['cat sat down'])).toBeCloseTo(Math.exp(1 - 3 / 1), 10);
+    expect(calculateBleuScore('good dog', ['good dog runs fast'])).toBeCloseTo(
+      Math.exp(1 - 4 / 2),
+      10,
+    );
+  });
+
+  it('should pick the best matching reference for a short candidate', () => {
+    // The renormalized short-candidate path must still take the best match across
+    // references: the exact reference yields a perfect score.
+    expect(calculateBleuScore('good dog', ['bad dog', 'good dog', 'the dog'])).toBeCloseTo(1, 5);
+  });
+
+  it('should be unchanged for candidates with all four n-gram orders (renormalization is a no-op)', () => {
+    // Every order 1-4 is present, so weightSum === 1 and dividing by it is a
+    // no-op: the result must match the pre-renormalization formula exactly,
+    // including non-uniform weights. Precisions are 5/6, 3/5, 2/4, 1/3.
+    const score = calculateBleuScore(
+      'the dog sat on the mat',
+      ['the cat sat on the mat'],
+      [0.4, 0.3, 0.2, 0.1],
+    );
+    expect(score).toBeCloseTo(
+      Math.exp(
+        0.4 * Math.log(5 / 6) +
+          0.3 * Math.log(3 / 5) +
+          0.2 * Math.log(2 / 4) +
+          0.1 * Math.log(1 / 3),
+      ),
+      10,
+    );
+  });
+
+  it('should not return NaN for a short candidate with custom n-gram weights', () => {
+    // Regression guard: dropping unavailable orders and renormalizing divides by
+    // the sum of the *usable* weights. With weights concentrated on higher orders
+    // a short candidate can have no usable weighted order. That must not divide by
+    // zero (NaN); it scores 0 (no scorable signal under these weights). A >= 4
+    // token candidate still has its 4-grams, so the same weights score normally.
+    expect(calculateBleuScore('cat', ['cat'], [0, 0, 0, 1])).toBe(0);
+    expect(calculateBleuScore('the good dog', ['the good dog'], [0, 0, 0, 1])).toBe(0);
+    expect(
+      calculateBleuScore('the very good dog', ['the very good dog'], [0, 0, 0, 1]),
+    ).toBeCloseTo(1, 5);
+    // A partially-weighted short candidate still scores finitely (not NaN).
+    expect(calculateBleuScore('good dog', ['good dog'], [0.5, 0.5, 0, 0])).not.toBeNaN();
+  });
+
+  it('should reject negative weights', () => {
+    // BLEU weights are non-negative by definition. Negatives would push the score
+    // far outside [0, 1] (a negative weight on a smoothed zero-precision order) and
+    // can make the usable-weight sum cancel to zero. Reject them outright.
+    expect(() => calculateBleuScore('a b', ['a b'], [1, -1, 0.5, 0.5])).toThrow(
+      'Weights must be non-negative',
+    );
+    expect(() => calculateBleuScore('a b c x', ['a b c d'], [0.5, 0.5, 1, -1])).toThrow(
+      'Weights must be non-negative',
+    );
+  });
+
   it('should handle sentences with different lengths', () => {
     const references = ['The cat sat on the mat.'];
     const candidate = 'The cat sat.';
@@ -74,6 +164,66 @@ describe('BLEU score calculation', () => {
 
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.999);
+  });
+
+  it('should not depend on the order of equidistant references', () => {
+    const candidate = 'a b c d'; // 4 tokens
+    const shorterRef = 'a b c'; // 3 tokens (distance 1 from candidate)
+    const longerRef = 'a b c d e'; // 5 tokens (distance 1 from candidate)
+
+    // When two references are equally close to the candidate length, BLEU breaks the
+    // tie toward the shorter reference (Papineni et al. / NLTK `closest_ref_length`),
+    // so the score must be independent of the order the references are provided in.
+    const scoreShorterFirst = calculateBleuScore(candidate, [shorterRef, longerRef]);
+    const scoreLongerFirst = calculateBleuScore(candidate, [longerRef, shorterRef]);
+
+    expect(scoreLongerFirst).toBeCloseTo(scoreShorterFirst, 10);
+  });
+
+  it('should break equidistant ties toward the shorter reference (direction, not just determinism)', () => {
+    // Two references equidistant from the candidate length (both distance 2): lengths 2
+    // and 6. Every 1- to 4-gram of the candidate is contained in the longer reference, so
+    // n-gram precision is perfect and the score reduces to the brevity penalty alone.
+    // NLTK `closest_ref_length` breaks the tie toward the SHORTER reference (length 2);
+    // the candidate (4 tokens) is longer than it, so the brevity penalty is 1 and the
+    // score is exactly 1. Preferring the longer reference (length 6) would instead give
+    // exp(1 - 6/4) ≈ 0.6065 — so this pins the tie-break DIRECTION. The order-independence
+    // test above passes for either direction; only this test fails if the tie flips.
+    const candidate = 'a b c d'; // 4 tokens
+    const refs = ['a b', 'a b c d e f']; // lengths 2 and 6, both distance 2 from candidate
+
+    expect(calculateBleuScore(candidate, refs)).toBe(1);
+    expect(calculateBleuScore(candidate, [...refs].reverse())).toBe(1);
+    // Guard: a regression preferring the longer reference would yield exp(1 - 6/4).
+    expect(calculateBleuScore(candidate, refs)).not.toBeCloseTo(Math.exp(1 - 6 / 4), 5);
+  });
+
+  it('should penalize short candidates and never exceed 1.0', () => {
+    // Every 1- to 4-gram of the candidate appears in the reference, so n-gram
+    // precision is perfect, but the candidate is shorter than the reference. BLEU is
+    // bounded by 1.0, so the brevity penalty must pull the score down (penalize),
+    // never above 1.0. Per Papineni et al., BP = exp(1 - referenceLength/candidateLength)
+    // for candidateLength <= referenceLength.
+    const candidate = 'a b c d e'; // 5 tokens, perfect n-gram precision
+    const reference = 'a b c d e f g'; // 7 tokens
+
+    const score = calculateBleuScore(candidate, [reference]);
+
+    expect(score).toBeLessThanOrEqual(1);
+    // precision product is 1, so the score equals the brevity penalty itself.
+    expect(score).toBeCloseTo(Math.exp(1 - 7 / 5), 10);
+  });
+
+  it('should not penalize a candidate at least as long as the reference (brevity penalty = 1 at c == r)', () => {
+    // candidateLength === referenceLength is the boundary of the brevity-penalty
+    // branch: exp(1 - referenceLength/candidateLength) = exp(0) = 1, so a perfect,
+    // equal-length match must score exactly 1.0 — never penalized, never above 1.0.
+    const candidate = 'a b c d e'; // 5 tokens
+    const reference = 'a b c d e'; // 5 tokens, identical length and content
+
+    const score = calculateBleuScore(candidate, [reference]);
+
+    expect(score).toBe(1);
   });
 
   it('should throw error for empty reference array', () => {
@@ -143,6 +293,26 @@ describe('handleBleuScore', () => {
     });
   });
 
+  it('should produce an order-independent score and verdict for an array of references', () => {
+    // End-to-end guard through the public handler: the same equidistant references supplied
+    // in different orders via renderedValue must yield the same score and pass/fail verdict.
+    const outputString = 'a b c d'; // 4 tokens
+    const refs = ['a b c', 'a b c d e']; // lengths 3 and 5, both distance 1 from candidate
+    const base = {
+      assertion: { type: 'bleu' },
+      outputString,
+      inverse: false,
+    };
+    const shorterFirst = handleBleuScore({ ...base, renderedValue: refs } as AssertionParams);
+    const longerFirst = handleBleuScore({
+      ...base,
+      renderedValue: [...refs].reverse(),
+    } as AssertionParams);
+
+    expect(longerFirst.score).toBeCloseTo(shorterFirst.score, 10);
+    expect(longerFirst.pass).toBe(shorterFirst.pass);
+  });
+
   it('should handle custom threshold', () => {
     const params = {
       assertion: { type: 'bleu', value: 'The cat sat on the mat.', threshold: 0.8 },
@@ -171,6 +341,26 @@ describe('handleBleuScore', () => {
       reason: 'Assertion passed',
       assertion: expect.any(Object),
     });
+  });
+
+  it('should report a bounded [0, 1] score for inverse assertions on short candidates', () => {
+    // Regression for the brevity-penalty bug: a short candidate with perfect n-gram
+    // precision previously scored above 1.0 (~1.33), so the inverse path (1 - score)
+    // reported a NEGATIVE score. With the score correctly bounded to [0, 1], the
+    // inverse score stays in [0, 1] too.
+    const params = {
+      assertion: { type: 'bleu', value: 'a b c d e f g' },
+      renderedValue: 'a b c d e f g', // 7 tokens
+      outputString: 'a b c d e', // 5 tokens, shorter with perfect n-gram precision
+      inverse: true,
+    } as AssertionParams;
+
+    const result = handleBleuScore(params);
+
+    expect(result.score).toBeGreaterThanOrEqual(0);
+    expect(result.score).toBeLessThanOrEqual(1);
+    // BLEU score is exp(1 - 7/5) ≈ 0.6703, so the inverse score is 1 - that.
+    expect(result.score).toBeCloseTo(1 - Math.exp(1 - 7 / 5), 10);
   });
 
   it('should use default threshold of 0.5', () => {

@@ -173,6 +173,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
+| [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
@@ -212,7 +213,7 @@ If the LLM output is `Goodbye world`, the `equals` assertion fails but the `cont
 
 ### Setting a score requirement
 
-Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions exceeds the threshold value.
+Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value.
 
 For example:
 
@@ -229,6 +230,8 @@ tests:
 ```
 
 If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes and the final score is 0.33. Because this is below the 0.5 threshold, the test case fails. If the threshold were lowered to 0.2, the test case would succeed.
+
+A `threshold` of `0` makes the test case pass regardless of individual assertion failures, since the combined score is always at least 0. Use it to collect assertion scores without letting any single failure fail the test. The same applies to an `assert-set` threshold.
 
 :::info
 If weight is set to 0, the assertion automatically passes.

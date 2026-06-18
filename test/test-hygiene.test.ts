@@ -122,6 +122,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/extension-hooks.test.ts',
+    kind: 'skipIf',
+    linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,
+    reason: 'Python extension-hook smoke coverage requires an available Python interpreter',
+  },
+  {
     file: 'redteam/plugins/codingAgent.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
@@ -201,7 +207,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/watsonx.test.ts',
   'redteam/commands/crossSessionLeakGenerate.test.ts',
   'redteam/commands/generate.test.ts',
-  'redteam/commands/report.test.ts',
+  'commands/redteam/report.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
   'redteam/extraction/util.test.ts',
@@ -237,7 +243,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
-  'validators/testProvider.test.ts',
+  'node/testProvider.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;

@@ -173,6 +173,39 @@ export interface AzureAssistantProviderOptions {
 }
 
 // =============================================================================
+// Azure MAI Image Generation Types
+// =============================================================================
+
+/**
+ * Configuration options for Microsoft MAI image generation models served from
+ * the Foundry `/mai/v1/images/generations` route (e.g. `MAI-Image-2.5`).
+ *
+ * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
+ */
+export interface AzureImageOptions extends AzureCompletionOptions {
+  /**
+   * Output image width in pixels. Minimum 768; `width * height` must not exceed
+   * 1,048,576 (1024x1024). Defaults to 1024.
+   */
+  width?: number;
+  /**
+   * Output image height in pixels. Minimum 768; `width * height` must not exceed
+   * 1,048,576 (1024x1024). Defaults to 1024.
+   */
+  height?: number;
+  /**
+   * MAI model id used only for cost reporting (e.g. `MAI-Image-2.5`). Azure
+   * deployment names can't contain the dots in model ids, so set this when your
+   * deployment name differs from the model id. Defaults to the deployment name.
+   */
+  model?: string;
+  /**
+   * Override the request path. Defaults to `/mai/v1/images/generations`.
+   */
+  apiPath?: string;
+}
+
+// =============================================================================
 // Azure Video Generation Types (Sora)
 // =============================================================================
 
