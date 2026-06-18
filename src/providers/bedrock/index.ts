@@ -2452,13 +2452,20 @@ ${prompt}
       // chaining so a malformed tool_call entry (missing `.function`) degrades gracefully
       // instead of throwing inside output().
       if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
+        const content =
+          typeof choice.message.content === 'string' && config?.showThinking === false
+            ? choice.message.content.replace(
+                /^(?:<think>|<reasoning>)[\s\S]*?<\/(?:think|reasoning)>\s*/i,
+                '',
+              )
+            : choice.message.content;
         const toolCalls = choice.message.tool_calls
           .map(
             (toolCall: any) =>
               `Called function ${toolCall.function?.name} with arguments: ${toolCall.function?.arguments}`,
           )
           .join('\n');
-        return choice.message.content ? `${choice.message.content}\n\n${toolCalls}` : toolCalls;
+        return content ? `${content}\n\n${toolCalls}` : toolCalls;
       }
 
       const content = choice?.message?.content;

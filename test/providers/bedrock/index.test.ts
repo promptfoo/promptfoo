@@ -4597,6 +4597,22 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       );
     });
 
+    it('strips leading reasoning before rendering tool calls when showThinking is false', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '<think>private steps</think>Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
     it('ignores empty tool call arrays before stripping reasoning', () => {
       const response = {
         choices: [{ message: { content: '<think>steps</think>answer', tool_calls: [] } }],

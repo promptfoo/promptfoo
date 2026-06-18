@@ -10,7 +10,7 @@ description: 'Bedrock Mantle Chat Completions endpoint (bedrock:mantle:<id>)'
 # Authenticate with an Amazon Bedrock API key, and set a region where the model is offered
 # (list with: GET https://bedrock-mantle.<region>.api.aws/v1/models):
 #
-#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c promptfooconfig.mantle.yaml
+#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c examples/amazon-bedrock/models/promptfooconfig.mantle.yaml --no-cache
 
 prompts:
   - 'Answer in one short sentence: {{question}}'

@@ -6,7 +6,7 @@ description: 'xAI Grok 4.3 on Amazon Bedrock (Mantle / OpenAI-compatible Respons
 # an Amazon Bedrock API key, so set AWS_BEARER_TOKEN_BEDROCK (a long-term Bedrock API key) in
 # your environment. Grok 4.3 is currently available only in us-west-2.
 #
-#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c promptfooconfig.grok.yaml
+#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c examples/amazon-bedrock/models/promptfooconfig.grok.yaml --no-cache
 
 prompts:
   - 'Answer in one short sentence: {{question}}'
