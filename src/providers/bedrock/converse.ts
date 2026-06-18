@@ -326,6 +326,7 @@ const BEDROCK_CONVERSE_REGION_PRICING: Record<string, Record<string, BedrockConv
     'nemotron-super': { input: 0.18, output: 0.78 },
   },
   'eu-central-1': {
+    'zai.glm-5': { input: 1.2, output: 3.84 },
     'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
     'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
     'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },

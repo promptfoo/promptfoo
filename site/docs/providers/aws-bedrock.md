@@ -832,7 +832,7 @@ Bedrock's Anthropic-compatible Messages endpoint through the explicit
 
 [Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
 is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
-promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
+Promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
 Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`:
 
 ```yaml
@@ -854,7 +854,7 @@ aws bedrock put-account-data-retention --mode provider_data_share --region us-ea
 Both models use always-on adaptive thinking, so promptfoo omits sampling controls,
 converts manual thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`)
 to adaptive thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo
-endpoints cost 10% more than the global endpoint; promptfoo applies that premium when
+endpoints cost 10% more than the global endpoint; Promptfoo applies that premium when
 calculating costs.
 
 ```yaml
