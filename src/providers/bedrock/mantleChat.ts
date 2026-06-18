@@ -5,7 +5,7 @@ import {
   resolveBedrockMantleRegion,
 } from './mantle';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { ProviderOptions } from '../../types/index';
 
 /**
  * The Bedrock **Mantle** engine exposes an OpenAI-compatible **Chat Completions** API at
@@ -29,11 +29,13 @@ import type { ProviderOptions } from '../../types/providers';
 export const DEFAULT_BEDROCK_MANTLE_CHAT_REGION = 'us-east-1';
 
 /**
- * Base URL for the mantle Chat Completions API. Note the bare `/v1` path — the provider appends
- * `/chat/completions`. This differs from the Responses API's `/openai/v1` path.
+ * Base URL for the mantle Chat Completions API. Most mantle chat models use the bare `/v1`
+ * path, but Bedrock's OpenAI/xAI Chat Completions models use `/openai/v1`.
  */
-export function getBedrockMantleChatBaseUrl(region: string): string {
-  return `${getBedrockMantleOrigin(region)}/v1`;
+export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
+  const path =
+    modelName?.startsWith('openai.') || modelName?.startsWith('xai.') ? 'openai/v1' : 'v1';
+  return `${getBedrockMantleOrigin(region)}/${path}`;
 }
 
 /**
@@ -42,6 +44,33 @@ export function getBedrockMantleChatBaseUrl(region: string): string {
  * configured mantle `apiBaseUrl`.
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
+  protected getCapabilityModelName(): string {
+    return this.modelName.replace(/^(openai|xai)\./, '');
+  }
+
+  protected isGPT5Model(): boolean {
+    const model = this.getCapabilityModelName();
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
+  }
+
+  protected isReasoningModel(): boolean {
+    const model = this.getCapabilityModelName();
+    return (
+      this.modelName.startsWith('xai.') ||
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
+      this.isGPT5Model()
+    );
+  }
+
+  protected getBillingModelName(): string {
+    return this.getCapabilityModelName();
+  }
+
   /**
    * Pin requests to the configured mantle endpoint. The base `getApiUrl()` prefers
    * `apiHost`/`OPENAI_API_HOST` over `apiBaseUrl`, so without this an ambient `OPENAI_API_HOST`
@@ -80,7 +109,7 @@ export function createBedrockMantleChatProvider(
     );
   }
 
-  const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region);
+  const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,

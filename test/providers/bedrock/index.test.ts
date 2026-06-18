@@ -4578,6 +4578,13 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       );
     });
 
+    it('ignores empty tool call arrays before stripping reasoning', () => {
+      const response = {
+        choices: [{ message: { content: '<think>steps</think>answer', tool_calls: [] } }],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe('answer');
+    });
+
     it('does not throw on a malformed tool_call missing its function field', () => {
       const response = { choices: [{ message: { content: '', tool_calls: [{ id: 'x' }] } }] };
       expect(() => modelHandler.output({}, response)).not.toThrow();
@@ -4614,7 +4621,6 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
   it.each([
     'zai.glm-5',
     'zai.glm-4.7-flash',
-    'us.zai.glm-5',
     'minimax.minimax-m2',
     'minimax.minimax-m2.5',
     'moonshotai.kimi-k2.5',
@@ -4622,11 +4628,23 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     'nvidia.nemotron-nano-9b-v2',
     'nvidia.nemotron-super-3-120b',
     'google.gemma-3-12b-it',
-    'writer.palmyra-x5-v1:0',
     'us.writer.palmyra-x5-v1:0',
     'writer.palmyra-vision-7b',
   ])('routes %s to OPENAI_COMPAT', (modelName) => {
     expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+  });
+
+  it.each([
+    'us.zai.glm-5',
+    'global.zai.glm-5',
+    'writer.palmyra-x5-v1:0',
+    'writer.palmyra-x4-v1:0',
+    'zai.glm-4.6',
+    'google.gemma-4-31b',
+  ])('rejects unsupported direct InvokeModel id %s', (modelName) => {
+    expect(() => getHandlerForModel(modelName)).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
   });
 
   it.each([

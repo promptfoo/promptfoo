@@ -2451,7 +2451,7 @@ ${prompt}
       // Surface tool calls (OpenAI format) the same way the Qwen handler does. Use optional
       // chaining so a malformed tool_call entry (missing `.function`) degrades gracefully
       // instead of throwing inside output().
-      if (choice?.message?.tool_calls && Array.isArray(choice.message.tool_calls)) {
+      if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
         const toolCalls = choice.message.tool_calls
           .map(
             (toolCall: any) =>
@@ -2840,20 +2840,6 @@ export function getHandlerForModel(
   }
   if (modelName.startsWith('qwen.')) {
     return BEDROCK_MODEL.QWEN;
-  }
-  // Newer OpenAI Chat Completions-compatible families served via InvokeModel. `.includes`
-  // (not `.startsWith`) so geo/global inference profiles like `us.writer.palmyra-x5-v1:0`
-  // also match. `moonshot` covers both Bedrock prefixes (`moonshot.`/`moonshotai.`).
-  const OPENAI_COMPAT_MARKERS = [
-    'zai.',
-    'minimax',
-    'moonshot',
-    'nvidia.nemotron',
-    'writer.palmyra',
-    'google.gemma',
-  ];
-  if (OPENAI_COMPAT_MARKERS.some((marker) => modelName.includes(marker))) {
-    return BEDROCK_MODEL.OPENAI_COMPAT;
   }
   // Open-weight gpt-oss models are the only OpenAI models served via InvokeModel. The
   // frontier gpt-5.x models use the OpenAI-compatible Responses API and are routed to the

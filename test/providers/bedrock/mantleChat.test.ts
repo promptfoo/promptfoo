@@ -16,12 +16,21 @@ describe('bedrock mantle Chat Completions provider', () => {
   });
 
   describe('getBedrockMantleChatBaseUrl', () => {
-    it('builds the bare /v1 mantle endpoint (not /openai/v1)', () => {
+    it('builds the bare /v1 mantle endpoint for ordinary mantle chat models', () => {
       expect(getBedrockMantleChatBaseUrl('us-east-1')).toBe(
         'https://bedrock-mantle.us-east-1.api.aws/v1',
       );
       expect(getBedrockMantleChatBaseUrl('us-west-2')).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/v1',
+      );
+    });
+
+    it('builds the /openai/v1 mantle endpoint for OpenAI and xAI chat models', () => {
+      expect(getBedrockMantleChatBaseUrl('us-east-1', 'openai.gpt-5.5')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+      );
+      expect(getBedrockMantleChatBaseUrl('us-west-2', 'xai.grok-4.3')).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
     });
 
@@ -96,6 +105,31 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(`${provider.getApiUrl()}/chat/completions`).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
       );
+    });
+
+    it('uses the OpenAI-compatible chat endpoint and capabilities for Grok', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
+        config: { region: 'us-west-2', reasoning_effort: 'high', temperature: 0 },
+      }) as BedrockMantleChatProvider;
+      const { body } = await (provider as any).getOpenAiBody('hello');
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      expect(body.model).toBe('xai.grok-4.3');
+      expect(body.reasoning_effort).toBe('high');
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it('uses GPT-5 capabilities for Bedrock-prefixed OpenAI chat models', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockMantleChatProvider('openai.gpt-5.5', {
+        config: { region: 'us-east-2', verbosity: 'low' },
+      }) as BedrockMantleChatProvider;
+      const { body } = await (provider as any).getOpenAiBody('hello');
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
+      expect(body.model).toBe('openai.gpt-5.5');
+      expect(body.verbosity).toBe('low');
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_tokens).toBeUndefined();
     });
   });
 });

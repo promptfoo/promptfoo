@@ -2416,13 +2416,16 @@ Third line`;
       // Moonshot Kimi — K2.5 and K2 Thinking differ on output rate.
       { id: 'moonshotai.kimi-k2.5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 3.0 },
       { id: 'moonshot.kimi-k2-thinking', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
-      // NVIDIA Nemotron — nano vs super.
+      // NVIDIA Nemotron — nano variants and super differ.
       { id: 'nvidia.nemotron-nano-9b-v2', expected: (10000 / 1e6) * 0.06 + (5000 / 1e6) * 0.23 },
+      { id: 'nvidia.nemotron-nano-12b-v2', expected: (10000 / 1e6) * 0.2 + (5000 / 1e6) * 0.6 },
+      { id: 'nvidia.nemotron-nano-3-30b', expected: (10000 / 1e6) * 0.06 + (5000 / 1e6) * 0.24 },
       { id: 'nvidia.nemotron-super-3-120b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.65 },
       // Google Gemma 3 — per size.
       { id: 'google.gemma-3-4b-it', expected: (10000 / 1e6) * 0.04 + (5000 / 1e6) * 0.08 },
       { id: 'google.gemma-3-12b-it', expected: (10000 / 1e6) * 0.09 + (5000 / 1e6) * 0.29 },
       { id: 'google.gemma-3-27b-it', expected: (10000 / 1e6) * 0.23 + (5000 / 1e6) * 0.38 },
+      { id: 'writer.palmyra-vision-7b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.6 },
       { id: 'us.writer.palmyra-x5-v1:0', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 6 },
     ])('should calculate cost for OpenAI-compatible model $id', async ({ id, expected }) => {
       const provider = new AwsBedrockConverseProvider(id, { config: { region: 'us-east-1' } });

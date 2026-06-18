@@ -222,6 +222,7 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'qwen.qwen3-coder-480b': { input: 1.5, output: 7.5 },
   'qwen.qwen3': { input: 0.5, output: 1.5 },
   // Writer Palmyra
+  'writer.palmyra-vision': { input: 0.15, output: 0.6 },
   'writer.palmyra-x5': { input: 0.6, output: 6 },
   'writer.palmyra-x4': { input: 2.5, output: 10 },
   // Newer OpenAI Chat-compatible families (US-region on-demand rates per
@@ -239,6 +240,8 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'kimi-k2.5': { input: 0.6, output: 3.0 },
   'kimi-k2-thinking': { input: 0.6, output: 2.5 },
   // NVIDIA Nemotron
+  'nemotron-nano-12b-v2': { input: 0.2, output: 0.6 },
+  'nemotron-nano-3-30b': { input: 0.06, output: 0.24 },
   'nemotron-nano': { input: 0.06, output: 0.23 },
   'nemotron-super': { input: 0.15, output: 0.65 },
   // Google Gemma 3
