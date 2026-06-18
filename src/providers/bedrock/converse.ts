@@ -445,13 +445,14 @@ function getBedrockConversePricing(
 /**
  * Calculate cost based on model and token usage
  */
-function calculateBedrockConverseCost(
+export function calculateBedrockConverseCost(
   modelId: string,
   promptTokens?: number,
   completionTokens?: number,
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
   region?: string,
+  serviceTier?: BedrockConverseOptions['serviceTier'],
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
@@ -467,10 +468,13 @@ function calculateBedrockConverseCost(
   // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
-  const pricingMultiplier =
+  const endpointMultiplier =
     isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
       ? CLAUDE_5_REGIONAL_PREMIUM
       : 1;
+  const serviceTierMultiplier =
+    serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
+  const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
   const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
     ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
@@ -1831,6 +1835,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       cacheReadTokens,
       cacheWriteTokens,
       this.getRegion(),
+      this.config.serviceTier,
     );
 
     // Build metadata
@@ -2185,6 +2190,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.cacheReadInputTokens,
         usage.cacheWriteInputTokens,
         this.getRegion(),
+        this.config.serviceTier,
       );
 
       // Surface MCP failures via the response `error` field. If the model also

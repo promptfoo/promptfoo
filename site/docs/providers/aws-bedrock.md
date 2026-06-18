@@ -1191,8 +1191,8 @@ providers:
   the default is `us-east-1`.
 - Use the bare `bedrock:openai.gpt-5.5` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
   frontier and Grok models: those go through the **Responses API** and surface reasoning
-  tokens. `bedrock:mantle:` is the **Chat Completions** path, which the same models also
-  support but without reasoning-token output.
+  tokens. `bedrock:mantle:` is the **Chat Completions** path for mantle chat models such as
+  `zai.glm-4.6`, `deepseek.v3.1`, `google.gemma-4-*`, and supported xAI chat ids.
 - Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
   [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
   reached via `bedrock:<id>` or `bedrock:converse:<id>`.
@@ -1297,14 +1297,14 @@ Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeMo
 one handler and the same configuration options. They also work through the [Converse API](#converse-api)
 (`bedrock:converse:<id>`).
 
-| Family          | Example model IDs                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------- |
-| Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                             |
-| MiniMax         | `minimax.minimax-m2`, `minimax.minimax-m2.1`, `minimax.minimax-m2.5`                        |
-| Moonshot Kimi   | `moonshotai.kimi-k2.5`, `moonshot.kimi-k2-thinking`                                         |
-| NVIDIA Nemotron | `nvidia.nemotron-nano-9b-v2`, `nvidia.nemotron-nano-12b-v2`, `nvidia.nemotron-super-3-120b` |
-| Google Gemma 3  | `google.gemma-3-4b-it`, `google.gemma-3-12b-it`, `google.gemma-3-27b-it`                    |
-| Writer Palmyra  | `us.writer.palmyra-x5-v1:0`, `us.writer.palmyra-x4-v1:0`, `writer.palmyra-vision-7b`        |
+| Family          | Example model IDs                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                                                           |
+| MiniMax         | `minimax.minimax-m2`, `minimax.minimax-m2.1`, `minimax.minimax-m2.5`                                                      |
+| Moonshot Kimi   | `moonshotai.kimi-k2.5`, `moonshot.kimi-k2-thinking`                                                                       |
+| NVIDIA Nemotron | `nvidia.nemotron-nano-9b-v2`, `nvidia.nemotron-nano-12b-v2`, `nvidia.nemotron-nano-3-30b`, `nvidia.nemotron-super-3-120b` |
+| Google Gemma 3  | `google.gemma-3-4b-it`, `google.gemma-3-12b-it`, `google.gemma-3-27b-it`                                                  |
+| Writer Palmyra  | `us.writer.palmyra-x5-v1:0`, `us.writer.palmyra-x4-v1:0`, `writer.palmyra-vision-7b`                                      |
 
 ```yaml
 providers:

@@ -4,6 +4,7 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { isBedrockOpenAiResponsesModel } from './openaiResponses';
 
 type BedrockMantleChatProviderOptions = Record<string, any> & {
   config?: Record<string, any>;
@@ -117,7 +118,7 @@ export function createBedrockMantleChatProvider(
   modelName: string,
   providerOptions: BedrockMantleChatProviderOptions = {},
 ): OpenAiChatCompletionProvider {
-  if (modelName.startsWith('openai.') && !modelName.includes('gpt-oss')) {
+  if (isBedrockOpenAiResponsesModel(modelName)) {
     throw new Error(
       `Amazon Bedrock model "bedrock:mantle:${modelName}" does not support Chat Completions. ` +
         `Use the bare "bedrock:${modelName}" id so promptfoo routes it through Bedrock's ` +

@@ -2470,6 +2470,21 @@ Third line`;
       expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.18 + (5000 / 1e6) * 0.78, 6);
     });
 
+    it('applies service tier pricing multipliers', async () => {
+      const provider = new AwsBedrockConverseProvider('minimax.minimax-m2', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' } },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeCloseTo(((10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2) * 1.75, 6);
+    });
+
     it('does not invent regional rates where AWS does not list a model', async () => {
       const provider = new AwsBedrockConverseProvider('zai.glm-4.7', {
         config: { region: 'eu-west-2' },

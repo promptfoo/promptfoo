@@ -3685,6 +3685,27 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
 
+  it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 10000, completion_tokens: 5000, total_tokens: 15000 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('zai.glm-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo((10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2, 6);
+  });
+
   it('should pass base config to model.params when context is not provided', async () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {

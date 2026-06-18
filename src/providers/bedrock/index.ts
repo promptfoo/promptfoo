@@ -16,6 +16,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { calculateBedrockConverseCost } from './converse';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -3061,7 +3062,16 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      const cost = calculateBedrockClaudeCost(this.modelName, output);
+      const cost =
+        calculateBedrockClaudeCost(this.modelName, output) ??
+        calculateBedrockConverseCost(
+          this.modelName,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+          tokenUsage.completionDetails?.cacheReadInputTokens,
+          tokenUsage.completionDetails?.cacheCreationInputTokens,
+          this.getRegion(),
+        );
 
       return {
         output: model.output(mergedConfig, output),
