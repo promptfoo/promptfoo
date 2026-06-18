@@ -40,6 +40,12 @@ describe('bedrock mantle Chat Completions provider', () => {
       );
     });
 
+    it('routes Gemma 4 chat models through the /openai/v1 mantle endpoint', () => {
+      expect(getBedrockMantleChatBaseUrl('us-east-1', 'google.gemma-4-31b')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+      );
+    });
+
     it('rejects a malformed region', () => {
       expect(() => getBedrockMantleChatBaseUrl('evil.com/x')).toThrow(/Invalid AWS region/);
     });
@@ -74,7 +80,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       });
       const provider = createBedrockMantleChatProvider('google.gemma-4-31b', {});
       expect((provider.config as any).apiBaseUrl).toBe(
-        'https://bedrock-mantle.us-east-1.api.aws/v1',
+        'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
       );
       expect((provider.config as any).apiKey).toBe('env-bedrock-key');
     });

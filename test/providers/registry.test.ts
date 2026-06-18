@@ -616,6 +616,20 @@ describe('Provider Registry', () => {
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 
+    it('should handle bedrock mantle chat providers correctly', async () => {
+      const path = 'bedrock:mantle:zai.glm-4.6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        { ...mockProviderOptions, config: { apiKey: 'bedrock-key' } },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
+    });
+
     it('should handle bedrock-agent providers correctly', async () => {
       const factories = await getProviderFactories('bedrock-agent:agent-id');
       const factory = factories.find((f) => f.test('bedrock-agent:agent-id'));

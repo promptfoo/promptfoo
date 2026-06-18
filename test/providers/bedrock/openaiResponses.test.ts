@@ -281,10 +281,11 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider as any).getCapabilityModelName()).toBe('grok-4.3');
       expect((provider as any).isReasoningModel()).toBe(true);
       expect((provider as any).isGPT5Model()).toBe(false);
-      expect((provider as any).supportsTemperature()).toBe(true);
+      // Grok Responses rejects temperature, so promptfoo must not send its default.
+      expect((provider as any).supportsTemperature()).toBe(false);
     });
 
-    it('forwards reasoning effort, sends the real xai. model id, and preserves explicit temperature', async () => {
+    it('forwards reasoning effort, sends the real xai. model id, and omits temperature', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
         config: { reasoning_effort: 'high', temperature: 0 } as any,
@@ -292,7 +293,7 @@ describe('bedrock openaiResponses helper', () => {
       const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
       expect(body.model).toBe('xai.grok-4.3');
       expect(body.reasoning).toEqual({ effort: 'high' });
-      expect(body.temperature).toBe(0);
+      expect(body.temperature).toBeUndefined();
       // No GPT-5 verbosity for Grok.
       expect(body.text?.verbosity).toBeUndefined();
     });

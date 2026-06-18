@@ -36,6 +36,7 @@ export const DEFAULT_BEDROCK_MANTLE_CHAT_REGION = 'us-east-1';
 export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
   const path =
     modelName?.startsWith('xai.') ||
+    modelName?.startsWith('google.gemma-4') ||
     (modelName?.startsWith('openai.') && !modelName.includes('gpt-oss'))
       ? 'openai/v1'
       : 'v1';

@@ -127,10 +127,6 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
   protected isReasoningModel(): boolean {
     return true;
   }
-
-  protected supportsTemperature(): boolean {
-    return true;
-  }
 }
 
 /**
