@@ -62,7 +62,7 @@ describe('MoonshotProvider configuration', () => {
   it('lets the user override the base URL (e.g. the China endpoint)', () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { config: { apiBaseUrl: 'https://api.moonshot.cn/v1' } },
+        config: { apiBaseUrl: 'https://api.moonshot.cn/v1' },
       }),
     );
     expect(provider.config.apiBaseUrl).toBe('https://api.moonshot.cn/v1');
@@ -72,7 +72,7 @@ describe('MoonshotProvider configuration', () => {
   it('passes through standard OpenAI options without dropping them', () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { config: { temperature: 0.2, max_tokens: 256 } },
+        config: { temperature: 0.2, max_tokens: 256 },
       }),
     );
     expect(provider.config.temperature).toBe(0.2);
@@ -91,7 +91,7 @@ describe('MoonshotProvider configuration', () => {
   it('redacts an explicit apiKey from toJSON output', () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { config: { apiKey: 'sk-secret', temperature: 0.2 } },
+        config: { apiKey: 'sk-secret', temperature: 0.2 },
       }),
     );
     const json = provider.toJSON();
@@ -104,7 +104,7 @@ describe('MoonshotProvider configuration', () => {
 describe('MoonshotProvider key resolution', () => {
   it('resolves apiKey from config', () => {
     const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { config: { apiKey: 'sk-from-config' } },
+      config: { apiKey: 'sk-from-config' },
     });
     expect((provider as any).getApiKey()).toBe('sk-from-config');
   });
@@ -137,7 +137,7 @@ describe('MoonshotProvider key resolution', () => {
     const restore = mockProcessEnv({ CUSTOM_MOONSHOT_KEY: 'sk-custom' });
     try {
       const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-        config: { config: { apiKeyEnvar: 'CUSTOM_MOONSHOT_KEY' } },
+        config: { apiKeyEnvar: 'CUSTOM_MOONSHOT_KEY' },
       });
       expect((provider as any).getApiKey()).toBe('sk-custom');
     } finally {
@@ -161,7 +161,7 @@ describe('MoonshotProvider sampling-param handling', () => {
   it('preserves explicit sampling/token params for Kimi models', async () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:kimi-k2.6', {
-        config: { config: { temperature: 1, max_tokens: 2048 } },
+        config: { temperature: 1, max_tokens: 2048 },
       }),
     );
     const { body } = await provider.getOpenAiBody('Hello');
@@ -172,7 +172,7 @@ describe('MoonshotProvider sampling-param handling', () => {
   it('maps max_completion_tokens to Moonshot max_tokens for Kimi (not the injected 1024 default)', async () => {
     const provider = asChat(
       createMoonshotProvider('moonshot:kimi-k2.6', {
-        config: { config: { max_completion_tokens: 4096 } },
+        config: { max_completion_tokens: 4096 },
       }),
     );
     const { body } = await provider.getOpenAiBody('Hello');
@@ -262,7 +262,7 @@ describe('MoonshotProvider callApi cost', () => {
   it('fills in cost from user-supplied rates (incl. cached tokens)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
     const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 } },
+      config: { apiKey: 'k', inputCost: 0.000002, outputCost: 0.000004 },
     });
     const result = await provider.callApi('Say hi');
     expect(result.cost).toBe(
@@ -273,7 +273,7 @@ describe('MoonshotProvider callApi cost', () => {
   it('leaves cost undefined when no pricing is configured', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
     const provider = createMoonshotProvider('moonshot:moonshot-v1-8k', {
-      config: { config: { apiKey: 'k' } },
+      config: { apiKey: 'k' },
     });
     const result = await provider.callApi('Say hi');
     expect(result.cost).toBeUndefined();

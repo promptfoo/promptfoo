@@ -293,8 +293,6 @@ describe('Provider Registry', () => {
       );
       expect(provider).toBeDefined();
       expect(provider.id()).toBe('moonshot:moonshot-v1-8k');
-      // The registry double-nests config (createMoonshotProvider reads
-      // options.config.config); assert the user config survives end-to-end.
       const config = (provider as any).config;
       expect(config.temperature).toBe(0.42);
       expect(config.apiKey).toBe('moonshot-test-key');
