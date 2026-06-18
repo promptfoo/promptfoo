@@ -269,7 +269,7 @@ function hasUsOnlyBedrockConversePricing(modelId: string): boolean {
 }
 
 function isUsBedrockRegion(region: string): boolean {
-  return region.startsWith('us-');
+  return ['us-east-1', 'us-east-2', 'us-west-2'].includes(region);
 }
 
 /**

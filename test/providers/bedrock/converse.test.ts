@@ -2454,6 +2454,21 @@ Third line`;
 
       expect(result.cost).toBeUndefined();
     });
+
+    it('does not report commercial US rates in GovCloud regions', async () => {
+      const provider = new AwsBedrockConverseProvider('nvidia.nemotron-super-3-120b', {
+        config: { region: 'us-gov-west-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeUndefined();
+    });
   });
 
   describe('caching', () => {
