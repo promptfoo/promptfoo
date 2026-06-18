@@ -94,6 +94,12 @@ export const awsProviderFactories: ProviderFactory[] = [
           });
         }
       }
+      if (candidateMantleModel?.includes('.xai.')) {
+        throw new Error(
+          `Amazon Bedrock model "${candidateMantleModel}" is not a valid Grok mantle id. ` +
+            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+        );
+      }
 
       // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
       // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models

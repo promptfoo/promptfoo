@@ -3530,6 +3530,17 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
   });
 
+  it.each([
+    'anthropic.claude-instant-v1',
+    'anthropic.claude-v1',
+    'anthropic.claude-v2',
+    'anthropic.claude-v2:1',
+  ])('rejects retired Claude direct model id %s', (modelName) => {
+    expect(() => getHandlerForModel(modelName)).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
   it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,

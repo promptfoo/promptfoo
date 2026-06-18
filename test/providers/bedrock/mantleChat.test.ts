@@ -122,13 +122,23 @@ describe('bedrock mantle Chat Completions provider', () => {
     it('uses the OpenAI-compatible chat endpoint and capabilities for Grok', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
-        config: { region: 'us-west-2', reasoning_effort: 'high', temperature: 0 },
+        config: {
+          region: 'us-west-2',
+          reasoning_effort: 'high',
+          temperature: 0,
+          presence_penalty: 0.5,
+          frequency_penalty: 0.7,
+          stop: ['\n'],
+        },
       }) as BedrockMantleChatProvider;
       const { body } = await (provider as any).getOpenAiBody('hello');
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
       expect(body.model).toBe('xai.grok-4.3');
       expect(body.reasoning_effort).toBe('high');
       expect(body.temperature).toBe(0);
+      expect(body.presence_penalty).toBeUndefined();
+      expect(body.frequency_penalty).toBeUndefined();
+      expect(body.stop).toBeUndefined();
     });
 
     it('uses GPT-5 capabilities for Bedrock-prefixed OpenAI chat models', async () => {

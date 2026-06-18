@@ -56,6 +56,16 @@ describe('aws bedrock provider factory routing', () => {
     );
   });
 
+  it('rejects prefixed Grok ids before native Converse routing', async () => {
+    await expect(
+      bedrockFactory.create(
+        'bedrock:converse:us.xai.grok-4.3',
+        { config: { apiKey: 'bedrock-key' } },
+        ctx,
+      ),
+    ).rejects.toThrow(/Use the bare "bedrock:xai.grok-4.3" id instead/);
+  });
+
   it('routes bedrock:mantle:<id> to the Chat Completions provider on the mantle /v1 endpoint', async () => {
     // Mantle-only chat models (zai.glm-4.6, deepseek.v3.1, gemma-4, qwen *-instruct ids) are not
     // served by InvokeModel/Converse; bedrock:mantle:<id> reaches them via Chat Completions.

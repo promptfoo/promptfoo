@@ -2796,6 +2796,16 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
+  if (
+    [
+      'anthropic.claude-instant-v1',
+      'anthropic.claude-v1',
+      'anthropic.claude-v2',
+      'anthropic.claude-v2:1',
+    ].includes(modelName)
+  ) {
+    throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+  }
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }

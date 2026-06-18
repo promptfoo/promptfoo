@@ -5,7 +5,7 @@ import {
   resolveBedrockMantleRegion,
 } from './mantle';
 
-import type { ProviderOptions } from '../../types/index';
+import type { CallApiContextParams, ProviderOptions } from '../../types/index';
 
 /**
  * The Bedrock **Mantle** engine exposes an OpenAI-compatible **Chat Completions** API at
@@ -78,6 +78,16 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
 
   protected getBillingModelName(): string {
     return this.getCapabilityModelName();
+  }
+
+  async getOpenAiBody(prompt: string, context?: CallApiContextParams, callApiOptions?: any) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (this.modelName.startsWith('xai.')) {
+      delete result.body.presence_penalty;
+      delete result.body.frequency_penalty;
+      delete result.body.stop;
+    }
+    return result;
   }
 
   /**
