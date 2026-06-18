@@ -33,6 +33,7 @@ type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['
  * `GET /v1/models`), so the caller should set `region` to one where the target model is offered.
  */
 export const DEFAULT_BEDROCK_MANTLE_CHAT_REGION = 'us-east-1';
+export const DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION = 'us-west-2';
 
 /**
  * Base URL for the mantle Chat Completions API. Most mantle chat models use the bare `/v1`
@@ -125,7 +126,9 @@ export function createBedrockMantleChatProvider(
   const region = resolveBedrockMantleRegion(
     config,
     providerOptions.env,
-    DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
+    modelName.startsWith('xai.')
+      ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
+      : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
   );
   const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
 

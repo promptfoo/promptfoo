@@ -24,6 +24,7 @@ describe('bedrock mantle Chat Completions provider', () => {
   afterEach(() => {
     restoreEnv?.();
     restoreEnv = undefined;
+    vi.resetAllMocks();
   });
 
   describe('getBedrockMantleChatBaseUrl', () => {
@@ -94,6 +95,19 @@ describe('bedrock mantle Chat Completions provider', () => {
         'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
       );
       expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+    });
+
+    it('defaults Grok mantle chat to its launch region', () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      const provider = createBedrockMantleChatProvider('xai.grok-4.3', {});
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
     });
 
     it('treats an unresolved {{env.*}} apiKey template as missing', () => {

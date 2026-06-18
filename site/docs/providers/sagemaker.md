@@ -1,7 +1,7 @@
 ---
 sidebar_label: Amazon SageMaker AI
 title: Amazon SageMaker AI Provider
-description: Evaluate models deployed on Amazon SageMaker AI endpoints — JumpStart, Hugging Face, and custom containers — with promptfoo
+description: Evaluate Amazon SageMaker AI endpoints with promptfoo, including JumpStart, Hugging Face, custom container, tuned model, and hosted inference deployments.
 ---
 
 # Amazon SageMaker AI
