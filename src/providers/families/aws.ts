@@ -59,9 +59,10 @@ export const awsProviderFactories: ProviderFactory[] = [
         );
       }
 
-      // OpenAI frontier models (gpt-5.x) and xAI Grok (grok-4.3) are served only through
-      // Bedrock's OpenAI-compatible Responses API on the regional mantle endpoint — never the
-      // native InvokeModel/Converse APIs. Route them before the per-type handlers so
+      // Bare and explicit Converse/InvokeModel aliases for OpenAI frontier models (gpt-5.x)
+      // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
+      // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
+      // aliases before the per-type handlers so
       // `bedrock:openai.gpt-5.5`, `bedrock:xai.grok-4.3`, and the explicit
       // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
       // gpt-oss models fall through to InvokeModel/Converse below.

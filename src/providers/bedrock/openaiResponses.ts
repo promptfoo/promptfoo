@@ -110,11 +110,9 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
  * transport with the OpenAI frontier provider, but Grok has its own request semantics:
  *
  * - The capability/billing name strips the `xai.` prefix (→ `grok-4.3`).
- * - Grok is reasoning-first with a configurable `reasoning.effort`, so it is treated as a
- *   reasoning model — promptfoo forwards `reasoning` / `reasoning_effort` and, because the base
- *   provider couples reasoning models to "no temperature", it stops sending a `temperature`
- *   default. This matches the live API: Grok's Responses endpoint rejects `temperature`
- *   ("Unsupported parameter: 'temperature' is not supported with this model").
+ * - Grok is reasoning-first with a configurable `reasoning.effort`, so promptfoo forwards
+ *   `reasoning` / `reasoning_effort`. Grok also accepts an explicit `temperature`; only the
+ *   inherited OpenAI Responses default is omitted when the caller does not set one.
  *
  * Cost is not computed for Grok: the Responses billing tables are keyed on OpenAI model names,
  * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
@@ -125,6 +123,10 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
   }
 
   protected isReasoningModel(): boolean {
+    return true;
+  }
+
+  protected supportsTemperature(): boolean {
     return true;
   }
 }
