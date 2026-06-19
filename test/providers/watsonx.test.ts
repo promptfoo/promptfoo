@@ -430,14 +430,20 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache = {
         get: vi.fn(),
         set: vi.fn(),
       };
-      vi.mocked(getCache).mockReturnValue(cache as any);
-      vi.mocked(isCacheEnabled).mockReturnValue(false);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return false;
+      });
 
       const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
 
@@ -871,14 +877,20 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache = {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
       };
-      vi.mocked(getCache).mockReturnValue(cache as any);
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
 
@@ -1023,14 +1035,20 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      vi.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache = {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
       };
-      vi.mocked(getCache).mockReturnValue(cache as any);
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const response = await new WatsonXProvider(MODEL_ID, {
         config: configWithModelId,
