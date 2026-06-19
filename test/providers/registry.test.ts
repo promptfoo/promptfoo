@@ -297,6 +297,29 @@ describe('Provider Registry', () => {
       expect(config.temperature).toBe(0.42);
       expect(config.apiKey).toBe('moonshot-test-key');
       expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
+      expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'moonshot:chat:kimi-k2.6',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const defaultProvider = await factory!.create(
+        'moonshot:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+
+      expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      const { body } = await (chatProvider as any).getOpenAiBody('Hello');
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_tokens).toBeUndefined();
     });
 
     it('should handle http/websocket providers correctly', async () => {
