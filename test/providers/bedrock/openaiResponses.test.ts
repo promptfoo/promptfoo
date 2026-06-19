@@ -269,8 +269,9 @@ describe('bedrock openaiResponses helper', () => {
   });
 
   describe('xAI Grok (mantle Responses)', () => {
-    it('classifies xai. ids', () => {
+    it('classifies only xai.grok- ids', () => {
       expect(isBedrockGrokModel('xai.grok-4.3')).toBe(true);
+      expect(isBedrockGrokModel('xai.other-model')).toBe(false);
       expect(isBedrockGrokModel('openai.gpt-5.5')).toBe(false);
       expect(isBedrockGrokModel('anthropic.claude-opus-4-8')).toBe(false);
     });

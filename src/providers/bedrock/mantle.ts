@@ -12,7 +12,7 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
 
 /** Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`). */
 export function isBedrockGrokModel(modelName: string): boolean {
-  return modelName.startsWith('xai.');
+  return modelName.startsWith('xai.grok-');
 }
 
 /** Whether a Bedrock model id is served through the mantle Responses API. */

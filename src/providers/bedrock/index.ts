@@ -685,6 +685,16 @@ export function addConfigParam(
   }
 }
 
+function getOpenAiCompatibleTokenUsage(responseJson: any, _promptText: string): TokenUsage {
+  const usage = responseJson?.usage;
+  return {
+    prompt: coerceStrToNum(usage?.prompt_tokens),
+    completion: coerceStrToNum(usage?.completion_tokens),
+    total: coerceStrToNum(usage?.total_tokens),
+    numRequests: 1,
+  };
+}
+
 const BEDROCK_MISTRAL_CHAT_MODEL = {
   params: async (
     config: BedrockMistralGenerationOptions,
@@ -798,23 +808,7 @@ const BEDROCK_DEEPSEEK_CHAT_MODEL = {
     }
     return responseJson.choices?.[0]?.message?.content;
   },
-  tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-    if (responseJson?.usage) {
-      return {
-        prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-        completion: coerceStrToNum(responseJson.usage.completion_tokens),
-        total: coerceStrToNum(responseJson.usage.total_tokens),
-        numRequests: 1,
-      };
-    }
-
-    return {
-      prompt: undefined,
-      completion: undefined,
-      total: undefined,
-      numRequests: 1,
-    };
-  },
+  tokenUsage: getOpenAiCompatibleTokenUsage,
 } satisfies IBedrockModel;
 
 export const LlamaVersion = {
@@ -1242,16 +1236,6 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   };
 };
 
-function getOpenAiChatTokenUsage(responseJson: any, _promptText: string): TokenUsage {
-  const usage = responseJson?.usage;
-  return {
-    prompt: coerceStrToNum(usage?.prompt_tokens),
-    completion: coerceStrToNum(usage?.completion_tokens),
-    total: coerceStrToNum(usage?.total_tokens),
-    numRequests: 1,
-  };
-}
-
 export const BEDROCK_MODEL = {
   AI21: {
     params: async (
@@ -1300,7 +1284,7 @@ export const BEDROCK_MODEL = {
       }
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: getOpenAiChatTokenUsage,
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   AMAZON_NOVA: {
     params: async (
@@ -1796,25 +1780,7 @@ export const BEDROCK_MODEL = {
       return { inputText: prompt, textGenerationConfig };
     },
     output: (_config: BedrockOptions, responseJson: any) => responseJson?.results[0]?.outputText,
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      // If token usage is provided by the API, use it
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
   LLAMA3: getLlamaModelHandler(LlamaVersion.V3),
@@ -1992,24 +1958,7 @@ ${prompt}
 
       return undefined;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   MISTRAL: {
     params: async (
@@ -2302,7 +2251,7 @@ ${prompt}
 
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: getOpenAiChatTokenUsage,
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
   /**
    * Shared handler for newer Bedrock model families that speak the OpenAI Chat Completions
@@ -2345,7 +2294,7 @@ ${prompt}
             ? stop
             : undefined;
       if (effectiveStop) {
-        addConfigParam(params, 'stop', effectiveStop, getEnvString('AWS_BEDROCK_STOP'));
+        addConfigParam(params, 'stop', effectiveStop);
       }
       addConfigParam(
         params,
@@ -2413,7 +2362,7 @@ ${prompt}
 
       return content;
     },
-    tokenUsage: getOpenAiChatTokenUsage,
+    tokenUsage: getOpenAiCompatibleTokenUsage,
   },
 };
 
@@ -2978,7 +2927,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           coerceStrToNum(output.usage?.cache_read_input_tokens),
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
           coerceStrToNum(output.usage?.cache_creation_input_tokens),
-        this.getRegion(),
+        region,
       );
 
       return {

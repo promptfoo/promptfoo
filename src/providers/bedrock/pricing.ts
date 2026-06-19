@@ -8,8 +8,10 @@ export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex';
 };
 
+type BedrockPricing = { input: number; output: number };
+
 /** Bedrock model pricing per 1M tokens. */
-const BEDROCK_PRICING: Record<string, { input: number; output: number }> = {
+const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
   'anthropic.claude-fable-5': { input: 10, output: 50 },
   // Claude Opus 4.8
@@ -109,8 +111,6 @@ const BEDROCK_PRICING: Record<string, { input: number; output: number }> = {
   'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
   'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
 };
-
-type BedrockPricing = { input: number; output: number };
 
 const BEDROCK_REGION_PRICING_MODEL_PREFIXES = [
   'zai.glm-',
@@ -235,8 +235,7 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
-function getBedrockPricing(modelId: string, region?: string): BedrockPricing | undefined {
-  const normalizedModelId = modelId.toLowerCase();
+function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
   const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
   if (regionPricing) {
     for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
