@@ -246,7 +246,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/config/load.test.ts',
   'util/jsonExport.test.ts',
   'util/jsonlOutput.test.ts',
-  'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
   'node/testProvider.test.ts',
