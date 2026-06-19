@@ -2412,9 +2412,14 @@ ${prompt}
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
       );
       addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'));
-      // Prefer the call-level `stop` only when it is non-empty; an explicit empty array must
-      // not shadow a configured `config.stop` (an empty array is truthy).
-      const effectiveStop = stop && stop.length > 0 ? stop : config?.stop;
+      // `callApi` passes AWS_BEDROCK_STOP through `stop`, so explicit provider or prompt config
+      // must take precedence. An explicit empty array must not shadow the environment fallback.
+      const effectiveStop =
+        config?.stop && config.stop.length > 0
+          ? config.stop
+          : stop && stop.length > 0
+            ? stop
+            : undefined;
       if (effectiveStop && effectiveStop.length > 0) {
         addConfigParam(params, 'stop', effectiveStop, getEnvString('AWS_BEDROCK_STOP'));
       }
@@ -2455,10 +2460,7 @@ ${prompt}
       if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
         const content =
           typeof choice.message.content === 'string' && config?.showThinking === false
-            ? choice.message.content.replace(
-                /^(?:<think>|<reasoning>)[\s\S]*?<\/(?:think|reasoning)>\s*/i,
-                '',
-              )
+            ? choice.message.content.replace(/^\s*<(think|reasoning)>[\s\S]*?<\/\1>\s*/i, '')
             : choice.message.content;
         const toolCalls = choice.message.tool_calls
           .map(

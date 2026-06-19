@@ -3706,6 +3706,29 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo((10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2, 6);
   });
 
+  it('uses current GPT-OSS Runtime pricing in the shared cost fallback', async () => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1_000_000,
+        completion_tokens: 1_000_000,
+        total_tokens: 2_000_000,
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('openai.gpt-oss-120b-1:0', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.75, 6);
+  });
+
   it('includes Claude Runtime cache token pricing in the fallback cost', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
@@ -4537,6 +4560,13 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       expect(params.stop).toEqual(['CONFIG_STOP']);
     });
 
+    it('prefers explicit config.stop over the environment-derived stop argument', async () => {
+      const params = await modelHandler.params({ stop: ['CONFIG_STOP'] }, 'Hi', [
+        'ENVIRONMENT_STOP',
+      ]);
+      expect(params.stop).toEqual(['CONFIG_STOP']);
+    });
+
     it('applies env-var fallbacks for max_tokens/temperature/top_p when not configured', async () => {
       const restore = mockProcessEnv({
         AWS_BEDROCK_MAX_TOKENS: '512',
@@ -4653,6 +4683,22 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
           {
             message: {
               content: '<think>private steps</think>Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('strips whitespace-prefixed reasoning before rendering tool calls', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '\n  <reasoning>private steps</reasoning>Let me check.',
               tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
             },
           },

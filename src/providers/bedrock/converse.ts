@@ -251,8 +251,8 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse). The frontier
   // gpt-5.x models are not available through Converse — they use the OpenAI-compatible
   // Responses API (see src/providers/bedrock/openaiResponses.ts).
-  'openai.gpt-oss-120b': { input: 1.0, output: 3.0 },
-  'openai.gpt-oss-20b': { input: 0.3, output: 0.9 },
+  'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
+  'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
 };
 
 type BedrockConversePricing = { input: number; output: number };
@@ -344,8 +344,8 @@ const BEDROCK_CONVERSE_REGION_PRICING: Record<string, Record<string, BedrockConv
   },
   'eu-south-1': {
     'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
-    'minimax.minimax-m2.5': { input: 0.35, output: 1.41 },
-    'minimax.minimax-m2.1': { input: 0.35, output: 1.41 },
+    'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
+    'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },
     'minimax.minimax-m2': { input: 0.35, output: 1.41 },
     'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
     'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
@@ -357,8 +357,8 @@ const BEDROCK_CONVERSE_REGION_PRICING: Record<string, Record<string, BedrockConv
   },
   'eu-west-1': {
     'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
-    'minimax.minimax-m2.5': { input: 0.35, output: 1.41 },
-    'minimax.minimax-m2.1': { input: 0.35, output: 1.41 },
+    'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
+    'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },
     'minimax.minimax-m2': { input: 0.35, output: 1.41 },
     'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
     'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },

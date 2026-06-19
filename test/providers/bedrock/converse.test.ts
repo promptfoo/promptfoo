@@ -2455,6 +2455,22 @@ Third line`;
       expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.14 + (5000 / 1e6) * 0.45, 6);
     });
 
+    it.each([
+      { model: 'minimax.minimax-m2.1', region: 'eu-west-1' },
+      { model: 'minimax.minimax-m2.5', region: 'eu-south-1' },
+    ])('uses variant-specific MiniMax rates for $model in $region', async ({ model, region }) => {
+      const provider = new AwsBedrockConverseProvider(model, { config: { region } });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.36 + (5000 / 1e6) * 1.44, 6);
+    });
+
     it('uses published GovCloud OpenAI-compatible rates', async () => {
       const provider = new AwsBedrockConverseProvider('nvidia.nemotron-super-3-120b', {
         config: { region: 'us-gov-west-1' },
