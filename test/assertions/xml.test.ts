@@ -312,7 +312,7 @@ describe('validateXml', () => {
       ]),
     ).toEqual({
       isValid: false,
-      reason: 'Missing required element or path: analysis.features',
+      reason: 'XML is missing required elements: analysis.features',
     });
   });
 });
