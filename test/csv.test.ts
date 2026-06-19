@@ -332,6 +332,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
+    it('throws on __expected0 since indices are 1-based', () => {
+      const key = '__config:__expected0:threshold';
+      const row: CsvRow = {
+        __expected1: 'equals:foo',
+        [key]: '0.5',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow(
+        'Invalid expected key "__expected0" in __config column',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid expected key "__expected0" in __config column "__config:__expected0:threshold". Must be __expected or __expected<N> where N is a positive integer.',
+      );
+    });
+
     it('throws on invalid config key in __config column', () => {
       const key = '__config:__expected1:bogus';
       const row: CsvRow = {
