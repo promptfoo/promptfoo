@@ -454,7 +454,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, Grok, Mantle Chat Completions, and OpenAI-compatible Bedrock model usage.
+See [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, Grok, Mantle Chat Completions, and OpenAI-compatible Bedrock model usage.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -1472,7 +1472,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [GitHub](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
 When loading image files as variables, promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 

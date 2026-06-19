@@ -492,7 +492,7 @@ defaultTest:
 
 ## Environment Variables
 
-promptfoo will also read certain environment variables to set default generation parameters:
+Promptfoo will also read certain environment variables to set default generation parameters:
 
 - `AWS_REGION` or `AWS_DEFAULT_REGION`: Default region for SageMaker API calls
 - `AWS_SAGEMAKER_MAX_TOKENS`: Default maximum number of tokens to generate
