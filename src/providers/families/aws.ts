@@ -87,23 +87,15 @@ export const awsProviderFactories: ProviderFactory[] = [
             `Use the bare "bedrock:xai.grok-4.3" id instead.`,
         );
       }
-      // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
-      // behind a cheap prefix check, like every other handler import below, so the common
-      // non-mantle bedrock: models don't load it at construction. The prefix is a necessary
-      // condition; isBedrockMantleResponsesModel remains the source of truth for the decision
-      // (a gpt-oss id passes the prefix gate but is rejected there and falls through to
-      // InvokeModel below).
-      if (
-        candidateResponsesModel?.startsWith('openai.') ||
-        candidateResponsesModel?.startsWith('xai.')
-      ) {
+      // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
+      // ordinary bedrock: models do not load the Responses stack at construction. The predicate
+      // also excludes gpt-oss ids, which must fall through to InvokeModel below.
+      if (candidateResponsesModel && isBedrockMantleResponsesModel(candidateResponsesModel)) {
         const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
-        if (isBedrockMantleResponsesModel(candidateResponsesModel)) {
-          return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
-            ...providerOptions,
-            id: providerOptions.id ?? providerPath,
-          });
-        }
+        return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
       }
       // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
       // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models

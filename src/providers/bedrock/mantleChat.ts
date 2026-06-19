@@ -1,6 +1,7 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
+  isBedrockGrokModel,
   isBedrockOpenAiResponsesModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
@@ -44,7 +45,10 @@ export const DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION = 'us-west-2';
  */
 export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
   const path =
-    modelName?.startsWith('xai.') || modelName?.startsWith('google.gemma-4') ? 'openai/v1' : 'v1';
+    (modelName !== undefined && isBedrockGrokModel(modelName)) ||
+    modelName?.startsWith('google.gemma-4')
+      ? 'openai/v1'
+      : 'v1';
   return `${getBedrockMantleOrigin(region)}/${path}`;
 }
 
@@ -59,11 +63,11 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    return this.modelName.startsWith('xai.') || super.isReasoningModel();
+    return isBedrockGrokModel(this.modelName) || super.isReasoningModel();
   }
 
   protected supportsTemperature(): boolean {
-    return this.modelName.startsWith('xai.') || super.supportsTemperature();
+    return isBedrockGrokModel(this.modelName) || super.supportsTemperature();
   }
 
   async getOpenAiBody(
@@ -72,7 +76,7 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: BedrockMantleChatCallApiOptions,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
-    if (this.modelName.startsWith('xai.')) {
+    if (isBedrockGrokModel(this.modelName)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
@@ -119,7 +123,7 @@ export function createBedrockMantleChatProvider(
   const region = resolveBedrockMantleRegion(
     config,
     providerOptions.env,
-    modelName.startsWith('xai.')
+    isBedrockGrokModel(modelName)
       ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
       : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
   );
@@ -135,7 +139,7 @@ export function createBedrockMantleChatProvider(
   }
 
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
-  const isGrok = modelName.startsWith('xai.grok-');
+  const isGrok = isBedrockGrokModel(modelName);
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,
