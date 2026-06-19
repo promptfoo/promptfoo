@@ -65,8 +65,8 @@ const BEDROCK_PRICING: Record<string, { input: number; output: number }> = {
   'ai21.jamba-1-5-mini': { input: 0.2, output: 0.4 },
   'ai21.jamba-1-5-large': { input: 2, output: 8 },
   // Cohere
-  'cohere.command-r': { input: 0.5, output: 1.5 },
   'cohere.command-r-plus': { input: 3, output: 15 },
+  'cohere.command-r': { input: 0.5, output: 1.5 },
   // DeepSeek
   'deepseek.deepseek-r1': { input: 1.35, output: 5.4 },
   'deepseek.r1': { input: 1.35, output: 5.4 },
@@ -309,7 +309,12 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  const pricing = getBedrockPricing(normalizedModelId, region);
+  const isLongContextClaudeSonnet =
+    /anthropic\.claude-sonnet-4-(?:5|6)(?!\d)/.test(normalizedModelId) &&
+    promptTokens + cacheReadTokens + cacheWriteTokens > 200_000;
+  const pricing = isLongContextClaudeSonnet
+    ? { input: 6, output: 22.5 }
+    : getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
   }

@@ -2629,6 +2629,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'nvidia.nemotron-nano-12b-v2': BEDROCK_MODEL.OPENAI_COMPAT,
   'nvidia.nemotron-nano-3-30b': BEDROCK_MODEL.OPENAI_COMPAT,
   'nvidia.nemotron-super-3-120b': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us-gov.nvidia.nemotron-nano-9b-v2': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us-gov.nvidia.nemotron-nano-12b-v2': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us-gov.nvidia.nemotron-nano-3-30b': BEDROCK_MODEL.OPENAI_COMPAT,
+  'us-gov.nvidia.nemotron-super-3-120b': BEDROCK_MODEL.OPENAI_COMPAT,
 
   // Google Gemma 3 (open models; text + image input)
   'google.gemma-3-4b-it': BEDROCK_MODEL.OPENAI_COMPAT,

@@ -3718,6 +3718,46 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.75, 6);
   });
 
+  it('uses Command R+ pricing before the broader Command R price key', async () => {
+    const responseJson = JSON.stringify({
+      text: 'ok',
+      meta: {
+        billed_units: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('cohere.command-r-plus-v1:0', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(18, 6);
+  });
+
+  it('uses long-context pricing for Claude Sonnet Runtime responses above 200k input tokens', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 200_001, output_tokens: 1_000 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-sonnet-4-6', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo((200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5, 6);
+  });
+
   it('includes Claude Runtime cache token pricing in the fallback cost', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
@@ -4747,6 +4787,8 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     'moonshot.kimi-k2-thinking',
     'nvidia.nemotron-nano-9b-v2',
     'nvidia.nemotron-super-3-120b',
+    'us-gov.nvidia.nemotron-nano-9b-v2',
+    'us-gov.nvidia.nemotron-super-3-120b',
     'google.gemma-3-12b-it',
     'us.writer.palmyra-x5-v1:0',
     'writer.palmyra-vision-7b',
@@ -4780,6 +4822,10 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     'nvidia.nemotron-nano-12b-v2',
     'nvidia.nemotron-nano-3-30b',
     'nvidia.nemotron-super-3-120b',
+    'us-gov.nvidia.nemotron-nano-9b-v2',
+    'us-gov.nvidia.nemotron-nano-12b-v2',
+    'us-gov.nvidia.nemotron-nano-3-30b',
+    'us-gov.nvidia.nemotron-super-3-120b',
     'google.gemma-3-4b-it',
     'google.gemma-3-12b-it',
     'google.gemma-3-27b-it',
