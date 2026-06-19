@@ -290,6 +290,31 @@ describe('validateXml', () => {
       reason: 'XML is valid and contains all required elements',
     });
   });
+
+  it('should reject the example XML structure when a required element is missing', () => {
+    const xml = dedent`
+      <analysis>
+        <classification>T-shirt/top</classification>
+        <color>White with black print</color>
+        <style>Modern, casual streetwear</style>
+        <confidence>9</confidence>
+        <reasoning>The image clearly shows a short-sleeved garment with a round neckline, which is characteristic of a T-shirt.</reasoning>
+      </analysis>
+    `;
+    expect(
+      validateXml(xml, [
+        'analysis.classification',
+        'analysis.color',
+        'analysis.features',
+        'analysis.style',
+        'analysis.confidence',
+        'analysis.reasoning',
+      ]),
+    ).toEqual({
+      isValid: false,
+      reason: 'Missing required element or path: analysis.features',
+    });
+  });
 });
 
 describe('containsXml', () => {
@@ -350,6 +375,24 @@ describe('containsXml', () => {
     const input = 'Text <élément>Content</élément> more';
 
     expect(containsXml(input, ['élément'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should find valid XML with non-ASCII text content', () => {
+    const input = 'Text <root><child>Café 東京 مرحبا</child></root> more';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should find valid XML with non-ASCII attribute values', () => {
+    const input = 'Text <root><child label="Crème brûlée 東京">Content</child></root> more';
+
+    expect(containsXml(input, ['root.child.@_label'])).toEqual({
       isValid: true,
       reason: 'XML is valid and contains all required elements',
     });
