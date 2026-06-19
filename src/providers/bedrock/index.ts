@@ -6,9 +6,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
-  calculateAnthropicCost,
   isAlwaysOnAdaptiveThinkingClaudeModel,
-  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
@@ -31,20 +29,6 @@ import type { TokenUsage, VarValue } from '../../types/shared';
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
-
-function calculateBedrockClaudeCost(modelName: string, responseJson: any): number | undefined {
-  if (!isClaudeFableOrMythos5Model(modelName)) {
-    return undefined;
-  }
-  return calculateAnthropicCost(
-    modelName,
-    {},
-    responseJson.usage?.input_tokens,
-    responseJson.usage?.output_tokens,
-    responseJson.usage?.cache_read_input_tokens,
-    responseJson.usage?.cache_creation_input_tokens,
-  );
-}
 
 export type BedrockModelFamily =
   | 'claude'
@@ -488,13 +472,6 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOpti
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
    */
   reasoning_effort?: 'low' | 'medium' | 'high';
-  /**
-   * Controls whether a reasoning/thinking block the model emits (either `<think>…</think>`
-   * or `<reasoning>…</reasoning>`) is surfaced. Unset (default) returns the raw output so an
-   * eval framework never hides application-visible content; `false` strips the block and
-   * returns only the final answer.
-   */
-  showThinking?: boolean;
 }
 
 // =============================================================================
@@ -2349,13 +2326,7 @@ ${prompt}
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const params: any = { messages };
 
-      addConfigParam(
-        params,
-        'max_tokens',
-        config?.max_tokens,
-        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        undefined,
-      );
+      addConfigParam(params, 'max_tokens', config?.max_tokens, getEnvInt('AWS_BEDROCK_MAX_TOKENS'));
       // No forced temperature/top_p default: reasoning-oriented models in this group (e.g.
       // MiniMax M2) recommend their own sampling settings, so only send these when set.
       addConfigParam(
@@ -2373,7 +2344,7 @@ ${prompt}
           : stop && stop.length > 0
             ? stop
             : undefined;
-      if (effectiveStop && effectiveStop.length > 0) {
+      if (effectiveStop) {
         addConfigParam(params, 'stop', effectiveStop, getEnvString('AWS_BEDROCK_STOP'));
       }
       addConfigParam(
@@ -2388,15 +2359,9 @@ ${prompt}
         config?.presence_penalty,
         getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
       );
-      addConfigParam(params, 'reasoning_effort', config?.reasoning_effort, undefined, undefined);
-      addConfigParam(
-        params,
-        'tools',
-        await maybeLoadToolsFromExternalFile(config?.tools, vars),
-        undefined,
-        undefined,
-      );
-      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
+      addConfigParam(params, 'reasoning_effort', config?.reasoning_effort);
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools, vars));
+      addConfigParam(params, 'tool_choice', config?.tool_choice);
 
       return params;
     },
@@ -3005,18 +2970,16 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      const cost =
-        calculateBedrockClaudeCost(this.modelName, output) ??
-        calculateBedrockCost(
-          this.modelName,
-          tokenUsage.prompt,
-          tokenUsage.completion,
-          tokenUsage.completionDetails?.cacheReadInputTokens ??
-            coerceStrToNum(output.usage?.cache_read_input_tokens),
-          tokenUsage.completionDetails?.cacheCreationInputTokens ??
-            coerceStrToNum(output.usage?.cache_creation_input_tokens),
-          this.getRegion(),
-        );
+      const cost = calculateBedrockCost(
+        this.modelName,
+        tokenUsage.prompt,
+        tokenUsage.completion,
+        tokenUsage.completionDetails?.cacheReadInputTokens ??
+          coerceStrToNum(output.usage?.cache_read_input_tokens),
+        tokenUsage.completionDetails?.cacheCreationInputTokens ??
+          coerceStrToNum(output.usage?.cache_creation_input_tokens),
+        this.getRegion(),
+      );
 
       return {
         output: model.output(mergedConfig, output),

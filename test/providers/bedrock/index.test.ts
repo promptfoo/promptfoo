@@ -4777,25 +4777,32 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
   });
 });
 
-describe('getHandlerForModel routing for OpenAI-compatible families', () => {
-  it.each([
-    'zai.glm-5',
-    'zai.glm-4.7-flash',
-    'minimax.minimax-m2',
-    'minimax.minimax-m2.5',
-    'moonshotai.kimi-k2.5',
-    'moonshot.kimi-k2-thinking',
-    'nvidia.nemotron-nano-9b-v2',
-    'nvidia.nemotron-super-3-120b',
-    'us-gov.nvidia.nemotron-nano-9b-v2',
-    'us-gov.nvidia.nemotron-super-3-120b',
-    'google.gemma-3-12b-it',
-    'us.writer.palmyra-x5-v1:0',
-    'writer.palmyra-vision-7b',
-  ])('routes %s to OPENAI_COMPAT', (modelName) => {
-    expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
-  });
+const OPENAI_COMPAT_MODEL_IDS = [
+  'zai.glm-5',
+  'zai.glm-4.7',
+  'zai.glm-4.7-flash',
+  'minimax.minimax-m2',
+  'minimax.minimax-m2.1',
+  'minimax.minimax-m2.5',
+  'moonshotai.kimi-k2.5',
+  'moonshot.kimi-k2-thinking',
+  'nvidia.nemotron-nano-9b-v2',
+  'nvidia.nemotron-nano-12b-v2',
+  'nvidia.nemotron-nano-3-30b',
+  'nvidia.nemotron-super-3-120b',
+  'us-gov.nvidia.nemotron-nano-9b-v2',
+  'us-gov.nvidia.nemotron-nano-12b-v2',
+  'us-gov.nvidia.nemotron-nano-3-30b',
+  'us-gov.nvidia.nemotron-super-3-120b',
+  'google.gemma-3-4b-it',
+  'google.gemma-3-12b-it',
+  'google.gemma-3-27b-it',
+  'us.writer.palmyra-x5-v1:0',
+  'us.writer.palmyra-x4-v1:0',
+  'writer.palmyra-vision-7b',
+] as const;
 
+describe('getHandlerForModel routing for OpenAI-compatible families', () => {
   it.each([
     'us.zai.glm-5',
     'global.zai.glm-5',
@@ -4809,31 +4816,9 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     );
   });
 
-  it.each([
-    'zai.glm-5',
-    'zai.glm-4.7',
-    'zai.glm-4.7-flash',
-    'minimax.minimax-m2',
-    'minimax.minimax-m2.1',
-    'minimax.minimax-m2.5',
-    'moonshotai.kimi-k2.5',
-    'moonshot.kimi-k2-thinking',
-    'nvidia.nemotron-nano-9b-v2',
-    'nvidia.nemotron-nano-12b-v2',
-    'nvidia.nemotron-nano-3-30b',
-    'nvidia.nemotron-super-3-120b',
-    'us-gov.nvidia.nemotron-nano-9b-v2',
-    'us-gov.nvidia.nemotron-nano-12b-v2',
-    'us-gov.nvidia.nemotron-nano-3-30b',
-    'us-gov.nvidia.nemotron-super-3-120b',
-    'google.gemma-3-4b-it',
-    'google.gemma-3-12b-it',
-    'google.gemma-3-27b-it',
-    'us.writer.palmyra-x5-v1:0',
-    'us.writer.palmyra-x4-v1:0',
-    'writer.palmyra-vision-7b',
-  ])('registers %s in AWS_BEDROCK_MODELS', (modelName) => {
+  it.each(OPENAI_COMPAT_MODEL_IDS)('registers and routes %s to OPENAI_COMPAT', (modelName) => {
     expect(AWS_BEDROCK_MODELS[modelName]).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
   });
 
   it.each([
