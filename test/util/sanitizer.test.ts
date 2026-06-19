@@ -959,7 +959,7 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(input);
       // BigInt is not JSON serializable; sanitizer should not expose original data.
       expect(typeof result).toBe('string');
-      expect(result).toBe('[Unserializable]');
+      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
       expect(result).not.toContain('9007199254740991');
       expect(result).not.toContain('secret');
     });
