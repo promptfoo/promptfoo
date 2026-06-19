@@ -799,8 +799,8 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createMoonshotProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
       });
     },
   },
