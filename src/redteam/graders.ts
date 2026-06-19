@@ -80,13 +80,13 @@ import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophan
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
+import { PathTraversalGrader } from './plugins/pathTraversal';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
 import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
 import { PiiGrader } from './plugins/pii';
 import { PlinyGrader } from './plugins/pliny';
 import { PolicyViolationGrader } from './plugins/policy/index';
-import { PathTraversalGrader } from './plugins/pathTraversal';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
