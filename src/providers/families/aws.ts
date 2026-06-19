@@ -79,6 +79,13 @@ export const awsProviderFactories: ProviderFactory[] = [
           : splits.length === 2
             ? splits[1]
             : undefined;
+      const routedMantleModel = modelType === 'mantle' ? modelName : candidateMantleModel;
+      if (routedMantleModel?.includes('.xai.')) {
+        throw new Error(
+          `Amazon Bedrock model "${routedMantleModel}" is not a valid Grok mantle id. ` +
+            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+        );
+      }
       // Gate the (heavy) openaiResponses import — which pulls in the OpenAI Responses stack —
       // behind a cheap prefix check, like every other handler import below, so the common
       // non-mantle bedrock: models don't load it at construction. The prefix is a necessary
@@ -95,24 +102,11 @@ export const awsProviderFactories: ProviderFactory[] = [
           });
         }
       }
-      if (candidateMantleModel?.includes('.xai.')) {
-        throw new Error(
-          `Amazon Bedrock model "${candidateMantleModel}" is not a valid Grok mantle id. ` +
-            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
-        );
-      }
-
       // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
       // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models
       // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
       // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
       if (modelType === 'mantle') {
-        if (modelName.includes('.xai.')) {
-          throw new Error(
-            `Amazon Bedrock model "${modelName}" is not a valid Grok mantle id. ` +
-              `Use the bare "bedrock:xai.grok-4.3" id instead.`,
-          );
-        }
         const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
         return createBedrockMantleChatProvider(modelName, {
           ...providerOptions,

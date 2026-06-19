@@ -36,6 +36,24 @@ import type {
   TextGenerationOptions,
 } from '../../../src/providers/bedrock/index';
 
+const RETIRED_BEDROCK_MODEL_IDS = [
+  'amazon.titan-text-express-v1',
+  'amazon.titan-text-lite-v1',
+  'amazon.titan-text-premier-v1:0',
+  'anthropic.claude-3-opus-20240229-v1:0',
+  'us.anthropic.claude-3-opus-20240229-v1:0',
+  'anthropic.claude-opus-4-20250514-v1:0',
+  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-instant-v1',
+  'anthropic.claude-v1',
+  'anthropic.claude-v2',
+  'anthropic.claude-v2:1',
+  'cohere.command-text-v14',
+  'cohere.command-light-text-v14',
+  'meta.llama2-13b-chat-v1',
+  'meta.llama2-70b-chat-v1',
+] as const;
+
 const bedrockRuntimeFactory = vi.hoisted(() => {
   const mockInvokeModel = vi.fn();
   const BedrockRuntimeMock = vi.fn(function BedrockRuntimeMock(this: any) {
@@ -3509,41 +3527,12 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Verified via `aws bedrock list-foundation-models` across all commercial regions: these
     // are no longer offered anywhere, so they must not appear in the supported-models list.
     // (Claude 3.5/3.7 Sonnet are intentionally kept — still offered in APAC regions.)
-    for (const id of [
-      'amazon.titan-text-express-v1',
-      'amazon.titan-text-lite-v1',
-      'amazon.titan-text-premier-v1:0',
-      'anthropic.claude-3-opus-20240229-v1:0',
-      'us.anthropic.claude-3-opus-20240229-v1:0',
-      'anthropic.claude-opus-4-20250514-v1:0',
-      'us.anthropic.claude-opus-4-20250514-v1:0',
-      'anthropic.claude-instant-v1',
-      'anthropic.claude-v1',
-      'anthropic.claude-v2',
-      'anthropic.claude-v2:1',
-      'cohere.command-text-v14',
-      'cohere.command-light-text-v14',
-      'meta.llama2-13b-chat-v1',
-      'meta.llama2-70b-chat-v1',
-    ]) {
+    for (const id of RETIRED_BEDROCK_MODEL_IDS) {
       expect(AWS_BEDROCK_MODELS[id]).toBeUndefined();
     }
   });
 
-  it.each([
-    'anthropic.claude-3-opus-20240229-v1:0',
-    'us.anthropic.claude-3-opus-20240229-v1:0',
-    'anthropic.claude-opus-4-20250514-v1:0',
-    'us.anthropic.claude-opus-4-20250514-v1:0',
-    'anthropic.claude-instant-v1',
-    'anthropic.claude-v1',
-    'anthropic.claude-v2',
-    'anthropic.claude-v2:1',
-    'cohere.command-text-v14',
-    'cohere.command-light-text-v14',
-    'meta.llama2-13b-chat-v1',
-    'meta.llama2-70b-chat-v1',
-  ])('rejects retired Claude direct model id %s', (modelName) => {
+  it.each(RETIRED_BEDROCK_MODEL_IDS)('rejects retired direct model id %s', (modelName) => {
     expect(() => getHandlerForModel(modelName)).toThrow(
       `Unknown Amazon Bedrock model: ${modelName}`,
     );

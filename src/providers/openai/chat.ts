@@ -184,19 +184,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
   protected isGPT5Model(): boolean {
+    const model = this.getCapabilityModelName();
     // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
   protected isReasoningModel(): boolean {
+    const model = this.getCapabilityModelName();
     return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
       this.isGPT5Model()
     );
   }
@@ -208,7 +214,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+    return this.getCapabilityModelName();
   }
 
   protected getGenAISystem(): string {

@@ -16,7 +16,7 @@ import {
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
-import { calculateBedrockConverseCost } from './converse';
+import { calculateBedrockCost } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -482,13 +482,7 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
  * standard `max_tokens` field — Writer Palmyra in particular rejects `max_completion_tokens`
  * — so this handler always sends `max_tokens`.
  */
-interface BedrockOpenAICompatGenerationOptions extends BedrockOptions {
-  max_tokens?: number;
-  temperature?: number;
-  top_p?: number;
-  stop?: string[];
-  frequency_penalty?: number;
-  presence_penalty?: number;
+interface BedrockOpenAICompatGenerationOptions extends BedrockQwenGenerationOptions {
   /**
    * Reasoning depth for reasoning-capable models in this group (e.g. MiniMax M2, NVIDIA
    * Nemotron). Forwarded as-is so Bedrock validates it; omitted unless explicitly set.
@@ -501,23 +495,6 @@ interface BedrockOpenAICompatGenerationOptions extends BedrockOptions {
    * returns only the final answer.
    */
   showThinking?: boolean;
-  tools?: {
-    type: 'function';
-    function: {
-      name: string;
-      description: string;
-      parameters: any;
-    };
-  }[];
-  tool_choice?:
-    | 'auto'
-    | 'none'
-    | {
-        type: 'function';
-        function: {
-          name: string;
-        };
-      };
 }
 
 // =============================================================================
@@ -1288,6 +1265,16 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   };
 };
 
+function getOpenAiChatTokenUsage(responseJson: any, _promptText: string): TokenUsage {
+  const usage = responseJson?.usage;
+  return {
+    prompt: coerceStrToNum(usage?.prompt_tokens),
+    completion: coerceStrToNum(usage?.completion_tokens),
+    total: coerceStrToNum(usage?.total_tokens),
+    numRequests: 1,
+  };
+}
+
 export const BEDROCK_MODEL = {
   AI21: {
     params: async (
@@ -1336,24 +1323,7 @@ export const BEDROCK_MODEL = {
       }
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiChatTokenUsage,
   },
   AMAZON_NOVA: {
     params: async (
@@ -2355,24 +2325,7 @@ ${prompt}
 
       return responseJson.choices?.[0]?.message?.content;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiChatTokenUsage,
   },
   /**
    * Shared handler for newer Bedrock model families that speak the OpenAI Chat Completions
@@ -2495,23 +2448,7 @@ ${prompt}
 
       return content;
     },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      if (responseJson?.usage) {
-        return {
-          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
-          completion: coerceStrToNum(responseJson.usage.completion_tokens),
-          total: coerceStrToNum(responseJson.usage.total_tokens),
-          numRequests: 1,
-        };
-      }
-
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
+    tokenUsage: getOpenAiChatTokenUsage,
   },
 };
 
@@ -2903,7 +2840,7 @@ export function getHandlerForModel(
   if (modelName.includes('xai.') || modelName.includes('grok')) {
     // Grok runs on Mantle (OpenAI-compatible Responses API), not InvokeModel. The bare id is
     // normally intercepted in src/providers/families/aws.ts before reaching here; this guards
-    // the edge cases (e.g. an inference-profile ARN with inferenceModelType) with a clear hint.
+    // direct or prefixed ids that bypass the factory's supported bare-id route.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API. Grok runs on the ` +
         `OpenAI-compatible Responses API (mantle endpoint) — use "bedrock:xai.grok-4.3" and set ` +
@@ -3066,7 +3003,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
       const cost =
         calculateBedrockClaudeCost(this.modelName, output) ??
-        calculateBedrockConverseCost(
+        calculateBedrockCost(
           this.modelName,
           tokenUsage.prompt,
           tokenUsage.completion,

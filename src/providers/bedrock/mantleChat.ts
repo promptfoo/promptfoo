@@ -17,13 +17,14 @@ type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['
 /**
  * The Bedrock **Mantle** engine exposes an OpenAI-compatible **Chat Completions** API at
  *
- *   https://bedrock-mantle.<region>.api.aws/v1/chat/completions
+ *   https://bedrock-mantle.<region>.api.aws/<route>/chat/completions
  *
  * AWS recommends the mantle endpoint "whenever possible", and it is the *only* way to reach
  * some models that are not served by the native `InvokeModel`/`Converse` APIs and therefore do
  * not appear in `list-foundation-models` — e.g. `zai.glm-4.6`, `deepseek.v3.1`,
  * `google.gemma-4-*`, and the mantle-namespaced Qwen `*-instruct` ids. `bedrock:mantle:<id>`
- * routes here so any mantle Chat Completions model is reachable.
+ * routes here so any mantle Chat Completions model is reachable. Most models use `/v1`; xAI
+ * and Gemma 4 use `/openai/v1` (see {@link getBedrockMantleChatBaseUrl}).
  *
  * This is the Chat Completions counterpart to {@link createBedrockOpenAiResponsesProvider} (the
  * `/openai/v1/responses` path used by the OpenAI frontier and xAI Grok models). Use the bare
@@ -56,31 +57,12 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     return this.modelName.replace(/^(openai|xai)\./, '');
   }
 
-  protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName();
-    return model.startsWith('gpt-5') || model.includes('/gpt-5');
-  }
-
   protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName();
-    return (
-      this.modelName.startsWith('xai.') ||
-      model.startsWith('o1') ||
-      model.startsWith('o3') ||
-      model.startsWith('o4') ||
-      model.includes('/o1') ||
-      model.includes('/o3') ||
-      model.includes('/o4') ||
-      this.isGPT5Model()
-    );
+    return this.modelName.startsWith('xai.') || super.isReasoningModel();
   }
 
   protected supportsTemperature(): boolean {
     return this.modelName.startsWith('xai.') || super.supportsTemperature();
-  }
-
-  protected getBillingModelName(): string {
-    return this.getCapabilityModelName();
   }
 
   async getOpenAiBody(
