@@ -2400,6 +2400,21 @@ Third line`;
 
       expect(result.cost).toBeUndefined();
     });
+
+    it('passes region and service tier through to the shared cost calculator', async () => {
+      const provider = new AwsBedrockConverseProvider('minimax.minimax-m2.1', {
+        config: { region: 'eu-west-1', serviceTier: { type: 'priority' } },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBeCloseTo(((10000 / 1e6) * 0.36 + (5000 / 1e6) * 1.44) * 1.75, 6);
+    });
   });
 
   describe('caching', () => {
