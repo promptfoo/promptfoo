@@ -2401,48 +2401,9 @@ Third line`;
       expect(result.cost).toBeUndefined();
     });
 
-    // OpenAI-compatible families. 10k input + 5k output tokens; cost = in/1M*inRate + out/1M*outRate.
-    // Covers geo-prefixed (`us.`) and version-suffixed (`-m2.5`) ids to lock in the
-    // order-sensitive `includes()` pricing-key matching.
-    it.each([
-      // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
-      { id: 'zai.glm-5', expected: (10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2 },
-      { id: 'us.zai.glm-5', expected: (10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2 },
-      { id: 'zai.glm-4.7', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.2 },
-      { id: 'zai.glm-4.7-flash', expected: (10000 / 1e6) * 0.07 + (5000 / 1e6) * 0.4 },
-      // MiniMax — M2 / M2.1 / M2.5 share a rate.
-      { id: 'minimax.minimax-m2', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
-      { id: 'minimax.minimax-m2.5', expected: (10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2 },
-      // Moonshot Kimi — K2.5 and K2 Thinking differ on output rate.
-      { id: 'moonshotai.kimi-k2.5', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 3.0 },
-      { id: 'moonshot.kimi-k2-thinking', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 2.5 },
-      // NVIDIA Nemotron — nano variants and super differ.
-      { id: 'nvidia.nemotron-nano-9b-v2', expected: (10000 / 1e6) * 0.06 + (5000 / 1e6) * 0.23 },
-      { id: 'nvidia.nemotron-nano-12b-v2', expected: (10000 / 1e6) * 0.2 + (5000 / 1e6) * 0.6 },
-      { id: 'nvidia.nemotron-nano-3-30b', expected: (10000 / 1e6) * 0.06 + (5000 / 1e6) * 0.24 },
-      { id: 'nvidia.nemotron-super-3-120b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.65 },
-      // Google Gemma 3 — per size.
-      { id: 'google.gemma-3-4b-it', expected: (10000 / 1e6) * 0.04 + (5000 / 1e6) * 0.08 },
-      { id: 'google.gemma-3-12b-it', expected: (10000 / 1e6) * 0.09 + (5000 / 1e6) * 0.29 },
-      { id: 'google.gemma-3-27b-it', expected: (10000 / 1e6) * 0.23 + (5000 / 1e6) * 0.38 },
-      { id: 'writer.palmyra-vision-7b', expected: (10000 / 1e6) * 0.15 + (5000 / 1e6) * 0.6 },
-      { id: 'us.writer.palmyra-x5-v1:0', expected: (10000 / 1e6) * 0.6 + (5000 / 1e6) * 6 },
-    ])('should calculate cost for OpenAI-compatible model $id', async ({ id, expected }) => {
-      const provider = new AwsBedrockConverseProvider(id, { config: { region: 'us-east-1' } });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
-        }),
-      );
-
-      const result = await provider.callApi('Test');
-
-      expect(result.cost).toBeCloseTo(expected, 6);
-    });
-
-    it('uses published regional OpenAI-compatible rates outside US regions', async () => {
-      const provider = new AwsBedrockConverseProvider('google.gemma-3-12b-it', {
-        config: { region: 'eu-west-2' },
+    it('passes region and service tier through to the shared cost calculator', async () => {
+      const provider = new AwsBedrockConverseProvider('minimax.minimax-m2.1', {
+        config: { region: 'eu-west-1', serviceTier: { type: 'priority' } },
       });
       mockSend.mockResolvedValueOnce(
         createMockConverseResponse('Response', {
@@ -2452,68 +2413,7 @@ Third line`;
 
       const result = await provider.callApi('Test');
 
-      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.14 + (5000 / 1e6) * 0.45, 6);
-    });
-
-    it.each([
-      { model: 'minimax.minimax-m2.1', region: 'eu-west-1' },
-      { model: 'minimax.minimax-m2.5', region: 'eu-south-1' },
-    ])('uses variant-specific MiniMax rates for $model in $region', async ({ model, region }) => {
-      const provider = new AwsBedrockConverseProvider(model, { config: { region } });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
-        }),
-      );
-
-      const result = await provider.callApi('Test');
-
-      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.36 + (5000 / 1e6) * 1.44, 6);
-    });
-
-    it('uses published GovCloud OpenAI-compatible rates', async () => {
-      const provider = new AwsBedrockConverseProvider('nvidia.nemotron-super-3-120b', {
-        config: { region: 'us-gov-west-1' },
-      });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
-        }),
-      );
-
-      const result = await provider.callApi('Test');
-
-      expect(result.cost).toBeCloseTo((10000 / 1e6) * 0.18 + (5000 / 1e6) * 0.78, 6);
-    });
-
-    it('applies service tier pricing multipliers', async () => {
-      const provider = new AwsBedrockConverseProvider('minimax.minimax-m2', {
-        config: { region: 'us-east-1', serviceTier: { type: 'priority' } },
-      });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
-        }),
-      );
-
-      const result = await provider.callApi('Test');
-
-      expect(result.cost).toBeCloseTo(((10000 / 1e6) * 0.3 + (5000 / 1e6) * 1.2) * 1.75, 6);
-    });
-
-    it('does not invent regional rates where AWS does not list a model', async () => {
-      const provider = new AwsBedrockConverseProvider('zai.glm-4.7', {
-        config: { region: 'eu-west-2' },
-      });
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('Response', {
-          usage: { inputTokens: 10000, outputTokens: 5000, totalTokens: 15000 },
-        }),
-      );
-
-      const result = await provider.callApi('Test');
-
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBeCloseTo(((10000 / 1e6) * 0.36 + (5000 / 1e6) * 1.44) * 1.75, 6);
     });
   });
 

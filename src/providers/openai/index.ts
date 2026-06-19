@@ -125,6 +125,40 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.config.apiKeyRequired ?? true;
   }
 
+  /**
+   * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
+   * prefix while retaining the real request model in {@link modelName}.
+   */
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
+  protected isGPT5Model(): boolean {
+    const model = this.getCapabilityModelName();
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
+  }
+
+  protected isReasoningModel(): boolean {
+    const model = this.getCapabilityModelName();
+    return (
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
+      this.isGPT5Model()
+    );
+  }
+
+  protected supportsTemperature(): boolean {
+    return !this.isReasoningModel();
+  }
+
+  protected getBillingModelName(_config: OpenAiSharedOptions): string {
+    return this.getCapabilityModelName();
+  }
+
   protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
     return context?.bustCache ?? context?.debug;
   }

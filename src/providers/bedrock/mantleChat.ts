@@ -6,10 +6,11 @@ import {
 } from './mantle';
 import { isBedrockOpenAiResponsesModel } from './openaiResponses';
 
-type BedrockMantleChatProviderOptions = Record<string, any> & {
-  config?: Record<string, any>;
-  id?: string;
-  env?: OpenAiChatCompletionProvider['env'];
+type OpenAiChatProviderOptions = NonNullable<
+  ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]
+>;
+type BedrockMantleChatProviderOptions = Omit<OpenAiChatProviderOptions, 'config'> & {
+  config?: NonNullable<OpenAiChatProviderOptions['config']> & { region?: string };
 };
 type BedrockMantleChatBodyContext = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[1];
 type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[2];
@@ -106,7 +107,7 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
 export function createBedrockMantleChatProvider(
   modelName: string,
   providerOptions: BedrockMantleChatProviderOptions = {},
-): OpenAiChatCompletionProvider {
+): BedrockMantleChatProvider {
   if (isBedrockOpenAiResponsesModel(modelName)) {
     throw new Error(
       `Amazon Bedrock model "bedrock:mantle:${modelName}" does not support Chat Completions. ` +

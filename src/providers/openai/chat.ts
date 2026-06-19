@@ -184,39 +184,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected getCapabilityModelName(): string {
-    return this.modelName;
-  }
-
-  protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName();
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return model.startsWith('gpt-5') || model.includes('/gpt-5');
-  }
-
-  protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName();
-    return (
-      model.startsWith('o1') ||
-      model.startsWith('o3') ||
-      model.startsWith('o4') ||
-      model.includes('/o1') ||
-      model.includes('/o3') ||
-      model.includes('/o4') ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.getCapabilityModelName();
-  }
-
   protected getGenAISystem(): string {
     return 'openai';
   }

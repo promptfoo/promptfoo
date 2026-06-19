@@ -67,22 +67,22 @@ export const awsProviderFactories: ProviderFactory[] = [
       // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
       // gpt-oss models fall through to InvokeModel/Converse below.
       //
-      // Only those three forms carry a mantle model id, so restrict the candidate to the bare
-      // id (`bedrock:openai.gpt-5.5`, i.e. exactly two segments) and the explicit
-      // `converse:`/`completion:` forms. Mantle ids contain no colon, so the bare form is
-      // always two segments. This prevents sub-typed forms whose id merely contains the prefix
+      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.5`, exactly two
+      // segments) and the explicit `converse:`/`completion:` aliases. Responses ids contain no
+      // colon, so the bare form is always two segments. This prevents sub-typed forms whose id
+      // merely contains the prefix
       // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
       // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
-      const candidateMantleModel =
+      const candidateResponsesModel =
         modelType === 'converse' || modelType === 'completion'
           ? modelName
           : splits.length === 2
             ? splits[1]
             : undefined;
-      const routedMantleModel = modelType === 'mantle' ? modelName : candidateMantleModel;
-      if (routedMantleModel?.includes('.xai.')) {
+      const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
+      if (routedGrokModel?.includes('.xai.')) {
         throw new Error(
-          `Amazon Bedrock model "${routedMantleModel}" is not a valid Grok mantle id. ` +
+          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. ` +
             `Use the bare "bedrock:xai.grok-4.3" id instead.`,
         );
       }
@@ -92,11 +92,14 @@ export const awsProviderFactories: ProviderFactory[] = [
       // condition; isBedrockMantleResponsesModel remains the source of truth for the decision
       // (a gpt-oss id passes the prefix gate but is rejected there and falls through to
       // InvokeModel below).
-      if (candidateMantleModel?.startsWith('openai.') || candidateMantleModel?.startsWith('xai.')) {
+      if (
+        candidateResponsesModel?.startsWith('openai.') ||
+        candidateResponsesModel?.startsWith('xai.')
+      ) {
         const { isBedrockMantleResponsesModel, createBedrockOpenAiResponsesProvider } =
           await import('../bedrock/openaiResponses');
-        if (isBedrockMantleResponsesModel(candidateMantleModel)) {
-          return createBedrockOpenAiResponsesProvider(candidateMantleModel, {
+        if (isBedrockMantleResponsesModel(candidateResponsesModel)) {
+          return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
           });
