@@ -129,6 +129,22 @@ function isValidSystemId(value: string): boolean {
   return !value.includes('#');
 }
 
+function preserveExternalEntityReferences(parser: SaxesParser): void {
+  const entities = parser.ENTITIES;
+  parser.ENTITIES = new Proxy(entities, {
+    get(target, property, receiver) {
+      if (
+        typeof property === 'string' &&
+        readXmlName(property, 0)?.end === property.length &&
+        !Reflect.has(target, property)
+      ) {
+        return `&${property};`;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 function hasValidSystemLiteral(input: string, start: number): boolean {
   const literalStart = skipXmlWhitespace(input, start);
   if (literalStart === start) {
@@ -181,6 +197,18 @@ function isWellFormedDoctype(doctype: string): boolean {
   }
 
   return false;
+}
+
+function hasDoctypeExternalSubset(doctype: string): boolean {
+  const name = readXmlName(doctype, skipXmlWhitespace(doctype, 0));
+  if (!name) {
+    return false;
+  }
+
+  const externalIdStart = skipXmlWhitespace(doctype, name.end);
+  return (
+    doctype.startsWith('SYSTEM', externalIdStart) || doctype.startsWith('PUBLIC', externalIdStart)
+  );
 }
 
 function findTagEnd(input: string, start: number): number {
@@ -492,8 +520,12 @@ export function validateXml(
   // embedded in otherwise non-XML output.
   let unsupportedReason: string | undefined;
   let doctypeParseError: string | undefined;
+  let standalone = false;
   try {
     const parser = new SaxesParser();
+    parser.on('xmldecl', (declaration) => {
+      standalone = declaration.standalone === 'yes';
+    });
     parser.on('doctype', (doctype) => {
       if (hasDoctypeInternalSubset(doctype)) {
         unsupportedReason = 'DTD internal subsets are not supported by is-xml validation';
@@ -502,6 +534,9 @@ export function validateXml(
       if (!isWellFormedDoctype(doctype)) {
         doctypeParseError = 'Malformed DOCTYPE declaration';
         throw new Error(doctypeParseError);
+      }
+      if (hasDoctypeExternalSubset(doctype) && !standalone) {
+        preserveExternalEntityReferences(parser);
       }
     });
     parser.write(xmlString).close();

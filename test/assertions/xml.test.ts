@@ -51,6 +51,7 @@ describe('validateXml', () => {
       '<root><!-- bad -- comment --></root>', // invalid comment body
       '<root attr="1" attr="2"/>', // duplicate attributes
       '<root>&undefined;</root>', // undeclared entity
+      '<!DOCTYPE root><root>&undefined;</root>', // bare doctype cannot declare entities
       '<root>\u0001</root>', // disallowed XML character
       '', // missing root element
       '"<a/>"', // quoted XML output
@@ -91,6 +92,29 @@ describe('validateXml', () => {
         reason: 'XML is valid and contains all required elements',
       });
     }
+  });
+
+  it('should accept external DOCTYPE entity references without loading external resources', () => {
+    for (const xml of [
+      '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><body>&nbsp;</body></html>',
+      '<?xml version="1.0" standalone="no"?><!DOCTYPE root SYSTEM "entities.dtd"><root>&external;</root>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should reject undeclared external entities in standalone documents', () => {
+    expect(
+      validateXml(
+        '<?xml version="1.0" standalone="yes"?><!DOCTYPE root SYSTEM "entities.dtd"><root>&external;</root>',
+      ),
+    ).toEqual({
+      isValid: false,
+      reason: expect.stringContaining('XML parsing failed'),
+    });
   });
 
   it('should reject malformed external DOCTYPE declarations', () => {

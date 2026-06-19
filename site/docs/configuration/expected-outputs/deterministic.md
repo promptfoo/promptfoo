@@ -59,7 +59,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is a well-formed XML document                               |
+| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
@@ -371,7 +371,7 @@ assert:
 
 ### Is-XML
 
-The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+The `is-xml` assertion checks if the entire LLM output is a supported well-formed XML document. It can also verify the presence of specific elements within the XML structure.
 
 Example:
 
@@ -380,7 +380,7 @@ assert:
   - type: is-xml
 ```
 
-This basic usage checks if the output is valid XML.
+This basic usage checks if the output is a supported well-formed XML document.
 
 You can also specify required elements:
 
@@ -393,12 +393,12 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
 
 #### How it works
 
-1. The assertion validates that the entire output is one well-formed XML document, then parses it with fast-xml-parser.
-2. If validation and parsing succeed, it's considered valid XML.
+1. The assertion validates that the entire output is one supported well-formed XML document, then parses it with fast-xml-parser.
+2. If validation and parsing succeed, it's considered valid XML for `is-xml`.
 3. If `value` is specified:
    - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
@@ -446,16 +446,16 @@ Fails for: `<root><parent><child></child></parent></root>` (missing grandchild e
 
 #### Inverse assertion
 
-You can use the `not-is-xml` assertion to check if the output is not valid XML:
+You can use the `not-is-xml` assertion to check if the output is not a supported well-formed XML document:
 
 ```yaml
 assert:
   - type: not-is-xml
 ```
 
-This will pass for non-XML content and fail for valid XML content.
+This will pass for non-XML content and XML outside Promptfoo's supported `is-xml` subset, and fail for supported well-formed XML content.
 
-Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+Note: The `is-xml` assertion requires the entire output to be a supported well-formed XML document. For checking XML content within a larger text, use the `contains-xml` assertion.
 
 `is-xml` rejects documents with a DTD internal subset because Promptfoo cannot safely validate the subset's declarations and entity replacement text. External resources are not loaded during validation.
 
