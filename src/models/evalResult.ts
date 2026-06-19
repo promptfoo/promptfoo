@@ -7,7 +7,6 @@ import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { ProviderConfig } from '../providers/shared';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -31,11 +30,26 @@ import {
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
+import type { ProviderConfig } from '../providers/shared';
+
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
-  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
-    context: 'provider config',
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as ProviderConfig;
+  try {
+    let configToSanitize: ProviderConfig = config;
+    const serialized = safeJsonStringify(config);
+    if (serialized !== undefined) {
+      configToSanitize = JSON.parse(serialized);
+    }
+
+    return sanitizeObject(configToSanitize, {
+      context: 'provider config',
+      maxDepth: Number.POSITIVE_INFINITY,
+      redactErrorMessages: true,
+      throwOnError: true,
+    }) as ProviderConfig;
+  } catch {
+    logger.debug('Unable to sanitize provider config safely; omitting config fields');
+    return {};
+  }
 }
 
 function projectProviderResponse(
@@ -89,10 +103,14 @@ function projectTestCase(
   return projectedTestCase;
 }
 
-// Removes circular references from the provider object and ensures consistent format
+// Removes circular references and credentials from the provider object and ensures consistent format.
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
 ): ProviderOptions {
+  if (typeof provider === 'string') {
+    return { id: provider };
+  }
+
   try {
     if (isApiProvider(provider)) {
       return {
@@ -126,8 +144,11 @@ export function sanitizeProvider(
         }),
       };
     }
-  } catch {}
-  return JSON.parse(safeJsonStringify(provider) as string);
+  } catch {
+    logger.debug('Unable to sanitize provider safely; omitting provider fields');
+  }
+
+  return { id: 'unknown' };
 }
 
 /**
@@ -138,6 +159,10 @@ export function sanitizeProvider(
  * This prevents "Converting circular structure to JSON" errors that can occur
  * when Node.js Timeout objects or other non-serializable data leaks into results.
  * See: https://github.com/promptfoo/promptfoo/issues/7266
+ *
+ * Fallback behavior: if serialization returns `undefined` (for example, certain
+ * non-JSON-serializable values) or parsing throws, this function preserves JSON
+ * shape by returning `[]` for array inputs and `null` for non-array inputs.
  */
 function sanitizeForDb<T>(obj: T): T {
   if (obj === null || obj === undefined) {
@@ -156,9 +181,9 @@ function sanitizeForDb<T>(obj: T): T {
       return (Array.isArray(obj) ? [] : null) as T;
     }
     return JSON.parse(serialized);
-  } catch (error) {
+  } catch {
     // If parsing fails, return type-appropriate fallback
-    logger.debug('sanitizeForDb: Parse error, using fallback', { error });
+    logger.debug('sanitizeForDb: Parse error, using fallback');
     return (Array.isArray(obj) ? [] : null) as T;
   }
 }
@@ -173,17 +198,30 @@ function sanitizeForDb<T>(obj: T): T {
  * client) flows in from the evaluator. Without this, credentials configured on
  * the judge provider end up in the Eval results both in the DB and in the
  * polling response served by `/api/eval/job/:id`.
+ *
+ * Note: this sanitizer intentionally uses `maxDepth: Number.POSITIVE_INFINITY`.
+ * Provider configs in eval results are not depth-bounded in practice (they can
+ * contain arbitrarily deep nested objects from resolved runtime provider/client
+ * state). A finite depth could stop traversal early and miss secret-bearing
+ * fields at deeper levels.
  */
 function sanitizeForDbWithSecrets<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
-  return sanitizeObject(obj, {
-    context: 'evalResult field',
-    // Nested provider configs can be deeper than the default maxDepth (4);
-    // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as T;
+  try {
+    return sanitizeObject(obj, {
+      context: 'evalResult field',
+      // Nested provider configs can be deeper than the default maxDepth (4);
+      // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
+      maxDepth: Number.POSITIVE_INFINITY,
+      redactErrorMessages: true,
+      throwOnError: true,
+    }) as T;
+  } catch {
+    logger.debug('Unable to sanitize eval result field safely; omitting field contents');
+    return (Array.isArray(obj) ? [] : typeof obj === 'object' ? {} : null) as T;
+  }
 }
 
 // Headers that may carry credentials, session state, or PII / org-level identifiers

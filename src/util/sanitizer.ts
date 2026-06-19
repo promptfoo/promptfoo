@@ -715,11 +715,17 @@ export function sanitizeObject(
   obj: any,
   options: {
     context?: string;
+    redactErrorMessages?: boolean;
     throwOnError?: boolean;
     maxDepth?: number;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const {
+    context = 'object',
+    redactErrorMessages = false,
+    throwOnError = false,
+    maxDepth = MAX_DEPTH,
+  } = options;
 
   try {
     // Handle null/undefined
@@ -743,11 +749,16 @@ export function sanitizeObject(
     const safeObj = JSON.parse(
       safeStringify(
         obj,
-        (_key, val) => {
-          if (val instanceof Error) {
+        function (this: Record<string, unknown>, key, val) {
+          if (typeof val === 'bigint') {
+            return val.toString();
+          }
+          const originalValue = this[key];
+          if (val instanceof Error || (redactErrorMessages && originalValue instanceof Error)) {
+            const error = originalValue instanceof Error ? originalValue : val;
             return {
-              name: val.name,
-              message: val.message,
+              name: error.name,
+              message: redactErrorMessages ? REDACTED : error.message,
             };
           }
           return val;
