@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
+  isBedrockGrokModel,
+  isBedrockMantleResponsesModel,
+  isBedrockOpenAiResponsesModel,
+} from '../../../src/providers/bedrock/mantle';
+import {
   BedrockGrokResponsesProvider,
   BedrockOpenAiResponsesProvider,
   createBedrockOpenAiResponsesProvider,
   getBedrockMantleBaseUrl,
-  isBedrockGrokModel,
-  isBedrockMantleResponsesModel,
-  isBedrockOpenAiResponsesModel,
 } from '../../../src/providers/bedrock/openaiResponses';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';

@@ -2,6 +2,24 @@ import { getEnvString } from '../../envars';
 
 import type { EnvOverrides } from '../../types/env';
 
+/**
+ * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
+ * (a bare `openai.` id that is not an open-weight `gpt-oss` model).
+ */
+export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
+  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
+}
+
+/** Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`). */
+export function isBedrockGrokModel(modelName: string): boolean {
+  return modelName.startsWith('xai.');
+}
+
+/** Whether a Bedrock model id is served through the mantle Responses API. */
+export function isBedrockMantleResponsesModel(modelName: string): boolean {
+  return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);
+}
+
 // Region resolution intentionally mirrors AwsBedrockGenericProvider.getRegion()
 // (src/providers/bedrock/base.ts): same config.region → AWS_BEDROCK_REGION head
 // plus AWS_REGION/AWS_DEFAULT_REGION fallbacks. The mantle providers wrap other

@@ -1,6 +1,7 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
+  isBedrockGrokModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
@@ -26,38 +27,6 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
 /** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
 export const DEFAULT_BEDROCK_GROK_REGION = 'us-west-2';
-
-/**
- * Whether a Bedrock OpenAI model id is a frontier model served through the Responses API
- * (a bare `openai.` id that is not an open-weight `gpt-oss` model, e.g. `openai.gpt-5.5`).
- *
- * Only the bare ids are accepted. AWS's GPT-5.5 / GPT-5.4 model cards list just the bare model
- * ids and explicitly mark the Geo and Global inference IDs as "Not supported", so a
- * region/geo-prefixed id such as `us.openai.gpt-5.5` is not a real Bedrock model. Matching it
- * here would route an invalid id to the mantle endpoint; instead it falls through to a clear
- * error (see `getHandlerForModel` in ./index.ts) that points at the supported bare id.
- */
-export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
-  return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
-}
-
-/**
- * Whether a Bedrock model id is an xAI Grok model (e.g. `xai.grok-4.3`). Grok also runs on the
- * mantle endpoint and is served through the same OpenAI-compatible Responses API; its model
- * card lists only the bare `xai.` id (no Geo/Global inference IDs), so a prefixed id like
- * `us.xai.grok-4.3` is not a real Bedrock model.
- */
-export function isBedrockGrokModel(modelName: string): boolean {
-  return modelName.startsWith('xai.');
-}
-
-/**
- * Whether a Bedrock model id is served through the OpenAI-compatible Responses API on the
- * mantle endpoint — either an OpenAI frontier model or an xAI Grok model.
- */
-export function isBedrockMantleResponsesModel(modelName: string): boolean {
-  return isBedrockOpenAiResponsesModel(modelName) || isBedrockGrokModel(modelName);
-}
 
 /**
  * Build the regional Bedrock mantle base URL for the OpenAI frontier models.
@@ -88,7 +57,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real
    * `this.modelName` (e.g. `openai.gpt-5.5`) as the model id. Only bare `openai.` ids reach
-   * this provider (see {@link isBedrockOpenAiResponsesModel}), so no region prefix is expected.
+   * this provider (see the routing predicates in `mantle.ts`), so no region prefix is expected.
    */
   protected getCapabilityModelName(): string {
     return this.modelName.replace(/^openai\./, '');

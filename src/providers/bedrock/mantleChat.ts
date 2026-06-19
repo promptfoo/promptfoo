@@ -1,10 +1,10 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
+  isBedrockOpenAiResponsesModel,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
-import { isBedrockOpenAiResponsesModel } from './openaiResponses';
 
 type OpenAiChatProviderOptions = NonNullable<
   ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]

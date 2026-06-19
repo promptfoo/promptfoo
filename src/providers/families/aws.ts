@@ -1,5 +1,6 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
+import { isBedrockMantleResponsesModel } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -96,8 +97,7 @@ export const awsProviderFactories: ProviderFactory[] = [
         candidateResponsesModel?.startsWith('openai.') ||
         candidateResponsesModel?.startsWith('xai.')
       ) {
-        const { isBedrockMantleResponsesModel, createBedrockOpenAiResponsesProvider } =
-          await import('../bedrock/openaiResponses');
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
         if (isBedrockMantleResponsesModel(candidateResponsesModel)) {
           return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
             ...providerOptions,
