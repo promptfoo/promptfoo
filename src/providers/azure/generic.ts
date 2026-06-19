@@ -24,6 +24,7 @@ export class AzureGenericProvider implements ApiProvider {
   authHeaders?: Record<string, string>;
 
   protected initializationPromise: Promise<void> | null = null;
+  protected initializationError: unknown;
 
   constructor(deploymentName: string, options: AzureProviderOptions = {}) {
     const { config, id, env } = options;
@@ -50,7 +51,9 @@ export class AzureGenericProvider implements ApiProvider {
     this.config = config || {};
     this.id = id ? () => id : this.id;
 
-    this.initializationPromise = this.initialize();
+    this.initializationPromise = this.initialize().catch((err) => {
+      this.initializationError = err;
+    });
   }
 
   async initialize() {
@@ -60,6 +63,9 @@ export class AzureGenericProvider implements ApiProvider {
   async ensureInitialized() {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
+    }
+    if (this.initializationError) {
+      throw this.initializationError;
     }
   }
 

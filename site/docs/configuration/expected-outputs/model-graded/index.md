@@ -224,11 +224,11 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use promptfoo's built-in grading provider. Promptfoo chooses that
-provider from the credentials available in the environment; for example, OpenAI, Anthropic, Gemini,
-Mistral, GitHub Models, Azure OpenAI, and Codex login credentials can each activate a different
-default. If you do not have access to the selected default or prefer a different judge, you can
-override the grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts automatically select a grading model based on available
+credentials. When `OPENAI_API_KEY` is set, the default is `gpt-5.5-2026-04-23`. See
+[llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the
+complete priority order. If you prefer a different model, you can override the rubric grader.
+There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
@@ -391,7 +391,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.4`.
 
 ```yaml
 defaultTest:

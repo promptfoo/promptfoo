@@ -178,6 +178,8 @@ describe('writeOutput', () => {
       tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret-key',
+        AWS_SESSION_TOKEN: 'aws-session-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
         REGION: 'us-east-1',
       },
@@ -198,6 +200,8 @@ describe('writeOutput', () => {
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_SECRET_ACCESS_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_SESSION_TOKEN).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
@@ -547,6 +551,8 @@ describe('writeOutput', () => {
     const eval_ = new Eval({
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token',
+        AWS_SECRET_ACCESS_KEY: 'aws-secret-key',
+        AWS_SESSION_TOKEN: 'aws-session-token',
         ANTHROPIC_API_KEY: 'anthropic-token',
         AWS_REGION: 'us-east-1',
       },
@@ -564,6 +570,8 @@ describe('writeOutput', () => {
     const outputYaml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = yaml.load(outputYaml) as Record<string, any>;
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_SECRET_ACCESS_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_SESSION_TOKEN).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.AWS_REGION).toBe('us-east-1');
     expect(parsed.config.defaultTest.options.apiKey).toBe('[REDACTED]');

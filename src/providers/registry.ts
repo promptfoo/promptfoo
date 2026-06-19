@@ -503,7 +503,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createDeepSeekProvider(providerPath, {
-        config: providerOptions,
+        ...providerOptions,
         env: context.env,
       });
     },

@@ -278,6 +278,9 @@
         "DATABRICKS_WORKSPACE_URL": {
           "type": "string"
         },
+        "DEEPSEEK_API_KEY": {
+          "type": "string"
+        },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
           "type": "string"
         },
@@ -560,10 +563,25 @@
         "AZURE_CONTENT_SAFETY_API_VERSION": {
           "type": "string"
         },
+        "AWS_ACCESS_KEY_ID": {
+          "type": "string"
+        },
+        "AWS_BEARER_TOKEN_BEDROCK": {
+          "type": "string"
+        },
         "AWS_REGION": {
           "type": "string"
         },
         "AWS_DEFAULT_REGION": {
+          "type": "string"
+        },
+        "AWS_PROFILE": {
+          "type": "string"
+        },
+        "AWS_SECRET_ACCESS_KEY": {
+          "type": "string"
+        },
+        "AWS_SESSION_TOKEN": {
           "type": "string"
         },
         "AWS_SAGEMAKER_MAX_TOKENS": {
@@ -1741,6 +1759,9 @@
                     "DATABRICKS_WORKSPACE_URL": {
                       "type": "string"
                     },
+                    "DEEPSEEK_API_KEY": {
+                      "type": "string"
+                    },
                     "DOCKER_MODEL_RUNNER_BASE_URL": {
                       "type": "string"
                     },
@@ -2023,10 +2044,25 @@
                     "AZURE_CONTENT_SAFETY_API_VERSION": {
                       "type": "string"
                     },
+                    "AWS_ACCESS_KEY_ID": {
+                      "type": "string"
+                    },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
+                      "type": "string"
+                    },
                     "AWS_REGION": {
                       "type": "string"
                     },
                     "AWS_DEFAULT_REGION": {
+                      "type": "string"
+                    },
+                    "AWS_PROFILE": {
+                      "type": "string"
+                    },
+                    "AWS_SECRET_ACCESS_KEY": {
+                      "type": "string"
+                    },
+                    "AWS_SESSION_TOKEN": {
                       "type": "string"
                     },
                     "AWS_SAGEMAKER_MAX_TOKENS": {

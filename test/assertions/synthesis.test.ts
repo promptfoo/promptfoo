@@ -1,10 +1,11 @@
 import dedent from 'dedent';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   convertQuestionToPythonPrompt,
   generateNewQuestionsPrompt,
   synthesize,
 } from '../../src/assertions/synthesis';
+import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
@@ -14,7 +15,15 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
+}));
+
 describe('synthesize', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should generate assertions based on config prompts and existing assertions', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -41,6 +50,102 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(1);
     expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
+  });
+
+  it('should preserve default provider configuration when setting the conversion token budget', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'default-provider',
+      config: {
+        showThinking: false,
+        passthrough: { thinking: { type: 'disabled' } },
+      },
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i++ === 0) {
+          return Promise.resolve({
+            output:
+              '{"questions": [{"label": "metric1", "question": "test question", "question_source": "IMPLIED_IN_INSTRUCTIONS", "question_type": "CORE_FOR_APPLICATION"}]}',
+          });
+        }
+        return Promise.resolve({ output: 'None' });
+      }),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    await synthesize({
+      prompts: ['Test prompt'],
+      tests: [],
+      numQuestions: 1,
+      type: 'pi',
+    });
+
+    expect(mockProvider.config).toEqual({
+      showThinking: false,
+      passthrough: { thinking: { type: 'disabled' } },
+      max_tokens: 3000,
+      maxTokens: 3000,
+    });
+  });
+
+  it('should apply custom instructions and generate mixed Python and rubric assertions', async () => {
+    const callApi = vi
+      .fn<ApiProvider['callApi']>()
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          questions: [
+            {
+              label: 'Word Limit',
+              question: 'Does the response contain fewer than 10 words?',
+              question_source: 'IMPLIED_IN_INSTRUCTIONS',
+              question_type: 'FORMAT_CHECK',
+            },
+            {
+              label: 'Accuracy',
+              question: 'Is the response accurate?',
+              question_source: 'FULLY_NEWLY_GENERATED',
+              question_type: 'CORE_FOR_APPLICATION',
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        output: "return {'pass': len(output.split()) < 10, 'score': 1.0}",
+      })
+      .mockResolvedValueOnce({ output: 'None' });
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi,
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Answer concisely.', 'Answer factually.'],
+      instructions: 'Prioritize format requirements.',
+      tests: [],
+      numQuestions: 2,
+      type: 'llm-rubric',
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(3);
+    expect(callApi.mock.calls[0][0]).toContain('Prioritize format requirements.');
+    expect(result.map((assertion) => assertion.metric).sort()).toEqual(['Accuracy', 'Word Limit']);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'python',
+          value: "return {'pass': len(output.split()) < 10, 'score': 1.0}",
+        }),
+        expect.objectContaining({ type: 'llm-rubric' }),
+      ]),
+    );
   });
 });
 

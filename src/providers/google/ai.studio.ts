@@ -602,7 +602,7 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.1-pro-preview';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

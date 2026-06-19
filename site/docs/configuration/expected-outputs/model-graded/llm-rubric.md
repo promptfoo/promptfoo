@@ -24,18 +24,28 @@ This assertion will use a language model to grade the output based on the specif
 
 ## How it works
 
-Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
+Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available, checked in priority order:
 
-- **OpenAI API key**: `gpt-5`
-- **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
-- **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
-- **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
-- **Mistral API key**: `mistral-large-latest`
-- **GitHub token**: `openai/gpt-5`
-- **Azure credentials**: Your configured Azure GPT deployment
+| Priority | Provider         | Model                    | Environment Variable                                                                             |
+| -------- | ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------ |
+| 1        | OpenAI           | `gpt-5.5-2026-04-23`     | `OPENAI_API_KEY`                                                                                 |
+| 2        | Anthropic        | `claude-sonnet-4-6`      | `ANTHROPIC_API_KEY`                                                                              |
+| 3        | Azure OpenAI     | Your deployment          | `AZURE_OPENAI_API_KEY`/`AZURE_API_KEY`, or Azure client credentials, plus a deployment env var   |
+| 4        | Google AI Studio | `gemini-3.1-pro-preview` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`                                            |
+| 5        | xAI              | `grok-4.3`               | `XAI_API_KEY`                                                                                    |
+| 6        | DeepSeek         | `deepseek-v4-flash`      | `DEEPSEEK_API_KEY`                                                                               |
+| 7        | Mistral          | `mistral-large-latest`   | `MISTRAL_API_KEY`                                                                                |
+| 8        | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_BEARER_TOKEN_BEDROCK`                                                                       |
+| 9        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set  |
+| 10       | Google Vertex    | `gemini-3.1-pro-preview` | Google ADC (ambient credentials)                                                                 |
+| 11       | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (optionally `AWS_SESSION_TOKEN`), or `AWS_PROFILE` |
+| 12       | GitHub Models    | `openai/gpt-5`           | `GITHUB_TOKEN` (ambient)                                                                         |
 
 You can override this by setting the `provider` option (see below).
+
+When selected automatically, the DeepSeek judge requests non-thinking mode so final grading output
+is not mixed with reasoning text. Explicit DeepSeek grader configurations can choose a different
+mode through `config.passthrough.thinking.type`.
 
 Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
@@ -57,7 +67,7 @@ Use your knowledge of this structure to give special instructions in your rubric
 assert:
   - type: llm-rubric
     value: |
-      Evaluate the output based on how funny it is. Grade it on a scale of 0.0 to 1.0, where:
+      Evaluate the output based on how funny it is.  Grade it on a scale of 0.0 to 1.0, where:
       Score of 0.1: Only a slight smile.
       Score of 0.5: Laughing out loud.
       Score of 1.0: Rolling on the floor laughing.
@@ -71,7 +81,7 @@ You can incorporate test variables into your LLM rubric. This is particularly us
 
 ```yaml
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.4
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -88,12 +98,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, `llm-rubric` uses `gpt-5` for grading. You can override this in several ways:
+By default, `llm-rubric` uses `gpt-5.5-2026-04-23` for grading when `OPENAI_API_KEY` is set. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader openai:gpt-5-mini
+   promptfoo eval --grader openai:gpt-5.4-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -102,7 +112,7 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
    defaultTest:
      // highlight-start
      options:
-       provider: openai:gpt-5-mini
+       provider: openai:gpt-5.4-mini
      // highlight-end
    tests:
      - assert:
@@ -119,27 +129,28 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: openai:gpt-5-mini
+           provider: openai:gpt-5.4-mini
            // highlight-end
    ```
 
 ### Setting grader parameters (temperature, etc.)
 
-To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to push grading toward reproducibility when swapping in a custom judge:
+Use a `provider` object with `id` and `config` when you need to set grader parameters such as `temperature`, `max_tokens`, or a custom API host:
 
 ```yaml
-assert:
-  - type: llm-rubric
-    value: Is not apologetic and provides a clear, concise answer
-    // highlight-start
-    provider:
-      id: openai:gpt-5-mini
-      config:
-        temperature: 0
-    // highlight-end
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Is not apologetic and provides a clear, concise answer
+        // highlight-start
+        provider:
+          id: openai:gpt-5.4-mini
+          config:
+            temperature: 0
+        // highlight-end
 ```
 
-The same shape works under `defaultTest.options.provider` and `test.options.provider`.
+This works at every level where a grader can be set: per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
 
 Provider precedence is exact: `assertion.provider` overrides `test.options.provider`, which
 overrides `defaultTest.options.provider`. If your default grader is a full object with `config`, do
@@ -147,7 +158,7 @@ not add a shorthand `provider: openai:chat:...` on the assertion unless you also
 object there.
 
 :::note
-The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. GPT-5 series reasoning models ignore `temperature` and do not need it set.
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
 :::
 
 Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
