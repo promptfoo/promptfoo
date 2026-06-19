@@ -1,8 +1,6 @@
 import dedent from 'dedent';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion } from '../../types/index';
-
 const PLUGIN_ID = 'promptfoo:redteam:path-traversal';
 
 const DEFAULT_EXAMPLES = dedent`
@@ -82,10 +80,10 @@ export class PathTraversalPlugin extends RedteamPluginBase {
   `;
   }
 
-  protected getAssertions(_prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string) {
     return [
       {
-        type: PLUGIN_ID,
+        type: PLUGIN_ID as `promptfoo:redteam:${string}`,
         metric: 'PathTraversal',
       },
     ];
