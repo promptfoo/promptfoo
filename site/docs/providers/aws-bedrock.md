@@ -1154,8 +1154,8 @@ providers:
 - Grok 4.3 is **reasoning-first**: reasoning is always active and the effort is configurable
   (`none` | `low` | `medium` | `high`). promptfoo forwards `reasoning_effort` (or
   `reasoning: { effort }`) and surfaces reasoning token counts in `tokenUsage`.
-- Grok's Responses API **does not accept `temperature`** — setting it returns
-  `Unsupported parameter`. promptfoo therefore does not send a temperature default for Grok.
+- Grok accepts an explicit `temperature`. When you omit it, promptfoo does not inject the OpenAI
+  provider default, so Bedrock uses Grok's model default instead.
 - **Cost is not reported** for Grok (`cost` is left undefined). The Responses
   billing tables are keyed on OpenAI model names; refer to the
   [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for Grok rates.
