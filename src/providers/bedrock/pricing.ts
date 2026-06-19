@@ -118,7 +118,74 @@ const BEDROCK_REGION_PRICING_MODEL_PREFIXES = [
   'kimi-k2',
   'nemotron-',
   'gemma-3-',
+  'openai.gpt-oss-',
 ] as const;
+
+// GPT-OSS is available in more regions than the newer OpenAI-compatible Runtime families, and
+// its rates do not follow the same regional groupings. Keep its complete published region map
+// separate so a configured region never silently falls back to the US rate.
+const GPT_OSS_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
+  'ap-northeast-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.73 },
+    'openai.gpt-oss-20b': { input: 0.08, output: 0.36 },
+  },
+  'ap-south-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.71 },
+    'openai.gpt-oss-20b': { input: 0.08, output: 0.35 },
+  },
+  'ap-southeast-2': {
+    'openai.gpt-oss-120b': { input: 0.1545, output: 0.618 },
+    'openai.gpt-oss-20b': { input: 0.0721, output: 0.309 },
+  },
+  'ap-southeast-3': {
+    'openai.gpt-oss-120b': { input: 0.16, output: 0.62 },
+    'openai.gpt-oss-20b': { input: 0.07, output: 0.31 },
+  },
+  'eu-central-1': {
+    'openai.gpt-oss-120b': { input: 0.2, output: 0.79 },
+    'openai.gpt-oss-20b': { input: 0.09, output: 0.4 },
+  },
+  'eu-north-1': {
+    'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
+    'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
+  },
+  'eu-south-1': {
+    'openai.gpt-oss-120b': { input: 0.2, output: 0.79 },
+    'openai.gpt-oss-20b': { input: 0.09, output: 0.4 },
+  },
+  'eu-west-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.7 },
+    'openai.gpt-oss-20b': { input: 0.08, output: 0.35 },
+  },
+  'eu-west-2': {
+    'openai.gpt-oss-120b': { input: 0.23, output: 0.93 },
+    'openai.gpt-oss-20b': { input: 0.11, output: 0.47 },
+  },
+  'sa-east-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.73 },
+    'openai.gpt-oss-20b': { input: 0.08, output: 0.36 },
+  },
+  'us-east-1': {
+    'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
+    'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
+  },
+  'us-east-2': {
+    'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
+    'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
+  },
+  'us-gov-east-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.72 },
+    'openai.gpt-oss-20b': { input: 0.084, output: 0.36 },
+  },
+  'us-gov-west-1': {
+    'openai.gpt-oss-120b': { input: 0.18, output: 0.72 },
+    'openai.gpt-oss-20b': { input: 0.084, output: 0.36 },
+  },
+  'us-west-2': {
+    'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
+    'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
+  },
+};
 
 const AP_NORTHEAST_1_AND_SA_EAST_1_PRICING: Record<string, BedrockPricing> = {
   'zai.glm-5': { input: 1.2, output: 3.84 },
@@ -138,21 +205,33 @@ const AP_NORTHEAST_1_AND_SA_EAST_1_PRICING: Record<string, BedrockPricing> = {
   'gemma-3-27b': { input: 0.28, output: 0.46 },
 };
 
-const AP_SOUTHEAST_3_AND_EU_NORTH_1_PRICING: Record<string, BedrockPricing> = {
+const AP_SOUTHEAST_3_EU_CENTRAL_1_AND_EU_NORTH_1_PRICING: Record<string, BedrockPricing> = {
   'zai.glm-5': { input: 1.2, output: 3.84 },
   'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
   'zai.glm-4.7': { input: 0.72, output: 2.64 },
   'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
   'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },
+  'minimax.minimax-m2': { input: 0.36, output: 1.44 },
   'kimi-k2.5': { input: 0.72, output: 3.6 },
+  'kimi-k2-thinking': { input: 0.72, output: 3.0 },
+  'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
+  'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
+  'nemotron-nano': { input: 0.072, output: 0.276 },
   'nemotron-super': { input: 0.18, output: 0.78 },
+  'gemma-3-4b': { input: 0.048, output: 0.096 },
+  'gemma-3-12b': { input: 0.108, output: 0.348 },
+  'gemma-3-27b': { input: 0.276, output: 0.456 },
 };
 
 const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
+  'zai.glm-5': { input: 1.2, output: 3.84 },
   'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
+  'zai.glm-4.7': { input: 0.72, output: 2.64 },
   'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
   'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },
   'minimax.minimax-m2': { input: 0.35, output: 1.41 },
+  'kimi-k2.5': { input: 0.72, output: 3.6 },
+  'kimi-k2-thinking': { input: 0.72, output: 3.0 },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.71 },
   'nemotron-nano-3-30b': { input: 0.07, output: 0.28 },
   'nemotron-nano': { input: 0.07, output: 0.27 },
@@ -205,23 +284,20 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
     'gemma-3-12b': { input: 0.0927, output: 0.2987 },
     'gemma-3-27b': { input: 0.2369, output: 0.3914 },
   },
-  'ap-southeast-3': AP_SOUTHEAST_3_AND_EU_NORTH_1_PRICING,
-  'eu-central-1': {
-    'zai.glm-5': { input: 1.2, output: 3.84 },
-    'zai.glm-4.7-flash': { input: 0.08, output: 0.48 },
-    'minimax.minimax-m2.5': { input: 0.36, output: 1.44 },
-    'minimax.minimax-m2.1': { input: 0.36, output: 1.44 },
-    'nemotron-super': { input: 0.18, output: 0.78 },
-  },
-  'eu-north-1': AP_SOUTHEAST_3_AND_EU_NORTH_1_PRICING,
+  'ap-southeast-3': AP_SOUTHEAST_3_EU_CENTRAL_1_AND_EU_NORTH_1_PRICING,
+  'eu-central-1': AP_SOUTHEAST_3_EU_CENTRAL_1_AND_EU_NORTH_1_PRICING,
+  'eu-north-1': AP_SOUTHEAST_3_EU_CENTRAL_1_AND_EU_NORTH_1_PRICING,
   'eu-south-1': EU_SOUTH_1_AND_EU_WEST_1_PRICING,
   'eu-west-1': EU_SOUTH_1_AND_EU_WEST_1_PRICING,
   'eu-west-2': {
     'zai.glm-5': { input: 1.55, output: 4.96 },
     'zai.glm-4.7-flash': { input: 0.11, output: 0.62 },
+    'zai.glm-4.7': { input: 0.93, output: 3.41 },
     'minimax.minimax-m2.5': { input: 0.47, output: 1.86 },
     'minimax.minimax-m2.1': { input: 0.47, output: 1.86 },
     'minimax.minimax-m2': { input: 0.47, output: 1.86 },
+    'kimi-k2.5': { input: 0.93, output: 4.65 },
+    'kimi-k2-thinking': { input: 0.93, output: 3.875 },
     'nemotron-nano-12b-v2': { input: 0.31, output: 0.93 },
     'nemotron-nano-3-30b': { input: 0.09, output: 0.37 },
     'nemotron-nano': { input: 0.09, output: 0.36 },
@@ -236,6 +312,19 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
 };
 
 function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
+  if (normalizedModelId.includes('openai.gpt-oss-') && region) {
+    const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
+    if (!pricing) {
+      return undefined;
+    }
+    for (const [modelPrefix, modelPricing] of Object.entries(pricing)) {
+      if (normalizedModelId.includes(modelPrefix)) {
+        return modelPricing;
+      }
+    }
+    return undefined;
+  }
+
   const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
   if (regionPricing) {
     for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
@@ -257,6 +346,16 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
   }
   return undefined;
 }
+
+const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
+  'zai.glm-',
+  'minimax.minimax-',
+  'kimi-k2',
+  'nemotron-',
+  'gemma-3-',
+  'writer.palmyra-',
+  'openai.gpt-oss-',
+] as const;
 
 /**
  * Calculate cost based on model and token usage
@@ -302,4 +401,38 @@ export function calculateBedrockCost(
     : promptTokens * inputRate;
   const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
   return inputCost + outputCost;
+}
+
+/**
+ * Calculate InvokeModel cost only for models whose Runtime rates are verified here.
+ *
+ * The broader table preserves existing Converse cost coverage, but several legacy entries are
+ * stale or refer to different variants. Before this shared calculator existed, InvokeModel only
+ * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
+ * emitting a plausible but incorrect cost.
+ */
+export function calculateBedrockInvokeModelCost(
+  modelId: string,
+  promptTokens?: number,
+  completionTokens?: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+  region?: string,
+): number | undefined {
+  const normalizedModelId = modelId.toLowerCase();
+  if (
+    !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
+  ) {
+    return undefined;
+  }
+
+  return calculateBedrockCost(
+    modelId,
+    promptTokens,
+    completionTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    region,
+  );
 }

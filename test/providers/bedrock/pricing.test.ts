@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { calculateBedrockCost } from '../../../src/providers/bedrock/pricing';
+import {
+  calculateBedrockCost,
+  calculateBedrockInvokeModelCost,
+} from '../../../src/providers/bedrock/pricing';
 
 const INPUT_TOKENS = 10_000;
 const OUTPUT_TOKENS = 5_000;
@@ -41,6 +44,9 @@ describe('calculateBedrockCost', () => {
     { id: 'google.gemma-3-12b-it', region: 'eu-west-2', input: 0.14, output: 0.45 },
     { id: 'minimax.minimax-m2.1', region: 'eu-west-1', input: 0.36, output: 1.44 },
     { id: 'minimax.minimax-m2.5', region: 'eu-south-1', input: 0.36, output: 1.44 },
+    { id: 'minimax.minimax-m2', region: 'eu-central-1', input: 0.36, output: 1.44 },
+    { id: 'google.gemma-3-12b-it', region: 'eu-central-1', input: 0.108, output: 0.348 },
+    { id: 'openai.gpt-oss-120b-1:0', region: 'eu-west-2', input: 0.23, output: 0.93 },
     {
       id: 'nvidia.nemotron-super-3-120b',
       region: 'us-gov-west-1',
@@ -62,9 +68,15 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(costAtRates(0.3, 1.2) * 1.75, 6);
   });
 
-  it('does not invent regional rates where AWS does not list a model', () => {
+  it('uses newly published London pricing for GLM 4.7', () => {
     expect(
       calculateBedrockCost('zai.glm-4.7', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'eu-west-2'),
+    ).toBeCloseTo(costAtRates(0.93, 3.41), 6);
+  });
+
+  it('does not invent GPT-OSS pricing in an unlisted region', () => {
+    expect(
+      calculateBedrockCost('openai.gpt-oss-120b-1:0', 1e6, 1e6, 0, 0, 'ca-central-1'),
     ).toBeUndefined();
   });
 
@@ -77,5 +89,20 @@ describe('calculateBedrockCost', () => {
       (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
       6,
     );
+  });
+
+  it.each([
+    'mistral.mistral-large-3-675b-instruct',
+    'qwen.qwen3-coder-480b-a35b-v1:0',
+    'cohere.command-r-plus-v1:0',
+    'anthropic.claude-sonnet-4-6',
+  ])('does not apply unverified Converse pricing to InvokeModel model %s', (modelId) => {
+    expect(calculateBedrockInvokeModelCost(modelId, 1e6, 1e6, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  it('retains verified InvokeModel pricing for the new Runtime families', () => {
+    expect(
+      calculateBedrockInvokeModelCost('zai.glm-5', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
+    ).toBeCloseTo(costAtRates(1, 3.2), 6);
   });
 });

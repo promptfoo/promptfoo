@@ -3718,7 +3718,7 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.75, 6);
   });
 
-  it('uses Command R+ pricing before the broader Command R price key', async () => {
+  it('does not apply the stale Converse Command R+ rate to Runtime responses', async () => {
     const responseJson = JSON.stringify({
       text: 'ok',
       meta: {
@@ -3736,10 +3736,10 @@ describe('AwsBedrockCompletionProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('ok');
-    expect(result.cost).toBeCloseTo(18, 6);
+    expect(result.cost).toBeUndefined();
   });
 
-  it('uses long-context pricing for Claude Sonnet Runtime responses above 200k input tokens', async () => {
+  it('does not apply the unverified Converse Claude Sonnet rate to Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
       usage: { input_tokens: 200_001, output_tokens: 1_000 },
@@ -3755,10 +3755,10 @@ describe('AwsBedrockCompletionProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('ok');
-    expect(result.cost).toBeCloseTo((200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5, 6);
+    expect(result.cost).toBeUndefined();
   });
 
-  it('includes Claude Runtime cache token pricing in the fallback cost', async () => {
+  it('does not apply the unverified Converse Claude Opus rate to Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
       usage: {
@@ -3781,10 +3781,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const result = await provider.callApi('hello');
 
     expect(result.output).toBe('ok');
-    expect(result.cost).toBeCloseTo(
-      (10000 / 1e6) * 5 + (1000 / 1e6) * 0.5 + (2000 / 1e6) * 6.25 + (5000 / 1e6) * 25,
-      6,
-    );
+    expect(result.cost).toBeUndefined();
   });
 
   it('should pass base config to model.params when context is not provided', async () => {
