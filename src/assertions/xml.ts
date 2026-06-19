@@ -522,7 +522,7 @@ export function validateXml(
   let doctypeParseError: string | undefined;
   let standalone = false;
   try {
-    const parser = new SaxesParser();
+    const parser = new SaxesParser({ xmlns: true });
     parser.on('xmldecl', (declaration) => {
       standalone = declaration.standalone === 'yes';
     });

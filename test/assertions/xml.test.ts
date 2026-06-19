@@ -50,6 +50,9 @@ describe('validateXml', () => {
       '<a/>trailing', // text outside the root element
       '<root><!-- bad -- comment --></root>', // invalid comment body
       '<root attr="1" attr="2"/>', // duplicate attributes
+      '<p:root/>', // unbound namespace prefix
+      '<root xmlns:xml="wrong"/>', // invalid reserved namespace binding
+      '<root xmlns:a="urn:x" xmlns:b="urn:x" a:id="1" b:id="2"/>', // duplicate expanded attributes
       '<root>&undefined;</root>', // undeclared entity
       '<!DOCTYPE root><root>&undefined;</root>', // bare doctype cannot declare entities
       '<root>\u0001</root>', // disallowed XML character
