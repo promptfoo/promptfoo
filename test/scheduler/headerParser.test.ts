@@ -266,6 +266,23 @@ describe('parseRateLimitHeaders', () => {
 
       vi.restoreAllMocks();
     });
+
+    it('should fall back to retry-after when retry-after-ms is invalid', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'retry-after-ms': 'Infinity',
+        'retry-after': '30',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.retryAfterMs).toBe(30000);
+      expect(result.resetAt).toBe(now + 30000);
+
+      vi.restoreAllMocks();
+    });
   });
 
   describe('Duration parsing', () => {
