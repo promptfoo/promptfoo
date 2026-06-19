@@ -215,10 +215,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return 'openai';
   }
 
-  protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
-    return context?.bustCache ?? context?.debug;
-  }
-
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,

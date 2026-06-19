@@ -193,10 +193,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return data.usage;
   }
 
-  protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
-    return context?.bustCache ?? context?.debug;
-  }
-
   protected applyBilling(
     result: ProviderResponse,
     data: any,

@@ -125,6 +125,10 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.config.apiKeyRequired ?? true;
   }
 
+  protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
+    return context?.bustCache ?? context?.debug;
+  }
+
   protected getMissingApiKeyErrorMessage(): string {
     return `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
   }
