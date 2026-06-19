@@ -46,11 +46,21 @@ describe('splitTextIntoSentences', () => {
     ]);
   });
 
+  it('trims leading/trailing whitespace on a single-line prose input before splitting', () => {
+    expect(
+      splitTextIntoSentences('   Paris is the capital of France. France is in Europe.   '),
+    ).toEqual(['Paris is the capital of France.', 'France is in Europe.']);
+  });
+
   it('does not split decimals', () => {
     expect(splitTextIntoSentences('Pi is about 3.14 in value. It is irrational.')).toEqual([
       'Pi is about 3.14 in value.',
       'It is irrational.',
     ]);
+  });
+
+  it('does not split when a decimal appears at the end of text', () => {
+    expect(splitTextIntoSentences('The value is 3.14.')).toEqual(['The value is 3.14.']);
   });
 
   it('treats text with two or more non-empty lines as pre-segmented (one unit per line)', () => {

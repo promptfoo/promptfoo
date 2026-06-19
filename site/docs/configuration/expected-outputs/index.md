@@ -130,7 +130,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                               |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                          |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                                |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                     |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
@@ -173,6 +173,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
+| [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
