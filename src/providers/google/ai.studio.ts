@@ -13,6 +13,7 @@ import {
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
+  getCachedReasoningDetails,
   getCandidate,
   getGoogleTokenUsageCompletionDetails,
   getLastPromptSafetyRatings,
@@ -234,31 +235,21 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     try {
       const output = data.candidates[0].content;
+      // Legacy PaLM responses only ever carry reasoning details (no context-cache reads).
+      const completionDetails = getCachedReasoningDetails(data.usageMetadata?.thoughtsTokenCount);
       const tokenUsage = cached
         ? {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 0,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(completionDetails && { completionDetails }),
           }
         : {
             prompt: data.usageMetadata?.promptTokenCount,
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(completionDetails && { completionDetails }),
           };
 
       // Calculate cost (only for non-cached responses)
@@ -450,18 +441,18 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       const grounding = collectGroundingMetadata(dataWithResponse);
       const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
 
+      // On a cache hit no Gemini context-cache read occurred, so the cached branch
+      // reports reasoning only and must NOT surface cacheReadInputTokens (which the
+      // non-cached helper would add) to avoid double-counting reads.
+      const cachedReasoningDetails = getCachedReasoningDetails(
+        lastData.usageMetadata?.thoughtsTokenCount,
+      );
       const tokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 0,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(cachedReasoningDetails && { completionDetails: cachedReasoningDetails }),
           }
         : {
             prompt: lastData.usageMetadata?.promptTokenCount,

@@ -211,21 +211,6 @@ export function stripExecutableToolFileReferences(
   return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
 }
 
-/**
- * Calculates the cost for a Google API call.
- *
- * Handles tiered pricing for models where cost varies by prompt size.
- * For example, Gemini Pro models have higher rates for prompts >200k tokens.
- * Some models (e.g. Gemini 2.0 Flash) have different pricing on Vertex AI.
- *
- * @param modelName - The name of the model used
- * @param config - Provider configuration (may contain custom cost override)
- * @param promptTokens - Number of tokens in the prompt
- * @param completionTokens - Number of tokens in the completion
- * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
- * @param cacheUsage - Cached input token count and modality breakdown
- * @returns The calculated cost in dollars, or undefined if it cannot be calculated
- */
 interface GeminiTokenDetails {
   modality?: string;
   tokenCount?: number;
@@ -240,6 +225,18 @@ interface GoogleCacheReadUsage {
   cost: number;
   tokenCount: number;
 }
+
+// Modalities Google bills at the text/image/video cache-read rate. An unspecified or
+// omitted modality defaults to this tier, and DOCUMENT (e.g. PDF) tokens are billed at
+// the image rate. Audio has a separate cache-read rate and is handled explicitly below.
+const TEXT_IMAGE_VIDEO_CACHE_MODALITIES = new Set([
+  '',
+  'modality_unspecified',
+  'text',
+  'image',
+  'video',
+  'document',
+]);
 
 function getGoogleCacheReadUsage(
   cost: GoogleModelCost | undefined,
@@ -287,18 +284,16 @@ function getGoogleCacheReadUsage(
     }
     detailTokenCount += tokenCount;
 
-    // Google treats an unspecified modality as text and bills DOCUMENT (for example,
-    // PDF) tokens at the image rate. Audio has a separate cache-read rate.
-    const modality = detail.modality?.toLowerCase();
-    const cacheReadRate =
-      modality == null ||
-      modality === '' ||
-      modality === 'modality_unspecified' ||
-      ['text', 'image', 'video', 'document'].includes(modality)
-        ? cost.cacheRead.textImageVideo
-        : modality === 'audio'
-          ? cost.cacheRead.audio
-          : undefined;
+    // An omitted/unspecified modality defaults to the text/image/video rate (see
+    // TEXT_IMAGE_VIDEO_CACHE_MODALITIES); audio is priced separately. Any other modality
+    // is left unpriced so the caller falls back to the undiscounted input estimate.
+    const modality = detail.modality?.toLowerCase() ?? '';
+    let cacheReadRate: number | undefined;
+    if (TEXT_IMAGE_VIDEO_CACHE_MODALITIES.has(modality)) {
+      cacheReadRate = cost.cacheRead.textImageVideo;
+    } else if (modality === 'audio') {
+      cacheReadRate = cost.cacheRead.audio;
+    }
 
     if (cacheReadRate == null) {
       hasUnpricedTokens = true;
@@ -329,6 +324,21 @@ function getGoogleCacheReadUsage(
   return { cost: cacheReadCost, tokenCount: pricedTokenCount };
 }
 
+/**
+ * Calculates the cost for a Google API call.
+ *
+ * Handles tiered pricing for models where cost varies by prompt size.
+ * For example, Gemini Pro models have higher rates for prompts >200k tokens.
+ * Some models (e.g. Gemini 2.0 Flash) have different pricing on Vertex AI.
+ *
+ * @param modelName - The name of the model used
+ * @param config - Provider configuration (may contain custom cost override)
+ * @param promptTokens - Number of tokens in the prompt
+ * @param completionTokens - Number of tokens in the completion
+ * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param cacheUsage - Cached input token count and modality breakdown
+ * @returns The calculated cost in dollars, or undefined if it cannot be calculated
+ */
 export function calculateGoogleCost(
   modelName: string,
   config: ProviderConfig,
@@ -341,18 +351,26 @@ export function calculateGoogleCost(
 
   let baseCost: number | undefined;
   let inputCost: number | undefined;
+  // The model-pricing object whose `input` rate produced `inputCost`. The cache-read
+  // discount must read its `cacheRead` from this SAME object so we never subtract one
+  // tier's input rate while adding another tier's cache-read rate (e.g. a Vertex base
+  // rate with an AI Studio cache rate). If this source lacks `cacheRead`, repricing
+  // simply no-ops rather than borrowing a rate from a different tier.
+  let costSource: GoogleModelCost | undefined;
   const hasExplicitInputCostOverride = config.cost != null || config.inputCost != null;
 
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
+      costSource = model.tieredCost.above;
+      inputCost = config.inputCost ?? config.cost ?? costSource.input;
+      const outputCost = config.outputCost ?? config.cost ?? costSource.output;
       baseCost = inputCost * promptTokens + outputCost * completionTokens;
     } else if (isVertexMode && model?.vertexCost) {
       // Use Vertex-specific pricing when available
-      inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
+      costSource = model.vertexCost;
+      inputCost = config.inputCost ?? config.cost ?? costSource.input;
+      const outputCost = config.outputCost ?? config.cost ?? costSource.output;
       baseCost = inputCost * promptTokens + outputCost * completionTokens;
     }
   }
@@ -361,6 +379,7 @@ export function calculateGoogleCost(
     // Standard (non-tiered) pricing.
     baseCost = calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
     if (model?.cost) {
+      costSource = model.cost;
       inputCost = config.inputCost ?? config.cost ?? model.cost.input;
     }
   }
@@ -372,13 +391,7 @@ export function calculateGoogleCost(
   // Re-price only cached tokens with known modality rates. Keep user input-cost overrides
   // authoritative; an output-only override does not affect cache-read pricing.
   if (promptTokens != null && inputCost != null && !hasExplicitInputCostOverride) {
-    const cacheReadCostSource =
-      model?.tieredCost && promptTokens > model.tieredCost.threshold
-        ? model.tieredCost.above
-        : isVertexMode && model?.vertexCost?.cacheRead
-          ? model.vertexCost
-          : model?.cost;
-    const cacheReadUsage = getGoogleCacheReadUsage(cacheReadCostSource, promptTokens, cacheUsage);
+    const cacheReadUsage = getGoogleCacheReadUsage(costSource, promptTokens, cacheUsage);
     if (cacheReadUsage !== undefined) {
       return baseCost - cacheReadUsage.tokenCount * inputCost + cacheReadUsage.cost;
     }
@@ -432,6 +445,29 @@ interface GeminiUsageMetadata extends GeminiCacheUsageMetadata {
   thoughtsTokenCount?: number;
 }
 
+/**
+ * Build the completion-token details for a Gemini response that carries reasoning
+ * (thinking) tokens, returning `undefined` when no usable reasoning count is present.
+ * A negative or non-finite count is treated as malformed and bounded/dropped.
+ *
+ * This deliberately reports ONLY reasoning details and never `cacheReadInputTokens`.
+ * The cached (promptfoo cache-hit) provider branches use this helper because a cache hit
+ * performs no Gemini context-cache read, so surfacing a read would double-count it (see
+ * `stripCachedContextReadDetails` in vertex.ts for the disk-cache equivalent).
+ */
+export function getCachedReasoningDetails(
+  thoughtsTokenCount: number | undefined,
+): { reasoning: number; acceptedPrediction: number; rejectedPrediction: number } | undefined {
+  if (thoughtsTokenCount == null || !Number.isFinite(thoughtsTokenCount)) {
+    return undefined;
+  }
+  return {
+    reasoning: Math.max(0, thoughtsTokenCount),
+    acceptedPrediction: 0,
+    rejectedPrediction: 0,
+  };
+}
+
 export function getGoogleTokenUsageCompletionDetails(
   usageMetadata:
     | {
@@ -441,7 +477,7 @@ export function getGoogleTokenUsageCompletionDetails(
       }
     | undefined,
 ) {
-  const reasoningTokens = usageMetadata?.thoughtsTokenCount;
+  const reasoningDetails = getCachedReasoningDetails(usageMetadata?.thoughtsTokenCount);
   const reportedCacheReadInputTokens = usageMetadata?.cachedContentTokenCount;
   const promptTokens = usageMetadata?.promptTokenCount;
   const boundedPromptTokens =
@@ -455,18 +491,13 @@ export function getGoogleTokenUsageCompletionDetails(
             : Math.min(reportedCacheReadInputTokens, boundedPromptTokens),
         )
       : undefined;
-  const hasReasoningTokens = reasoningTokens !== undefined;
   const hasCacheReadTokens = cacheReadInputTokens !== undefined;
-  if (!hasReasoningTokens && !hasCacheReadTokens) {
+  if (!reasoningDetails && !hasCacheReadTokens) {
     return undefined;
   }
 
   return {
-    ...(hasReasoningTokens && {
-      reasoning: reasoningTokens,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    }),
+    ...reasoningDetails,
     ...(hasCacheReadTokens && {
       cacheReadInputTokens,
     }),

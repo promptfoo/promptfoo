@@ -958,6 +958,47 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('does not surface cacheReadInputTokens on a cache hit (no live context-cache read occurred)', async () => {
+      // A fetchWithCache hit replays the raw usageMetadata, including cachedContentTokenCount.
+      // The cached branch must report reasoning only and omit cacheReadInputTokens so repeated
+      // cache-served evals don't keep re-counting reads that never happened. Guards against a
+      // future refactor that switches the cached branch to getGoogleTokenUsageCompletionDetails.
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+            thoughtsTokenCount: 4,
+            cachedContentTokenCount: 8,
+          },
+        },
+        cached: true,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.cached).toBe(true);
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toEqual({
+        cached: 15,
+        total: 15,
+        numRequests: 0,
+        completionDetails: { reasoning: 4, acceptedPrediction: 0, rejectedPrediction: 0 },
+      });
+      expect(response.tokenUsage?.completionDetails).not.toHaveProperty('cacheReadInputTokens');
+    });
+
     it('should use v1alpha API for thinking model', async () => {
       provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
         config: { apiKey: 'test-key' },

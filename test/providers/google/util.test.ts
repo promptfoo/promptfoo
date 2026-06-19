@@ -2599,6 +2599,35 @@ describe('util', () => {
         }),
       ).toEqual({ cacheReadInputTokens: 0 });
     });
+
+    it('passes through cache-read usage unclamped when the prompt token count is absent', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          cachedContentTokenCount: 12,
+        }),
+      ).toEqual({ cacheReadInputTokens: 12 });
+    });
+
+    it('bounds negative reasoning tokens at zero and drops non-finite ones', () => {
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          thoughtsTokenCount: -5,
+          promptTokenCount: 10,
+        }),
+      ).toEqual({ reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 });
+
+      expect(
+        getGoogleTokenUsageCompletionDetails({
+          thoughtsTokenCount: Number.NaN,
+          promptTokenCount: 10,
+        }),
+      ).toBeUndefined();
+    });
+
+    it('returns undefined when no usage metadata is present', () => {
+      expect(getGoogleTokenUsageCompletionDetails(undefined)).toBeUndefined();
+      expect(getGoogleTokenUsageCompletionDetails({})).toBeUndefined();
+    });
   });
 
   describe('calculateGoogleCost', () => {
@@ -2839,6 +2868,47 @@ describe('util', () => {
       ).toBeCloseTo(0.003, 10);
     });
 
+    it('should fall back to the undiscounted cost when a cache detail token count is malformed', () => {
+      // A negative or non-finite per-detail tokenCount voids cache repricing entirely
+      // (getGoogleCacheReadUsage returns undefined), so cost equals the full base cost.
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(full).toBeCloseTo(0.0155, 10);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: Number.NaN }],
+        }),
+      ).toBe(full);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: -5 }],
+        }),
+      ).toBe(full);
+    });
+
+    it('should not discount when every cached detail has an unknown modality', () => {
+      // An unrecognized modality is left unpriced (pricedTokenCount === 0), so the whole
+      // cache-read adjustment is skipped and the undiscounted base cost is returned.
+      const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
+      expect(
+        calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000, false, {
+          cachedContentTokenCount: 8000,
+          cacheTokensDetails: [{ modality: 'FUTURE_MODALITY', tokenCount: 8000 }],
+        }),
+      ).toBe(full);
+    });
+
+    it('should clamp number-form cache pricing to the prompt token count', () => {
+      // gemini-3.1-pro-preview uses number-form cacheRead (0.2/1M at the base tier). When
+      // cachedContentTokenCount exceeds promptTokens, only promptTokens are repriced.
+      const discounted = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000, false, {
+        cachedContentTokenCount: 120000,
+      });
+      // base 0.8; all 100000 prompt tokens repriced at 0.2/1M instead of 2.0/1M.
+      expect(discounted).toBeCloseTo(0.62, 10);
+    });
+
     it('should use the base-tier cache rate for a tiered model below its threshold', () => {
       // gemini-3.1-pro-preview has a tieredCost, but a 100k prompt stays under the
       // 200k threshold, so cached tokens must be repriced at the base cacheRead
@@ -3035,6 +3105,18 @@ describe('util', () => {
       // Legacy PaLM models don't have pricing
       expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
       expect(calculateGoogleCost('gemma', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('keeps Vertex cache pricing self-consistent (every vertexCost defines cacheRead when its base cost does)', () => {
+      // In Vertex mode the base input rate comes from vertexCost.input while the cache-read
+      // discount reads cacheRead from the same source. If a model defined vertexCost without
+      // a cacheRead while its AI Studio cost has one, repricing would mix a Vertex input rate
+      // with an AI Studio cache rate. This invariant prevents that drift as models are added.
+      for (const model of GOOGLE_MODELS) {
+        if (model.vertexCost && model.cost?.cacheRead != null) {
+          expect(model.vertexCost.cacheRead).not.toBeUndefined();
+        }
+      }
     });
 
     it('should respect custom cost override in config', () => {

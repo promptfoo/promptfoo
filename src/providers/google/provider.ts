@@ -28,6 +28,7 @@ import {
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
+  getCachedReasoningDetails,
   getCandidate,
   getGoogleClient,
   getGoogleTokenUsageCompletionDetails,
@@ -611,18 +612,18 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
       const completionDetails = getGoogleTokenUsageCompletionDetails(lastData.usageMetadata);
+      // On a cache hit no Gemini context-cache read occurred, so the cached branch
+      // reports reasoning only and must NOT surface cacheReadInputTokens (which the
+      // non-cached helper would add) to avoid double-counting reads.
+      const cachedReasoningDetails = getCachedReasoningDetails(
+        lastData.usageMetadata?.thoughtsTokenCount,
+      );
       const tokenUsage: TokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 0,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
+            ...(cachedReasoningDetails && { completionDetails: cachedReasoningDetails }),
           }
         : {
             prompt: lastData.usageMetadata?.promptTokenCount,
