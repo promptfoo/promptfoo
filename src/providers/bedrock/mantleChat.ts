@@ -76,6 +76,14 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: BedrockMantleChatCallApiOptions,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    // Gemma 4 accepts this field even though the base provider's OpenAI-specific reasoning
+    // model detection does not recognize its Bedrock model id.
+    if (
+      this.modelName.startsWith('google.gemma-4-') &&
+      result.config.reasoning_effort !== undefined
+    ) {
+      result.body.reasoning_effort = result.config.reasoning_effort;
+    }
     if (isBedrockGrokModel(this.modelName)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;

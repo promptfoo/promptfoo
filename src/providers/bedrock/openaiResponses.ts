@@ -8,6 +8,9 @@ import {
 
 import type { ProviderOptions } from '../../types/providers';
 
+type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[1];
+type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[2];
+
 /**
  * OpenAI's frontier models on Amazon Bedrock (gpt-5.5, gpt-5.4, ...) are NOT served
  * through the native `InvokeModel` / `Converse` APIs that back the rest of the `bedrock:`
@@ -80,8 +83,9 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
  *
  * - The capability/billing name strips the `xai.` prefix (→ `grok-4.3`).
  * - Grok is reasoning-first with a configurable `reasoning.effort`, so promptfoo forwards
- *   `reasoning` / `reasoning_effort`. Grok also accepts an explicit `temperature`; only the
- *   inherited OpenAI Responses default is omitted when the caller does not set one.
+ *   `reasoning` / `reasoning_effort`. Grok also accepts explicit `temperature` and `top_p`; only
+ *   the inherited OpenAI Responses temperature default is omitted when the caller does not set
+ *   one.
  *
  * Cost is not computed for Grok: the Responses billing tables are keyed on OpenAI model names,
  * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
@@ -97,6 +101,19 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
 
   protected supportsTemperature(): boolean {
     return true;
+  }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockOpenAiResponsesBodyContext,
+    callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    // The base provider omits top_p for active reasoning, but Grok accepts an explicit value.
+    if (result.config.top_p !== undefined && result.body.top_p === undefined) {
+      result.body.top_p = result.config.top_p;
+    }
+    return result;
   }
 
   protected shouldBustCache(): boolean {

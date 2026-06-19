@@ -164,6 +164,16 @@ describe('bedrock mantle Chat Completions provider', () => {
       );
     });
 
+    it('forwards configured reasoning effort for Gemma 4 chat models', async () => {
+      const provider = createBedrockMantleChatProvider('google.gemma-4-31b', {
+        config: { apiKey: 'bedrock-key', reasoning_effort: 'high' },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello');
+
+      expect(body.reasoning_effort).toBe('high');
+    });
+
     it('calls the mantle chat endpoint and tracks token usage', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: {

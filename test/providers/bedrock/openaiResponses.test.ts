@@ -352,6 +352,18 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.text?.verbosity).toBeUndefined();
     });
 
+    it('preserves explicit top_p when Grok reasoning is active', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: { reasoning_effort: 'high', top_p: 0.8 } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.top_p).toBe(0.8);
+    });
+
     it('bypasses the persistent fetch cache so the Bedrock bearer token is not in its identity', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
