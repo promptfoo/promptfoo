@@ -17,8 +17,9 @@ providers:
     config:
       region: us-west-2
       # Grok is reasoning-first; configure effort with none | low | medium | high.
-      # (Grok's Responses API does not accept `temperature`.)
       reasoning_effort: low
+      # Optional: set an explicit value, or omit this field to use Grok's model default.
+      temperature: 0.2
 
 tests:
   - vars:

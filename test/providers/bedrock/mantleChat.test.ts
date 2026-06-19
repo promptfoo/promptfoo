@@ -107,6 +107,21 @@ describe('bedrock mantle Chat Completions provider', () => {
       );
     });
 
+    it('omits the inherited temperature default when Grok temperature is not configured', async () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        OPENAI_TEMPERATURE: undefined,
+      });
+      const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
+        config: { omitDefaults: false },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello');
+
+      expect((provider.config as any).omitDefaults).toBe(true);
+      expect(body.temperature).toBeUndefined();
+    });
+
     it('treats an unresolved {{env.*}} apiKey template as missing', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
       expect(() =>
@@ -173,7 +188,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        true,
         undefined,
       );
       expect(result.output).toBe('Mantle output');
@@ -225,6 +240,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       const provider = createBedrockMantleChatProvider('xai.grok-4.3', {
         config: {
           region: 'us-west-2',
+          omitDefaults: false,
           reasoning_effort: 'high',
           temperature: 0,
           presence_penalty: 0.5,
@@ -233,6 +249,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         },
       }) as BedrockMantleChatProvider;
       const { body } = await (provider as any).getOpenAiBody('hello');
+      expect((provider.config as any).omitDefaults).toBe(true);
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
       expect(body.model).toBe('xai.grok-4.3');
       expect(body.reasoning_effort).toBe('high');

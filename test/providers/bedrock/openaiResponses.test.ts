@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import {
   BedrockGrokResponsesProvider,
   BedrockOpenAiResponsesProvider,
@@ -12,12 +13,40 @@ import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing'
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { mockProcessEnv } from '../../util/utils';
 
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
 describe('bedrock openaiResponses helper', () => {
   let restoreEnv: (() => void) | undefined;
+
+  beforeEach(() => {
+    vi.mocked(fetchWithCache)
+      .mockReset()
+      .mockResolvedValue({
+        data: {
+          id: 'resp_123',
+          model: 'xai.grok-4.3',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'hello' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+  });
 
   afterEach(() => {
     restoreEnv?.();
     restoreEnv = undefined;
+    vi.resetAllMocks();
   });
 
   describe('isBedrockOpenAiResponsesModel', () => {
@@ -291,17 +320,51 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider as any).supportsTemperature()).toBe(true);
     });
 
+    it('omits the inherited temperature default when Grok temperature is not configured', async () => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+        OPENAI_TEMPERATURE: undefined,
+      });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: { omitDefaults: false } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect((provider.config as any).omitDefaults).toBe(true);
+      expect(body.temperature).toBeUndefined();
+    });
+
     it('forwards reasoning effort, sends the real xai. model id, and preserves explicit temperature', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
-        config: { reasoning_effort: 'high', temperature: 0 } as any,
+        config: { omitDefaults: false, reasoning_effort: 'high', temperature: 0 } as any,
       });
       const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect((provider.config as any).omitDefaults).toBe(true);
       expect(body.model).toBe('xai.grok-4.3');
       expect(body.reasoning).toEqual({ effort: 'high' });
       expect(body.temperature).toBe(0);
       // No GPT-5 verbosity for Grok.
       expect(body.text?.verbosity).toBeUndefined();
+    });
+
+    it('bypasses the persistent fetch cache so the Bedrock bearer token is not in its identity', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {});
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
     });
   });
 });

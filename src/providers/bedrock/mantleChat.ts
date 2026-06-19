@@ -106,6 +106,13 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
   getApiUrl(): string {
     return this.config.apiBaseUrl || super.getApiUrl();
   }
+
+  protected shouldBustCache(): boolean {
+    // The inherited fetch cache includes an HMAC fingerprint of Authorization in its
+    // persistent identity. Bedrock exposes no non-secret account identifier for partitioning,
+    // so bypass caching rather than persist a derivative of the Bedrock bearer token.
+    return true;
+  }
 }
 
 /**
@@ -145,9 +152,10 @@ export function createBedrockMantleChatProvider(
   }
 
   const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
+  const isGrok = modelName.startsWith('xai.grok-');
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey },
+    config: { ...config, apiBaseUrl, apiKey, ...(isGrok ? { omitDefaults: true } : {}) },
   });
 }

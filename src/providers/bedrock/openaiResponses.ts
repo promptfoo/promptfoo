@@ -129,6 +129,13 @@ export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider
   protected supportsTemperature(): boolean {
     return true;
   }
+
+  protected shouldBustCache(): boolean {
+    // The inherited fetch cache includes an HMAC fingerprint of Authorization in its
+    // persistent identity. Bedrock exposes no non-secret account identifier for partitioning,
+    // so bypass caching rather than persist a derivative of the Bedrock bearer token.
+    return true;
+  }
 }
 
 /**
@@ -166,6 +173,6 @@ export function createBedrockOpenAiResponsesProvider(
 
   return new ProviderClass(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, apiKey },
+    config: { ...config, apiBaseUrl, apiKey, ...(isGrok ? { omitDefaults: true } : {}) },
   });
 }
