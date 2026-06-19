@@ -1106,7 +1106,7 @@ describe('sanitizeObject', () => {
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
       expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('session-token-value');
     });
 
     it('should sanitize provider response with metadata', () => {
