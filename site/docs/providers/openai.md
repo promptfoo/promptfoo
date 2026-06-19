@@ -127,6 +127,7 @@ Supported parameters include:
 | `seed`                   | Seed used for deterministic output.                                                                                                                                                                                                                                                                          |
 | `stop`                   | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                                  |
 | `store`                  | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                            |
+| `stream`                 | Enable streaming mode for Chat Completions (`openai:chat`) requests. Helps prevent 504 gateway timeouts for long-running requests by keeping the connection alive. Default: `false`.                                                                                                                         |
 | `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because OpenAI ignores it there.                                                                                                      |
 | `tool_choice`            | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                    |
 | `tools`                  | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                            |
@@ -164,6 +165,7 @@ interface OpenAiConfig {
   user?: string;
   metadata?: Record<string, string>;
   store?: boolean;
+  stream?: boolean;
   prompt_cache_key?: string;
   prompt_cache_retention?: 'in_memory' | '24h' | null;
   passthrough?: object;
@@ -190,6 +192,25 @@ interface OpenAiConfig {
   maxRetries?: number;
 }
 ```
+
+### Streaming chat completions
+
+Set `stream: true` on an `openai:chat:*` provider to use Chat Completions streaming.
+Promptfoo automatically requests `stream_options.include_usage: true` so token usage and
+cost stay populated from the final usage chunk. To pass additional OpenAI streaming
+options, add them under `passthrough.stream_options`; Promptfoo preserves those values
+and still requests usage.
+
+Streaming keeps the same function-tool callback behavior as non-streaming chat
+completions. Native streaming responses are not persisted in Promptfoo's response cache:
+authenticated requests, custom authorization headers, and response content can contain
+sensitive material that should not be represented by long-lived cache identifiers. Use
+`stream: false` when you require normal cached-response reuse. Streamed refusal signals
+are preserved; request audio output with `stream: false`, because streaming audio
+assembly is not supported here.
+
+Promptfoo applies its normal retry and quota handling to streaming requests, and rejects
+malformed or prematurely terminated event streams instead of returning partial output.
 
 ### Generating Multiple Responses
 

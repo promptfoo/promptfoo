@@ -19,6 +19,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { fetchProviderRequestWithRetries } from '../fetch';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
@@ -40,6 +41,605 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+
+type OpenAiStreamingUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  audio_prompt_tokens?: number;
+  audio_completion_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+  };
+  completion_tokens_details?: {
+    reasoning_tokens?: number;
+    accepted_prediction_tokens?: number;
+    rejected_prediction_tokens?: number;
+  };
+};
+
+type OpenAiStreamingFunctionCall = { name: string; arguments: string };
+
+type OpenAiStreamingToolCall = {
+  id: string;
+  type: string;
+  function: OpenAiStreamingFunctionCall;
+};
+
+type OpenAiFunctionCallLike = {
+  name?: string;
+  arguments?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+};
+
+type OpenAiStreamingChoice = {
+  index: number;
+  content: string;
+  refusal: string;
+  reasoning: string;
+  reasoningContent: string;
+  logProbs: number[];
+  finishReason: string | null;
+  functionCall: OpenAiStreamingFunctionCall | null;
+  toolCalls: Map<number, OpenAiStreamingToolCall>;
+};
+
+type OpenAiStreamingState = {
+  choices: Map<number, OpenAiStreamingChoice>;
+  usage?: OpenAiStreamingUsage;
+  serviceTier?: string | null;
+  error?: string;
+  completed: boolean;
+  malformed: boolean;
+};
+
+function getStreamingPassthroughOptions(body: Record<string, any>): Record<string, unknown> {
+  if (
+    typeof body.stream_options !== 'object' ||
+    body.stream_options === null ||
+    Array.isArray(body.stream_options)
+  ) {
+    return {};
+  }
+  return body.stream_options;
+}
+
+function getSseData(line: string): string | undefined {
+  if (!line || line.startsWith(':') || !line.startsWith('data:')) {
+    return undefined;
+  }
+  const data = line.slice(5);
+  return data.startsWith(' ') ? data.slice(1) : data;
+}
+
+function getOpenAiStreamingErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) {
+      return message;
+    }
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function appendFunctionCall(
+  choice: OpenAiStreamingChoice,
+  functionCallDelta: { name?: string; arguments?: string },
+) {
+  choice.functionCall ??= { name: '', arguments: '' };
+  choice.functionCall.name += functionCallDelta.name || '';
+  choice.functionCall.arguments += functionCallDelta.arguments || '';
+}
+
+function appendToolCalls(
+  choice: OpenAiStreamingChoice,
+  toolCallDeltas: Array<{
+    index: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }>,
+) {
+  for (const toolCallDelta of toolCallDeltas) {
+    const index = toolCallDelta.index;
+    if (!Number.isSafeInteger(index) || index < 0) {
+      throw new Error('Invalid streaming tool call index');
+    }
+    const toolCall = choice.toolCalls.get(index) ?? {
+      id: '',
+      type: 'function',
+      function: { name: '', arguments: '' },
+    };
+    toolCall.id = toolCallDelta.id || toolCall.id;
+    toolCall.function.name += toolCallDelta.function?.name || '';
+    toolCall.function.arguments += toolCallDelta.function?.arguments || '';
+    choice.toolCalls.set(index, toolCall);
+  }
+}
+
+function getOpenAiStreamingChoice(
+  state: OpenAiStreamingState,
+  index: number,
+): OpenAiStreamingChoice {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new Error('Invalid streaming choice index');
+  }
+  let choice = state.choices.get(index);
+  if (!choice) {
+    choice = {
+      index,
+      content: '',
+      refusal: '',
+      reasoning: '',
+      reasoningContent: '',
+      logProbs: [],
+      finishReason: null,
+      functionCall: null,
+      toolCalls: new Map(),
+    };
+    state.choices.set(index, choice);
+  }
+  return choice;
+}
+
+function appendStreamingChoice(
+  state: OpenAiStreamingState,
+  choice?: {
+    index?: number;
+    delta?: {
+      content?: string;
+      refusal?: string;
+      reasoning?: string;
+      reasoning_content?: string;
+      function_call?: { name?: string; arguments?: string };
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    logprobs?: {
+      content?: Array<{ token?: string; logprob?: number }>;
+    } | null;
+    finish_reason?: string | null;
+  },
+) {
+  if (!choice) {
+    return;
+  }
+  const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
+  streamingChoice.content += choice.delta?.content || '';
+  streamingChoice.refusal += choice.delta?.refusal || '';
+  streamingChoice.reasoning += choice.delta?.reasoning || '';
+  streamingChoice.reasoningContent += choice.delta?.reasoning_content || '';
+  for (const logProb of choice.logprobs?.content ?? []) {
+    if (typeof logProb.logprob === 'number') {
+      streamingChoice.logProbs.push(logProb.logprob);
+    }
+  }
+  if (choice.delta?.function_call) {
+    appendFunctionCall(streamingChoice, choice.delta.function_call);
+  }
+  if (choice.delta?.tool_calls) {
+    appendToolCalls(streamingChoice, choice.delta.tool_calls);
+  }
+  if (choice.finish_reason) {
+    streamingChoice.finishReason = choice.finish_reason;
+  }
+}
+
+function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string): boolean {
+  if (data === '[DONE]') {
+    state.completed = true;
+    return true;
+  }
+
+  try {
+    const chunk = JSON.parse(data) as {
+      choices?: Array<Parameters<typeof appendStreamingChoice>[1]>;
+      usage?: OpenAiStreamingUsage;
+      service_tier?: string | null;
+      error?: unknown;
+    };
+    if (chunk.error !== undefined && chunk.error !== null) {
+      state.error = getOpenAiStreamingErrorMessage(chunk.error);
+      return true;
+    }
+    if (chunk.choices !== undefined && !Array.isArray(chunk.choices)) {
+      throw new Error('Invalid streaming choices');
+    }
+    for (const choice of chunk.choices ?? []) {
+      appendStreamingChoice(state, choice);
+    }
+    if (chunk.usage) {
+      state.usage = chunk.usage;
+    }
+    if (chunk.service_tier !== undefined) {
+      state.serviceTier = chunk.service_tier;
+    }
+  } catch {
+    state.malformed = true;
+    logger.debug('Failed to parse OpenAI SSE chunk');
+  }
+
+  return false;
+}
+
+function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): boolean {
+  const dataLines = event
+    .split(/\r?\n/)
+    .map(getSseData)
+    .filter((data): data is string => data !== undefined);
+  if (dataLines.length === 0) {
+    return false;
+  }
+
+  const joinedData = dataLines.join('\n');
+  try {
+    if (joinedData !== '[DONE]') {
+      JSON.parse(joinedData);
+    }
+    return processOpenAiStreamingChunk(state, joinedData);
+  } catch {
+    // Some OpenAI-compatible proxies omit blank event separators and emit each
+    // data line as an independent JSON chunk. Preserve that compatibility only
+    // when every line is independently valid; otherwise fail closed below.
+    const independentlyValid = dataLines.every((data) => {
+      if (data === '[DONE]') {
+        return true;
+      }
+      try {
+        JSON.parse(data);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (independentlyValid && dataLines.length > 1) {
+      return dataLines.some((data) => processOpenAiStreamingChunk(state, data));
+    }
+    return processOpenAiStreamingChunk(state, joinedData);
+  }
+}
+
+function processOpenAiSseEvents(state: OpenAiStreamingState, events: string[]): boolean {
+  return events.some((event) => processOpenAiSseEvent(state, event));
+}
+
+async function readOpenAiStreamingResponse(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<OpenAiStreamingState> {
+  const decoder = new TextDecoder();
+  const state: OpenAiStreamingState = {
+    choices: new Map(),
+    completed: false,
+    malformed: false,
+  };
+  let buffer = '';
+  let streamDone = false;
+
+  try {
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) {
+        buffer += decoder.decode();
+        if (buffer) {
+          processOpenAiSseEvent(state, buffer);
+        }
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() || '';
+      streamDone = processOpenAiSseEvents(state, events);
+    }
+  } finally {
+    if (streamDone) {
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  return state;
+}
+
+function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string | undefined {
+  if (state.error) {
+    return `API returned streaming error: ${state.error}`;
+  }
+  if (state.malformed) {
+    return 'API returned malformed SSE data during streaming request';
+  }
+  if (!state.completed) {
+    return 'Streaming response ended before the [DONE] completion marker was received';
+  }
+  if (!state.choices.has(0)) {
+    return 'Streaming response did not include a primary choice';
+  }
+  return undefined;
+}
+
+function getOpenAiStreamingToolCalls(choice: OpenAiStreamingChoice): OpenAiStreamingToolCall[] {
+  return Array.from(choice.toolCalls.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([, toolCall]) => toolCall)
+    .filter((toolCall) => toolCall.function?.name);
+}
+
+function getOpenAiStreamingOutput(choice: OpenAiStreamingChoice): any {
+  if (choice.functionCall?.name) {
+    return choice.functionCall;
+  }
+
+  const validToolCalls = getOpenAiStreamingToolCalls(choice);
+  if (validToolCalls.length > 0) {
+    return choice.content
+      ? { content: choice.content, tool_calls: validToolCalls }
+      : validToolCalls;
+  }
+
+  return choice.content;
+}
+
+function getOpenAiStreamingChoiceMetadata(choice: OpenAiStreamingChoice) {
+  const toolCalls = getOpenAiStreamingToolCalls(choice);
+  return {
+    index: choice.index,
+    finish_reason: choice.finishReason,
+    message: {
+      role: 'assistant',
+      content: choice.content,
+      ...(choice.refusal ? { refusal: choice.refusal } : {}),
+      ...(choice.reasoning ? { reasoning: choice.reasoning } : {}),
+      ...(choice.reasoningContent ? { reasoning_content: choice.reasoningContent } : {}),
+      ...(choice.functionCall?.name ? { function_call: choice.functionCall } : {}),
+      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+    },
+  };
+}
+
+function parseStructuredStreamingOutput(output: any, config: OpenAiCompletionOptions): any {
+  if (config.response_format?.type !== 'json_schema' || typeof output !== 'string') {
+    return output;
+  }
+
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    logger.error(`Failed to parse JSON output: ${error}`);
+    return output;
+  }
+}
+
+function maybePrependOpenAiStreamingReasoning(
+  output: any,
+  choice: OpenAiStreamingChoice,
+  showThinking: boolean,
+): any {
+  const reasoning = choice.reasoning || choice.reasoningContent;
+  if (!showThinking || !reasoning || typeof output !== 'string') {
+    return output;
+  }
+  return `Thinking: ${reasoning}\n\n${output}`;
+}
+
+function getOpenAiStreamingTokenUsage(
+  usage?: OpenAiStreamingUsage,
+): ProviderResponse['tokenUsage'] {
+  if (!usage) {
+    return undefined;
+  }
+  return getTokenUsage({ usage }, false);
+}
+
+function buildOpenAiStreamingResponse(
+  state: OpenAiStreamingState,
+  billingModelName: string,
+  config: OpenAiCompletionOptions,
+  latencyMs: number,
+): ProviderResponse {
+  const primaryChoice = state.choices.get(0)!;
+  let output = parseStructuredStreamingOutput(getOpenAiStreamingOutput(primaryChoice), config);
+  const normalizedFinishReason = normalizeFinishReason(primaryChoice.finishReason);
+  const contentFiltered = normalizedFinishReason === FINISH_REASON_MAP.content_filter;
+  const refused = primaryChoice.refusal.length > 0;
+  if (refused) {
+    output = primaryChoice.refusal;
+  } else if (contentFiltered && output === '') {
+    output = 'Content filtered by provider';
+  } else if (!contentFiltered) {
+    output = maybePrependOpenAiStreamingReasoning(
+      output,
+      primaryChoice,
+      config.showThinking ?? true,
+    );
+  }
+  const choices = Array.from(state.choices.values()).sort(
+    (left, right) => left.index - right.index,
+  );
+  const logProbs = primaryChoice.logProbs.length > 0 ? primaryChoice.logProbs : undefined;
+
+  return {
+    output,
+    tokenUsage: getOpenAiStreamingTokenUsage(state.usage),
+    cached: false,
+    latencyMs,
+    ...(logProbs ? { logProbs } : {}),
+    ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
+    cost: calculateOpenAIUsageCost(billingModelName, config, state.usage, {
+      cachedResponse: false,
+      serviceTier: state.serviceTier ?? config.service_tier,
+    }),
+    ...(refused || contentFiltered ? { isRefusal: true } : {}),
+    guardrails: { flagged: refused || contentFiltered },
+    ...(choices.length > 1 && {
+      metadata: { choices: choices.map(getOpenAiStreamingChoiceMetadata) },
+    }),
+  };
+}
+
+function createOpenAiStreamingAbortSignal(
+  requestTimeoutMs: number,
+  abortSignal?: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } {
+  const timeoutSignal = AbortSignal.timeout(requestTimeoutMs);
+  if (!abortSignal) {
+    return { signal: timeoutSignal, cleanup: () => undefined };
+  }
+  if (abortSignal.aborted) {
+    return { signal: abortSignal, cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const abortFromTimeout = () => controller.abort(timeoutSignal.reason);
+  const abortFromCaller = () => controller.abort(abortSignal.reason);
+  timeoutSignal.addEventListener('abort', abortFromTimeout, { once: true });
+  abortSignal.addEventListener('abort', abortFromCaller, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      timeoutSignal.removeEventListener('abort', abortFromTimeout);
+      abortSignal.removeEventListener('abort', abortFromCaller);
+    },
+  };
+}
+
+function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['metadata'] {
+  return {
+    http: {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers ? Object.fromEntries(response.headers.entries()) : {},
+    },
+  };
+}
+
+async function getOpenAiStreamingApiErrorResponse(
+  response: Response,
+  metadata: ProviderResponse['metadata'],
+): Promise<ProviderResponse | undefined> {
+  if (response.ok) {
+    return undefined;
+  }
+
+  const errorText = await response.text();
+  const errorMessage = `API error: ${response.status} ${response.statusText}\n${errorText}`;
+  try {
+    const errorBody = JSON.parse(errorText) as { error?: { code?: string } };
+    if (errorBody.error?.code === 'invalid_prompt') {
+      return {
+        output: errorMessage,
+        isRefusal: true,
+        guardrails: { flagged: true, flaggedInput: true },
+        metadata,
+      };
+    }
+  } catch {
+    // Non-JSON API errors remain ordinary transport failures.
+  }
+  return { error: errorMessage, metadata };
+}
+
+async function getOpenAiStreamingReader(
+  response: Response,
+  metadata: ProviderResponse['metadata'],
+): Promise<{
+  reader?: ReadableStreamDefaultReader<Uint8Array>;
+  errorResponse?: ProviderResponse;
+}> {
+  const apiErrorResponse = await getOpenAiStreamingApiErrorResponse(response, metadata);
+  if (apiErrorResponse) {
+    return { errorResponse: apiErrorResponse };
+  }
+
+  if (!response.body) {
+    return { errorResponse: { error: 'No response body for streaming request', metadata } };
+  }
+
+  return { reader: response.body.getReader() };
+}
+
+function getOpenAiStreamingTransportErrorResponse(
+  err: unknown,
+  requestTimeoutMs: number,
+  metadata: ProviderResponse['metadata'] | undefined,
+  abortSignal?: AbortSignal,
+): ProviderResponse {
+  if (err instanceof HttpRateLimitError) {
+    return {
+      error: formatRateLimitErrorMessage(err),
+      metadata: {
+        rateLimitKind: err.kind,
+        http: {
+          status: err.status,
+          statusText: err.statusText,
+          headers: err.headers ?? {},
+        },
+      },
+    };
+  }
+
+  if (err instanceof Error && err.name === 'TimeoutError') {
+    return {
+      error: `API call timed out after ${requestTimeoutMs}ms`,
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+
+  if (abortSignal?.aborted) {
+    return {
+      error: `API call aborted: ${String(abortSignal.reason ?? err)}`,
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+
+  return {
+    error: `API call error: ${String(err)}`,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function normalizeMcpContent(content: any): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as any).text != null) {
+            return String((part as any).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as any).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as any).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -181,6 +781,78 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error; // Re-throw so caller can handle fallback behavior
+    }
+  }
+
+  private async resolveFunctionToolCallbacks(
+    functionCalls: OpenAiFunctionCallLike[] | undefined,
+    config: OpenAiCompletionOptions,
+  ): Promise<string | undefined> {
+    if (!functionCalls || (!config.functionToolCallbacks && !this.mcpClient)) {
+      return undefined;
+    }
+
+    const results = [];
+    let hasSuccessfulCallback = false;
+    for (const functionCall of functionCalls) {
+      const functionName = functionCall.name || functionCall.function?.name;
+      if (!functionName) {
+        continue;
+      }
+
+      const mcpResult = await this.resolveMcpToolCallback(functionName, functionCall);
+      if (mcpResult !== undefined) {
+        results.push(mcpResult);
+        hasSuccessfulCallback = true;
+        continue;
+      }
+
+      if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
+        try {
+          const functionResult = await this.executeFunctionCallback(
+            functionName,
+            functionCall.arguments || functionCall.function?.arguments || '{}',
+            config,
+          );
+          results.push(functionResult);
+          hasSuccessfulCallback = true;
+        } catch (error) {
+          logger.debug(
+            `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
+          );
+          hasSuccessfulCallback = false;
+          break;
+        }
+      }
+    }
+
+    return hasSuccessfulCallback && results.length > 0 ? results.join('\n') : undefined;
+  }
+
+  private async resolveMcpToolCallback(
+    functionName: string,
+    functionCall: OpenAiFunctionCallLike,
+  ): Promise<string | undefined> {
+    if (!this.mcpClient) {
+      return undefined;
+    }
+
+    const mcpTool = this.mcpClient.getAllTools().find((tool) => tool.name === functionName);
+    if (!mcpTool) {
+      return undefined;
+    }
+
+    try {
+      const args = functionCall.arguments || functionCall.function?.arguments || '{}';
+      const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+      const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+      if (isMcpErrorResult(mcpResult)) {
+        return `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`;
+      }
+      return `MCP Tool Result (${functionName}): ${normalizeMcpContent(mcpResult?.content)}`;
+    } catch (error) {
+      logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
+      return `MCP Tool Error (${functionName}): ${error}`;
     }
   }
 
@@ -453,6 +1125,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
+    // Use streaming mode if explicitly enabled
+    // Streaming helps prevent 504 gateway timeouts for long-running requests
+    const shouldStream = config.stream ?? false;
+    if (shouldStream) {
+      return this.callApiStreaming(body, config, callApiOptions);
+    }
+
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
         OpenAI.ChatCompletion.Choice & {
@@ -669,116 +1348,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
-      if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
-        const results = [];
-        let hasSuccessfulCallback = false;
-        for (const functionCall of functionCalls) {
-          const functionName = functionCall.name || functionCall.function?.name;
-
-          // Try MCP first if available
-          if (this.mcpClient) {
-            const mcpTools = this.mcpClient.getAllTools();
-            const mcpTool = mcpTools.find((tool) => tool.name === functionName);
-            if (mcpTool) {
-              try {
-                const args = functionCall.arguments || functionCall.function?.arguments || '{}';
-                const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-
-                if (isMcpErrorResult(mcpResult)) {
-                  results.push(
-                    `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`,
-                  );
-                } else {
-                  // Normalize MCP content to a readable string
-                  const normalizeContent = (content: any): string => {
-                    if (content == null) {
-                      return '';
-                    }
-                    if (typeof content === 'string') {
-                      return content;
-                    }
-                    if (Array.isArray(content)) {
-                      return content
-                        .map((part) => {
-                          if (typeof part === 'string') {
-                            return part;
-                          }
-                          if (part && typeof part === 'object') {
-                            if ('text' in part && (part as any).text != null) {
-                              return String((part as any).text);
-                            }
-                            if ('json' in part) {
-                              return JSON.stringify((part as any).json);
-                            }
-                            if ('data' in part) {
-                              return JSON.stringify((part as any).data);
-                            }
-                            return JSON.stringify(part);
-                          }
-                          return String(part);
-                        })
-                        .join('\n');
-                    }
-                    return JSON.stringify(content);
-                  };
-
-                  const content = normalizeContent(mcpResult?.content);
-                  results.push(`MCP Tool Result (${functionName}): ${content}`);
-                }
-                hasSuccessfulCallback = true;
-                continue; // Skip to next function call
-              } catch (error) {
-                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
-                hasSuccessfulCallback = true;
-                continue; // Skip to next function call
-              }
-            }
-          }
-
-          // Fall back to regular function callbacks
-          if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                functionCall.arguments || functionCall.function?.arguments,
-                config,
-              );
-              results.push(functionResult);
-              hasSuccessfulCallback = true;
-            } catch (error) {
-              // If callback fails, fall back to original behavior (return the function call)
-              logger.debug(
-                `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
-              );
-              hasSuccessfulCallback = false;
-              break;
-            }
-          }
-        }
-        if (hasSuccessfulCallback && results.length > 0) {
-          return {
-            output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            latencyMs,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-              cachedResponse: cached,
-              serviceTier: data.service_tier ?? config.service_tier,
-            }),
-            guardrails: { flagged: contentFiltered },
-            metadata: {
-              http: {
-                status,
-                statusText,
-                headers: responseHeaders ?? {},
-              },
+      const callbackOutput = await this.resolveFunctionToolCallbacks(functionCalls, config);
+      if (callbackOutput !== undefined) {
+        return {
+          output: callbackOutput,
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
+          logProbs,
+          ...(finishReason && { finishReason }),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? config.service_tier,
+          }),
+          guardrails: { flagged: contentFiltered },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
             },
-          };
-        }
+          },
+        };
       }
 
       // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
@@ -854,6 +1445,115 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
         },
       };
+    }
+  }
+
+  /**
+   * Handles streaming API calls using native fetch with SSE parsing.
+   * Streaming helps prevent 504 gateway timeouts for long-running requests
+   * by keeping the connection alive with incremental data.
+   */
+  private async callApiStreaming(
+    body: Record<string, any>,
+    config: OpenAiCompletionOptions,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const startTime = Date.now();
+    let metadata: ProviderResponse['metadata'];
+    if (Array.isArray(body.modalities) && body.modalities.includes('audio')) {
+      return {
+        error:
+          'Streaming Chat Completions do not support audio output. Set stream: false when requesting the audio modality.',
+      };
+    }
+    const apiKey = this.getApiKey();
+    const requestTimeoutMs = getRequestTimeoutMs();
+    const streamingAbort = createOpenAiStreamingAbortSignal(
+      requestTimeoutMs,
+      callApiOptions?.abortSignal,
+    );
+
+    try {
+      // Build streaming request body
+      const streamBody = {
+        ...body,
+        stream: true,
+        // Request usage stats in the final chunk
+        stream_options: {
+          ...getStreamingPassthroughOptions(body),
+          include_usage: true,
+        },
+      };
+
+      const url = `${this.getApiUrl()}/chat/completions`;
+      logger.debug(`Starting streaming request to ${url}`, { model: this.modelName });
+
+      const response = await fetchProviderRequestWithRetries(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            ...this.getOpenAiRequestHeaders(config.headers),
+          },
+          body: JSON.stringify(streamBody),
+          signal: streamingAbort.signal,
+        },
+        requestTimeoutMs,
+        this.config.maxRetries,
+      );
+      metadata = getOpenAiStreamingHttpMetadata(response);
+
+      const streamingReader = await getOpenAiStreamingReader(response, metadata);
+      if (streamingReader.errorResponse) {
+        return streamingReader.errorResponse;
+      }
+
+      // Parse SSE stream
+      const streamingState = await readOpenAiStreamingResponse(streamingReader.reader!);
+      const validationError = getOpenAiStreamingValidationError(streamingState);
+      if (validationError) {
+        return { error: validationError, metadata };
+      }
+      const primaryChoice = streamingState.choices.get(0)!;
+
+      const latencyMs = Date.now() - startTime;
+      logger.debug(`Streaming request completed in ${latencyMs}ms`, {
+        model: this.modelName,
+        contentLength: primaryChoice.content.length,
+        finishReason: primaryChoice.finishReason,
+      });
+
+      const providerResponse = buildOpenAiStreamingResponse(
+        streamingState,
+        this.getBillingModelName(config),
+        config,
+        latencyMs,
+      );
+      const callbackOutput = await this.resolveFunctionToolCallbacks(
+        primaryChoice.functionCall
+          ? [primaryChoice.functionCall]
+          : getOpenAiStreamingToolCalls(primaryChoice),
+        config,
+      );
+      if (callbackOutput !== undefined) {
+        providerResponse.output = callbackOutput;
+      }
+      providerResponse.metadata = { ...providerResponse.metadata, ...metadata };
+
+      return providerResponse;
+    } catch (err) {
+      const latencyMs = Date.now() - startTime;
+      logger.error(`Streaming API call error after ${latencyMs}ms: ${String(err)}`);
+      return getOpenAiStreamingTransportErrorResponse(
+        err,
+        requestTimeoutMs,
+        metadata,
+        callApiOptions?.abortSignal,
+      );
+    } finally {
+      streamingAbort.cleanup();
     }
   }
 }
