@@ -231,15 +231,20 @@ describe('calculateMoonshotCost', () => {
     expect(cost).toBeCloseTo(1000 * 0.000001 + 500 * 0.000004, 10);
   });
 
-  it('bills cached prompt tokens at cacheReadCost when supplied', () => {
+  it('uses per-token rates converted from per-million pricing for mixed cached input', () => {
     const cost = calculateMoonshotCost(
-      { inputCost: 0.000002, outputCost: 0.000004, cacheReadCost: 0.0000005 },
-      1000,
+      {
+        inputCost: 0.95 / 1_000_000,
+        cacheReadCost: 0.16 / 1_000_000,
+        outputCost: 4 / 1_000_000,
+      },
+      1_000,
       500,
       400,
     );
-    const expected = 600 * 0.000002 + 400 * 0.0000005 + 500 * 0.000004;
-    expect(cost).toBeCloseTo(expected, 10);
+
+    // 600 uncached input, 400 cached input, and 500 output tokens.
+    expect(cost).toBe(0.002634);
   });
 });
 
