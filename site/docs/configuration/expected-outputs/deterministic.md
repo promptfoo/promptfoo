@@ -136,14 +136,17 @@ assert:
 
 For case insensitive matching, use `icontains-any`.
 
-When `contains-any`, `contains-all`, or their case-insensitive and inverse variants are written as assertion strings, separate values with commas. Wrap a value that contains a comma in double quotes:
+In YAML or JSON, list each value separately under `value`, so commas inside a value need no escaping:
 
 ```yaml
 assert:
-  - 'contains-all:"1,000",in stock'
+  - type: contains-all
+    value:
+      - '1,000'
+      - 'in stock'
 ```
 
-This checks for the two values `1,000` and `in stock`. See [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for the additional escaping needed inside a CSV cell.
+The comma-separated **string** form (for example `contains-all:1,000,in stock`) is a shorthand for the `__expected` column of CSV files and other spreadsheet sources (Google Sheets, XLSX); it is not accepted in YAML `assert:` or JSON test files. In that string form, wrap a value that contains a comma in double quotes (`contains-all:"1,000",in stock`). See [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for the additional escaping needed inside a CSV cell.
 
 ### Regex
 
