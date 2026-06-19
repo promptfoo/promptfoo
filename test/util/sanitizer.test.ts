@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -12,17 +12,12 @@ import {
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
-beforeAll(() => {
+beforeEach(() => {
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  consoleErrorSpy.mockClear();
-  consoleWarnSpy.mockClear();
-});
-
-afterAll(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
 });
