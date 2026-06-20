@@ -317,7 +317,7 @@
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "read-excel-file": "^9.0.0",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.104.0",
