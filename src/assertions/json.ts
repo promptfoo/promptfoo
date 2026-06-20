@@ -69,7 +69,7 @@ export function handleContainsJson({
   inverse,
   valueFromScript,
 }: AssertionParams): GradingResult {
-  let errorMessage = 'Expected output to contain valid JSON';
+  let errorMessage = `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`;
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {

@@ -1273,6 +1273,25 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail not-contains-json without a schema with a message that matches the assertion', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to not contain valid JSON',
+    });
+  });
+
   it('should pass when the javascript assertion passes', async () => {
     const output = 'Expected output';
 
