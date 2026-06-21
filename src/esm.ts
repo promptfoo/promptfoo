@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -7,7 +6,6 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
-import { JAVASCRIPT_EXTENSIONS } from './util/fileExtensions';
 import { safeResolve } from './util/pathUtils';
 
 /**
@@ -165,33 +163,28 @@ async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   await tsxLoaderPromise;
 }
 
-function normalizeModuleExtension(modulePath: string): string {
+async function normalizeModuleExtension(modulePath: string): Promise<string> {
   const extension = path.extname(modulePath);
   const normalizedExtension = extension.toLowerCase();
-  if (
-    extension === normalizedExtension ||
-    !JAVASCRIPT_EXTENSIONS.includes(normalizedExtension.slice(1))
-  ) {
+  if (extension === normalizedExtension || !/^\.[cm]?[jt]s$/.test(normalizedExtension)) {
     return modulePath;
   }
 
   const normalizedPath = `${modulePath.slice(0, -extension.length)}${normalizedExtension}`;
-  if (!fs.existsSync(normalizedPath)) {
+  const [requestedFile, normalizedFile] = await Promise.all([
+    fsPromises.stat(modulePath).catch(() => undefined),
+    fsPromises.stat(normalizedPath).catch(() => undefined),
+  ]);
+  if (!normalizedFile) {
     return modulePath;
   }
-  if (!fs.existsSync(modulePath)) {
+  if (!requestedFile) {
     return normalizedPath;
   }
 
-  try {
-    const requestedFile = fs.statSync(modulePath);
-    const normalizedFile = fs.statSync(normalizedPath);
-    return requestedFile.dev === normalizedFile.dev && requestedFile.ino === normalizedFile.ino
-      ? normalizedPath
-      : modulePath;
-  } catch {
-    return modulePath;
-  }
+  return requestedFile.dev === normalizedFile.dev && requestedFile.ino === normalizedFile.ino
+    ? normalizedPath
+    : modulePath;
 }
 
 /**
@@ -247,7 +240,7 @@ export function getDirectory(): string {
  * Uses Node.js native ESM import with proper URL resolution
  */
 export async function importModule(modulePath: string, functionName?: string) {
-  const loadPath = normalizeModuleExtension(modulePath);
+  const loadPath = await normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
   );
