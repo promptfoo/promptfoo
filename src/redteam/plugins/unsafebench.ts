@@ -71,7 +71,7 @@ async function processImageToJpeg(
     );
 
     // Check what processing is needed
-    const isJpeg = metadata.format === 'jpeg' || metadata.format === 'jpg';
+    const isJpeg = metadata.format === 'jpeg';
     const needsFormatConversion = !isJpeg;
 
     // Check if image exceeds size limits (only check if we have dimensions)
