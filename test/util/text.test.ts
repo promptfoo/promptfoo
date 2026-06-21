@@ -25,4 +25,15 @@ describe('ellipsize', () => {
   it('should handle empty string', () => {
     expect(ellipsize('', 5)).toBe('');
   });
+
+  it('should stay within maxLen when maxLen is too small for an ellipsis', () => {
+    // maxLen < 3 has no room for "..."; the result must still respect maxLen
+    // (previously slice(0, maxLen - 3) used a negative index and overflowed).
+    expect(ellipsize('hello', 2)).toBe('he');
+    expect(ellipsize('hello', 1)).toBe('h');
+    expect(ellipsize('hello', 0)).toBe('');
+    for (const maxLen of [0, 1, 2, 3]) {
+      expect(ellipsize('hello', maxLen).length).toBeLessThanOrEqual(maxLen);
+    }
+  });
 });
