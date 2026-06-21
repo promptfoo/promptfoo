@@ -7,6 +7,7 @@ import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
 import logger from './logger';
+import { JAVASCRIPT_EXTENSIONS } from './util/fileExtensions';
 import { safeResolve } from './util/pathUtils';
 
 /**
@@ -164,6 +165,35 @@ async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   await tsxLoaderPromise;
 }
 
+function normalizeModuleExtension(modulePath: string): string {
+  const extension = path.extname(modulePath);
+  const normalizedExtension = extension.toLowerCase();
+  if (
+    extension === normalizedExtension ||
+    !JAVASCRIPT_EXTENSIONS.includes(normalizedExtension.slice(1))
+  ) {
+    return modulePath;
+  }
+
+  const normalizedPath = `${modulePath.slice(0, -extension.length)}${normalizedExtension}`;
+  if (!fs.existsSync(normalizedPath)) {
+    return modulePath;
+  }
+  if (!fs.existsSync(modulePath)) {
+    return normalizedPath;
+  }
+
+  try {
+    const requestedFile = fs.statSync(modulePath);
+    const normalizedFile = fs.statSync(normalizedPath);
+    return requestedFile.dev === normalizedFile.dev && requestedFile.ino === normalizedFile.ino
+      ? normalizedPath
+      : modulePath;
+  } catch {
+    return modulePath;
+  }
+}
+
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds.
  *
@@ -217,14 +247,15 @@ export function getDirectory(): string {
  * Uses Node.js native ESM import with proper URL resolution
  */
 export async function importModule(modulePath: string, functionName?: string) {
+  const loadPath = normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
   );
 
   try {
-    await ensureTypescriptLoader(modulePath);
+    await ensureTypescriptLoader(loadPath);
 
-    const resolvedPath = pathToFileURL(safeResolve(modulePath));
+    const resolvedPath = pathToFileURL(safeResolve(loadPath));
     const resolvedPathStr = resolvedPath.toString();
     logger.debug(`Attempting ESM import from: ${resolvedPathStr}`);
 
@@ -248,13 +279,13 @@ export async function importModule(modulePath: string, functionName?: string) {
     // Note: createRequire() doesn't work for .js files in "type": "module" packages
     // because Node.js still treats them as ESM based on package.json.
     // We use Node's vm module to execute the code with proper CJS globals.
-    if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
+    if (loadPath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
       logger.debug(
         `ESM import failed for ${modulePath}, attempting vm-based CJS fallback: ${errorMessage}`,
       );
 
       try {
-        const resolvedPath = safeResolve(modulePath);
+        const resolvedPath = safeResolve(loadPath);
         const mod = loadCjsModule(resolvedPath);
         logger.debug(
           `Successfully loaded module via CJS fallback: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
@@ -299,7 +330,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     // This provides clearer error messages for users when their files don't exist.
     const nodeError = err as NodeJS.ErrnoException;
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
-      const resolvedModulePath = safeResolve(modulePath);
+      const resolvedModulePath = safeResolve(loadPath);
       try {
         await fsPromises.access(resolvedModulePath);
         // File exists - the error is about a missing dependency, log and preserve original error
