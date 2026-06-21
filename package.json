@@ -332,7 +332,7 @@
     "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "2.8.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
