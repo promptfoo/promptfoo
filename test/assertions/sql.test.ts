@@ -725,6 +725,86 @@ describe('is-sql assertion', () => {
   });
 });
 
+describe('contains-sql assertion', () => {
+  const fence = '```';
+  const runContainsSql = (outputString: string, inverse = false) =>
+    handleContainsSql({
+      assertion: { type: inverse ? 'not-contains-sql' : 'contains-sql' },
+      renderedValue: undefined,
+      outputString,
+      inverse,
+    } as AssertionParams);
+
+  it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
+    // Before the fix, the [^`]+ fence regex could not contain backticks, so this
+    // valid MySQL (backtick-quoted identifiers) failed to extract and fell through
+    // to validating the whole fenced string (including the fences) -> failure.
+    const outputString = `Here is the query:\n${fence}sql\nSELECT \`id\` FROM \`users\`;\n${fence}`;
+    const result: GradingResult = await runContainsSql(outputString);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should still extract a plain fenced SQL block', async () => {
+    const outputString = `${fence}sql\nSELECT id, name FROM users\n${fence}`;
+    const result: GradingResult = await runContainsSql(outputString);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should extract SQL with an escaped backtick in an identifier', async () => {
+    const outputString = `${fence}sql\nSELECT \`a\`\`b\` FROM \`users\`;\n${fence}`;
+    const result = await runContainsSql(outputString);
+
+    expect(result.pass).toBe(true);
+  });
+
+  it('should find valid SQL after a non-SQL code block', async () => {
+    const outputString = `${fence}python\nprint('hello')\n${fence}\n${fence}sql\nSELECT 1;\n${fence}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+    await expect(runContainsSql(outputString, true)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+    });
+  });
+
+  it('should find valid SQL after an invalid SQL block', async () => {
+    const outputString = `${fence}sql\nnot sql\n${fence}\n${fence}sql\nSELECT 1;\n${fence}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([
+    ['a four-backtick fence', '````sql\nSELECT `id` FROM `users`;\n````'],
+    ['a tilde fence', '~~~sql\nSELECT 1;\n~~~'],
+    ['a longer closing fence', '```sql\nSELECT 1;\n````'],
+  ])('should extract SQL from %s', async (_description, outputString) => {
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a whitespace-only string', ' \n\t'],
+    ['an empty fenced block', `${fence}sql\n${fence}`],
+    ['a whitespace-only fenced block', `${fence}sql\n  \n${fence}`],
+    ['an unclosed fenced block', `${fence}sql\nSELECT 1;`],
+    ['a non-SQL fenced block', `${fence}python\nprint('hello')\n${fence}`],
+    ['a tag that merely starts with sql', `${fence}sqlSELECT\nSELECT 1;\n${fence}`],
+  ])('should reject %s', async (_description, outputString) => {
+    const result = await runContainsSql(outputString);
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it('should pass not-contains-sql when every SQL block is invalid', async () => {
+    const outputString = `${fence}sql\nnot sql\n${fence}\n${fence}\nstill not sql\n${fence}`;
+
+    await expect(runContainsSql(outputString, true)).resolves.toMatchObject({
+      pass: true,
+      score: 1,
+    });
+  });
+});
+
 describe('is-sql parser loading', () => {
   beforeEach(() => {
     vi.resetModules();
