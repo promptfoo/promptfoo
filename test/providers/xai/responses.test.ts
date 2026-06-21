@@ -254,6 +254,82 @@ describe('XAIResponsesProvider', () => {
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
   });
 
+  it('applies cache-read pricing when cost ticks are absent', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_cached',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          input_tokens_details: {
+            cached_tokens: 8,
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 2 uncached input @ $1.25/M + 8 cached input @ $0.20/M + 5 output @ $2.50/M.
+    expect(result.cost).toBeCloseTo(0.0000166, 10);
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(8);
+  });
+
+  it('honors explicit cache-read pricing overrides', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        id: 'resp_cached_override',
+        model: 'grok-4.3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          input_tokens_details: { cached_tokens: 8 },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: {
+        apiKey: 'test-key',
+        inputCost: 3e-6,
+        outputCost: 15e-6,
+        cacheReadCost: 0.75e-6,
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // 2 uncached input @ $3/M + 8 cached input @ $0.75/M + 5 output @ $15/M.
+    expect(result.cost).toBeCloseTo(0.000087, 10);
+  });
+
   it('keeps fallback xAI pricing when input tokens are zero', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {

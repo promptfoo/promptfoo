@@ -332,6 +332,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
+    it('throws on __expected0 since indices are 1-based', () => {
+      const key = '__config:__expected0:threshold';
+      const row: CsvRow = {
+        __expected1: 'equals:foo',
+        [key]: '0.5',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow(
+        'Invalid expected key "__expected0" in __config column',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid expected key "__expected0" in __config column "__config:__expected0:threshold". Must be __expected or __expected<N> where N is a positive integer.',
+      );
+    });
+
     it('throws on invalid config key in __config column', () => {
       const key = '__config:__expected1:bogus';
       const row: CsvRow = {
@@ -347,18 +362,82 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it('throws on non-numeric threshold values', () => {
+    it.each([
+      'not-a-number',
+      '0abc',
+      '0,8',
+    ])('throws on invalid threshold value %s', (thresholdValue) => {
       const key = '__config:__expected1:threshold';
       const row: CsvRow = {
         __expected1: 'similar:foo',
-        [key]: 'not-a-number',
+        [key]: thresholdValue,
       } as any;
 
       expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
       expect(logger.error).toHaveBeenCalledWith(
-        'Invalid numeric value "not-a-number" for config key "threshold" in column "__config:__expected1:threshold"',
+        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
       );
     });
+  });
+  it('should preserve zero __threshold in the test case', () => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: '0',
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // threshold: 0 is a valid value (e.g. "always pass regardless of score").
+    // A falsy guard like `threshold ? { threshold } : {}` silently drops it.
+    expect(result.threshold).toBe(0);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['non-numeric', 'abc'],
+    ['whitespace', '   '],
+    ['numeric prefix', '0abc'],
+    ['comma decimal', '0,8'],
+    ['non-finite literal', 'Infinity'],
+    ['overflow', '1e309'],
+    ['hexadecimal', '0x10'],
+  ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // A blank/garbage cell must be treated as "unset" so it inherits defaultTest.threshold
+    // via `testCase.threshold ?? defaultTest?.threshold` in the evaluator. Leaking NaN here
+    // would clobber that inheritance (NaN ?? x === NaN), so the key must be omitted entirely.
+    expect(result).not.toHaveProperty('threshold');
+  });
+
+  it.each([
+    ['integer', '5', 5],
+    ['decimal', '0.8', 0.8],
+    ['leading-dot decimal', '.5', 0.5],
+    ['trailing-dot decimal', '5.', 5],
+    ['negative', '-1', -1],
+    ['exponent', '1e3', 1000],
+    ['signed exponent', '-2.5e-2', -0.025],
+    ['explicit plus', '+1', 1],
+    ['surrounding whitespace', '  0.8  ', 0.8],
+  ])('should parse a %s __threshold cell to %s', (_label, thresholdValue, expected) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // Pins the numeric contract of parseFiniteNumber: complete numeric literals
+    // (including negatives, exponents, and leading-dot decimals) are accepted and
+    // trimmed. This is intentionally wider than a bare integer parse, so the behavior
+    // is locked down here to catch any future regression in the shared parser.
+    expect(result.threshold).toBe(expected);
   });
 });
 

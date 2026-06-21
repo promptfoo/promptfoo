@@ -19,6 +19,21 @@ function getAssertionRegex(): RegExp {
   return _assertionRegex;
 }
 
+/**
+ * Parse a CSV cell into a finite number, returning `undefined` when the cell is empty
+ * or not a complete numeric literal. Used for threshold fields so that a meaningful `0`
+ * is preserved while a blank/garbage cell is treated as "unset" rather than leaking
+ * `NaN` into the TestCase.
+ */
+function parseFiniteNumber(value: string | undefined): number | undefined {
+  const trimmed = value?.trim() ?? '';
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (
@@ -75,8 +90,7 @@ export function assertionFromString(expected: string): Assertion {
       string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
-    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
+    const threshold = parseFiniteNumber(thresholdStr);
 
     if (
       type === 'contains-all' ||
@@ -185,7 +199,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     } else if (key === '__metric') {
       metric = value;
     } else if (key === '__threshold') {
-      threshold = Number.parseFloat(value);
+      threshold = parseFiniteNumber(value);
     } else if (key.startsWith('__metadata:')) {
       const metadataKey = key.slice('__metadata:'.length);
       if (metadataKey.endsWith('[]')) {
@@ -226,7 +240,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
+            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
+            // through to the "positive integer" error below instead of
+            // silently writing the config to assertionConfigs[-1].
+            if (oneBasedIndex >= 1) {
+              targetIndex = oneBasedIndex - 1;
+            }
           }
         }
 
@@ -252,16 +272,12 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           assertionConfigs[targetIndex] = {};
         }
 
-        // Parse the value based on the config key
-        let parsedValue: string | number = value.trim();
-        if (configKey === 'threshold') {
-          parsedValue = Number.parseFloat(value);
-          if (!Number.isFinite(parsedValue)) {
-            logger.error(
-              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-            );
-            throw new Error(`Invalid numeric value for ${configKey}`);
-          }
+        const parsedValue = parseFiniteNumber(value);
+        if (parsedValue === undefined) {
+          logger.error(
+            `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+          );
+          throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
@@ -297,7 +313,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     options,
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
-    ...(threshold ? { threshold } : {}),
+    // Gate on `=== undefined`, not a truthy check: a threshold of 0 is meaningful
+    // ("collect assertion scores without letting failures fail the test") and must
+    // be preserved. parseFiniteNumber already normalizes blank/invalid cells to undefined.
+    ...(threshold === undefined ? {} : { threshold }),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
