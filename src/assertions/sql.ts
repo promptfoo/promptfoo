@@ -139,8 +139,8 @@ export const handleIsSql = async ({
 }: AssertionParams): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
+  let allowedTables: string[] | undefined;
+  let allowedColumns: string[] | undefined;
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
       databaseType?: string;
@@ -149,8 +149,8 @@ export const handleIsSql = async ({
     };
 
     databaseType = value.databaseType || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
+    allowedTables = value.allowedTables;
+    allowedColumns = value.allowedColumns;
   }
 
   if (renderedValue && typeof renderedValue !== 'object') {
@@ -205,10 +205,10 @@ export const handleIsSql = async ({
     pass = inverse;
   }
 
-  if (whiteTableList) {
+  if (allowedTables) {
     opt.type = 'table';
     try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+      sqlParser.whiteListCheck(outputString, allowedTables, opt);
     } catch (err) {
       pass = inverse;
       const error = err as Error;
@@ -224,7 +224,7 @@ export const handleIsSql = async ({
         failureReasons.push(
           `SQL references unauthorized table(s). ` +
             `Found: [${actualTables.join(', ')}]. ` +
-            `Allowed: [${whiteTableList.join(', ')}].`,
+            `Allowed: [${allowedTables.join(', ')}].`,
         );
       } else {
         failureReasons.push(`SQL validation failed: ${error.message}.`);
@@ -232,20 +232,20 @@ export const handleIsSql = async ({
     }
   }
 
-  if (whiteColumnList) {
+  if (allowedColumns) {
     opt.type = 'column';
-    const normalizedWhiteList = [...whiteColumnList];
-    for (const item of whiteColumnList) {
+    const normalizedAllowedColumns = [...allowedColumns];
+    for (const item of allowedColumns) {
       const parts = item.split('::');
       if (parts.length === 3 && parts[1] !== 'null') {
         const alt = `${parts[0]}::null::${parts[2]}`;
-        if (!normalizedWhiteList.includes(alt)) {
-          normalizedWhiteList.push(alt);
+        if (!normalizedAllowedColumns.includes(alt)) {
+          normalizedAllowedColumns.push(alt);
         }
       }
     }
     try {
-      sqlParser.whiteListCheck(outputString, normalizedWhiteList, opt);
+      sqlParser.whiteListCheck(outputString, normalizedAllowedColumns, opt);
     } catch (err) {
       pass = inverse;
       const error = err as Error;
@@ -261,7 +261,7 @@ export const handleIsSql = async ({
         failureReasons.push(
           `SQL references unauthorized column(s). ` +
             `Found: [${actualColumns.join(', ')}]. ` +
-            `Allowed: [${whiteColumnList.join(', ')}].`,
+            `Allowed: [${allowedColumns.join(', ')}].`,
         );
       } else {
         failureReasons.push(`SQL validation failed: ${error.message}.`);
