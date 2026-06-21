@@ -226,7 +226,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
+            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
+            // through to the "positive integer" error below instead of
+            // silently writing the config to assertionConfigs[-1].
+            if (oneBasedIndex >= 1) {
+              targetIndex = oneBasedIndex - 1;
+            }
           }
         }
 
