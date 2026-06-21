@@ -128,9 +128,9 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                       |
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                               |
-| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                |
+| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is a non-empty valid SQL statement                          |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                                |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                     |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |

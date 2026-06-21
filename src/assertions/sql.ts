@@ -3,6 +3,113 @@ import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+const STANDARD_SELECT_MODIFIER_PATTERN = '(?:all|distinct)';
+const MYSQL_SELECT_MODIFIER_PATTERN =
+  '(?:all|distinct(?:row)?|high_priority|straight_join|sql_(?:big_result|buffer_result|cache|calc_found_rows|no_cache|small_result))';
+const IDENTIFIER_PATTERN = '[A-Za-z_][A-Za-z0-9_]*';
+
+function createLikelyMissingCommaPattern(selectModifierPattern: string): RegExp {
+  return new RegExp(
+    String.raw`\bselect\s+(?:${selectModifierPattern}\s+)*(?!${selectModifierPattern}\b)${IDENTIFIER_PATTERN}\s+${IDENTIFIER_PATTERN}\s+from\b`,
+    'i',
+  );
+}
+
+const STANDARD_LIKELY_MISSING_COMMA_PATTERN = createLikelyMissingCommaPattern(
+  STANDARD_SELECT_MODIFIER_PATTERN,
+);
+const MYSQL_LIKELY_MISSING_COMMA_PATTERN = createLikelyMissingCommaPattern(
+  MYSQL_SELECT_MODIFIER_PATTERN,
+);
+const MYSQL_FAMILY_DATABASES = new Set(['MySQL', 'MariaDB']);
+const BRACKET_IDENTIFIER_DATABASES = new Set(['TransactSQL', 'Sqlite']);
+const SQL_EXPRESSION_PLACEHOLDER = ' ? ';
+
+function getLikelyMissingCommaPattern(databaseType: string): RegExp {
+  return MYSQL_FAMILY_DATABASES.has(databaseType)
+    ? MYSQL_LIKELY_MISSING_COMMA_PATTERN
+    : STANDARD_LIKELY_MISSING_COMMA_PATTERN;
+}
+const DOLLAR_QUOTE_DELIMITER_PATTERN = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/;
+
+function readDollarQuoteDelimiter(sql: string, start: number): string | undefined {
+  return DOLLAR_QUOTE_DELIMITER_PATTERN.exec(sql.slice(start))?.[0];
+}
+
+function findQuotedTextEnd(sql: string, start: number, quote: string): number {
+  const closingQuote = quote === '[' ? ']' : quote;
+  let cursor = start + 1;
+  while (cursor < sql.length) {
+    if (closingQuote !== ']' && sql[cursor] === '\\') {
+      cursor += 2;
+      continue;
+    }
+    if (sql[cursor] === closingQuote) {
+      if (sql[cursor + 1] === closingQuote) {
+        cursor += 2;
+        continue;
+      }
+      return cursor + 1;
+    }
+    cursor++;
+  }
+  return sql.length;
+}
+
+function stripIgnoredSqlText(sql: string, databaseType: string): string {
+  const chunks: string[] = [];
+  const supportsBracketIdentifiers = BRACKET_IDENTIFIER_DATABASES.has(databaseType);
+  let plainTextStart = 0;
+  let cursor = 0;
+
+  while (cursor < sql.length) {
+    const character = sql[cursor];
+    let ignoredTextEnd: number | undefined;
+    let replacement = ' ';
+
+    if (
+      character === "'" ||
+      character === '"' ||
+      character === '`' ||
+      (character === '[' && supportsBracketIdentifiers)
+    ) {
+      ignoredTextEnd = findQuotedTextEnd(sql, cursor, character);
+      replacement = SQL_EXPRESSION_PLACEHOLDER;
+    } else if ((character === '-' && sql[cursor + 1] === '-') || character === '#') {
+      ignoredTextEnd = cursor + 1;
+      while (
+        ignoredTextEnd < sql.length &&
+        sql[ignoredTextEnd] !== '\r' &&
+        sql[ignoredTextEnd] !== '\n'
+      ) {
+        ignoredTextEnd++;
+      }
+    } else if (character === '/' && sql[cursor + 1] === '*') {
+      const commentEnd = sql.indexOf('*/', cursor + 2);
+      ignoredTextEnd = commentEnd === -1 ? sql.length : commentEnd + 2;
+    } else if (character === '$') {
+      const delimiter = readDollarQuoteDelimiter(sql, cursor);
+      if (delimiter) {
+        const quoteEnd = sql.indexOf(delimiter, cursor + delimiter.length);
+        ignoredTextEnd = quoteEnd === -1 ? sql.length : quoteEnd + delimiter.length;
+        replacement = SQL_EXPRESSION_PLACEHOLDER;
+      }
+    }
+
+    if (ignoredTextEnd === undefined) {
+      cursor++;
+      continue;
+    }
+
+    chunks.push(sql.slice(plainTextStart, cursor), replacement);
+    cursor = ignoredTextEnd;
+    plainTextStart = cursor;
+  }
+
+  chunks.push(sql.slice(plainTextStart));
+  return chunks.join('');
+}
+
 type SqlParserConstructor = typeof import('node-sql-parser').Parser;
 type SqlParserModule = {
   Parser?: SqlParserConstructor;
@@ -21,7 +128,6 @@ async function createSqlParser() {
   if (!SqlParser) {
     throw new Error('node-sql-parser is not installed. Please install it first');
   }
-
   return new SqlParser();
 }
 
@@ -59,12 +165,22 @@ export const handleIsSql = async ({
 
   // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
+  if (normalizedSql.length === 0) {
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
   if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );
   }
-  if (/select\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(normalizedSql)) {
+  // node-sql-parser accepts a missing comma as implicit aliasing. Ignore leading
+  // SELECT modifiers and SQL-looking text inside literals or comments, then check
+  // the first two column tokens.
+  const sqlForHeuristics = stripIgnoredSqlText(normalizedSql, databaseType);
+  const likelyMissingCommaPattern = getLikelyMissingCommaPattern(databaseType);
+  if (likelyMissingCommaPattern.test(sqlForHeuristics)) {
     failureReasons.push(
       `SQL statement does not conform to the provided ${databaseType} database syntax.`,
     );

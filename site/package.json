@@ -35,7 +35,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^9.0.0",
     "@segment/ajv-human-errors": "^2.16.0",
-    "@swc/core": "^1.15.18",
+    "@swc/core": "^1.15.41",
     "@swc/jest": "^0.2.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -62,7 +62,7 @@
     "webpack": "5.107.2"
   },
   "optionalDependencies": {
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.1"
   },
   "overrides": {
     "lodash-es": "^4.18.1"
