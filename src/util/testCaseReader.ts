@@ -28,6 +28,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
+  Vars,
 } from '../types/index';
 
 type StandaloneTestsFileMetadata = {
@@ -339,16 +340,172 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonTestCases(fileContent);
+  return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonTestCases(fileContent: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as any;
-  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+function parseJsonTestCases(fileContent: string, sourcePath?: string): TestCase[] {
+  const jsonData = yaml.load(fileContent) as unknown;
+
+  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, sourcePath);
+  if (agentSkillsCases) {
+    return agentSkillsCases;
+  }
+
+  const testCases: TestCase[] = Array.isArray(jsonData)
+    ? (jsonData as TestCase[])
+    : [jsonData as TestCase];
   return testCases.map((item, idx) => ({
     ...item,
     description: item.description || `Row #${idx + 1}`,
   }));
+}
+
+function maybeConvertAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
+  const testCases = parseAgentSkillsEvalsJson(input, sourcePath);
+  if (testCases) {
+    telemetry.record('feature_used', {
+      feature: 'agent-skills evals.json tests file',
+    });
+  }
+  return testCases;
+}
+
+type AgentSkillsEvalCase = {
+  id?: string | number;
+  prompt: string;
+  expected_output?: unknown;
+  assertions?: unknown;
+  files?: unknown;
+};
+
+type AgentSkillsEvalsFile = {
+  skill_name?: unknown;
+  evals?: unknown;
+};
+
+/**
+ * Detect the AgentSkills `evals.json` format described at
+ * https://agentskills.io/skill-creation/evaluating-skills and convert it to
+ * promptfoo `TestCase`s. Returns `null` when the input does not match the
+ * expected shape so callers can fall back to the generic JSON parser.
+ *
+ * The mapping is:
+ *   - `prompt`           -> literal `vars.prompt`
+ *   - `expected_output`  -> `llm-rubric` assertion (first)
+ *   - `assertions[i]`    -> additional `llm-rubric` assertions
+ *   - `files`            -> absolute paths resolved from the JSON source layout
+ *   - `id`               -> `metadata.id` and `description`
+ *   - top-level `skill_name` -> `metadata.skill_name`
+ */
+function parseAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const candidate = input as AgentSkillsEvalsFile;
+  const skillName =
+    typeof candidate.skill_name === 'string' && candidate.skill_name.trim()
+      ? candidate.skill_name
+      : undefined;
+  if (!skillName || !Array.isArray(candidate.evals)) {
+    return null;
+  }
+
+  const validCases = candidate.evals.filter(
+    (entry): entry is AgentSkillsEvalCase =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as Partial<AgentSkillsEvalCase>).prompt === 'string' &&
+      Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
+  );
+  return validCases.flatMap((entry, idx) => {
+    const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourcePath);
+    return testCase ? [testCase] : [];
+  });
+}
+
+function agentSkillsEvalToTestCase(
+  entry: AgentSkillsEvalCase,
+  idx: number,
+  skillName: string,
+  sourcePath?: string,
+): TestCase | null {
+  const assertions = buildAgentSkillsAssertions(entry);
+  if (assertions.length === 0) {
+    return null;
+  }
+
+  const idValue =
+    typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
+
+  const sourceDirectory = sourcePath ? path.dirname(sourcePath) : undefined;
+  const isStandardAgentSkillsLayout =
+    sourcePath &&
+    sourceDirectory &&
+    path.basename(sourcePath) === 'evals.json' &&
+    path.basename(sourceDirectory) === 'evals';
+  const sourceRoot = isStandardAgentSkillsLayout ? path.dirname(sourceDirectory) : sourceDirectory;
+  const files = (
+    Array.isArray(entry.files)
+      ? entry.files.filter(
+          (file): file is string => typeof file === 'string' && Boolean(file.trim()),
+        )
+      : []
+  ).map((file) =>
+    sourceRoot && !file.startsWith('file://') ? path.resolve(sourceRoot, file) : file,
+  );
+  const prompt =
+    files.length > 0
+      ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
+      : entry.prompt;
+  const vars: Vars = { prompt };
+  if (files.length > 0) {
+    vars.files = files;
+  }
+
+  const metadata = buildAgentSkillsMetadata(idValue, skillName);
+
+  const testCase: TestCase = {
+    description: idValue == null ? `Row #${idx + 1}` : `eval ${idValue}`,
+    vars,
+    assert: assertions,
+    options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+  };
+  if (metadata) {
+    testCase.metadata = metadata;
+  }
+  return testCase;
+}
+
+function buildAgentSkillsAssertions(
+  entry: AgentSkillsEvalCase,
+): { type: 'llm-rubric'; value: string }[] {
+  const assertions: { type: 'llm-rubric'; value: string }[] = [];
+  if (typeof entry.expected_output === 'string' && entry.expected_output.trim()) {
+    assertions.push({ type: 'llm-rubric', value: entry.expected_output });
+  }
+  if (Array.isArray(entry.assertions)) {
+    for (const assertion of entry.assertions) {
+      if (typeof assertion === 'string' && assertion.trim()) {
+        assertions.push({ type: 'llm-rubric', value: assertion });
+      }
+    }
+  }
+  return assertions;
+}
+
+function buildAgentSkillsMetadata(
+  idValue: string | number | undefined,
+  skillName: string | undefined,
+): Record<string, string | number> | undefined {
+  const metadata: Record<string, string | number> = {};
+  if (idValue != null) {
+    metadata.id = idValue;
+  }
+  if (skillName) {
+    metadata.skill_name = skillName;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -531,7 +688,9 @@ export async function loadTestsFromGlob(
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases =
+        maybeConvertAgentSkillsEvalsJson(rawContent, testFile) ??
+        (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
@@ -547,6 +706,26 @@ export async function loadTestsFromGlob(
     }
   }
   return ret;
+}
+
+async function readTestsArrayStringSource(source: string, basePath: string): Promise<TestCase[]> {
+  // Extract path without function name (Windows-aware).
+  const lastColonIndex = source.lastIndexOf(':');
+  const pathWithoutFunction = lastColonIndex > 1 ? source.slice(0, lastColonIndex) : source;
+  // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1).
+  const pathWithoutSheet = source.split('#')[0];
+
+  if (
+    isJavascriptFile(pathWithoutFunction) ||
+    pathWithoutFunction.endsWith('.py') ||
+    pathWithoutSheet.endsWith('.xlsx') ||
+    pathWithoutSheet.endsWith('.xls') ||
+    source.replace(/^file:\/\//, '').includes(':')
+  ) {
+    return readStandaloneTestsFile(source, basePath);
+  }
+
+  return loadTestsFromGlob(source, basePath);
 }
 
 export async function readTests(
@@ -576,25 +755,7 @@ export async function readTests(
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        // Extract path without function name (Windows-aware)
-        const lastColonIndex = globOrTest.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
-        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-        const pathWithoutSheet = globOrTest.split('#')[0];
-        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
-        if (
-          isJavascriptFile(pathWithoutFunction) ||
-          pathWithoutFunction.endsWith('.py') ||
-          pathWithoutSheet.endsWith('.xlsx') ||
-          pathWithoutSheet.endsWith('.xls') ||
-          globOrTest.replace(/^file:\/\//, '').includes(':')
-        ) {
-          ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
-        } else {
-          // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
-        }
+        ret.push(...(await readTestsArrayStringSource(globOrTest, basePath)));
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {

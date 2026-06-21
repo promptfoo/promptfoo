@@ -144,6 +144,31 @@ describe('evaluator defaultTest merging', () => {
     // But other defaultTest options should still be merged
     expect(processedTest?.options?.transform).toBe('output.toUpperCase()');
   });
+
+  it('should preserve default skipRenderVars when test cases add literal variables', async () => {
+    const mockProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt')],
+      providers: [mockProvider],
+      tests: [
+        {
+          options: { skipRenderVars: ['prompt'] },
+        },
+      ],
+      defaultTest: {
+        options: { skipRenderVars: ['system'] },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0].testCase.options?.skipRenderVars).toEqual(['system', 'prompt']);
+  });
 });
 
 describe('Evaluator with external defaultTest', () => {

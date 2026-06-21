@@ -288,6 +288,187 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  describe('AgentSkills evals.json format', () => {
+    it('detects {skill_name, evals: [...]} and converts to TestCases', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              id: 1,
+              prompt: 'Find the top 3 months by revenue from data/sales_2025.csv.',
+              expected_output: 'A bar chart image showing the top 3 months by revenue.',
+              files: ['evals/files/sales_2025.csv', 'evals/files/chart-template.svg'],
+              assertions: [
+                'The output includes a bar chart image file',
+                'The chart shows exactly 3 months',
+              ],
+            },
+            {
+              id: 'inv-2',
+              prompt: 'Summarize the quarterly trends.',
+              expected_output: '   ', // whitespace-only should be ignored
+              assertions: ['Mentions Q1 through Q4'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+      const salesFile = path.resolve('evals/files/sales_2025.csv');
+      const chartTemplate = path.resolve('evals/files/chart-template.svg');
+
+      expect(result).toEqual([
+        {
+          description: 'eval 1',
+          vars: {
+            prompt: `Find the top 3 months by revenue from data/sales_2025.csv.\n\nFiles available for this eval:\n- ${salesFile}\n- ${chartTemplate}`,
+            files: [salesFile, chartTemplate],
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'A bar chart image showing the top 3 months by revenue.',
+            },
+            { type: 'llm-rubric', value: 'The output includes a bar chart image file' },
+            { type: 'llm-rubric', value: 'The chart shows exactly 3 months' },
+          ],
+          metadata: { id: 1, skill_name: 'csv-analyzer' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+        },
+        {
+          description: 'eval inv-2',
+          vars: { prompt: 'Summarize the quarterly trends.' },
+          assert: [{ type: 'llm-rubric', value: 'Mentions Q1 through Q4' }],
+          metadata: { id: 'inv-2', skill_name: 'csv-analyzer' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+        },
+      ]);
+    });
+
+    it('resolves standard evals/evals.json file entries from the skill root', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              prompt: 'Analyze the CSV.',
+              files: ['evals/files/sales_2025.csv'],
+              assertions: ['Reports the total revenue'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('/skills/csv-analyzer/evals/evals.json');
+      const salesFile = path.resolve('/skills/csv-analyzer/evals/files/sales_2025.csv');
+
+      expect(result[0].vars).toEqual({
+        prompt: `Analyze the CSV.\n\nFiles available for this eval:\n- ${salesFile}`,
+        files: [salesFile],
+      });
+    });
+
+    it('resolves file entries beside AgentSkills JSON outside the standard layout', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              prompt: 'Analyze the CSV.',
+              files: ['files/sales_2025.csv'],
+              assertions: ['Reports the total revenue'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('/repo/evals/smoke.json');
+      const salesFile = path.resolve('/repo/evals/files/sales_2025.csv');
+
+      expect(result[0].vars).toEqual({
+        prompt: `Analyze the CSV.\n\nFiles available for this eval:\n- ${salesFile}`,
+        files: [salesFile],
+      });
+    });
+
+    it('does not hijack prompt-bearing JSON files without an AgentSkills skill name', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          evals: [{ prompt: 'generic prompt', vars: { foo: 'bar' } }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('not-agent-skills.json');
+
+      // Falls through to the generic JSON parser: wraps the object as a single TestCase
+      // and stamps the default `Row #1` description.
+      expect(result).toEqual([
+        {
+          evals: [{ prompt: 'generic prompt', vars: { foo: 'bar' } }],
+          description: 'Row #1',
+        },
+      ]);
+    });
+
+    it('ignores blank prompts and keeps skill metadata for valid entries without ids', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'greeter',
+          evals: [
+            { prompt: '   ', expected_output: 'must not run' },
+            { prompt: 'hello', expected_output: 'greets the user' },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toEqual([
+        {
+          description: 'Row #1',
+          vars: { prompt: 'hello' },
+          assert: [{ type: 'llm-rubric', value: 'greets the user' }],
+          metadata: { skill_name: 'greeter' },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+        },
+      ]);
+    });
+
+    it('skips eval entries that are not objects but keeps the rest', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'mixed',
+          evals: [null, { prompt: 'good entry', assertions: ['must answer'] }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        description: 'Row #1',
+        vars: { prompt: 'good entry' },
+        assert: [{ type: 'llm-rubric', value: 'must answer' }],
+        metadata: { skill_name: 'mixed' },
+        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+      });
+    });
+
+    it('does not emit a generic passing row when all AgentSkills entries are invalid', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'invalid',
+          evals: [null, { prompt: '   ' }, { prompt: 'has no grading rubric' }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   it('should read JSONL file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}
@@ -1350,6 +1531,39 @@ describe('readTests', () => {
     const result = await readTests(['test.jsonl']);
 
     expect(result).toEqual(expectedTests);
+  });
+
+  it('loads AgentSkills evals.json through an array glob source', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        skill_name: 'summarizer',
+        evals: [
+          {
+            id: 'case-1',
+            prompt: 'Summarize this input.',
+            files: ['evals/files/input.txt'],
+            assertions: ['Is concise'],
+          },
+        ],
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['/skills/summarizer/evals/evals.json']);
+
+    const result = await readTests(['file://skills/*/evals/evals.json']);
+    const inputFile = path.resolve('/skills/summarizer/evals/files/input.txt');
+
+    expect(result).toEqual([
+      {
+        description: 'eval case-1',
+        vars: {
+          prompt: `Summarize this input.\n\nFiles available for this eval:\n- ${inputFile}`,
+          files: [inputFile],
+        },
+        assert: [{ type: 'llm-rubric', value: 'Is concise' }],
+        metadata: { id: 'case-1', skill_name: 'summarizer' },
+        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+      },
+    ]);
   });
 
   it('should handle file read errors gracefully', async () => {
