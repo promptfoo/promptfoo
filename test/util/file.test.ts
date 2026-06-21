@@ -80,6 +80,14 @@ describe('file utilities', () => {
       expect(isJavascriptFile('test.txt')).toBe(false);
       expect(isJavascriptFile('test.py')).toBe(false);
     });
+
+    it('matches extensions case-insensitively', () => {
+      expect(isJavascriptFile('test.JS')).toBe(true);
+      expect(isJavascriptFile('test.Ts')).toBe(true);
+      expect(isJavascriptFile('test.MJS')).toBe(true);
+      expect(isJavascriptFile('test.CTS')).toBe(true);
+      expect(isJavascriptFile('test.TXT')).toBe(false);
+    });
   });
 
   describe('isImageFile', () => {
