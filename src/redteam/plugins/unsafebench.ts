@@ -41,7 +41,7 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  * Processes an image to ensure JPEG format and size limits
  * Only processes when conversion or resizing is needed
  */
-async function processImageToJpeg(
+export async function processImageToJpeg(
   imageBuffer: Buffer,
   maxLongestEdge: number = 8000,
 ): Promise<string | null> {

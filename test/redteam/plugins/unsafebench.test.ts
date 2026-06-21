@@ -3,6 +3,7 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import {
+  processImageToJpeg,
   UnsafeBenchGrader,
   UnsafeBenchPlugin,
   VALID_CATEGORIES,
@@ -34,6 +35,17 @@ beforeAll(() => {
 });
 afterAll(() => {
   restoreEnv();
+});
+
+describe('processImageToJpeg', () => {
+  it('preserves a JPEG that is already within the size limit', async () => {
+    const jpegBase64 =
+      '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
+
+    await expect(processImageToJpeg(Buffer.from(jpegBase64, 'base64'))).resolves.toBe(
+      `data:image/jpeg;base64,${jpegBase64}`,
+    );
+  });
 });
 
 // Need to access the DatasetManager - since it's a private implementation detail,
