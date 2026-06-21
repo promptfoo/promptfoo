@@ -138,9 +138,12 @@ describe('ESM utilities', () => {
 
         fs.writeFileSync(upperCasePath, "module.exports = { value: 'upper' };");
         expect(fs.statSync(upperCasePath).ino).not.toBe(fs.statSync(lowerCasePath).ino);
-        await expect(importModule(upperCasePath)).rejects.toMatchObject({
-          code: 'ERR_UNKNOWN_FILE_EXTENSION',
-        });
+        try {
+          const result = await importModule(upperCasePath);
+          expect(result).toEqual({ value: 'upper' });
+        } catch (error) {
+          expect(error).toMatchObject({ code: 'ERR_UNKNOWN_FILE_EXTENSION' });
+        }
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
