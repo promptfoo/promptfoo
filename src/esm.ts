@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
