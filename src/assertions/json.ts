@@ -57,7 +57,7 @@ export function handleIsJson({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+    reason: pass ? 'Assertion passed' : `Expected output to ${inverse ? 'not ' : ''}be valid JSON`,
     assertion,
   };
 }

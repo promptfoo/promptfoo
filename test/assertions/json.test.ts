@@ -35,6 +35,12 @@ describe('handleIsJson', () => {
     expect(r.pass).toBe(true);
   });
 
+  it('inverse fails with an inverse-aware message when the output is valid JSON', () => {
+    const r = handleIsJson(params({ outputString: '{"foo": "bar"}', inverse: true }));
+    expect(r.pass).toBe(false);
+    expect(r.reason).toBe('Expected output to not be valid JSON');
+  });
+
   it('passes when JSON conforms to an object schema', () => {
     const r = handleIsJson(params({ outputString: '{"foo": "bar"}', renderedValue: objectSchema }));
     expect(r.pass).toBe(true);
@@ -78,6 +84,37 @@ describe('handleIsJson', () => {
 });
 
 describe('handleContainsJson', () => {
+  it('fails without a schema when no JSON is present', () => {
+    const r = handleContainsJson(
+      params({ assertion: { type: 'contains-json' }, outputString: 'no json here' }),
+    );
+    expect(r.pass).toBe(false);
+    expect(r.reason).toBe('Expected output to contain valid JSON');
+  });
+
+  it('inverse fails with an inverse-aware message when JSON is present without a schema', () => {
+    const r = handleContainsJson(
+      params({
+        assertion: { type: 'not-contains-json' },
+        outputString: 'prefix {"foo": "bar"} suffix',
+        inverse: true,
+      }),
+    );
+    expect(r.pass).toBe(false);
+    expect(r.reason).toBe('Expected output to not contain valid JSON');
+  });
+
+  it('inverse passes without a schema when no JSON is present', () => {
+    const r = handleContainsJson(
+      params({
+        assertion: { type: 'not-contains-json' },
+        outputString: 'no json here',
+        inverse: true,
+      }),
+    );
+    expect(r.pass).toBe(true);
+  });
+
   it('passes when embedded JSON conforms to an object schema', () => {
     const r = handleContainsJson(
       params({
