@@ -97,12 +97,17 @@ describe('GLEU score calculation', () => {
     }).toThrow('Invalid inputs');
   });
 
-  it('should return 0 for an empty candidate instead of throwing', () => {
-    expect(calculateGleuScore('', ['The cat sat on the mat.'])).toBe(0);
+  it.each(['', '   \n\t', '...'])('returns 0 for a tokenless candidate (%j)', (candidate) => {
+    expect(calculateGleuScore(candidate, ['The cat sat on the mat.'])).toBe(0);
   });
 
-  it('should return 0 for a whitespace-only candidate', () => {
-    expect(calculateGleuScore('   \n\t', ['The cat sat on the mat.'])).toBe(0);
+  it.each(['', '   \n\t', '...'])('returns 0 for a tokenless reference (%j)', (reference) => {
+    expect(calculateGleuScore('The cat sat on the mat.', [reference])).toBe(0);
+  });
+
+  it('treats tokenless candidate and reference inputs symmetrically', () => {
+    expect(calculateGleuScore('   ', ['...'])).toBe(0);
+    expect(calculateGleuScore('...', ['   '])).toBe(0);
   });
 
   it('should handle multiple references with varying lengths', () => {

@@ -3,6 +3,15 @@ import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function tokenizeForGleu(text: string): string[] {
+  return text
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/\.+$/, ''))
+    .filter(Boolean);
+}
+
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.
  *
@@ -23,7 +32,8 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * Implementation details:
  * - n-grams from n=1 to n=4 are considered by default
  * - The calculation is case-insensitive
- * - Identical strings will always receive a score of 1
+ * - Identical non-empty strings will always receive a score of 1
+ * - Text that is empty after normalization has no n-grams and scores 0
  * - If there are no n-grams in common, the score will be 0
  *
  * @param candidate - The string to evaluate
@@ -43,25 +53,14 @@ export function calculateGleuScore(
     throw new Error('Invalid inputs');
   }
 
-  // An empty or whitespace-only candidate (e.g. a refusal or a truncated
-  // generation) has no n-grams to score, so it scores 0 rather than throwing.
-  if (candidate.trim() === '') {
+  const candidateWords = tokenizeForGleu(candidate);
+  if (candidateWords.length === 0) {
     return 0;
   }
 
-  const candidateWords = candidate
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.replace(/\.+$/, ''));
-
   // For each reference, calculate a GLEU score and later take the maximum
   const referenceScores = references.map((reference) => {
-    const referenceWords = reference
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .map((word) => word.replace(/\.+$/, ''));
+    const referenceWords = tokenizeForGleu(reference);
 
     // For identical strings, return 1 directly
     if (
