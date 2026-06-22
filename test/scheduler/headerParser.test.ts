@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../src/scheduler/headerParser';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('parseRateLimitHeaders', () => {
   describe('OpenAI format (x-ratelimit-*)', () => {
@@ -61,8 +65,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 30000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -102,8 +104,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 90000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -131,8 +131,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 120000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -163,8 +161,6 @@ describe('parseRateLimitHeaders', () => {
 
       expect(result.retryAfterMs).toBe(60000);
       expect(result.resetAt).toBe(now + 60000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -194,8 +190,6 @@ describe('parseRateLimitHeaders', () => {
 
       // Should use x-ratelimit-reset-requests (first in priority list)
       expect(result.resetAt).toBe(now + 30000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -212,8 +206,6 @@ describe('parseRateLimitHeaders', () => {
 
       expect(result.retryAfterMs).toBe(5000);
       expect(result.resetAt).toBe(now + 5000);
-
-      vi.restoreAllMocks();
     });
 
     it('should parse retry-after as integer seconds', () => {
@@ -228,8 +220,6 @@ describe('parseRateLimitHeaders', () => {
 
       expect(result.retryAfterMs).toBe(30000);
       expect(result.resetAt).toBe(now + 30000);
-
-      vi.restoreAllMocks();
     });
 
     it('should not override resetAt if already set', () => {
@@ -247,8 +237,6 @@ describe('parseRateLimitHeaders', () => {
       // resetAt should be from x-ratelimit-reset, not retry-after
       expect(result.resetAt).toBe(futureTime);
       expect(result.retryAfterMs).toBe(30000);
-
-      vi.restoreAllMocks();
     });
 
     it('should prioritize retry-after-ms over retry-after', () => {
@@ -263,8 +251,21 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.retryAfterMs).toBe(5000);
+    });
 
-      vi.restoreAllMocks();
+    it('should fall back to retry-after when retry-after-ms is invalid', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'retry-after-ms': 'Infinity',
+        'retry-after': '30',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.retryAfterMs).toBe(30000);
+      expect(result.resetAt).toBe(now + 30000);
     });
   });
 
@@ -280,8 +281,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 500);
-
-      vi.restoreAllMocks();
     });
 
     it('should parse seconds duration', () => {
@@ -295,8 +294,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 45000);
-
-      vi.restoreAllMocks();
     });
 
     it('should parse minutes and seconds duration', () => {
@@ -310,8 +307,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 90000); // 60s + 30s
-
-      vi.restoreAllMocks();
     });
 
     it('should parse hours and minutes duration', () => {
@@ -325,8 +320,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 5400000); // 3600s + 1800s
-
-      vi.restoreAllMocks();
     });
 
     it('should parse complex duration with hours, minutes, and seconds', () => {
@@ -340,8 +333,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 8130000); // 7200s + 900s + 30s
-
-      vi.restoreAllMocks();
     });
 
     it('should parse minutes-only duration', () => {
@@ -355,8 +346,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 300000);
-
-      vi.restoreAllMocks();
     });
 
     it('should parse hours-only duration', () => {
@@ -370,8 +359,6 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders(headers);
 
       expect(result.resetAt).toBe(now + 3600000);
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -407,6 +394,13 @@ describe('parseRateLimitHeaders', () => {
       expect(result.remainingRequests).toBeUndefined();
       expect(result.resetAt).toBeUndefined();
       expect(result.retryAfterMs).toBeUndefined();
+    });
+
+    it('should ignore a duration string whose total overflows to non-finite', () => {
+      const overflowingDuration = `${'9'.repeat(400)}h`;
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': overflowingDuration });
+
+      expect(result.resetAt).toBeUndefined();
     });
 
     it('should ignore negative reset values', () => {
