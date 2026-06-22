@@ -8,29 +8,23 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-// Keep this parser local rather than importing it from src/assertions/contains.ts:
-// this module is bundled into the frontend (see the app layer's allowedImportPaths
-// in architecture/layers.json), so importing the assertion handlers would pull the
-// backend-only assertion code into the browser bundle and widen the
-// legacy-runtime -> core edge past its baseline. A drift-guard test in
-// test/csv.test.ts keeps this copy in sync with the canonical implementation.
-interface ParsedAssertionField {
+// Local copy of parseCommaSeparatedValues from src/assertions/contains.ts, kept
+// deliberately identical (names, bodies, and order) so the two can be diffed
+// function-for-function. This module is bundled into the frontend (see the app
+// layer's allowedImportPaths in architecture/layers.json), so importing the
+// assertion handlers would pull backend-only assertion code into the browser
+// bundle and widen the legacy-runtime -> core edge past its baseline. A
+// drift-guard test in test/csv.test.ts keeps this copy in sync with the canonical
+// implementation.
+interface ParsedField {
   field: string;
   nextIndex: number;
 }
 
-function skipAssertionWhitespace(value: string, startIndex: number): number {
-  let i = startIndex;
-  while (i < value.length && /\s/.test(value[i])) {
-    i++;
-  }
-  return i;
-}
-
-function skipAssertionSeparators(value: string, startIndex: number): number {
+function skipWhitespaceAndCommas(value: string, startIndex: number): number {
   let i = startIndex;
   while (i < value.length) {
-    i = skipAssertionWhitespace(value, i);
+    i = skipWhitespace(value, i);
     if (value[i] !== ',') {
       break;
     }
@@ -39,7 +33,15 @@ function skipAssertionSeparators(value: string, startIndex: number): number {
   return i;
 }
 
-function parseQuotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
+function skipWhitespace(value: string, startIndex: number): number {
+  let i = startIndex;
+  while (i < value.length && /\s/.test(value[i])) {
+    i++;
+  }
+  return i;
+}
+
+function parseQuotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex + 1;
   let field = '';
   let terminated = false;
@@ -65,7 +67,7 @@ function parseQuotedAssertionField(value: string, startIndex: number): ParsedAss
   return { field, nextIndex: i };
 }
 
-function parseUnquotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
+function parseUnquotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex;
   while (i < value.length && value[i] !== ',') {
     i++;
@@ -73,28 +75,24 @@ function parseUnquotedAssertionField(value: string, startIndex: number): ParsedA
   return { field: value.substring(startIndex, i).trim(), nextIndex: i };
 }
 
-function parseCommaSeparatedAssertionValues(value: string): string[] {
+function parseCommaSeparatedValues(value: string): string[] {
   const results: string[] = [];
   let i = 0;
-
   while (i < value.length) {
-    i = skipAssertionSeparators(value, i);
+    i = skipWhitespaceAndCommas(value, i);
     if (i >= value.length) {
       break;
     }
 
     const isQuotedField = value[i] === '"';
-    const parsed = isQuotedField
-      ? parseQuotedAssertionField(value, i)
-      : parseUnquotedAssertionField(value, i);
+    const parsed = isQuotedField ? parseQuotedField(value, i) : parseUnquotedField(value, i);
     results.push(parsed.field);
-    i = isQuotedField ? skipAssertionWhitespace(value, parsed.nextIndex) : parsed.nextIndex;
+    i = isQuotedField ? skipWhitespace(value, parsed.nextIndex) : parsed.nextIndex;
     invariant(
       !isQuotedField || i >= value.length || value[i] === ',',
       'Expected comma after quoted field in contains assertion value',
     );
   }
-
   return results;
 }
 
@@ -176,7 +174,7 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value ? parseCommaSeparatedAssertionValues(value) : value,
+        value: value ? parseCommaSeparatedValues(value) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
