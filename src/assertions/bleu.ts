@@ -67,8 +67,11 @@ export function calculateBleuScore(
   references: string[],
   weights: number[] = [0.25, 0.25, 0.25, 0.25],
 ): number {
-  if (!candidate || references.length === 0 || weights.length !== 4) {
+  if (candidate == null || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
+  }
+  if (candidate === '') {
+    return 0;
   }
   // BLEU weights are non-negative by definition. Rejecting negatives keeps the
   // score within the documented [0, 1] range (a negative weight on a smoothed

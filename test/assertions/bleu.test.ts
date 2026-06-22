@@ -377,4 +377,23 @@ describe('handleBleuScore', () => {
       assertion: expect.any(Object),
     });
   });
+
+  it('should return pass:false score:0 for empty output, not throw', () => {
+    expect(() =>
+      handleBleuScore({
+        assertion: { type: 'bleu' },
+        renderedValue: 'some reference',
+        outputString: '',
+        inverse: false,
+      } as AssertionParams),
+    ).not.toThrow();
+    const result = handleBleuScore({
+      assertion: { type: 'bleu' },
+      renderedValue: 'some reference',
+      outputString: '',
+      inverse: false,
+    } as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
 });
