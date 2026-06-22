@@ -6,6 +6,13 @@ import semverGt from 'semver/functions/gt.js';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
+import {
+  isLatestUpdateBlockedByRuntime,
+  NODE_20_SUPPORT_END_DATE_LABEL,
+  NODE_MINIMUM_UPGRADE_VERSION,
+  NODE_RECOMMENDED_VERSION,
+  NODE_RUNTIME_UPGRADE_GUIDE_URL,
+} from './runtimeCompatibility';
 import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
@@ -25,7 +32,12 @@ export async function getLatestVersion() {
   return data.latestVersion;
 }
 
-export async function checkForUpdates(): Promise<boolean> {
+interface CheckForUpdatesOptions {
+  currentNodeVersion?: string;
+  now?: Date;
+}
+
+export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Promise<boolean> {
   if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
@@ -38,6 +50,23 @@ export async function checkForUpdates(): Promise<boolean> {
   }
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
+    if (
+      isLatestUpdateBlockedByRuntime(
+        options.currentNodeVersion ?? process.version,
+        options.now ?? new Date(),
+      )
+    ) {
+      logger.warn(
+        `\n${border}
+${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.
+
+Upgrade to Node.js ${NODE_MINIMUM_UPGRADE_VERSION} or newer (${NODE_RECOMMENDED_VERSION} recommended), then update promptfoo.
+Upgrade guide: ${NODE_RUNTIME_UPGRADE_GUIDE_URL}
+${border}\n`,
+      );
+      return true;
+    }
+
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(

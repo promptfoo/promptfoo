@@ -58,6 +58,126 @@ describe('UpdateBanner', () => {
     expect(copyCommandButton).toHaveAttribute('title', 'npm i -g promptfoo@latest');
   });
 
+  it('should prioritize the Node.js runtime notice over an ordinary update', async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 7,
+        },
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss,
+    };
+    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Node.js 20 support ends July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/built-in SQLite/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Update available: v2.0.0/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copy Update Command/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Remind me/i }));
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not offer an incompatible latest update when the runtime blocks it', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 1,
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+  });
+
+  it('should show a compatible promptfoo update while the runtime notice is snoozed', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 7,
+        },
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: true,
+      dismiss: vi.fn(),
+      runtimeNoticeDismissed: true,
+      updateDismissed: false,
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Node.js 20 support ends/i)).not.toBeInTheDocument();
+  });
+
   it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
     const user = userEvent.setup();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {

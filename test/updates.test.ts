@@ -23,6 +23,27 @@ vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
+vi.mock('../src/envars', () => ({
+  getEnvBool: (key: string) => {
+    const value = process.env[key]?.toLowerCase();
+    return value === '1' || value === 'true';
+  },
+  getEnvInt: (key: string, defaultValue?: number) => {
+    const value = process.env[key];
+    return value === undefined ? defaultValue : Number.parseInt(value, 10);
+  },
+  getEnvString: (key: string, defaultValue?: string) => process.env[key] ?? defaultValue,
+}));
+
+vi.mock('../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
 vi.mock('../src/version', () => ({
   VERSION: '0.11.0',
   POSTHOG_KEY: '',
@@ -73,6 +94,7 @@ describe('getLatestVersion', () => {
 
 describe('checkForUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let loggerWarnSpy: ReturnType<typeof vi.spyOn>;
   let restoreEnv: () => void;
 
   beforeEach(() => {
@@ -80,10 +102,12 @@ describe('checkForUpdates', () => {
     vi.mocked(fetchWithTimeout).mockReset();
     restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
     loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
   });
 
   afterEach(() => {
     loggerInfoSpy.mockRestore();
+    loggerWarnSpy.mockRestore();
     restoreEnv();
   });
 
@@ -115,6 +139,40 @@ describe('checkForUpdates', () => {
 
     const result = await checkForUpdates();
     expect(result).toBeFalsy();
+  });
+
+  it('should tell Node.js 20 users to upgrade Node before installing latest after cutoff', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    const result = await checkForUpdates({
+      currentNodeVersion: 'v20.20.2',
+      now: new Date('2026-07-30T00:00:00.000Z'),
+    });
+
+    expect(result).toBe(true);
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
+    );
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep normal update guidance for Node.js 20 before cutoff', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    const result = await checkForUpdates({
+      currentNodeVersion: 'v20.20.2',
+      now: new Date('2026-07-29T23:59:59.999Z'),
+    });
+
+    expect(result).toBe(true);
+    expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest'));
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 });
 

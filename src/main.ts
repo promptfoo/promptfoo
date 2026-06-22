@@ -42,6 +42,7 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
+import { maybeWarnAboutRuntime } from './runtimeCompatibilityNotice';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
@@ -60,7 +61,12 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  await checkForUpdates();
+  // Keep startup messaging focused: runtime reminders take priority, while update checks
+  // resume on invocations where the runtime reminder is rate-limited.
+  const runtimeNoticeShown = maybeWarnAboutRuntime();
+  if (!runtimeNoticeShown) {
+    await checkForUpdates();
+  }
   await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);

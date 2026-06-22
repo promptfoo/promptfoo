@@ -2,16 +2,52 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Alert } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import { Check, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
+
+function formatRemovalDate(removalDate: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+    year: 'numeric',
+  }).format(new Date(`${removalDate}T00:00:00.000Z`));
+}
+
+function getReminderLabel(reminderIntervalDays: 1 | 7): string {
+  return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
+}
 
 export default function UpdateBanner() {
-  const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
+  const {
+    versionInfo,
+    loading,
+    error,
+    dismissed,
+    dismiss,
+    runtimeNoticeDismissed,
+    updateDismissed,
+    dismissRuntimeNotice,
+    dismissUpdate,
+  } = useVersionCheck();
+  const { recordEvent } = useTelemetry();
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
+  const recordedRuntimeNoticeRef = useRef<string | null>(null);
+  const runtimeNotice = versionInfo?.runtimeNotice ?? null;
+  const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
+  const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
+  const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
+  const shouldShowRuntimeNotice = !!activeRuntimeNotice;
+  const shouldShowUpdate =
+    !activeRuntimeNotice &&
+    !isUpdateDismissed &&
+    !!versionInfo?.updateAvailable &&
+    !versionInfo?.updateBlockedByRuntime;
+  const shouldShowBanner = !loading && !error && (shouldShowRuntimeNotice || shouldShowUpdate);
   const dismissLabel = "Don't remind me of this version";
-  const shouldShowBanner = !loading && !error && !!versionInfo?.updateAvailable && !dismissed;
 
   useEffect(() => {
     if (!shouldShowBanner) {
@@ -61,6 +97,23 @@ export default function UpdateBanner() {
     }
   }, [copied]);
 
+  useEffect(() => {
+    if (
+      shouldShowBanner &&
+      activeRuntimeNotice &&
+      recordedRuntimeNoticeRef.current !== activeRuntimeNotice.id
+    ) {
+      recordEvent('feature_used', {
+        action: 'shown',
+        feature: 'runtime_compatibility_notice',
+        noticeId: activeRuntimeNotice.id,
+        runtimeMajor: activeRuntimeNotice.currentMajor,
+        surface: 'webui_banner',
+      });
+      recordedRuntimeNoticeRef.current = activeRuntimeNotice.id;
+    }
+  }, [activeRuntimeNotice, recordEvent, shouldShowBanner]);
+
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
 
@@ -96,45 +149,107 @@ export default function UpdateBanner() {
     }
   };
 
-  // Don't show banner if loading, error, no update available, or dismissed
-  if (!shouldShowBanner) {
+  const handleDismiss = () => {
+    if (activeRuntimeNotice) {
+      recordEvent('feature_used', {
+        action: 'remind_later',
+        feature: 'runtime_compatibility_notice',
+        noticeId: activeRuntimeNotice.id,
+        runtimeMajor: activeRuntimeNotice.currentMajor,
+        surface: 'webui_banner',
+      });
+      (dismissRuntimeNotice ?? dismiss)();
+      return;
+    }
+    (dismissUpdate ?? dismiss)();
+  };
+
+  const handleRuntimeGuideClick = () => {
+    if (!activeRuntimeNotice) {
+      return;
+    }
+    recordEvent('feature_used', {
+      action: 'guide_clicked',
+      feature: 'runtime_compatibility_notice',
+      noticeId: activeRuntimeNotice.id,
+      runtimeMajor: activeRuntimeNotice.currentMajor,
+      surface: 'webui_banner',
+    });
+  };
+
+  // Render only the highest-priority active notice. A snoozed runtime notice may
+  // yield to an ordinary update while that update is still compatible.
+  if (!shouldShowBanner || !versionInfo) {
     return null;
   }
 
   return (
     <Alert
       ref={bannerRef}
-      variant="info"
+      variant={activeRuntimeNotice ? 'warning' : 'info'}
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
         'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         // Use solid background to prevent content showing through the banner
-        'dark:bg-blue-950',
+        activeRuntimeNotice ? 'dark:bg-amber-950' : 'dark:bg-blue-950',
       )}
     >
       <div className="flex items-start gap-3 sm:items-center">
-        <RefreshCw className="size-4 shrink-0" />
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-medium">
-            Update available: v{versionInfo.latestVersion}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            (current: v{versionInfo.currentVersion})
-          </span>
-        </div>
+        {activeRuntimeNotice ? (
+          <TriangleAlert className="size-4 shrink-0" />
+        ) : (
+          <RefreshCw className="size-4 shrink-0" />
+        )}
+        {activeRuntimeNotice ? (
+          <div className="flex max-w-4xl flex-col gap-0.5">
+            <span className="text-sm font-medium">
+              Node.js 20 support {versionInfo.updateBlockedByRuntime ? 'ended' : 'ends'}{' '}
+              {formatRemovalDate(activeRuntimeNotice.removalDate)}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              This Promptfoo server is running {activeRuntimeNotice.currentVersion}. Upgrade to
+              Node.js {activeRuntimeNotice.minimumVersion} or newer; Node.js{' '}
+              {activeRuntimeNotice.recommendedVersion} is recommended. Upgrading also lets promptfoo
+              move to Node&apos;s built-in SQLite, removing a platform-specific database binding.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-medium">
+              Update available: v{versionInfo.latestVersion}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              (current: v{versionInfo.currentVersion})
+            </span>
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
-          <a
-            href="https://github.com/promptfoo/promptfoo/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Release Notes
-            <ExternalLink className="size-3" />
-          </a>
-        </Button>
-        {versionInfo?.updateCommands?.primary && (
+        {activeRuntimeNotice ? (
+          <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
+            <a
+              href={activeRuntimeNotice.documentationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={handleRuntimeGuideClick}
+            >
+              View upgrade guide
+              <ExternalLink className="size-3" />
+            </a>
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
+            <a
+              href="https://github.com/promptfoo/promptfoo/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Release Notes
+              <ExternalLink className="size-3" />
+            </a>
+          </Button>
+        )}
+        {!activeRuntimeNotice && versionInfo?.updateCommands?.primary && (
           <Button
             variant="outline"
             size="sm"
@@ -154,20 +269,26 @@ export default function UpdateBanner() {
                 : 'Copy Update Command'}
           </Button>
         )}
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label={dismissLabel}
-          title={dismissLabel}
-          className={cn(
-            'inline-flex size-6 items-center justify-center rounded-md',
-            'text-current opacity-70 hover:opacity-100',
-            'hover:bg-black/10 dark:hover:bg-white/10',
-            'cursor-pointer transition-colors',
-          )}
-        >
-          <X className="size-4" />
-        </button>
+        {activeRuntimeNotice ? (
+          <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
+            {getReminderLabel(activeRuntimeNotice.reminderIntervalDays)}
+          </Button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label={dismissLabel}
+            title={dismissLabel}
+            className={cn(
+              'inline-flex size-6 items-center justify-center rounded-md',
+              'text-current opacity-70 hover:opacity-100',
+              'hover:bg-black/10 dark:hover:bg-white/10',
+              'cursor-pointer transition-colors',
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
     </Alert>
   );

@@ -1,7 +1,7 @@
 import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
@@ -17,6 +17,10 @@ describe('useVersionCheck', () => {
     localStorage.clear();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {
@@ -111,6 +115,77 @@ describe('useVersionCheck', () => {
       mockVersionInfo.latestVersion,
     );
     expect(result.current.dismissed).toBe(true);
+  });
+
+  it('should snooze a runtime notice for seven days before the final notice phase', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-22T12:00:00.000Z'));
+    const mockVersionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: {
+        id: 'node20-removal-2026-07-30',
+        kind: 'runtime_deprecation' as const,
+        runtime: 'node' as const,
+        currentVersion: 'v20.20.2',
+        currentMajor: 20,
+        removalDate: '2026-07-30',
+        minimumVersion: '22.22.0',
+        recommendedVersion: '24 LTS',
+        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        reminderIntervalDays: 7 as const,
+      },
+    };
+
+    mockCallApiResponse(mockVersionInfo);
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.versionInfo).toEqual(mockVersionInfo);
+    });
+
+    act(() => {
+      result.current.dismiss();
+    });
+
+    expect(
+      localStorage.getItem('promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30'),
+    ).toBe('2026-06-22T12:00:00.000Z');
+    expect(result.current.dismissed).toBe(true);
+  });
+
+  it('should apply the shorter reminder cadence when the final notice phase begins', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-17T12:00:00.000Z'));
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-07-15T12:00:00.000Z',
+    );
+    mockCallApiResponse({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: {
+        id: 'node20-removal-2026-07-30',
+        kind: 'runtime_deprecation',
+        runtime: 'node',
+        currentVersion: 'v20.20.2',
+        currentMajor: 20,
+        removalDate: '2026-07-30',
+        minimumVersion: '22.22.0',
+        recommendedVersion: '24 LTS',
+        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        reminderIntervalDays: 1,
+      },
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.dismissed).toBe(false);
   });
 
   it('should only call the API once on mount and not refresh', async () => {

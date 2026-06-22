@@ -52,6 +52,8 @@ describe('Version Route', () => {
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
+    expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
+    expect(response.body.runtimeNotice).toBeNull();
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {
@@ -64,6 +66,7 @@ describe('Version Route', () => {
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
+    expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
   });
 
   it('should include all required fields matching UpdateCommandResult shape', async () => {

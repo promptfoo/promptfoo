@@ -4,6 +4,10 @@ import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import {
+  getRuntimeCompatibilityNotice,
+  isLatestUpdateBlockedByRuntime,
+} from '../../runtimeCompatibility';
 import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
@@ -95,11 +99,14 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
+    const runtimeNotice = getRuntimeCompatibilityNotice();
 
     const response = {
       currentVersion: VERSION,
       latestVersion: resolvedLatestVersion,
       updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
+      updateBlockedByRuntime: isLatestUpdateBlockedByRuntime(),
+      runtimeNotice,
       selfHosted,
       isNpx,
       updateCommands,
@@ -112,12 +119,15 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
+    const runtimeNotice = getRuntimeCompatibilityNotice();
 
     res.status(500).json({
       error: 'Failed to check version',
       currentVersion: VERSION,
       latestVersion: VERSION,
       updateAvailable: false,
+      updateBlockedByRuntime: isLatestUpdateBlockedByRuntime(),
+      runtimeNotice,
       selfHosted,
       isNpx,
       updateCommands,
