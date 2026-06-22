@@ -308,5 +308,61 @@ describe('matchesContextFaithfulness', () => {
       expect(result.score).toBeCloseTo(0, 5);
       expect(result.pass).toBe(false);
     });
+
+    it('scores the taught period-delimited format correctly (regression guard)', async () => {
+      // The canonical few-shot format ("...in order: Yes. No. Yes.") must keep
+      // scoring correctly through the token parser: 2 of 3 supported => 0.67.
+      mockTwoCalls(
+        'Statement 1\nStatement 2\nStatement 3',
+        'Final verdict for each statement in order: Yes. No. Yes.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBeCloseTo(2 / 3, 5);
+      expect(result.pass).toBe(true);
+    });
+
+    it('clamps to 0 when more "no" verdicts are emitted than statements', async () => {
+      // Three "no" tokens against two statements yields a raw score of 1 - 3/2 =
+      // -0.5; it must clamp to 0 (and fail), exercising the [0, 1] clamp on the
+      // token-parsing path (the existing clamp test only covers the else branch).
+      mockTwoCalls(
+        'Statement 1\nStatement 2',
+        'Final verdict for each statement in order: No. No. No.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBe(0);
+      expect(result.pass).toBe(false);
+    });
+
+    it('ignores yes/no substrings inside larger words via word boundaries', async () => {
+      // Only the standalone "Yes" is a verdict; "yesterday" and "cannot" must not
+      // match, so the single statement is supported => 1.0.
+      mockTwoCalls(
+        'Statement 1',
+        'Final verdict for each statement in order: Yes. Yesterday the report cannot be verified.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBeCloseTo(1, 5);
+      expect(result.pass).toBe(true);
+    });
+
+    it('KNOWN LIMITATION: a standalone "no" in a "Yes" verdict explanation is over-counted', async () => {
+      // Verdicts are counted globally (not per statement), so a standalone "no"
+      // word inside a supported statement's explanation is counted as unsupported:
+      // "Yes. There is no doubt." -> tokens [yes, no] -> 1 - 1/1 = 0. This is an
+      // accepted tradeoff of the conservative "count no" heuristic — graders are
+      // instructed to emit a bare yes/no per statement. Documented here so a future
+      // change that improves it has to flip this assertion intentionally.
+      mockTwoCalls(
+        'Statement 1',
+        'Final verdict for each statement in order: Yes. There is no doubt.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBe(0);
+    });
   });
 });
