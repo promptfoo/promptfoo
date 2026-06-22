@@ -485,8 +485,8 @@ describe('is-sql assertion', () => {
     });
   });
 
-  // ------------------------------------------- White Table/Column List Tests ------------------------------------------- //
-  describe('White Table/Column List Tests', () => {
+  // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
+  describe('Allowed Table/Column List Tests', () => {
     it('should fail if the output SQL statement violate allowedTables', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
