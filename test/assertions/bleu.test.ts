@@ -146,7 +146,10 @@ describe('BLEU score calculation', () => {
     expect(score).toBeLessThan(1.0);
   });
 
-  it('should handle multiple references and take best matching score', () => {
+  it('should pool n-gram matches across multiple references', () => {
+    // Multiple references are pooled at the n-gram level (Papineni et al. §2.1):
+    // each n-gram is clipped by its maximum count across references, so different
+    // references can cover different parts of the candidate.
     const references = [
       'The cat sat on the mat.',
       'There is a cat on the mat.',
@@ -156,6 +159,30 @@ describe('BLEU score calculation', () => {
 
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.25);
+  });
+
+  it('should pool n-gram matches across complementary references (Papineni multi-reference clipping)', () => {
+    // Each reference differs from the candidate by exactly one (different) word, so
+    // neither reference alone fully matches the candidate — but together they contain
+    // every 1- to 4-gram of it. Papineni et al. §2.1 clips each n-gram by its MAXIMUM
+    // count across all references (NLTK `modified_precision`), so modified precision is
+    // 1 at every order and the score is exactly 1.0. Clipping against the single
+    // best-matching reference instead undercounts to ~0.76.
+    expect(calculateBleuScore('a b c d e f', ['a b c d e X', 'Y b c d e f'])).toBeCloseTo(1, 10);
+    expect(
+      calculateBleuScore('the cat sat on the mat', [
+        'the cat sat on the X',
+        'Y cat sat on the mat',
+      ]),
+    ).toBeCloseTo(1, 10);
+  });
+
+  it('should clip each n-gram by its max count across references, not pick one reference', () => {
+    // Unigram-only weights isolate the clipping rule from higher-order smoothing.
+    // Candidate "a b": reference 1 covers "a", reference 2 covers "b", so the pooled
+    // unigram precision is 2/2 = 1.0 and the score is 1.0. The old "best single
+    // reference" behavior clipped 1/2 against either reference and scored 0.5.
+    expect(calculateBleuScore('a b', ['a c', 'b d'], [1, 0, 0, 0])).toBeCloseTo(1, 10);
   });
 
   it('should use closest reference length for brevity penalty', () => {

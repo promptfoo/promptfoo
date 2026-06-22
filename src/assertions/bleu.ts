@@ -121,20 +121,27 @@ export function calculateBleuScore(
 
     const candidateNGramCounts = countNGrams(candidateNGrams);
 
-    // Clipped n-gram count against the best-matching reference
-    let maxClippedCount = 0;
+    // Modified n-gram precision (Papineni et al. §2.1 / NLTK `modified_precision`):
+    // clip each candidate n-gram by the MAXIMUM number of times it occurs in ANY
+    // single reference, then sum the clipped counts. Taking the max *per n-gram*
+    // lets different references cover different n-grams of the candidate. Summing
+    // each reference's clipped count and taking the max of those totals instead — a
+    // "best single reference" — undercounts whenever the references are
+    // complementary (e.g. candidate "a b" with references ["a c", "b d"] scores a
+    // unigram precision of 1/2 rather than the correct 2/2).
+    const maxReferenceNGramCounts = new Map<string, number>();
     for (const referenceWords of referenceWordsList) {
-      const referenceNGramCounts = countNGrams(getNGrams(referenceWords, n));
-
-      let clippedCount = 0;
-      for (const [gram, count] of candidateNGramCounts) {
-        clippedCount += Math.min(count, referenceNGramCounts.get(gram) ?? 0);
+      for (const [gram, count] of countNGrams(getNGrams(referenceWords, n))) {
+        maxReferenceNGramCounts.set(gram, Math.max(maxReferenceNGramCounts.get(gram) ?? 0, count));
       }
-
-      maxClippedCount = Math.max(maxClippedCount, clippedCount);
     }
 
-    usableOrders.push({ precision: maxClippedCount / totalCount, weight: weights[n - 1] });
+    let clippedCount = 0;
+    for (const [gram, count] of candidateNGramCounts) {
+      clippedCount += Math.min(count, maxReferenceNGramCounts.get(gram) ?? 0);
+    }
+
+    usableOrders.push({ precision: clippedCount / totalCount, weight: weights[n - 1] });
   }
 
   const bp = calculateBrevityPenalty(candidateWords.length, closestRefLength);
