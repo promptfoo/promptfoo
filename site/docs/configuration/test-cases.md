@@ -343,7 +343,7 @@ text,__expected
 "1,000 items in stock","contains-all: ""1,000"",in stock"
 ```
 
-Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. The same quoting rules apply when these assertions are written as a plain string anywhere else (for example via `__expected` in JSON test files).
+Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. These quoting rules apply to `__expected` columns in CSV, XLSX, and Google Sheets. JSON and JSONL test files should use the structured `assert` object form instead.
 
 At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
