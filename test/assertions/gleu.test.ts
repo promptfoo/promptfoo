@@ -97,6 +97,14 @@ describe('GLEU score calculation', () => {
     }).toThrow('Invalid inputs');
   });
 
+  it('should return 0 for an empty candidate instead of throwing', () => {
+    expect(calculateGleuScore('', ['The cat sat on the mat.'])).toBe(0);
+  });
+
+  it('should return 0 for a whitespace-only candidate', () => {
+    expect(calculateGleuScore('   \n\t', ['The cat sat on the mat.'])).toBe(0);
+  });
+
   it('should handle multiple references with varying lengths', () => {
     const references = ['The small cat sat.', 'A cat was sitting.', 'The cat is on the mat.'];
     const candidate = 'The small cat sat.';
@@ -209,6 +217,36 @@ describe('GLEU score calculation', () => {
         pass: false,
         score: expect.any(Number),
         reason: expect.stringMatching(/GLEU score \d+\.\d+ is less than threshold 0\.5/),
+        assertion: expect.any(Object),
+      });
+    });
+
+    it('should fail (score 0) on an empty output instead of throwing', () => {
+      const params = {
+        assertion: { type: 'gleu', value: 'The cat sat on the mat.', threshold: 0.5 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: false,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringMatching(/GLEU score 0\.0000 is less than threshold 0\.5/),
+        assertion: expect.any(Object),
+      });
+    });
+
+    it('should pass an inverse assertion on an empty output', () => {
+      const params = {
+        assertion: { type: 'gleu', value: 'The cat sat on the mat.', threshold: 0.5 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: true,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
         assertion: expect.any(Object),
       });
     });
