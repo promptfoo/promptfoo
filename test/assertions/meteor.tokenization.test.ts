@@ -79,6 +79,14 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
     expect(result.score).toBe(0);
   });
 
+  it('distinguishes an empty-string candidate (throws) from whitespace-only (scores 0)', async () => {
+    // A whitespace-only candidate is a non-empty string, so it passes the
+    // `!candidate` guard, tokenizes to [] and scores 0. An empty-string candidate
+    // is falsy and still throws 'Invalid inputs'. Pin this asymmetry.
+    expect((await meteor({ outputString: '   \t  ' })).score).toBe(0);
+    await expect(meteor({ outputString: '' })).rejects.toThrow('Invalid inputs');
+  });
+
   it('preserves punctuation-only token scoring', async () => {
     const threeTokenScore = (
       await meteor({ renderedValue: 'one token two', outputString: 'one token two' })
