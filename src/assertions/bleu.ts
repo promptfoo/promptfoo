@@ -59,8 +59,9 @@ function countNGrams(ngrams: string[]): Map<string, number> {
  * @param references - Array of reference strings to compare against
  * @param weights - Weights for each n-gram precision (1-gram to 4-gram). Must be
  *   non-negative and sum to 1 (BLEU weights are non-negative by definition).
- * @returns BLEU score between 0 and 1
- * @throws When inputs are invalid, weights are negative, or weights don't sum to 1
+ * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate)
+ * @throws When the candidate is null/undefined, references is empty, weights are
+ *   negative, or weights don't sum to 1
  */
 export function calculateBleuScore(
   candidate: string,
@@ -70,7 +71,11 @@ export function calculateBleuScore(
   if (candidate == null || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
   }
-  if (candidate === '') {
+  // An empty or whitespace-only candidate (a refusal or truncated generation) has
+  // zero n-gram overlap with any reference, so its BLEU score is 0. Return early to
+  // avoid throwing — which would crash the eval — or letting `tokenize('   ')` (which
+  // yields `['']`) smooth to a misleadingly tiny nonzero score.
+  if (candidate.trim() === '') {
     return 0;
   }
   // BLEU weights are non-negative by definition. Rejecting negatives keeps the
