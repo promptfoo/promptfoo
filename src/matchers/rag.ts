@@ -404,15 +404,26 @@ export async function matchesContextFaithfulness(
 
   let finalAnswer = 'Final verdict for each statement in order:';
   finalAnswer = finalAnswer.toLowerCase();
-  let verdicts = resp.output.toLowerCase().trim();
+  const verdicts = resp.output.toLowerCase().trim();
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
-        score =
-          1 - parsedVerdicts.filter((answer) => !answer.includes('yes')).length / statements.length;
+      // Extract verdict tokens after the "Final verdict ... in order:" marker by
+      // matching standalone "yes"/"no" words, rather than splitting on "." and
+      // substring-testing for "yes". The old approach miscounted common grader
+      // formats the few-shot does not strictly prevent: an enumerated list
+      // ("1. Yes.") turned each bare "N" into a non-"yes" verdict (a fully
+      // supported answer scored 0), a comma-separated list ("Yes, No, Yes")
+      // collapsed into one segment that contained "yes" (scoring 1.0 and hiding
+      // the "No"), and explanatory prose ("No, the context never mentions yes")
+      // was counted as supported. Score by the number of "no" verdicts so an
+      // unparseable/absent verdict is treated as supported, preserving prior
+      // behavior.
+      const finalVerdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+      const verdictTokens = finalVerdicts.match(/\b(?:yes|no)\b/g) ?? [];
+      if (verdictTokens.length > 0) {
+        const notSupported = verdictTokens.filter((token) => token === 'no').length;
+        score = 1 - notSupported / statements.length;
       }
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;

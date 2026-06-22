@@ -241,4 +241,72 @@ describe('matchesContextFaithfulness', () => {
       expect(result.reason).toBeDefined();
     });
   });
+
+  describe('verdict format robustness', () => {
+    // The grader's few-shot teaches a period-delimited final line
+    // ("...in order: No. No. Yes."), but models commonly deviate — enumerating
+    // the list, separating with commas, or adding prose. The score must stay
+    // correct (supported statements / total) across these variations.
+    const mockTwoCalls = (statements: string, verdicts: string) => {
+      const mockCallApi = vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            output: statements,
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          }),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            output: verdicts,
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          }),
+        );
+      const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+      callApiSpy.mockReset();
+      callApiSpy.mockImplementation(mockCallApi);
+    };
+
+    it('scores an enumerated final verdict list correctly (all statements supported => 1.0)', async () => {
+      // Final verdicts as "1. Yes." … "5. Yes." — every statement is supported, so
+      // the score must be 1.0. The old split('.')-and-substring parser turned each
+      // "N." enumeration number into a non-"yes" segment and scored a perfect
+      // answer 0.0.
+      mockTwoCalls(
+        'Statement 1\nStatement 2\nStatement 3\nStatement 4\nStatement 5',
+        'Final verdict for each statement in order:\n1. Yes.\n2. Yes.\n3. Yes.\n4. Yes.\n5. Yes.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBeCloseTo(1, 5);
+      expect(result.pass).toBe(true);
+    });
+
+    it('scores a comma-separated final verdict list correctly (Yes, No, Yes => 0.67)', async () => {
+      // Commas instead of periods previously collapsed the whole line into one
+      // segment that contained "yes", scoring 1.0 and hiding the "No".
+      mockTwoCalls(
+        'Statement 1\nStatement 2\nStatement 3',
+        'Final verdict for each statement in order: Yes, No, Yes',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBeCloseTo(2 / 3, 5);
+      expect(result.pass).toBe(true);
+    });
+
+    it('does not count the word "yes" inside a "No" verdict explanation (both No => 0.0)', async () => {
+      // A "No" verdict whose text contains the substring "yes" must not be counted
+      // as supported. Both statements are unsupported, so the score must be 0.0;
+      // the old parser scored 0.5 because the "yes" substring matched.
+      mockTwoCalls(
+        'Statement 1\nStatement 2',
+        'Final verdict for each statement in order: No, the context never mentions yes. No.',
+      );
+
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
+      expect(result.score).toBeCloseTo(0, 5);
+      expect(result.pass).toBe(false);
+    });
+  });
 });
