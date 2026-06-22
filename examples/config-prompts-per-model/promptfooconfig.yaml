@@ -12,7 +12,7 @@ providers:
     prompts:
       - My first prompt
       - My second prompt
-  - id: openai:gpt-4
+  - id: openai:gpt-4o-mini
     prompts:
       - My first prompt
 

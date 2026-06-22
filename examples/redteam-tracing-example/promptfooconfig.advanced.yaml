@@ -2,7 +2,7 @@
 # This shows all available tracing options
 
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0.5
 

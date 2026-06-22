@@ -6,7 +6,7 @@ prompts:
   - 'Speak in {{language}}: {{input}}'
 providers:
   - openai:gpt-4.1-mini
-  - openai:gpt-4
+  - openai:gpt-4o-mini
 tests:
   - vars:
       language:

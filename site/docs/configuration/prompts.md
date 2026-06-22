@@ -348,7 +348,7 @@ prompts:
     label: claude_prompt
 
 providers:
-  - id: openai:gpt-4
+  - id: openai:gpt-4o-mini
     prompts: [gpt_prompt]
   - id: anthropic:claude-3
     prompts: [claude_prompt]

@@ -87,7 +87,7 @@ Control which providers run specific tests using the `providers` field. This all
 providers:
   - id: openai:gpt-3.5-turbo
     label: fast-model
-  - id: openai:gpt-4
+  - id: openai:gpt-4.1
     label: smart-model
 
 tests:
