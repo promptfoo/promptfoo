@@ -10,7 +10,12 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
   return modelName.startsWith('openai.') && !modelName.includes('gpt-oss');
 }
 
-/** Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`). */
+/**
+ * Whether a Bedrock model id is a bare xAI Grok id (for example, `xai.grok-4.3`).
+ *
+ * @param modelName The Bedrock model identifier to evaluate.
+ * @returns `true` when the model id is an xAI Grok model served as `xai.grok-*`; otherwise `false`.
+ */
 export function isBedrockGrokModel(modelName: string): boolean {
   return modelName.startsWith('xai.grok-');
 }
