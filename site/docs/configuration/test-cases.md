@@ -85,9 +85,9 @@ Control which providers run specific tests using the `providers` field. This all
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:chat:gpt-5.4-mini
     label: fast-model
-  - id: openai:gpt-4.1
+  - id: openai:chat:gpt-5.5
     label: smart-model
 
 tests:
@@ -112,12 +112,12 @@ tests:
 
 **Matching syntax:**
 
-| Pattern        | Matches                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `fast-model`   | Exact label match                                                    |
-| `openai:gpt-4` | Exact provider ID match                                              |
-| `openai:*`     | Wildcard - any provider starting with `openai:`                      |
-| `openai`       | Legacy prefix - matches `openai:gpt-4`, `openai:gpt-3.5-turbo`, etc. |
+| Pattern               | Matches                                                                         |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `fast-model`          | Exact label match                                                               |
+| `openai:chat:gpt-5.5` | Exact provider ID match                                                         |
+| `openai:*`            | Wildcard - any provider starting with `openai:`                                 |
+| `openai`              | Legacy prefix - matches `openai:chat:gpt-5.5`, `openai:chat:gpt-5.4-mini`, etc. |
 
 **Apply to all tests using `defaultTest`:**
 
@@ -156,7 +156,7 @@ prompts:
     raw: 'You are a creative writer. Answer: {{question}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:chat:gpt-5.4-mini
 
 tests:
   # This test only runs with the Factual Assistant prompt
