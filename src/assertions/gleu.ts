@@ -4,12 +4,13 @@ import { getNGrams } from './ngrams';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 function tokenizeForGleu(text: string): string[] {
-  return text
+  const words = text
     .toLowerCase()
     .trim()
     .split(/\s+/)
-    .map((word) => word.replace(/\.+$/, ''))
-    .filter(Boolean);
+    .map((word) => word.replace(/\.+$/, ''));
+
+  return words.some(Boolean) ? words : [];
 }
 
 /**
