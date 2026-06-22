@@ -310,6 +310,17 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should preserve existing description from JSONL rows', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      `{"description":"Custom Desc","vars":{"x":"y"}}
+{"vars":{"a":"b"}}`,
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].description).toBe('Custom Desc');
+    expect(result[1].description).toBe('Row #2');
+  });
+
   it('should read YAML file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - var1: value1
