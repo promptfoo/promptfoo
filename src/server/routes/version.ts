@@ -6,7 +6,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import {
   getRuntimeCompatibilityNotice,
-  isLatestUpdateBlockedByRuntime,
+  isUpdateBlockedByRuntime,
 } from '../../runtimeCompatibility';
 import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
@@ -105,7 +105,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       currentVersion: VERSION,
       latestVersion: resolvedLatestVersion,
       updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
-      updateBlockedByRuntime: isLatestUpdateBlockedByRuntime(),
+      updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
       runtimeNotice,
       selfHosted,
       isNpx,
@@ -126,7 +126,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       currentVersion: VERSION,
       latestVersion: VERSION,
       updateAvailable: false,
-      updateBlockedByRuntime: isLatestUpdateBlockedByRuntime(),
+      updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
       runtimeNotice,
       selfHosted,
       isNpx,

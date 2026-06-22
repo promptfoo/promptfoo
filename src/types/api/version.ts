@@ -25,8 +25,8 @@ export const VersionResponseSchema = z.object({
   currentVersion: z.string(),
   latestVersion: z.string(),
   updateAvailable: z.boolean(),
-  updateBlockedByRuntime: z.boolean(),
-  runtimeNotice: RuntimeCompatibilityNoticeSchema.nullable(),
+  updateBlockedByRuntime: z.boolean().optional(),
+  runtimeNotice: RuntimeCompatibilityNoticeSchema.nullable().optional(),
   selfHosted: z.boolean(),
   isNpx: z.boolean(),
   updateCommands: z.object({

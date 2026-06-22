@@ -17,6 +17,12 @@ const baseResponse = {
 };
 
 describe('VersionSchemas.Response', () => {
+  it('accepts legacy responses without runtime compatibility fields', () => {
+    const { updateBlockedByRuntime: _updateBlockedByRuntime, ...legacyResponse } = baseResponse;
+
+    expect(VersionSchemas.Response.parse(legacyResponse)).toEqual(legacyResponse);
+  });
+
   it('accepts a response without an active runtime notice', () => {
     expect(
       VersionSchemas.Response.parse({

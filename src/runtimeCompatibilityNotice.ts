@@ -71,7 +71,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   }
 
   const compact = options.nonInteractive ?? isNonInteractive();
-  logger.warn(formatRuntimeCompatibilityNotice(notice, compact, now));
+  console.warn(formatRuntimeCompatibilityNotice(notice, compact, now));
 
   telemetry.record('feature_used', {
     feature: 'runtime_compatibility_notice',

@@ -3,6 +3,7 @@ import {
   getRuntimeCompatibilityNotice,
   getRuntimeNoticeReminderIntervalMs,
   isLatestUpdateBlockedByRuntime,
+  isUpdateBlockedByRuntime,
   parseNodeMajor,
   shouldShowRuntimeNotice,
 } from '../src/runtimeCompatibility';
@@ -53,6 +54,14 @@ describe('runtime compatibility policy', () => {
     expect(isLatestUpdateBlockedByRuntime('v24.0.0', new Date('2026-08-01T00:00:00.000Z'))).toBe(
       false,
     );
+  });
+
+  it('keeps Docker image updates available after the host runtime cutoff', () => {
+    const cutoff = new Date('2026-07-30T00:00:00.000Z');
+
+    expect(isUpdateBlockedByRuntime('docker', 'v20.20.2', cutoff)).toBe(false);
+    expect(isUpdateBlockedByRuntime('npm', 'v20.20.2', cutoff)).toBe(true);
+    expect(isUpdateBlockedByRuntime('npx', 'v20.20.2', cutoff)).toBe(true);
   });
 
   it('reminds weekly before the final phase and daily during it', () => {

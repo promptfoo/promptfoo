@@ -53,7 +53,11 @@ describe('Version Route', () => {
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
     expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
-    expect(response.body.runtimeNotice).toBeNull();
+    if (process.versions.node.startsWith('20.')) {
+      expect(response.body.runtimeNotice).toMatchObject({ currentMajor: 20, runtime: 'node' });
+    } else {
+      expect(response.body.runtimeNotice).toBeNull();
+    }
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {

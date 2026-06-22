@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/envars', () => ({
   getEnvBool: vi.fn(),
@@ -23,7 +23,6 @@ vi.mock('../src/telemetry', () => ({
 
 import { getEnvBool, getEnvString, isNonInteractive } from '../src/envars';
 import { readGlobalConfig, writeGlobalConfig } from '../src/globalConfig/globalConfig';
-import logger from '../src/logger';
 import { getRuntimeCompatibilityNotice } from '../src/runtimeCompatibility';
 import {
   formatRuntimeCompatibilityNotice,
@@ -32,12 +31,19 @@ import {
 import telemetry from '../src/telemetry';
 
 describe('runtime compatibility CLI notice', () => {
+  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.resetAllMocks();
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvString).mockReturnValue(undefined);
     vi.mocked(isNonInteractive).mockReturnValue(false);
     vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-installation' });
+  });
+
+  afterEach(() => {
+    consoleWarnSpy.mockRestore();
   });
 
   it('shows and persists the full notice for an interactive Node.js 20 run', () => {
@@ -47,8 +53,10 @@ describe('runtime compatibility CLI notice', () => {
       true,
     );
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('support ends July 30, 2026'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("Node's built-in SQLite"));
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('support ends July 30, 2026'),
+    );
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Node's built-in SQLite"));
     expect(writeGlobalConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         notices: {
@@ -76,7 +84,7 @@ describe('runtime compatibility CLI notice', () => {
       }),
     ).toBe(true);
 
-    const message = vi.mocked(logger.warn).mock.calls[0][0] as string;
+    const message = vi.mocked(console.warn).mock.calls[0][0] as string;
     expect(message).not.toContain('\n');
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
   });
@@ -95,7 +103,7 @@ describe('runtime compatibility CLI notice', () => {
         now: new Date('2026-06-22T12:00:00.000Z'),
       }),
     ).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it('can be disabled explicitly and stays silent on newer Node.js versions', () => {
@@ -104,14 +112,14 @@ describe('runtime compatibility CLI notice', () => {
 
     vi.mocked(getEnvBool).mockReturnValue(false);
     expect(maybeWarnAboutRuntime({ currentVersion: 'v24.0.0' })).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it('does not record a notice when warning-level output is suppressed', () => {
     vi.mocked(getEnvString).mockReturnValue('error');
 
     expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2' })).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
     expect(telemetry.record).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,9 @@
-import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import {
+  mockCallApiResponse,
+  mockCallApiResponseOnce,
+  rejectCallApi,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,6 +25,7 @@ describe('useVersionCheck', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -186,6 +192,84 @@ describe('useVersionCheck', () => {
       expect(result.current.loading).toBe(false);
     });
     expect(result.current.dismissed).toBe(false);
+  });
+
+  it('should re-enable a snoozed runtime notice without reloading the page', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 7 as const,
+    };
+    mockCallApiResponse({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice,
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    act(() => result.current.dismissRuntimeNotice?.());
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(7 * 24 * 60 * 60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+  });
+
+  it('should refetch runtime policy when the support cutoff is reached', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 1 as const,
+    };
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice,
+    });
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: true,
+      runtimeNotice,
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
   it('should only call the API once on mount and not refresh', async () => {
