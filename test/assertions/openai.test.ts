@@ -703,6 +703,55 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it('inverse (not-is-valid-openai-tools-call) fails when the call IS valid', async () => {
+      const toolsOutput = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            arguments: '{"location": "San Francisco, CA", "unit": "Fahrenheit"}',
+          },
+        },
+      ];
+
+      const result = await handleIsValidOpenAiToolsCall({
+        assertion: { ...toolsAssertion, type: 'not-is-valid-openai-tools-call' },
+        output: toolsOutput,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: 'is-valid-openai-tools-call',
+        assertionValueContext: mockContext,
+        inverse: true,
+        outputString: JSON.stringify(toolsOutput),
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Expected output to not be a valid OpenAI tools call, but it was');
+    });
+
+    it('inverse (not-is-valid-openai-tools-call) passes when the call is NOT valid', async () => {
+      const toolsOutput: unknown[] = [];
+
+      const result = await handleIsValidOpenAiToolsCall({
+        assertion: { ...toolsAssertion, type: 'not-is-valid-openai-tools-call' },
+        output: toolsOutput as never,
+        provider: mockProvider,
+        test: { vars: {} },
+        baseType: 'is-valid-openai-tools-call',
+        assertionValueContext: mockContext,
+        inverse: true,
+        outputString: JSON.stringify(toolsOutput),
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('OpenAI did not return a valid-looking tools response: []');
+    });
+
     it('should load tools from external file', async () => {
       const toolsOutput = [
         {

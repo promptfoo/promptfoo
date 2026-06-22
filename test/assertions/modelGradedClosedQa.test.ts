@@ -4,7 +4,14 @@ import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
-vi.mock('../../src/matchers/llmGrading');
+// Mock only matchesClosedQa; keep the real isGraderFailure so the grader-error
+// guard in the handler is exercised faithfully.
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
+    '../../src/matchers/llmGrading',
+  );
+  return { ...actual, matchesClosedQa: vi.fn() };
+});
 
 describe('handleModelGradedClosedQa', () => {
   beforeEach(() => {
@@ -121,6 +128,68 @@ describe('handleModelGradedClosedQa', () => {
       pass: true,
       score: 1,
       reason: 'test reason',
+    });
+  });
+
+  describe('inverse (not-model-graded-closedqa)', () => {
+    const baseParams: AssertionParams = {
+      assertion: { type: 'not-model-graded-closedqa' },
+      baseType: 'model-graded-closedqa',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test: { vars: {} },
+        logProbs: undefined,
+        provider: undefined,
+        providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      providerResponse: {},
+      renderedValue: 'test value',
+      test: { options: {}, vars: {} },
+    };
+
+    it('fails and zeroes the score when the grader passes', async () => {
+      vi.mocked(matchesClosedQa).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'criterion met',
+      });
+
+      const result = await handleModelGradedClosedQa(baseParams);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('criterion met');
+    });
+
+    it('passes and inverts the score when the grader fails', async () => {
+      vi.mocked(matchesClosedQa).mockResolvedValue({
+        pass: false,
+        score: 0.25,
+        reason: 'criterion not met',
+      });
+
+      const result = await handleModelGradedClosedQa(baseParams);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.75);
+      expect(result.reason).toBe('criterion not met');
+    });
+
+    it('does not invert a grader error', async () => {
+      vi.mocked(matchesClosedQa).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'grader failed',
+        metadata: { graderError: true },
+      });
+
+      const result = await handleModelGradedClosedQa(baseParams);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('grader failed');
     });
   });
 });

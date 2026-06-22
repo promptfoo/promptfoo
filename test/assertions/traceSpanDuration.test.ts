@@ -362,3 +362,52 @@ describe('handleTraceSpanDuration', () => {
     });
   });
 });
+
+describe('handleTraceSpanDuration inverse (not-trace-span-duration)', () => {
+  const fastTrace = {
+    ...defaultParams.assertionValueContext,
+    trace: {
+      traceId: 'fast-trace',
+      evaluationId: 'test-evaluation-id',
+      testCaseId: 'test-test-case-id',
+      metadata: { test: 'value' },
+      spans: [
+        { spanId: '1', name: 'fast.op1', startTime: 0, endTime: 100 },
+        { spanId: '2', name: 'fast.op2', startTime: 100, endTime: 500 },
+        { spanId: '3', name: 'fast.op3', startTime: 500, endTime: 1000 },
+      ],
+    },
+  };
+
+  it('should fail when the underlying duration check passes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-duration', value: { max: 1500 } },
+      renderedValue: { max: 1500 },
+      assertionValueContext: fastTrace,
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe(
+      'All 3 spans matching pattern "*" completed within 1500ms (max: 500ms)',
+    );
+  });
+
+  it('should pass when the underlying duration check fails', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-duration', value: { max: 50 } },
+      renderedValue: { max: 50 },
+      assertionValueContext: fastTrace,
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('exceed duration threshold 50ms');
+  });
+});

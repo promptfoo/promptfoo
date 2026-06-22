@@ -346,3 +346,44 @@ describe('handleTraceSpanCount', () => {
     );
   });
 });
+
+describe('handleTraceSpanCount inverse (not-trace-span-count)', () => {
+  const traceContext = {
+    ...defaultParams.assertionValueContext,
+    trace: mockTraceData,
+  };
+
+  it('should fail when the underlying span-count check passes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 3 } },
+      renderedValue: { pattern: '*llm*', max: 3 },
+      assertionValueContext: traceContext,
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe(
+      'Found 2 spans matching pattern "*llm*" (expected at most 3). Matched spans: llm.completion, llm.chat',
+    );
+  });
+
+  it('should pass when the underlying span-count check fails', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 1 } },
+      renderedValue: { pattern: '*llm*', max: 1 },
+      assertionValueContext: traceContext,
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe(
+      'Found 2 spans matching pattern "*llm*", expected at most 1. Matched spans: llm.completion, llm.chat',
+    );
+  });
+});

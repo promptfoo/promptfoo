@@ -4,7 +4,7 @@ import { maybeLoadToolsFromExternalFile } from '../util/index';
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleIsValidOpenAiToolsCall = async ({
+const handleIsValidOpenAiToolsCallInner = async ({
   assertion,
   output,
   provider,
@@ -104,4 +104,24 @@ export const handleIsValidOpenAiToolsCall = async ({
       assertion,
     };
   }
+};
+
+// The core validator above has several exit points, so `not-is-valid-openai-tools-call`
+// negates its verdict here rather than threading `inverse` through every branch.
+export const handleIsValidOpenAiToolsCall = async (
+  params: AssertionParams,
+): Promise<GradingResult> => {
+  const result = await handleIsValidOpenAiToolsCallInner(params);
+  if (!params.inverse) {
+    return result;
+  }
+  const pass = !result.pass;
+  return {
+    ...result,
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? result.reason
+      : 'Expected output to not be a valid OpenAI tools call, but it was',
+  };
 };
