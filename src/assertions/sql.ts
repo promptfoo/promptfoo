@@ -281,13 +281,82 @@ export const handleIsSql = async ({
   };
 };
 
+const FENCE_START_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*([^\r\n]*)$/;
+const FENCE_END_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/;
+
+function extractSqlCodeBlocks(output: string): string[] {
+  const sqlBlocks: string[] = [];
+  let activeBlock:
+    | { body: string[]; fenceCharacter: string; fenceLength: number; isSql: boolean }
+    | undefined;
+
+  for (const line of output.split(/\r\n?|\n/)) {
+    if (!activeBlock) {
+      const openingFence = FENCE_START_PATTERN.exec(line);
+      if (openingFence) {
+        const fence = openingFence[1];
+        const language = openingFence[2].trim().toLowerCase();
+        activeBlock = {
+          body: [],
+          fenceCharacter: fence[0],
+          fenceLength: fence.length,
+          isSql: language === '' || language === 'sql',
+        };
+      }
+      continue;
+    }
+
+    const closingFence = FENCE_END_PATTERN.exec(line)?.[1];
+    if (
+      closingFence?.[0] === activeBlock.fenceCharacter &&
+      closingFence.length >= activeBlock.fenceLength
+    ) {
+      if (activeBlock.isSql) {
+        sqlBlocks.push(activeBlock.body.join('\n').trim());
+      }
+      activeBlock = undefined;
+    } else {
+      activeBlock.body.push(line);
+    }
+  }
+
+  return sqlBlocks;
+}
+
 export const handleContainsSql = async (
   assertionParams: AssertionParams,
 ): Promise<GradingResult> => {
-  const match = coerceString(assertionParams.outputString).match(/```(?:sql)?([^`]+)```/);
-  if (match) {
-    const sqlCode = match[1].trim();
-    return handleIsSql({ ...assertionParams, outputString: sqlCode });
+  const outputString = coerceString(assertionParams.outputString);
+  const sqlBlocks = extractSqlCodeBlocks(outputString);
+  const candidates = sqlBlocks.length > 0 ? sqlBlocks : [outputString];
+  let failureReason = 'Output does not contain valid SQL';
+  let containsValidSql = false;
+
+  for (const candidate of candidates) {
+    if (candidate.trim().length === 0) {
+      continue;
+    }
+    const result = await handleIsSql({
+      ...assertionParams,
+      outputString: candidate,
+      inverse: false,
+    });
+    if (result.pass) {
+      containsValidSql = true;
+      break;
+    }
+    failureReason = result.reason;
   }
-  return handleIsSql(assertionParams);
+
+  const pass = assertionParams.inverse ? !containsValidSql : containsValidSql;
+  return {
+    assertion: assertionParams.assertion,
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? 'Assertion passed'
+      : containsValidSql
+        ? 'The output SQL statement is valid'
+        : failureReason,
+  };
 };

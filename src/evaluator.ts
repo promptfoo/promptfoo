@@ -432,6 +432,12 @@ function getRepeatCacheNamespace(
   return undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -650,6 +656,17 @@ interface ProviderCallResult {
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
 
+function mergeProviderPromptConfig(
+  promptConfig: Prompt['config'],
+  testOptions: AtomicTestCase['options'],
+): Prompt['config'] {
+  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  return {
+    ...(promptConfig ?? {}),
+    ...providerOptions,
+  };
+}
+
 function createRunEvalState({
   provider,
   prompt,
@@ -662,10 +679,7 @@ function createRunEvalState({
   const setup = createRunEvalSetup({
     provider,
     prompt,
-    promptConfig: {
-      ...(prompt.config ?? {}),
-      ...(test.options ?? {}),
-    },
+    promptConfig: mergeProviderPromptConfig(prompt.config, test.options),
     vars,
   });
 
@@ -804,10 +818,7 @@ async function renderRunEvalPrompt({
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
-  const promptConfig = {
-    ...(promptForRender.config ?? {}),
-    ...(test.options ?? {}),
-  };
+  const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
   setup.prompt.raw = renderedPrompt;
   return {
@@ -2170,6 +2181,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
+      ...data.options,
       ...test.options,
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
@@ -2386,13 +2398,19 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
-  for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
+  const globalRepeat = normalizeRepeatCount(options.repeat);
+  const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
+  const effectiveOptions = {
+    ...options,
+    repeat: testRepeat,
+  };
+  for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
     for (const vars of varCombinations) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
         evalId,
-        options,
+        options: effectiveOptions,
         promptIdCache,
         promptIndexMap,
         promptPrefix,

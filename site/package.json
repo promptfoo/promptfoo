@@ -87,7 +87,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.0.0",
     "@mui/system": "^9.0.0",
-    "@types/react": "19.2.14",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "dompurify": "^3.4.8",
     "react-countup": "^6.5.3",

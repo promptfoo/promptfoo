@@ -38,7 +38,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
@@ -135,6 +135,20 @@ assert:
 ```
 
 For case insensitive matching, use `icontains-any`.
+
+Use the structured assertion form in YAML configs:
+
+```yaml
+assert:
+  - type: contains-all
+    value:
+      - '1,000'
+      - in stock
+```
+
+This checks for the two values `1,000` and `in stock`.
+
+Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns use comma-separated values. Quote values containing commas; see [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for escaping details.
 
 ### Regex
 
@@ -257,12 +271,14 @@ It will fail for:
 
 ### Contains-Sql
 
-This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+This assertion ensures that the output is either valid SQL or contains a code block with valid SQL.
 
 ```yaml
 assert:
   - type: contains-sql
 ```
+
+Fenced SQL can use an optional `sql` language tag. MySQL backtick-quoted identifiers, such as ``SELECT `id` FROM `users`;``, are supported inside the fence.
 
 See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
 
