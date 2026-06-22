@@ -22,11 +22,16 @@ describe('ellipsize', () => {
     expect(ellipsize(str, 4)).toBe('h...');
   });
 
+  it('should return an empty string for negative maxLen', () => {
+    expect(ellipsize('hello', -1)).toBe('');
+    expect(ellipsize('hello', -5)).toBe('');
+  });
+
   it('should handle empty string', () => {
     expect(ellipsize('', 5)).toBe('');
   });
 
-  it('should stay within maxLen when maxLen is too small for an ellipsis', () => {
+  it('should hard-truncate when maxLen is less than 3', () => {
     // maxLen < 3 has no room for "..."; the result must still respect maxLen
     // (previously slice(0, maxLen - 3) used a negative index and overflowed).
     expect(ellipsize('hello', 2)).toBe('he');
