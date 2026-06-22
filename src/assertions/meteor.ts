@@ -264,7 +264,10 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-}: AssertionParams): Promise<GradingResult> {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'inverse' | 'outputString' | 'renderedValue'
+>): Promise<GradingResult> {
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||

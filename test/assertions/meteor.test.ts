@@ -1,12 +1,28 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('natural', () => {
+  const stems: Record<string, string> = {
+    sat: 'sit',
+    sitting: 'sit',
+  };
+
+  return {
+    PorterStemmer: {
+      stem: (token: string) => stems[token] ?? token,
+    },
+    WordNet: class {
+      lookup(_word: string, callback: (results: { synonyms: string[] }[]) => void) {
+        callback([]);
+      }
+    },
+  };
+});
+
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
-import type { AssertionParams } from '../../src/types/index';
-
-// These tests exercise the REAL handler (and the optional `natural` package) rather
-// than a re-implementation, so `src/assertions/meteor.ts` gets genuine coverage.
-// METEOR is deterministic, so the scores below are stable; assertions use ranges where
-// a tighter bound would be brittle across `natural` versions.
+// Exercise the real handler while mocking only its external NLP boundary. The focused
+// natural-package integration test lives in meteorNatural.test.ts so the full behavior
+// matrix does not repeatedly load WordNet's dictionary on every supported platform.
 function meteor(opts: {
   output: string;
   value: string | string[];
@@ -17,19 +33,26 @@ function meteor(opts: {
   inverse?: boolean;
 }) {
   const { output, value, inverse = false, threshold, alpha, beta, gamma } = opts;
+  const type: 'meteor' | 'not-meteor' = inverse ? 'not-meteor' : 'meteor';
+  const assertion = { type, value, threshold, alpha, beta, gamma };
+
   return handleMeteorAssertion({
-    assertion: { type: inverse ? 'not-meteor' : 'meteor', threshold, alpha, beta, gamma },
+    assertion,
     renderedValue: value,
     outputString: output,
     inverse,
-  } as unknown as AssertionParams);
+  });
 }
 
 describe('handleMeteorAssertion', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('scoring', () => {
-    it('scores identical text near 1 and passes', async () => {
+    it('scores case-only differences near 1 and passes', async () => {
       const result = await meteor({
-        output: 'the cat sat on the mat',
+        output: 'THE CAT SAT ON THE MAT',
         value: 'the cat sat on the mat',
       });
       expect(result.pass).toBe(true);
@@ -54,27 +77,6 @@ describe('handleMeteorAssertion', () => {
       expect(result.score).toBeGreaterThan(0.6);
       expect(result.score).toBeLessThan(1);
       expect(result.pass).toBe(true);
-    });
-
-    it('handles the NLTK reference example', async () => {
-      const result = await meteor({
-        output:
-          'It is a guide to action that ensures the military will forever heed Party commands',
-        value:
-          'It is a guide to action which ensures that the military always obeys the commands of the party',
-      });
-      expect(result.score).toBeGreaterThan(0.5);
-      expect(result.pass).toBe(true);
-    });
-
-    it('scores unrelated text low and fails with a directional reason', async () => {
-      const result = await meteor({
-        output: 'The dog ran in the park',
-        value: 'The cat sat on the mat',
-      });
-      expect(result.pass).toBe(false);
-      expect(result.score).toBeLessThan(0.5);
-      expect(result.reason).toMatch(/^METEOR score \d\.\d{4} did not meet threshold 0\.5$/);
     });
 
     it('scores fully disjoint text at 0', async () => {
@@ -105,29 +107,25 @@ describe('handleMeteorAssertion', () => {
         value: 'The cat sat on the mat',
         threshold: 0.95,
       });
-      // Stem-similar score (~0.79) is below the raised threshold.
+      // The stem-similar score remains below this deliberately high threshold.
       expect(result.pass).toBe(false);
       expect(result.reason).toMatch(/did not meet threshold 0\.95/);
     });
 
     it('accepts custom alpha, beta, and gamma', async () => {
-      const result = await meteor({
+      const input = {
         output: 'The cat is sitting on the mat',
         value: 'The cat sat on the mat',
+      };
+      const defaultResult = await meteor(input);
+      const customResult = await meteor({
+        ...input,
         alpha: 0.85,
         beta: 2.0,
         gamma: 0.4,
       });
-      expect(result.score).toBeGreaterThan(0.5);
-      expect(result.pass).toBe(true);
-    });
 
-    it('defaults the threshold to 0.5', async () => {
-      const result = await meteor({
-        output: 'The dog ran in the park',
-        value: 'The cat sat on the mat',
-      });
-      expect(result.pass).toBe(false);
+      expect(customResult.score).not.toBe(defaultResult.score);
     });
   });
 
@@ -145,13 +143,21 @@ describe('handleMeteorAssertion', () => {
       );
     });
 
-    it('passes when the score does not meet the threshold', async () => {
-      const result = await meteor({
+    it('complements the positive score and passes when the score is below the threshold', async () => {
+      const input = {
         output: 'The dog ran in the park',
         value: 'The cat sat on the mat',
+      };
+      const positiveResult = await meteor(input);
+      const result = await meteor({
+        ...input,
         inverse: true,
       });
+      expect(positiveResult.pass).toBe(false);
+      expect(positiveResult.score).toBeLessThan(0.5);
+      expect(positiveResult.reason).toMatch(/^METEOR score \d\.\d{4} did not meet threshold 0\.5$/);
       expect(result.pass).toBe(true);
+      expect(result.score).toBeCloseTo(1 - positiveResult.score, 12);
       expect(result.reason).toBe('METEOR assertion passed');
     });
   });
@@ -171,10 +177,10 @@ describe('handleMeteorAssertion', () => {
       await expect(
         handleMeteorAssertion({
           assertion: { type: 'meteor' },
-          renderedValue: 123 as never,
+          renderedValue: 123,
           outputString: 'some output',
           inverse: false,
-        } as unknown as AssertionParams),
+        }),
       ).rejects.toThrow('"meteor" assertion must have a string or array of strings value');
     });
   });
