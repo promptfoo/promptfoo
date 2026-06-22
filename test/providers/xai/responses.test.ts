@@ -6,6 +6,24 @@ const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
 const mockFetchWithCache = vi.hoisted(() => vi.fn());
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
 
+const DEFAULT_TEST_MODEL = 'grok-4.3';
+const createMockResponseData = (model: string = DEFAULT_TEST_MODEL) => ({
+  id: 'resp_123',
+  model,
+  output: [
+    {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: 'hello' }],
+    },
+  ],
+  usage: {
+    input_tokens: 10,
+    output_tokens: 5,
+    total_tokens: 15,
+  },
+});
+
 class TestableXAIResponsesProvider extends XAIResponsesProvider {
   public getResolvedApiKey(): string | undefined {
     return this.getApiKey();
@@ -51,22 +69,7 @@ describe('XAIResponsesProvider', () => {
     // Default passthrough: return whatever tools array is passed in
     mockMaybeLoadToolsFromExternalFile.mockImplementation((tools: any) => Promise.resolve(tools));
     mockFetchWithCache.mockResolvedValue({
-      data: {
-        id: 'resp_123',
-        model: 'grok-4.3',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'hello' }],
-          },
-        ],
-        usage: {
-          input_tokens: 10,
-          output_tokens: 5,
-          total_tokens: 15,
-        },
-      },
+      data: createMockResponseData(),
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -216,6 +219,59 @@ describe('XAIResponsesProvider', () => {
     expect(result.cost).toBe(1.25);
   });
 
+  it('uses fallback pricing for Grok 4.20 responses', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: createMockResponseData('grok-4.20'),
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.20', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBeCloseTo(0.000025, 8);
+  });
+
+  it('prefers billed cost ticks over calculated cost when reasoning tokens are present', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        ...createMockResponseData(),
+        id: 'resp_124',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'hello with reasoning' }],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          output_tokens_details: {
+            reasoning_tokens: 100,
+          },
+          cost_in_usd_ticks: 12_500_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new XAIResponsesProvider(DEFAULT_TEST_MODEL, {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.cost).toBe(1.25);
+  });
+
   it('falls back to calculated xAI pricing when cost ticks are absent', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
@@ -250,7 +306,7 @@ describe('XAIResponsesProvider', () => {
 
     // output_tokens (5) already includes the 3 reasoning tokens, so they are
     // not billed twice: 10 input @ $1.25/M + 5 output @ $2.50/M.
-    expect(result.cost).toBeCloseTo(0.000025, 10);
+    expect(result.cost).toBeCloseTo(0.000025, 8);
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
   });
 

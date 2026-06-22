@@ -70,8 +70,7 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
         );
         if (invalidCategories.length > 0) {
           logger.warn(
-            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. 
-          Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
+            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
           );
         }
       }
@@ -262,7 +261,7 @@ describe('UnsafeBenchPlugin', () => {
 
     // Create plugin with an invalid category
     new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-      categories: ['InvalidCategory' as any],
+      categories: ['InvalidCategory' as unknown as (typeof VALID_CATEGORIES)[number]],
     });
 
     expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
