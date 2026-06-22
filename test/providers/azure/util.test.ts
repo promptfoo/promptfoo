@@ -104,27 +104,113 @@ describe('AZURE_MODELS cost coverage', () => {
   });
 
   it.each([
-    ['gpt-5.4', 1000, 1000, 0.0125, 'GPT-5.x'],
-    ['gpt-4.1', 1000, 1000, 0.01, 'GPT-4.1'],
-    ['gpt-4o', 1000, 1000, 0.0125, 'GPT-4o'],
-    ['o3', 1000, 1000, 0.05, 'o-series reasoning'],
-    ['text-embedding-3-large', 1000, 0, 0.00013, 'embeddings'],
-    ['gpt-image-1', 1000, 1000, 0.045, 'image'],
-    ['claude-opus-4-7', 1000, 1000, 0.03, 'Anthropic Claude'],
-    ['Llama-3.3-70B-Instruct', 1000, 1000, 0.00074, 'Meta Llama'],
-    ['DeepSeek-R1', 1000, 1000, 0.00274, 'DeepSeek'],
-    ['grok-4', 1000, 1000, 0.018, 'xAI Grok'],
-    ['Kimi-K2-Thinking', 1000, 1000, 0.0031, 'MoonshotAI Kimi'],
-    ['Phi-4', 1000, 1000, 0.00021, 'Microsoft Phi'],
-    ['Mistral-Large-3', 1000, 1000, 0.002, 'Mistral'],
-    ['Cohere-command-r', 1000, 1000, 0.00075, 'Cohere'],
-    ['AI21-Jamba-1.5-Large', 1000, 1000, 0.001, 'AI21'],
-    ['MAI-DS-R1', 1000, 1000, 0.00274, 'Microsoft MAI'],
-  ])('computes expected representative cost for %s (%s)', (id, inputTokens, outputTokens, expectedCost) => {
-    expect(calculateAzureCost(id, {}, inputTokens as number, outputTokens as number)).toBeCloseTo(
-      expectedCost as number,
-      12,
-    );
+    {
+      id: 'gpt-5.4',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.0125,
+      family: 'GPT-5.x',
+    },
+    { id: 'gpt-4.1', inputTokens: 1000, outputTokens: 1000, expectedCost: 0.01, family: 'GPT-4.1' },
+    { id: 'gpt-4o', inputTokens: 1000, outputTokens: 1000, expectedCost: 0.0125, family: 'GPT-4o' },
+    {
+      id: 'o3',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.05,
+      family: 'o-series reasoning',
+    },
+    {
+      id: 'text-embedding-3-large',
+      inputTokens: 1000,
+      outputTokens: 0,
+      expectedCost: 0.00013,
+      family: 'embeddings',
+    },
+    {
+      id: 'gpt-image-1',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.045,
+      family: 'image',
+    },
+    {
+      id: 'claude-opus-4-7',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.03,
+      family: 'Anthropic Claude',
+    },
+    {
+      id: 'Llama-3.3-70B-Instruct',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.00074,
+      family: 'Meta Llama',
+    },
+    {
+      id: 'DeepSeek-R1',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.00274,
+      family: 'DeepSeek',
+    },
+    {
+      id: 'grok-4',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.018,
+      family: 'xAI Grok',
+    },
+    {
+      id: 'Kimi-K2-Thinking',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.0031,
+      family: 'MoonshotAI Kimi',
+    },
+    {
+      id: 'Phi-4',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.00021,
+      family: 'Microsoft Phi',
+    },
+    {
+      id: 'Mistral-Large-3',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.002,
+      family: 'Mistral',
+    },
+    {
+      id: 'Cohere-command-r',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.00075,
+      family: 'Cohere',
+    },
+    {
+      id: 'AI21-Jamba-1.5-Large',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.001,
+      family: 'AI21',
+    },
+    {
+      id: 'MAI-DS-R1',
+      inputTokens: 1000,
+      outputTokens: 1000,
+      expectedCost: 0.00274,
+      family: 'Microsoft MAI',
+    },
+  ])('computes expected representative cost for $family ($id)', ({
+    id,
+    inputTokens,
+    outputTokens,
+    expectedCost,
+  }) => {
+    expect(calculateAzureCost(id, {}, inputTokens, outputTokens)).toBeCloseTo(expectedCost, 12);
   });
 
   // Spot-check that a representative of each supported family is priced (documents coverage and
