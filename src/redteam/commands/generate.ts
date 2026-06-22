@@ -214,7 +214,11 @@ async function getConfigHash(
     Object.keys(filters).length > 0
       ? JSON.stringify({ version: VERSION, content, filters })
       : `${VERSION}:${content}`;
-  return createHash('md5').update(hashInput).digest('hex');
+  // Use SHA-256 for the config fingerprint. MD5 is rejected under FIPS-mode
+  // crypto policies (e.g. RHEL 9 default, Node built with --openssl-config) and
+  // triggers warnings in some static-analysis tools. SHA-256 is collision-resistant,
+  // available in every Node release, and identical perf for inputs of this size.
+  return createHash('sha256').update(hashInput).digest('hex');
 }
 
 function createHeaderComments({
