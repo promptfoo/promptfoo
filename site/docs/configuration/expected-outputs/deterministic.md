@@ -136,6 +136,20 @@ assert:
 
 For case insensitive matching, use `icontains-any`.
 
+Use the structured assertion form in YAML configs:
+
+```yaml
+assert:
+  - type: contains-all
+    value:
+      - '1,000'
+      - in stock
+```
+
+This checks for the two values `1,000` and `in stock`.
+
+Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns use comma-separated values. Quote values containing commas; see [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for escaping details.
+
 ### Regex
 
 The `regex` assertion checks if the LLM output matches the provided regular expression.

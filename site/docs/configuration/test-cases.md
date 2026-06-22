@@ -327,7 +327,7 @@ question,__expected1,__expected2,__expected3
 ```
 
 :::note
-**contains-any** and **contains-all** expect comma-delimited values inside the `__expected` column.
+**contains-any**, **icontains-any**, **contains-all**, and **icontains-all** expect comma-delimited values inside the `__expected` column. Surrounding whitespace around each value is trimmed.
 
 ```csv title="test_cases.csv"
 translated_text,__expected
@@ -335,6 +335,17 @@ translated_text,__expected
 ```
 
 If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
+
+To match a value that itself contains a comma, wrap that value in double quotes. Because the assertion is inside a quoted CSV cell, write each of those wrapping quotes twice:
+
+```csv title="test_cases.csv"
+text,__expected
+"1,000 items in stock","contains-all: ""1,000"",in stock"
+```
+
+Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. These quoting rules apply to `__expected` columns in CSV, XLSX, and Google Sheets. JSON and JSONL test files should use the structured `assert` object form instead.
+
+At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
 
 ### Special CSV Columns
