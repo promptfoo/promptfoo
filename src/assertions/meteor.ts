@@ -290,9 +290,7 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : inverse
-        ? `METEOR score ${score.toFixed(4)} met threshold ${threshold} (expected it not to)`
-        : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
     assertion,
   };
 }

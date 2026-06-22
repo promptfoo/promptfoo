@@ -152,9 +152,7 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : inverse
-        ? `METEOR score ${score.toFixed(4)} met threshold ${threshold} (expected it not to)`
-        : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
     assertion,
   };
 };
@@ -335,19 +333,6 @@ describe('METEOR score calculation', () => {
       const result = await handleMeteorAssertion(params as any);
       expect(result.pass).toBe(true);
       expect(result.score).toBeGreaterThan(0.5);
-    });
-
-    it('should report an inverse-aware reason when an inverse assertion fails', async () => {
-      const params: TestParams = {
-        assertion: { type: 'meteor', value: 'hello world', threshold: 0.5 },
-        renderedValue: 'hello world',
-        outputString: 'hello world',
-        inverse: true,
-      };
-
-      const result = await handleMeteorAssertion(params as any);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toBe('METEOR score 0.9900 met threshold 0.5 (expected it not to)');
     });
 
     it('should throw error for invalid inputs', async () => {
