@@ -174,6 +174,23 @@ describe('checkForUpdates', () => {
     expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest'));
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
+
+  it('should let the runtime campaign suppress duplicate post-cutoff guidance', async () => {
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    const result = await checkForUpdates({
+      currentNodeVersion: 'v20.20.2',
+      now: new Date('2026-07-30T00:00:00.000Z'),
+      suppressRuntimeBlockedWarning: true,
+    });
+
+    expect(result).toBe(true);
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('getModelAuditLatestVersion', () => {

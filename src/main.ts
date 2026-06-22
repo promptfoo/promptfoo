@@ -42,6 +42,7 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
+import { getRuntimeCompatibilityNotice } from './runtimeCompatibility';
 import { maybeWarnAboutRuntime } from './runtimeCompatibilityNotice';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
@@ -61,11 +62,12 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  // Keep startup messaging focused: runtime reminders take priority, while update checks
-  // resume on invocations where the runtime reminder is rate-limited.
+  // Keep startup messaging focused: runtime reminders take priority, while compatible update
+  // checks resume without duplicating post-cutoff runtime guidance.
+  const runtimeNoticeApplies = getRuntimeCompatibilityNotice() !== null;
   const runtimeNoticeShown = maybeWarnAboutRuntime();
   if (!runtimeNoticeShown) {
-    await checkForUpdates();
+    await checkForUpdates({ suppressRuntimeBlockedWarning: runtimeNoticeApplies });
   }
   await runDbMigrations({ suppressBindingErrorLogging: true });
 

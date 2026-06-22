@@ -20,6 +20,11 @@ function getReminderLabel(reminderIntervalDays: 1 | 7): string {
   return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
 }
 
+function hasRuntimeSupportEnded(removalDate: string): boolean {
+  const removalTimestamp = Date.parse(`${removalDate}T00:00:00.000Z`);
+  return !Number.isNaN(removalTimestamp) && Date.now() >= removalTimestamp;
+}
+
 export default function UpdateBanner() {
   const {
     versionInfo,
@@ -203,7 +208,8 @@ export default function UpdateBanner() {
         {activeRuntimeNotice ? (
           <div className="flex max-w-4xl flex-col gap-0.5">
             <span className="text-sm font-medium">
-              Node.js 20 support {versionInfo.updateBlockedByRuntime ? 'ended' : 'ends'}{' '}
+              Node.js 20 support{' '}
+              {hasRuntimeSupportEnded(activeRuntimeNotice.removalDate) ? 'ended' : 'ends'}{' '}
               {formatRemovalDate(activeRuntimeNotice.removalDate)}
             </span>
             <span className="text-sm text-muted-foreground">

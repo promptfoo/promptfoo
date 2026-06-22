@@ -35,6 +35,7 @@ export async function getLatestVersion() {
 interface CheckForUpdatesOptions {
   currentNodeVersion?: string;
   now?: Date;
+  suppressRuntimeBlockedWarning?: boolean;
 }
 
 export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Promise<boolean> {
@@ -56,6 +57,9 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
         options.now ?? new Date(),
       )
     ) {
+      if (options.suppressRuntimeBlockedWarning) {
+        return true;
+      }
       console.warn(
         `\n${border}
 ${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.

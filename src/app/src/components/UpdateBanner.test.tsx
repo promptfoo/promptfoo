@@ -108,6 +108,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
         updateAvailable: true,
@@ -137,6 +138,43 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+  });
+
+  it('should report ended support for a post-cutoff Docker deployment', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        commandType: 'docker',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 1,
+        },
+        updateCommands: {
+          primary: 'docker pull promptfoo/promptfoo:latest',
+          alternative: null,
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
   });
 
   it('should show a compatible promptfoo update while the runtime notice is snoozed', () => {

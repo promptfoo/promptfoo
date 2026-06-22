@@ -37,7 +37,6 @@ describe('runtime compatibility CLI notice', () => {
     vi.resetAllMocks();
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.mocked(getEnvBool).mockReturnValue(false);
-    vi.mocked(getEnvString).mockReturnValue(undefined);
     vi.mocked(isNonInteractive).mockReturnValue(false);
     vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-installation' });
   });
