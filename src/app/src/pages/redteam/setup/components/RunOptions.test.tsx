@@ -206,6 +206,18 @@ describe('RunOptionsContent', () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', 120);
     });
 
+    it('should not persist fractional minCharsPerMessage', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+
+      await user.clear(minCharsPerMessageInput);
+      await user.type(minCharsPerMessageInput, '1.5');
+      await user.tab();
+
+      expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 1.5);
+    });
+
     it('should not persist minCharsPerMessage above maxCharsPerMessage', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);

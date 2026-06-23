@@ -69,7 +69,7 @@ const isBelowMin = (value: string, min: number) => {
     return false;
   }
   const n = Number(value);
-  return Number.isNaN(n) || n < min;
+  return Number.isNaN(n) || !Number.isInteger(n) || n < min;
 };
 
 /**
@@ -172,7 +172,7 @@ export const MaxCharsPerMessageInput = ({
           return;
         }
         const parsed = Number(value);
-        if (Number.isNaN(parsed) || parsed < 1) {
+        if (Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1) {
           updateConfig('maxCharsPerMessage', undefined);
           setValue('');
           return;
@@ -225,7 +225,7 @@ export const MinCharsPerMessageInput = ({
           return;
         }
         const parsed = Number(value);
-        if (Number.isNaN(parsed) || parsed < 1) {
+        if (Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1) {
           updateConfig('minCharsPerMessage', undefined);
           setValue('');
           return;
