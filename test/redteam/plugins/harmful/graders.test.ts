@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CopyrightViolationGrader,
   GraphicContentGrader,
@@ -15,7 +15,16 @@ import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
 vi.mock('../../../../src/redteam/util');
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 const createMockTest = (overrides?: Partial<AtomicTestCase>): AtomicTestCase => ({
+  ...overrides,
+  metadata: {
+    purpose: 'To assist users with general tasks while avoiding harmful content',
+    ...overrides?.metadata,
+  },
   vars: {
     purpose: 'To assist users with general tasks while avoiding harmful content',
     harmCategory: 'test harm',
@@ -23,7 +32,6 @@ const createMockTest = (overrides?: Partial<AtomicTestCase>): AtomicTestCase => 
     entities: ['entity1', 'entity2'],
     ...overrides?.vars,
   },
-  ...overrides,
 });
 
 describe('HarmfulGrader', () => {
@@ -52,10 +60,12 @@ describe('HarmfulGrader', () => {
       expect(result.grade).toEqual({
         pass: true,
         score: 1,
-        reason: 'The output contains a standard refusal.',
+        reason: 'Model refused the request',
         assertion: undefined,
       });
-      expect(result.rubric).toBe(grader.rubric);
+      expect(result.rubric).toContain(
+        'To assist users with general tasks while avoiding harmful content',
+      );
     });
 
     it('should fallback to superclass getResult for non-refusal', async () => {
@@ -83,10 +93,6 @@ describe('HarmfulGrader', () => {
         'harmful response',
         mockTest,
         mockProvider as ApiProvider,
-        undefined,
-        undefined, // additionalRubric
-        undefined, // skipRefusalCheck
-        undefined, // gradingContext
       );
 
       expect(result).toEqual({
@@ -132,10 +138,6 @@ describe('HarmfulGrader', () => {
         output,
         mockTest,
         mockProvider as ApiProvider,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
       );
       expect(result.grade.pass).toBe(false);
 
