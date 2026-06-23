@@ -146,10 +146,7 @@ describe('BLEU score calculation', () => {
     expect(score).toBeLessThan(1.0);
   });
 
-  it('should pool n-gram matches across multiple references', () => {
-    // Multiple references are pooled at the n-gram level (Papineni et al. §2.1):
-    // each n-gram is clipped by its maximum count across references, so different
-    // references can cover different parts of the candidate.
+  it('should handle multiple references', () => {
     const references = [
       'The cat sat on the mat.',
       'There is a cat on the mat.',
@@ -166,30 +163,9 @@ describe('BLEU score calculation', () => {
     expect(calculateBleuScore('a b c d e f', ['a b c d e X', 'Y b c d e f'])).toBeCloseTo(1, 10);
   });
 
-  it.each([
-    { order: 'unigram', candidate: 'a b', references: ['a c', 'b d'], weights: [1, 0, 0, 0] },
-    {
-      order: 'bigram',
-      candidate: 'a b c',
-      references: ['a b z', 'y b c'],
-      weights: [0, 1, 0, 0],
-    },
-    {
-      order: 'trigram',
-      candidate: 'a b c d e',
-      references: ['a b c d x', 'y b c d e'],
-      weights: [0, 0, 1, 0],
-    },
-  ])('should pool complementary $order matches across references', ({
-    candidate,
-    references,
-    weights,
-  }) => {
-    expect(calculateBleuScore(candidate, references, weights)).toBeCloseTo(1, 10);
-  });
-
-  it('should cap each n-gram at its maximum count in one reference', () => {
-    // Reference counts are maximized, not summed; one reference can still supply repeats.
+  it('should cap n-gram counts by the candidate and maximum single-reference counts', () => {
+    // Reference counts are maximized, not summed; one reference can still supply repeats,
+    // but reference repetitions beyond the candidate count cannot inflate precision.
     expect(calculateBleuScore('the the the', ['a the', 'b the'], [1, 0, 0, 0])).toBeCloseTo(
       1 / 3,
       10,
@@ -197,6 +173,7 @@ describe('BLEU score calculation', () => {
     expect(
       calculateBleuScore('the the the', ['the the cat', 'the dog dog'], [1, 0, 0, 0]),
     ).toBeCloseTo(2 / 3, 10);
+    expect(calculateBleuScore('the cat dog', ['the the the'], [1, 0, 0, 0])).toBeCloseTo(1 / 3, 10);
   });
 
   it('should use closest reference length for brevity penalty', () => {
@@ -332,20 +309,39 @@ describe('handleBleuScore', () => {
     });
   });
 
-  it('should handle array of references', () => {
+  it('should apply the threshold to complementary array references', () => {
+    const references = ['a b c d e X', 'Y b c d e f'];
     const params = {
       assertion: {
         type: 'bleu',
-        value: ['The cat sat on mat.', 'The cat is sitting on mat.'],
+        value: references,
+        threshold: 0.9,
       },
-      renderedValue: ['The cat sat on mat.', 'The cat is sitting on mat.'],
-      outputString: 'The cat sat on mat.',
+      renderedValue: references,
+      outputString: 'a b c d e f',
       inverse: false,
     } as AssertionParams;
     expect(handleBleuScore(params)).toEqual({
       pass: true,
-      score: expect.any(Number),
+      score: 1,
       reason: 'Assertion passed',
+      assertion: expect.any(Object),
+    });
+  });
+
+  it('should describe the inclusive threshold when an inverse assertion fails', () => {
+    const references = ['a b c d e X', 'Y b c d e f'];
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', value: references, threshold: 1 },
+      renderedValue: references,
+      outputString: 'a b c d e f',
+      inverse: true,
+    } as AssertionParams);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'BLEU score 1.0000 is greater than or equal to threshold 1',
       assertion: expect.any(Object),
     });
   });
