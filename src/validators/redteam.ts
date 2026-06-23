@@ -197,6 +197,10 @@ export const RedteamStrategySchema = z.union([
   }),
 ]);
 
+function getCharsPerMessageLimit(limit: unknown): number | undefined {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0 ? limit : undefined;
+}
+
 function hasValidCharsPerMessageRange(data: {
   maxCharsPerMessage?: number;
   minCharsPerMessage?: number;
@@ -212,72 +216,78 @@ function hasValidCharsPerMessageRange(data: {
  * Schema for `promptfoo redteam generate` command options
  */
 // NOTE: Remember to edit types/redteam.ts:RedteamCliGenerateOptions if you edit this schema
-export const RedteamGenerateOptionsSchema = z.object({
-  addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional plugins to include'),
-  addStrategies: z
-    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
-    .optional()
-    .describe('Additional strategies to include'),
-  cache: z.boolean().describe('Whether to use caching'),
-  config: z.string().optional().describe('Path to the configuration file'),
-  target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
-  defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
-  defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
-  description: z.string().optional().describe('Custom description/name for the generated tests'),
-  delay: z
-    .int()
-    .nonnegative()
-    .optional()
-    .describe('Delay in milliseconds between plugin API calls'),
-  envFile: z.string().optional().describe('Path to the environment file'),
-  filterProviders: z.string().optional().describe('Regex used to select providers'),
-  filterTargets: z.string().optional().describe('Regex used to select targets'),
-  force: z.boolean().describe('Whether to force generation').prefault(false),
-  injectVar: z.string().optional().describe('Variable to inject'),
-  language: z
-    .union([z.string(), z.array(z.string())])
-    .optional()
-    .describe('Language(s) of tests to generate'),
-  frameworks: z
-    .array(z.enum(frameworkOptions))
-    .min(1)
-    .optional()
-    .describe(
-      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
-    ),
-  maxConcurrency: z.int().positive().optional().describe('Maximum number of concurrent API calls'),
-  maxCharsPerMessage: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of characters allowed per generated user message'),
-  minCharsPerMessage: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Minimum number of characters required per generated user message'),
-  numTests: z.int().positive().optional().describe('Number of tests to generate'),
-  output: z.string().optional().describe('Output file path'),
-  plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
-  provider: z.string().optional().describe('Provider to use'),
-  purpose: z.string().optional().describe('Purpose of the redteam generation'),
-  strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
-  write: z.boolean().describe('Whether to write the output'),
-  burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
-  progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
-  configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
-  strict: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Fail the scan if any plugins fail to generate test cases'),
-}).refine(hasValidCharsPerMessageRange, {
-  message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-  path: ['minCharsPerMessage'],
-});
+export const RedteamGenerateOptionsSchema = z
+  .object({
+    addPlugins: z
+      .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional plugins to include'),
+    addStrategies: z
+      .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
+      .optional()
+      .describe('Additional strategies to include'),
+    cache: z.boolean().describe('Whether to use caching'),
+    config: z.string().optional().describe('Path to the configuration file'),
+    target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
+    defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
+    defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+    description: z.string().optional().describe('Custom description/name for the generated tests'),
+    delay: z
+      .int()
+      .nonnegative()
+      .optional()
+      .describe('Delay in milliseconds between plugin API calls'),
+    envFile: z.string().optional().describe('Path to the environment file'),
+    filterProviders: z.string().optional().describe('Regex used to select providers'),
+    filterTargets: z.string().optional().describe('Regex used to select targets'),
+    force: z.boolean().describe('Whether to force generation').prefault(false),
+    injectVar: z.string().optional().describe('Variable to inject'),
+    language: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .describe('Language(s) of tests to generate'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe(
+        'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+      ),
+    maxConcurrency: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of concurrent API calls'),
+    maxCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of characters allowed per generated user message'),
+    minCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Minimum number of characters required per generated user message'),
+    numTests: z.int().positive().optional().describe('Number of tests to generate'),
+    output: z.string().optional().describe('Output file path'),
+    plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
+    provider: z.string().optional().describe('Provider to use'),
+    purpose: z.string().optional().describe('Purpose of the redteam generation'),
+    strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
+    write: z.boolean().describe('Whether to write the output'),
+    burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
+    progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
+    configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
+    strict: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Fail the scan if any plugins fail to generate test cases'),
+  })
+  .refine(hasValidCharsPerMessageRange, {
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path: ['minCharsPerMessage'],
+  });
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
@@ -384,8 +394,10 @@ export const RedteamConfigSchema = z
         continue;
       }
       const effectiveRange = {
-        maxCharsPerMessage: data.maxCharsPerMessage ?? plugin.config.maxCharsPerMessage,
-        minCharsPerMessage: data.minCharsPerMessage ?? plugin.config.minCharsPerMessage,
+        maxCharsPerMessage:
+          data.maxCharsPerMessage ?? getCharsPerMessageLimit(plugin.config.maxCharsPerMessage),
+        minCharsPerMessage:
+          data.minCharsPerMessage ?? getCharsPerMessageLimit(plugin.config.minCharsPerMessage),
       };
       if (!hasValidCharsPerMessageRange(effectiveRange)) {
         ctx.addIssue({
