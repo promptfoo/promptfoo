@@ -134,8 +134,16 @@ export function calculateBleuScore(
     const maxReferenceNGramCounts = new Map<string, number>();
     for (const referenceWords of referenceWordsList) {
       const referenceNGramCounts = countNGrams(getNGrams(referenceWords, n));
-      // Only candidate n-grams can affect the score, so keep this map candidate-sized.
-      for (const gram of candidateNGramCounts.keys()) {
+      // Only candidate n-grams can affect the score. Scan the smaller key set while
+      // keeping the retained maximum-count map candidate-sized.
+      const nGramCountsToCheck =
+        candidateNGramCounts.size <= referenceNGramCounts.size
+          ? candidateNGramCounts
+          : referenceNGramCounts;
+      for (const gram of nGramCountsToCheck.keys()) {
+        if (!candidateNGramCounts.has(gram)) {
+          continue;
+        }
         const count = referenceNGramCounts.get(gram) ?? 0;
         if (count > (maxReferenceNGramCounts.get(gram) ?? 0)) {
           maxReferenceNGramCounts.set(gram, count);
