@@ -21,7 +21,7 @@ vi.mock('natural', () => {
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
 // Exercise the real handler while mocking only its external NLP boundary. The focused
-// natural-package integration test lives in meteorNatural.test.ts so the full behavior
+// natural-package integration test lives in meteor.integration.test.ts so the full behavior
 // matrix does not repeatedly load WordNet's dictionary on every supported platform.
 function meteor(opts: {
   output: string;
@@ -102,14 +102,21 @@ describe('handleMeteorAssertion', () => {
 
   describe('parameters', () => {
     it('respects a custom threshold', async () => {
-      const result = await meteor({
+      const input = {
         output: 'The cat is sitting on the mat',
         value: 'The cat sat on the mat',
-        threshold: 0.95,
-      });
-      // The stem-similar score remains below this deliberately high threshold.
+      };
+      const defaultResult = await meteor(input);
+      expect(defaultResult.pass).toBe(true);
+      expect(defaultResult.score).toBeLessThan(1);
+
+      const threshold = (defaultResult.score + 1) / 2;
+      const result = await meteor({ ...input, threshold });
       expect(result.pass).toBe(false);
-      expect(result.reason).toMatch(/did not meet threshold 0\.95/);
+      expect(result.score).toBe(defaultResult.score);
+      expect(result.reason).toBe(
+        `METEOR score ${result.score.toFixed(4)} did not meet threshold ${threshold}`,
+      );
     });
 
     it('accepts custom alpha, beta, and gamma', async () => {
