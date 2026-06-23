@@ -535,11 +535,11 @@ describe('shared redteam provider utilities', () => {
       const mockProvider = createMockProvider({
         response: { output: 'test response', tokenUsage: { numRequests: 1 } },
       });
-      const result = await getTargetResponse(mockProvider, 'too short');
+      const result = await getTargetResponse(mockProvider, 'short');
       expect(mockProvider.callApi).not.toHaveBeenCalled();
       expect(result).toEqual({
         output: '',
-        error: 'Target prompt message at prompt is below minCharsPerMessage=9: 9 characters.',
+        error: 'Target prompt message at prompt is below minCharsPerMessage=9: 5 characters.',
         tokenUsage: { numRequests: 0 },
       });
     });

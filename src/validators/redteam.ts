@@ -197,6 +197,17 @@ export const RedteamStrategySchema = z.union([
   }),
 ]);
 
+function hasValidCharsPerMessageRange(data: {
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
+}): boolean {
+  return (
+    data.maxCharsPerMessage === undefined ||
+    data.minCharsPerMessage === undefined ||
+    data.minCharsPerMessage <= data.maxCharsPerMessage
+  );
+}
+
 /**
  * Schema for `promptfoo redteam generate` command options
  */
@@ -263,6 +274,9 @@ export const RedteamGenerateOptionsSchema = z.object({
     .optional()
     .default(false)
     .describe('Fail the scan if any plugins fail to generate test cases'),
+}).refine(hasValidCharsPerMessageRange, {
+  message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+  path: ['minCharsPerMessage'],
 });
 
 /**
@@ -356,6 +370,10 @@ export const RedteamConfigSchema = z
       )
       .optional()
       .describe('Global grading examples that apply to all plugins'),
+  })
+  .refine(hasValidCharsPerMessageRange, {
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path: ['minCharsPerMessage'],
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();

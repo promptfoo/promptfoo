@@ -166,6 +166,18 @@ describe('redteamGenerateOptionsSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject generate options with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamGenerateOptionsSchema.safeParse({
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        maxCharsPerMessage: 5,
+        minCharsPerMessage: 6,
+      }).success,
+    ).toBe(false);
+  });
+
   it('should require maxCharsPerMessage to be a positive integer', () => {
     const input = {
       cache: true,
@@ -256,6 +268,16 @@ describe('redteamPluginSchema', () => {
 });
 
 describe('redteamConfigSchema', () => {
+  it('should reject config with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: ['harmful:hate'],
+        maxCharsPerMessage: 5,
+        minCharsPerMessage: 6,
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { id: 'missing-purpose' },
     { id: 'empty-purpose', purpose: '' },

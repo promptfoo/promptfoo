@@ -204,6 +204,7 @@ export abstract class RedteamPluginBase {
       const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
       const rejectedPromptLengths: number[] = [];
       let rejectedPromptLimit: number | undefined;
+      let rejectedPromptKind: 'max' | 'min' | undefined;
 
       for (const prompt of parsedPrompts) {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
@@ -216,18 +217,21 @@ export abstract class RedteamPluginBase {
         if (violation) {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;
+          rejectedPromptKind = violation.kind;
         } else {
           acceptedPrompts.push(prompt);
         }
       }
 
       if (rejectedPromptLengths.length > 0) {
+        const comparison = rejectedPromptKind === 'min' ? 'below' : 'above';
+        const requiredDirection = rejectedPromptKind === 'min' ? 'at least' : 'at most';
         retryInstructions = dedent`
           Your previous response included ${rejectedPromptLengths.length} generated prompt${
             rejectedPromptLengths.length === 1 ? '' : 's'
-          } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
-          Generate replacement prompts only, and keep every user message within the character limit.
+          } that were ${comparison} the ${rejectedPromptLimit ?? 'configured'}-character limit.
+          The most recently rejected prompt length was ${rejectedPromptLengths.at(-1)} characters.
+          Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
         `.trim();
       } else {
         retryInstructions = undefined;
