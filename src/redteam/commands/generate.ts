@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -36,6 +35,7 @@ import {
   resolveConfigs,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
+import { sha256 } from '../../util/createHash';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
@@ -214,11 +214,8 @@ async function getConfigHash(
     Object.keys(filters).length > 0
       ? JSON.stringify({ version: VERSION, content, filters })
       : `${VERSION}:${content}`;
-  // Use SHA-256 for the config fingerprint. MD5 is rejected under FIPS-mode
-  // crypto policies (e.g. RHEL 9 default, Node built with --openssl-config) and
-  // triggers warnings in some static-analysis tools. SHA-256 is collision-resistant,
-  // available in every Node release, and identical perf for inputs of this size.
-  return createHash('sha256').update(hashInput).digest('hex');
+  // MD5 is unavailable in FIPS-enabled Node/OpenSSL runtimes.
+  return sha256(hashInput);
 }
 
 function createHeaderComments({
