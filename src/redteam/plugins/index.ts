@@ -8,7 +8,6 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -446,7 +445,7 @@ async function fetchRemoteTestCases(
       return [];
     }
 
-    await sleep(Math.pow(2, attempt) * backoffMs);
+    await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * backoffMs));
   }
 
   return [];
