@@ -133,8 +133,13 @@ export function calculateBleuScore(
     // found in any single reference, allowing different references to supply matches.
     const maxReferenceNGramCounts = new Map<string, number>();
     for (const referenceWords of referenceWordsList) {
-      for (const [gram, count] of countNGrams(getNGrams(referenceWords, n))) {
-        maxReferenceNGramCounts.set(gram, Math.max(maxReferenceNGramCounts.get(gram) ?? 0, count));
+      const referenceNGramCounts = countNGrams(getNGrams(referenceWords, n));
+      // Only candidate n-grams can affect the score, so keep this map candidate-sized.
+      for (const gram of candidateNGramCounts.keys()) {
+        const count = referenceNGramCounts.get(gram) ?? 0;
+        if (count > (maxReferenceNGramCounts.get(gram) ?? 0)) {
+          maxReferenceNGramCounts.set(gram, count);
+        }
       }
     }
 
