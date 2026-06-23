@@ -99,6 +99,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // Microsoft Phi reasoning models
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
+      // Microsoft MAI reasoning models (MAI-Thinking-1, MAI-DS-R1 / DeepSeek-R1
+      // lineage). MAI-Code-* are fast coding models and use the standard chat
+      // surface, so they're intentionally excluded here.
+      lowerName.includes('mai-thinking') ||
+      lowerName.includes('mai-ds-r1') ||
+      lowerName.includes('mai-reasoning') ||
       // xAI Grok reasoning models
       (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );
@@ -437,7 +443,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         output = message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results && choice.content_filter_results.error) {
+        // Optional-chain `choice`: in dataSources mode `find(...)` can return undefined (no
+        // assistant message), and an empty `choices` array makes `choices[0]` undefined.
+        if (choice?.content_filter_results?.error) {
           const { code, message } = choice.content_filter_results.error;
           logger.warn(
             `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
@@ -449,8 +457,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
         if (output == null) {
           // Handle tool_calls and function_call
-          const toolCalls = message.tool_calls;
-          const functionCall = message.function_call;
+          const toolCalls = message?.tool_calls;
+          const functionCall = message?.function_call;
 
           // Process function/tool calls if callbacks are configured or MCP is available
           if (
