@@ -432,6 +432,13 @@ describe('matchesContextFaithfulness', () => {
         0.5,
       ],
       ['extra positive verdicts', 2, `${marker} Yes. Yes. No. No.`, 0, 0.75],
+      [
+        'malformed suffix after excess comma verdicts',
+        2,
+        `${marker} Yes, Yes, Yes, indeed.`,
+        0,
+        0.5,
+      ],
       ['bold final-answer marker', 1, `**${marker}** Yes.`, 1, 0.5],
       ['smart-quoted verdicts', 2, `${marker} “Yes”. “No”.`, 0.5, 0.5],
       ['statement-labelled verdicts', 2, `${marker} Statement 1: Yes. Statement 2: Yes.`, 1, 0.75],

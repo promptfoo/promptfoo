@@ -402,7 +402,7 @@ function parseCommaSeparatedFaithfulnessVerdicts(
       }
       parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(entry), verdict });
       if (parsedVerdicts.length > expectedCount) {
-        break;
+        return null;
       }
     }
   }
