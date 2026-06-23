@@ -320,6 +320,11 @@ export async function matchesContextRelevance(
 
 type FaithfulnessVerdict = 'yes' | 'no' | 'unknown';
 
+interface ParsedFaithfulnessVerdict {
+  ordinal?: number;
+  verdict: FaithfulnessVerdict;
+}
+
 const faithfulnessEntryPrefix =
   /^(?:(?:(?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]|verdict\s*:)\s*)+/;
 
@@ -345,9 +350,10 @@ function parseFaithfulnessVerdict(
     return verdict;
   }
   const unwrapped = normalized.match(/^.*\p{L}/su)?.[0] ?? '';
-  const unknownMatch = /^(?:maybe|perhaps|unknown|unclear|undetermined|n\/a)(?![\p{L}\p{N}])/u.exec(
-    unwrapped,
-  );
+  const unknownMatch =
+    /^(?:maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}])/u.exec(
+      unwrapped,
+    );
   const unknownSuffix = unknownMatch ? unwrapped.slice(unknownMatch[0].length).trim() : '';
   const isKnownUnknown = Boolean(
     unknownMatch && /^(?:$|[:(\[\-\u2013\u2014])/u.test(unknownSuffix),
@@ -371,18 +377,18 @@ function getFaithfulnessOrdinal(value: string): number | undefined {
 function parseCommaSeparatedFaithfulnessVerdicts(
   chunk: string,
   expectedCount: number,
-): FaithfulnessVerdict[] | undefined {
+): ParsedFaithfulnessVerdict[] | undefined {
   if (!chunk.includes(',')) {
     return undefined;
   }
 
-  const parsedVerdicts: FaithfulnessVerdict[] = [];
+  const parsedVerdicts: ParsedFaithfulnessVerdict[] = [];
   for (const match of chunk.matchAll(/[^,]+/g)) {
     const verdict = parseFaithfulnessVerdict(match[0], true);
     if (!verdict) {
       return undefined;
     }
-    parsedVerdicts.push(verdict);
+    parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(match[0]), verdict });
     if (parsedVerdicts.length > expectedCount) {
       break;
     }
@@ -396,30 +402,37 @@ function parseFinalFaithfulnessVerdicts(
   expectedCount: number,
 ): FaithfulnessVerdict[] | undefined {
   const markerIndex = output.indexOf(marker);
-  if (markerIndex < 0) {
-    return undefined;
-  }
-  const markerStem = marker.endsWith(':') ? marker.slice(0, -1) : marker;
-  const repeatedMarkerIndex = output.indexOf(markerStem, markerIndex + marker.length);
-  if (
-    repeatedMarkerIndex >= 0 &&
-    /^\s*:/.test(output.slice(repeatedMarkerIndex + markerStem.length))
-  ) {
+  if (markerIndex < 0 || output.indexOf(marker, markerIndex + marker.length) >= 0) {
     return undefined;
   }
 
   const finalVerdicts = output
     .slice(markerIndex + marker.length)
     .replace(
-      /\s+((?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]\s*)(?=[^\p{L}\p{N}]*(?:yes|no|maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}]))/gu,
+      /\s((?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]\s*)(?=[^\p{L}\p{N}]*(?:yes|no|maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}]))/gu,
       '\n$1',
     );
   const parsedVerdicts: FaithfulnessVerdict[] = [];
   const seenOrdinals = new Set<number>();
   let pendingOrdinal: string | undefined;
+  const addOrdinal = (explicitOrdinal: number | undefined): boolean => {
+    if (explicitOrdinal === undefined) {
+      return true;
+    }
+    if (
+      !Number.isSafeInteger(explicitOrdinal) ||
+      explicitOrdinal < 1 ||
+      explicitOrdinal > expectedCount ||
+      seenOrdinals.has(explicitOrdinal)
+    ) {
+      return false;
+    }
+    seenOrdinals.add(explicitOrdinal);
+    return true;
+  };
 
   // Keep ordered slots and only accept a comma list when every item looks like an entry.
-  // Duplicate markers and excess entries are ambiguous, so fail without parsing the remainder.
+  // Duplicate markers or ordinals and excess entries are ambiguous, so fail closed.
   for (const match of finalVerdicts.matchAll(/[^.\r\n]+/g)) {
     const ordinal = /^\s*((?:statement\s+)?\d+)\s*$/.exec(match[0])?.[1];
     if (ordinal) {
@@ -429,27 +442,21 @@ function parseFinalFaithfulnessVerdicts(
 
     const chunk = pendingOrdinal ? `${pendingOrdinal}) ${match[0]}` : match[0];
     pendingOrdinal = undefined;
-    const explicitOrdinal = getFaithfulnessOrdinal(chunk);
-    if (explicitOrdinal !== undefined) {
-      if (
-        !Number.isSafeInteger(explicitOrdinal) ||
-        explicitOrdinal < 1 ||
-        explicitOrdinal > expectedCount ||
-        seenOrdinals.has(explicitOrdinal)
-      ) {
-        return undefined;
-      }
-      seenOrdinals.add(explicitOrdinal);
-    }
     const commaVerdicts = parseCommaSeparatedFaithfulnessVerdicts(chunk, expectedCount);
     if (commaVerdicts) {
-      for (const verdict of commaVerdicts) {
+      for (const { ordinal: explicitOrdinal, verdict } of commaVerdicts) {
+        if (!addOrdinal(explicitOrdinal)) {
+          return undefined;
+        }
         parsedVerdicts.push(verdict);
         if (parsedVerdicts.length > expectedCount) {
           return undefined;
         }
       }
     } else {
+      if (!addOrdinal(getFaithfulnessOrdinal(chunk))) {
+        return undefined;
+      }
       const verdict = parseFaithfulnessVerdict(chunk);
       if (verdict) {
         parsedVerdicts.push(verdict);
@@ -546,9 +553,11 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  let finalAnswer = 'Final verdict for each statement in order:';
-  finalAnswer = finalAnswer.toLowerCase();
-  const verdicts = resp.output.toLowerCase().trim();
+  const finalAnswer = 'final verdict for each statement in order:';
+  const verdicts = resp.output
+    .toLowerCase()
+    .trim()
+    .replace(/final verdict for each statement in order\s*:/gu, finalAnswer);
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
