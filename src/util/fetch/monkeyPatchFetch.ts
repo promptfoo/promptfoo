@@ -10,6 +10,8 @@ import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
 
+export const PROMPTFOO_TEAM_ID_HEADER = 'x-promptfoo-team-id';
+
 function isConnectionError(error: Error) {
   return (
     error instanceof TypeError &&
@@ -19,8 +21,32 @@ function isConnectionError(error: Error) {
   );
 }
 
+/** Extracts the request URL as a string. A `Request`'s `toString()` is "[object Request]", so read `.url`. */
+export function getRequestUrlString(url: string | URL | Request): string {
+  return url instanceof Request ? url.url : url.toString();
+}
+
+function matchesNoLogUrl(url: string, noLogUrl: string): boolean {
+  try {
+    const target = new URL(url);
+    const excluded = new URL(noLogUrl);
+    if (target.origin !== excluded.origin) {
+      return false;
+    }
+
+    const excludedPath = excluded.pathname.replace(/\/+$/, '');
+    return (
+      excludedPath === '' ||
+      target.pathname === excludedPath ||
+      target.pathname.startsWith(`${excludedPath}/`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function getSafeUrlForConnectionLog(url: string | URL | Request): string {
-  return sanitizeUrl(url instanceof Request ? url.url : url.toString());
+  return sanitizeUrl(getRequestUrlString(url));
 }
 
 function getSafeProxyForConnectionLog(): string {
@@ -61,14 +87,66 @@ export function getCloudBearerToken(url: string | URL | Request): string | undef
   return token ? `Bearer ${token}` : undefined;
 }
 
+function isPromptfooCloudTaskUrl(url: string | URL | Request): boolean {
+  if (!isPromptfooCloudApiHost(url)) {
+    return false;
+  }
+
+  try {
+    const targetUrl = new URL(getRequestUrlString(url));
+    const pathname = targetUrl.pathname.replace(/\/+$/, '');
+    return pathname.endsWith('/api/v1/task') || pathname.endsWith('/api/v1/task/harmful');
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the persisted CLI team for authenticated Cloud task requests. */
+export function getCloudTaskTeamId(url: string | URL | Request): string | undefined {
+  if (!isPromptfooCloudTaskUrl(url)) {
+    return undefined;
+  }
+
+  const organizationId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(organizationId);
+}
+
 /**
- * Case-insensitive check for a caller-supplied `Authorization` header. Request headers on
- * this path are always a plain object (see the `Record<string, string>` cast in
- * monkeyPatchFetch), so an object scan suffices. Used to avoid overriding an explicit
- * credential — e.g. the token being validated during cloud login/rotation.
+ * Resolves the caller-supplied headers for a request: the explicit `options.headers` when
+ * present, otherwise the headers carried by a `Request` URL.
+ *
+ * `monkeyPatchFetch`'s only in-repo caller (`fetchWithProxy`) always normalizes headers to
+ * a plain object, but the function is exported and typed to accept any `HeadersInit` /
+ * `Request`, so the helpers here preserve every shape rather than assuming a `Record`.
  */
-function hasAuthorizationHeader(headers: Record<string, string>): boolean {
-  return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+function getEffectiveHeaders(
+  url: string | URL | Request,
+  headers: HeadersInit | undefined,
+): HeadersInit | undefined {
+  return headers ?? (url instanceof Request ? url.headers : undefined);
+}
+
+/** Case-insensitive check for a caller-supplied `Authorization` header (any `HeadersInit` shape). */
+function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
+  return new Headers(headers).has('authorization');
+}
+
+function hasHeader(headers: HeadersInit | undefined, name: string): boolean {
+  return new Headers(headers).has(name);
+}
+
+/**
+ * Returns `headers` with `name: value` set. Plain objects retain their shape, while a
+ * `Headers` instance or `[name, value][]` array is normalized through `Headers` so existing
+ * entries are never dropped (a naive object spread would discard them).
+ */
+function setHeader(headers: HeadersInit | undefined, name: string, value: string): HeadersInit {
+  if (headers instanceof Headers || Array.isArray(headers)) {
+    const merged = new Headers(headers);
+    merged.set(name, value);
+    return merged;
+  }
+  return { ...(headers ?? {}), [name]: value };
 }
 
 /**
@@ -79,9 +157,10 @@ export async function monkeyPatchFetch(
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const headers = (options?.headers as Record<string, string>) || {};
-  const isSilent = headers['x-promptfoo-silent'] === 'true';
-  const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
+  const urlString = getRequestUrlString(url);
+  const callerHeaders = getEffectiveHeaders(url, options?.headers);
+  const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
+  const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const opts: RequestInit = {
     ...options,
@@ -94,10 +173,7 @@ export async function monkeyPatchFetch(
     try {
       const compressed = await gzipAsync(opts.body);
       opts.body = compressed as BodyInit;
-      opts.headers = {
-        ...(opts.headers || {}),
-        'Content-Encoding': 'gzip',
-      };
+      opts.headers = setHeader(getEffectiveHeaders(url, opts.headers), 'Content-Encoding', 'gzip');
     } catch (e) {
       logger.warn(`Failed to compress request body: ${e}`);
     }
@@ -107,11 +183,15 @@ export async function monkeyPatchFetch(
   // override an Authorization header the caller set explicitly — token
   // validation/rotation sends the token being validated, not the saved one.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !hasAuthorizationHeader(headers)) {
-    opts.headers = {
-      ...(opts.headers || {}),
-      Authorization: cloudAuth,
-    };
+  const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
+  if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
+    opts.headers = setHeader(effectiveHeaders, 'Authorization', cloudAuth);
+  }
+
+  const cloudTaskTeamId = getCloudTaskTeamId(url);
+  const headersWithAuth = getEffectiveHeaders(url, opts.headers);
+  if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
+    opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
@@ -119,7 +199,7 @@ export async function monkeyPatchFetch(
 
     if (logEnabled) {
       void logRequestResponse({
-        url: url.toString(),
+        url: urlString,
         requestBody: originalBody,
         requestMethod: opts.method || 'GET',
         response,
@@ -130,7 +210,7 @@ export async function monkeyPatchFetch(
   } catch (e) {
     if (logEnabled) {
       void logRequestResponse({
-        url: url.toString(),
+        url: urlString,
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
         response: null,

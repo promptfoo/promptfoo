@@ -917,6 +917,15 @@ describe('loadApiProvider', () => {
     expect((provider as any).apiKey).toBe('provider-key');
   });
 
+  it('loadApiProvider with moonshot prefers provider-level env over context env', async () => {
+    const provider = (await loadApiProvider('moonshot:kimi-k2.6', {
+      options: { env: { MOONSHOT_API_KEY: 'provider-key' } },
+      env: { MOONSHOT_API_KEY: 'context-key' },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.getApiKey()).toBe('provider-key');
+  });
+
   it('loadApiProvider with file://*.py', async () => {
     const provider = await loadApiProvider('file://script.py:function_name');
     expect(provider).toBeInstanceOf(PythonProvider);

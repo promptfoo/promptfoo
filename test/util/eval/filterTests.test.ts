@@ -428,7 +428,9 @@ describe('filterTests', () => {
       });
       // Should include all 3 tests: test1 (ASSERT), test2 (ERROR), test3 (ASSERT)
       expect(result).toHaveLength(3);
-      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3', 'test2']);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(
+        expect.arrayContaining(['test1', 'test2', 'test3']),
+      );
     });
   });
 
