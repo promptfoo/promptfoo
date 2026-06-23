@@ -449,6 +449,25 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail not-is-json without a schema with a message that matches the assertion', async () => {
+    const output = '{"key":"value"}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output to not be valid JSON',
+    });
+  });
+
   it('should pass when the is-json assertion passes with schema', async () => {
     const output = '{"latitude": 80.123, "longitude": -1}';
 
@@ -1098,7 +1117,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: containsJsonAssertionWithSchema,
+      assertion: { ...isJsonAssertionWithSchemaYamlString, type: 'contains-json' },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
