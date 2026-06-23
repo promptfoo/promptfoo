@@ -746,6 +746,38 @@ describe('runEval', () => {
     expect(results[0].error).toContain('maxCharsPerMessage=10');
   });
 
+  it('should fail before calling the provider when plugin minCharsPerMessage is missed', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'test-provider',
+        callApi,
+      },
+      prompt: { raw: '{{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'short',
+        },
+        metadata: {
+          pluginConfig: { minCharsPerMessage: 6 },
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {},
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(callApi).not.toHaveBeenCalled();
+    expect(results[0].error).toContain('minCharsPerMessage=6');
+  });
+
   it('should not enforce redteam maxCharsPerMessage for non-redteam evals', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'success' });
 

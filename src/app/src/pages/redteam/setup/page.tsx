@@ -367,6 +367,8 @@ export default function RedTeamSetupPage() {
         provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
+        maxCharsPerMessage: yamlConfig.redteam?.maxCharsPerMessage,
+        minCharsPerMessage: yamlConfig.redteam?.minCharsPerMessage,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,
         testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',

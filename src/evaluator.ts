@@ -30,7 +30,10 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
-import { throwIfTargetPromptViolatesCharLimits } from './redteam/shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
@@ -816,9 +819,12 @@ async function renderRunEvalPrompt({
     skipRenderVars,
   );
   if (isRedteam) {
+    const testCharLimits = getTargetPromptCharLimits({ test } as CallApiContextParams);
     throwIfTargetPromptViolatesCharLimits(renderedPrompt, {
-      maxCharsPerMessage: testSuite?.redteam?.maxCharsPerMessage,
-      minCharsPerMessage: testSuite?.redteam?.minCharsPerMessage,
+      maxCharsPerMessage:
+        testCharLimits.maxCharsPerMessage ?? testSuite?.redteam?.maxCharsPerMessage,
+      minCharsPerMessage:
+        testCharLimits.minCharsPerMessage ?? testSuite?.redteam?.minCharsPerMessage,
     });
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
