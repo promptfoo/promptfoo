@@ -378,7 +378,7 @@ function parseCommaSeparatedFaithfulnessVerdicts(
   chunk: string,
   expectedCount: number,
 ): ParsedFaithfulnessVerdict[] | null | undefined {
-  if (!chunk.includes(',')) {
+  if (!chunk.includes(',') && !chunk.includes(' and ')) {
     return undefined;
   }
 
@@ -398,7 +398,7 @@ function parseCommaSeparatedFaithfulnessVerdicts(
     for (const entry of values) {
       const verdict = parseFaithfulnessVerdict(entry, true);
       if (!verdict) {
-        return undefined;
+        return hasConjunction ? null : undefined;
       }
       parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(entry), verdict });
       if (parsedVerdicts.length > expectedCount) {
