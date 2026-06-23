@@ -1,5 +1,7 @@
 import cliState from '../../cliState';
 
+import type { CallApiContextParams } from '../../types/providers';
+
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 export const MIN_CHARS_PER_MESSAGE_MODIFIER_KEY = 'minCharsPerMessage';
 
@@ -182,6 +184,22 @@ export function throwIfTargetPromptViolatesCharLimits(
   throw new Error(
     `Target prompt message at ${violation.path} ${comparator} ${configKey}=${violation.limit}: ${violation.length} characters.`,
   );
+}
+
+
+export function getTargetPromptCharLimits(context?: CallApiContextParams): {
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
+} {
+  const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
+    const configuredLimit =
+      (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
+      (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
+    return typeof configuredLimit === 'number' && Number.isInteger(configuredLimit) && configuredLimit > 0
+      ? configuredLimit
+      : undefined;
+  };
+  return { maxCharsPerMessage: getLimit('maxCharsPerMessage'), minCharsPerMessage: getLimit('minCharsPerMessage') };
 }
 
 export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {

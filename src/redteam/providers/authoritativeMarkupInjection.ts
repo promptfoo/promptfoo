@@ -12,7 +12,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { getTargetPromptCharLimits, throwIfTargetPromptViolatesCharLimits } from '../shared/promptLength';
 
 import type {
   ApiProvider,
@@ -124,7 +124,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     const totalTokenUsage = createEmptyTokenUsage();
 
     // Call the target provider with the injected attack
-    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
+    throwIfTargetPromptViolatesCharLimits(renderedAttackerPrompt, getTargetPromptCharLimits(context));
     const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 

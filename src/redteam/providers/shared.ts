@@ -29,7 +29,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptViolatesCharLimits } from '../shared/promptLength';
+import { getTargetPromptCharLimits, throwIfTargetPromptViolatesCharLimits } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -305,27 +305,6 @@ export function isConversationEndedResponse(
   return Boolean(response?.conversationEnded);
 }
 
-function getTargetPromptCharLimits(context?: CallApiContextParams): {
-  maxCharsPerMessage?: number;
-  minCharsPerMessage?: number;
-} {
-  const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
-    const configuredLimit =
-      (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
-      (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
-
-    return typeof configuredLimit === 'number' &&
-      Number.isInteger(configuredLimit) &&
-      configuredLimit > 0
-      ? configuredLimit
-      : undefined;
-  };
-
-  return {
-    maxCharsPerMessage: getLimit('maxCharsPerMessage'),
-    minCharsPerMessage: getLimit('minCharsPerMessage'),
-  };
-}
 
 /**
  * Gets the response from the target provider for a given prompt.
