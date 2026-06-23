@@ -248,6 +248,16 @@ describe('BLEU score calculation', () => {
     );
   });
 
+  it('should still reject invalid weights for an empty candidate', () => {
+    const references = ['some reference'];
+    expect(() => calculateBleuScore('', references, [1, -1, 0.5, 0.5])).toThrow(
+      'Weights must be non-negative',
+    );
+    expect(() => calculateBleuScore('', references, [0.5, 0.5, 0.5, 0.5])).toThrow(
+      'Weights must sum to 1',
+    );
+  });
+
   it('should throw error for invalid weights', () => {
     const references = ['The cat sat on the mat.'];
     const invalidWeights = [0.5, 0.5, 0.5, 0.5];

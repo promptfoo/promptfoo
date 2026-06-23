@@ -71,13 +71,6 @@ export function calculateBleuScore(
   if (candidate == null || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
   }
-  // An empty or whitespace-only candidate (a refusal or truncated generation) has
-  // zero n-gram overlap with any reference, so its BLEU score is 0. Return early to
-  // avoid throwing — which would crash the eval — or letting `tokenize('   ')` (which
-  // yields `['']`) smooth to a misleadingly tiny nonzero score.
-  if (candidate.trim() === '') {
-    return 0;
-  }
   // BLEU weights are non-negative by definition. Rejecting negatives keeps the
   // score within the documented [0, 1] range (a negative weight on a smoothed
   // zero-precision order would otherwise blow the geometric mean far above 1)
@@ -88,6 +81,13 @@ export function calculateBleuScore(
   }
   if (Math.abs(weights.reduce((a, b) => a + b) - 1) > 1e-4) {
     throw new Error('Weights must sum to 1');
+  }
+  // An empty or whitespace-only candidate (a refusal or truncated generation) has
+  // zero n-gram overlap with any reference, so its BLEU score is 0. Return early to
+  // avoid throwing — which would crash the eval — or letting `tokenize('   ')` (which
+  // yields `['']`) smooth to a misleadingly tiny nonzero score.
+  if (candidate.trim() === '') {
+    return 0;
   }
 
   const candidateWords = tokenize(candidate);
