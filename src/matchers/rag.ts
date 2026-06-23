@@ -377,21 +377,37 @@ function getFaithfulnessOrdinal(value: string): number | undefined {
 function parseCommaSeparatedFaithfulnessVerdicts(
   chunk: string,
   expectedCount: number,
-): ParsedFaithfulnessVerdict[] | undefined {
+): ParsedFaithfulnessVerdict[] | null | undefined {
   if (!chunk.includes(',')) {
     return undefined;
   }
 
   const parsedVerdicts: ParsedFaithfulnessVerdict[] = [];
+  let hasConjunction = false;
   for (const match of chunk.matchAll(/[^,]+/g)) {
-    const verdict = parseFaithfulnessVerdict(match[0], true);
-    if (!verdict) {
-      return undefined;
+    const value = match[0].trim();
+    const values = value.startsWith('and ') ? [value.slice(4)] : [value];
+    hasConjunction ||= values[0] !== value;
+    if (values[0] === value && !parseFaithfulnessVerdict(value, true)) {
+      const conjunctionIndex = value.lastIndexOf(' and ');
+      if (conjunctionIndex >= 0) {
+        values.splice(0, 1, value.slice(0, conjunctionIndex), value.slice(conjunctionIndex + 5));
+        hasConjunction = true;
+      }
     }
-    parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(match[0]), verdict });
-    if (parsedVerdicts.length > expectedCount) {
-      break;
+    for (const entry of values) {
+      const verdict = parseFaithfulnessVerdict(entry, true);
+      if (!verdict) {
+        return undefined;
+      }
+      parsedVerdicts.push({ ordinal: getFaithfulnessOrdinal(entry), verdict });
+      if (parsedVerdicts.length > expectedCount) {
+        break;
+      }
     }
+  }
+  if (hasConjunction && parsedVerdicts.length !== expectedCount) {
+    return null;
   }
   return parsedVerdicts.length > 1 ? parsedVerdicts : undefined;
 }
@@ -443,6 +459,9 @@ function parseFinalFaithfulnessVerdicts(
     const chunk = pendingOrdinal ? `${pendingOrdinal}) ${match[0]}` : match[0];
     pendingOrdinal = undefined;
     const commaVerdicts = parseCommaSeparatedFaithfulnessVerdicts(chunk, expectedCount);
+    if (commaVerdicts === null) {
+      return undefined;
+    }
     if (commaVerdicts) {
       for (const { ordinal: explicitOrdinal, verdict } of commaVerdicts) {
         if (!addOrdinal(explicitOrdinal)) {
