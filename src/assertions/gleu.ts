@@ -33,7 +33,7 @@ function tokenizeForGleu(text: string): string[] {
  * Implementation details:
  * - n-grams from n=1 to n=4 are considered by default
  * - The calculation is case-insensitive
- * - Identical non-empty strings will always receive a score of 1
+ * - Identical strings with at least one normalized token will always receive a score of 1
  * - Text that is empty after normalization has no n-grams and scores 0
  * - If there are no n-grams in common, the score will be 0
  *
