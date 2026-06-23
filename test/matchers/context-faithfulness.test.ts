@@ -484,6 +484,9 @@ describe('matchesContextFaithfulness', () => {
       ['unparseable final list', 2, `${marker} Maybe. Perhaps.`, 0, 0.5],
       ['duplicate statement label', 2, `${marker} Statement 1: Yes. Statement 1: Yes.`, 0, 0.5],
       ['out-of-range statement label', 2, `${marker} Statement 1: Yes. Statement 3: Yes.`, 0, 0.5],
+      ['signed ordinal labels', 2, `${marker} -1) Yes. +2) Yes.`, 0, 0.5],
+      ['Unicode-minus ordinal labels', 2, `${marker} −1) Yes. −2) Yes.`, 0, 0.5],
+      ['spaced dash-bullet ordinal labels', 2, `${marker} - 1) Yes. - 2) Yes.`, 1, 0.5],
       [
         'duplicate statement label in comma list',
         2,

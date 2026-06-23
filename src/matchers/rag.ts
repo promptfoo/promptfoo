@@ -369,7 +369,11 @@ function parseFaithfulnessVerdict(
 }
 
 function getFaithfulnessOrdinal(value: string): number | undefined {
-  const normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
+  const trimmed = value.trim();
+  if (/^[^\p{L}\p{N}]*[+\-\u2212]\d+\s*[-\u2013\u2014.):\]]/u.test(trimmed)) {
+    return Number.NaN;
+  }
+  const normalized = trimmed.replace(/^[^\p{L}\p{N}]*/u, '');
   const ordinal = /^(?:statement\s+)?(\d+)\s*[-\u2013\u2014.):\]]/u.exec(normalized)?.[1];
   return ordinal ? Number(ordinal) : undefined;
 }
