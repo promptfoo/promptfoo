@@ -502,6 +502,16 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('contains-json');
   });
 
+  it.each([
+    'file://script.py',
+    'file://script.PY',
+    'file://script.Py',
+    'file://script.py:fn',
+  ])('should detect a python file reference case-insensitively: %s', (expected) => {
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('python');
+  });
+
   it('should create a function assertion', () => {
     const expected = 'fn:output === "Expected output"';
 
