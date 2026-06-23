@@ -320,14 +320,17 @@ export async function matchesContextRelevance(
 
 type FaithfulnessVerdict = 'yes' | 'no' | 'unknown';
 
-const faithfulnessEntryPrefix = /^(?:(?:(?:statement\s+)?\d+\s*[-.):\]]|verdict\s*:)\s*)+/;
+const faithfulnessEntryPrefix =
+  /^(?:(?:(?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]|verdict\s*:)\s*)+/;
 
 function parseFaithfulnessVerdict(
   value: string,
   requireExplicitEntry = false,
 ): FaithfulnessVerdict | undefined {
-  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
-  const hasEntryPrefix = faithfulnessEntryPrefix.test(normalized);
+  const trimmed = value.trim();
+  const hasBulletPrefix = /^(?:[-+*\u2022]\s+)/u.test(trimmed);
+  let normalized = trimmed.replace(/^[^\p{L}\p{N}]*/u, '');
+  const hasEntryPrefix = hasBulletPrefix || faithfulnessEntryPrefix.test(normalized);
   normalized = normalized.replace(faithfulnessEntryPrefix, '').replace(/^[^\p{L}]*/u, '');
 
   const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1] as 'yes' | 'no' | undefined;
@@ -341,12 +344,13 @@ function parseFaithfulnessVerdict(
   ) {
     return verdict;
   }
+  const isKnownUnknown = /^(?:maybe|perhaps|unknown|unclear|undetermined|n\/a)$/u.test(normalized);
   if (requireExplicitEntry) {
-    return hasEntryPrefix ? 'unknown' : undefined;
+    return hasEntryPrefix || isKnownUnknown ? 'unknown' : undefined;
   }
 
   // A labelled or compact value is still an ordered slot, even when it is unknown.
-  const unwrapped = normalized.replace(/[^\p{L}]+$/u, '');
+  const unwrapped = normalized.match(/^.*\p{L}/su)?.[0] ?? '';
   const isCompactUnknown = /^(?=.*\p{L})[\p{L}\p{N}]+(?:[/_-][\p{L}\p{N}]+)*$/u.test(unwrapped);
   return hasEntryPrefix || isCompactUnknown ? 'unknown' : undefined;
 }
