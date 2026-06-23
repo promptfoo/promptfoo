@@ -174,6 +174,21 @@ describe('RedteamGoatProvider', () => {
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('should enforce minCharsPerMessage from provider config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      minCharsPerMessage: 20,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should preserve an explicit maxTurns value of 0', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

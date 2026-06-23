@@ -278,6 +278,14 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject plugin config with minCharsPerMessage above maxCharsPerMessage', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5, minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { id: 'missing-purpose' },
     { id: 'empty-purpose', purpose: '' },

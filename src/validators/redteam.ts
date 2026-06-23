@@ -30,6 +30,8 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
+import { PluginConfigSchema } from '../redteam/types';
+
 import type {
   PluginConfig,
   RedteamContext,
@@ -114,7 +116,7 @@ export const RedteamPluginObjectSchema = z.object({
     .positive()
     .prefault(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
+  config: PluginConfigSchema.catchall(z.unknown()).optional().describe('Plugin-specific configuration'),
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
