@@ -186,20 +186,25 @@ export function throwIfTargetPromptViolatesCharLimits(
   );
 }
 
-
 export function getTargetPromptCharLimits(context?: CallApiContextParams): {
   maxCharsPerMessage?: number;
   minCharsPerMessage?: number;
 } {
   const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
     const configuredLimit =
+      cliState.config?.redteam?.[key] ??
       (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
       (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
-    return typeof configuredLimit === 'number' && Number.isInteger(configuredLimit) && configuredLimit > 0
+    return typeof configuredLimit === 'number' &&
+      Number.isInteger(configuredLimit) &&
+      configuredLimit > 0
       ? configuredLimit
       : undefined;
   };
-  return { maxCharsPerMessage: getLimit('maxCharsPerMessage'), minCharsPerMessage: getLimit('minCharsPerMessage') };
+  return {
+    maxCharsPerMessage: getLimit('maxCharsPerMessage'),
+    minCharsPerMessage: getLimit('minCharsPerMessage'),
+  };
 }
 
 export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {

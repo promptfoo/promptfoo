@@ -594,6 +594,25 @@ describe('shared redteam provider utilities', () => {
       );
     });
 
+    it('prefers global minCharsPerMessage to test metadata', async () => {
+      setCliStateConfig({ redteam: { minCharsPerMessage: 9 } });
+      const mockProvider = createMockProvider({
+        response: { output: 'test response', tokenUsage: { numRequests: 1 } },
+      });
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: { metadata: { pluginConfig: { minCharsPerMessage: 5 } } },
+      } as CallApiContextParams;
+
+      const result = await getTargetResponse(mockProvider, 'sixsix', context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at prompt is below minCharsPerMessage=9: 6 characters.',
+      );
+    });
+
     it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
       const mockProvider = createMockProvider({
         response: {
