@@ -5,6 +5,6 @@ prompts:
   - 'Tell me about {{topic}}'
 
 providers:
-  - openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.4-mini
 
 tests: file://tests.csv

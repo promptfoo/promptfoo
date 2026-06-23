@@ -156,7 +156,7 @@ prompts:
     raw: 'You are a creative writer. Answer: {{question}}'
 
 providers:
-  - openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.4-mini
 
 tests:
   # This test only runs with the Factual Assistant prompt

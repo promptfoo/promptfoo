@@ -5,8 +5,8 @@ prompts:
   - "You're a translator.  Translate this into {{language}}: {{input}}"
   - 'Speak in {{language}}: {{input}}'
 providers:
-  - openai:chat:gpt-5.4-mini
-  - openai:chat:gpt-5.5
+  - id: openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.5
 tests:
   - vars:
       language:

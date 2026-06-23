@@ -2,7 +2,7 @@
 # This shows all available tracing options
 
 providers:
-  - openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.4-mini
 
 prompts:
   - 'System: {{system_prompt}}\n\nUser: {{query}}'
