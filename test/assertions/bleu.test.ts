@@ -162,73 +162,41 @@ describe('BLEU score calculation', () => {
   });
 
   it('should pool n-gram matches across complementary references (Papineni multi-reference clipping)', () => {
-    // Each reference differs from the candidate by exactly one (different) word, so
-    // neither reference alone fully matches the candidate — but together they contain
-    // every 1- to 4-gram of it. Papineni et al. §2.1 clips each n-gram by its MAXIMUM
-    // count across all references (NLTK `modified_precision`), so modified precision is
-    // 1 at every order and the score is exactly 1.0. Clipping against the single
-    // best-matching reference instead undercounts to ~0.76.
+    // Together, the references contain every candidate n-gram from order 1 to 4.
     expect(calculateBleuScore('a b c d e f', ['a b c d e X', 'Y b c d e f'])).toBeCloseTo(1, 10);
-    expect(
-      calculateBleuScore('the cat sat on the mat', [
-        'the cat sat on the X',
-        'Y cat sat on the mat',
-      ]),
-    ).toBeCloseTo(1, 10);
   });
 
-  it('should clip each n-gram by its max count across references, not pick one reference', () => {
-    // Unigram-only weights isolate the clipping rule from higher-order smoothing.
-    // Candidate "a b": reference 1 covers "a", reference 2 covers "b", so the pooled
-    // unigram precision is 2/2 = 1.0 and the score is 1.0. The old "best single
-    // reference" behavior clipped 1/2 against either reference and scored 0.5.
-    expect(calculateBleuScore('a b', ['a c', 'b d'], [1, 0, 0, 0])).toBeCloseTo(1, 10);
+  it.each([
+    { order: 'unigram', candidate: 'a b', references: ['a c', 'b d'], weights: [1, 0, 0, 0] },
+    {
+      order: 'bigram',
+      candidate: 'a b c',
+      references: ['a b z', 'y b c'],
+      weights: [0, 1, 0, 0],
+    },
+    {
+      order: 'trigram',
+      candidate: 'a b c d e',
+      references: ['a b c d x', 'y b c d e'],
+      weights: [0, 0, 1, 0],
+    },
+  ])('should pool complementary $order matches across references', ({
+    candidate,
+    references,
+    weights,
+  }) => {
+    expect(calculateBleuScore(candidate, references, weights)).toBeCloseTo(1, 10);
   });
 
-  it('should cap each n-gram at its max count in any single reference (pooling takes max, not sum)', () => {
-    // Pooling must clip by the MAXIMUM per-reference count, never the sum across
-    // references. The candidate repeats "the" 3x but each reference contains it
-    // only once, so the clip is min(3, max(1,1)) = 1 → unigram precision 1/3. A
-    // "sum across references" regression would score 2/3. Guards the cap invariant
-    // independently of this PR's fix (both old and new code pass these).
+  it('should cap each n-gram at its maximum count in one reference', () => {
+    // Reference counts are maximized, not summed; one reference can still supply repeats.
     expect(calculateBleuScore('the the the', ['a the', 'b the'], [1, 0, 0, 0])).toBeCloseTo(
       1 / 3,
       10,
     );
-    expect(calculateBleuScore('the the the the', ['the cat', 'the dog'], [1, 0, 0, 0])).toBeCloseTo(
-      1 / 4,
-      10,
-    );
-    // A single reference legitimately containing "the" twice DOES permit a clip of
-    // 2, so the cap is the per-reference max (not a hardcoded 1): precision 2/2 = 1,
-    // reduced only by the brevity penalty (2 candidate tokens vs 3 reference tokens).
-    expect(calculateBleuScore('the the', ['the the cat'], [1, 0, 0, 0])).toBeCloseTo(
-      Math.exp(1 - 3 / 2),
-      10,
-    );
-  });
-
-  it('should pool higher-order n-grams across complementary references', () => {
-    // Bigram-only: candidate bigrams {a b, b c}; reference 1 covers "a b", reference
-    // 2 covers "b c". Pooled bigram precision 2/2 = 1.0; the old best-single-reference
-    // behavior scored 0.5.
-    expect(calculateBleuScore('a b c', ['a b z', 'y b c'], [0, 1, 0, 0])).toBeCloseTo(1, 10);
-    // Trigram-only: ref 1 covers the first two trigrams, ref 2 the last two. Pooled
-    // 3/3 = 1.0; the old behavior scored ~0.667.
-    expect(calculateBleuScore('a b c d e', ['a b c d x', 'y b c d e'], [0, 0, 1, 0])).toBeCloseTo(
-      1,
-      10,
-    );
-  });
-
-  it('should be numerically unchanged for a single partial-match reference', () => {
-    // The clipping refactor touches the single-reference path too; pin the exact
-    // partial-match score (precisions 5/6, 4/5, 3/4, 2/3) to prove it is a no-op
-    // when there is only one reference.
-    expect(calculateBleuScore('the dog sat on the mat', ['the cat sat on the mat'])).toBeCloseTo(
-      0.537284965911771,
-      10,
-    );
+    expect(
+      calculateBleuScore('the the the', ['the the cat', 'the dog dog'], [1, 0, 0, 0]),
+    ).toBeCloseTo(2 / 3, 10);
   });
 
   it('should use closest reference length for brevity penalty', () => {

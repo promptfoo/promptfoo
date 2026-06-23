@@ -1295,6 +1295,18 @@ assert:
     value: hello world
 ```
 
+`value` can also be an array of references. BLEU caps each candidate n-gram count at
+the largest count in any one reference, so different references can contribute matches:
+
+```yaml
+assert:
+  - type: bleu
+    threshold: 0.9
+    value:
+      - a b c d e X
+      - Y b c d e f
+```
+
 `value` can reference other variables using template syntax. For example:
 
 ```yaml

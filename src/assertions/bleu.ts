@@ -129,14 +129,8 @@ export function calculateBleuScore(
 
     const candidateNGramCounts = countNGrams(candidateNGrams);
 
-    // Modified n-gram precision (Papineni et al. §2.1 / NLTK `modified_precision`):
-    // clip each candidate n-gram by the MAXIMUM number of times it occurs in ANY
-    // single reference, then sum the clipped counts. Taking the max *per n-gram*
-    // lets different references cover different n-grams of the candidate. Summing
-    // each reference's clipped count and taking the max of those totals instead — a
-    // "best single reference" — undercounts whenever the references are
-    // complementary (e.g. candidate "a b" with references ["a c", "b d"] scores a
-    // unigram precision of 1/2 rather than the correct 2/2).
+    // BLEU modified precision caps each candidate n-gram count at the largest count
+    // found in any single reference, allowing different references to supply matches.
     const maxReferenceNGramCounts = new Map<string, number>();
     for (const referenceWords of referenceWordsList) {
       for (const [gram, count] of countNGrams(getNGrams(referenceWords, n))) {
