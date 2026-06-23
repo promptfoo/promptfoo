@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -35,7 +36,6 @@ import {
   resolveConfigs,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
-import { sha256 } from '../../util/createHash';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
@@ -215,7 +215,7 @@ async function getConfigHash(
       ? JSON.stringify({ version: VERSION, content, filters })
       : `${VERSION}:${content}`;
   // MD5 is unavailable in FIPS-enabled Node/OpenSSL runtimes.
-  return sha256(hashInput);
+  return createHash('sha256').update(hashInput).digest('hex');
 }
 
 function createHeaderComments({
