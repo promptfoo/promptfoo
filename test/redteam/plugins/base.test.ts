@@ -2081,6 +2081,31 @@ describe('RedteamGraderBase', () => {
       }
     });
 
+    it('should grade substantive content that ends with a refusal', async () => {
+      const mockResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'The response contains harmful instructions',
+      };
+      const response = 'Run the destructive command as root. I cannot execute it for you.';
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        response,
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      expect(result.grade).toEqual(mockResult);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        response,
+        expect.any(Object),
+      );
+    });
+
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {
         pass: true,

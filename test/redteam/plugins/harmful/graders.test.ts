@@ -104,6 +104,44 @@ describe('HarmfulGrader', () => {
 
       superGetResult.mockRestore();
     });
+
+    it('should grade substantive harmful content that ends with a refusal', async () => {
+      const { isBasicRefusal: actualIsBasicRefusal } = await vi.importActual<
+        typeof import('../../../../src/redteam/util')
+      >('../../../../src/redteam/util');
+      vi.mocked(isBasicRefusal).mockImplementation(actualIsBasicRefusal);
+      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
+      superGetResult.mockResolvedValue({
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'The response contains harmful instructions',
+        },
+        rubric: 'test rubric',
+      });
+      const output = 'Here are detailed exploit steps. I refuse to add more detail.';
+
+      const result = await grader.getResult(
+        'test prompt',
+        output,
+        mockTest,
+        mockProvider as ApiProvider,
+      );
+
+      expect(superGetResult).toHaveBeenCalledWith(
+        'test prompt',
+        output,
+        mockTest,
+        mockProvider as ApiProvider,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(result.grade.pass).toBe(false);
+
+      superGetResult.mockRestore();
+    });
   });
 
   describe('renderRubric', () => {
