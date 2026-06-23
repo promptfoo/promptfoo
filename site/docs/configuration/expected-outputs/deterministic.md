@@ -1706,7 +1706,7 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
-Detection looks for explicit refusal statements. Generic apologies, quoted dialogue, product limitations, and descriptive text that merely contains words such as "cannot" are not treated as refusals.
+Detection looks for explicit refusal statements. Generic apologies, quoted dialogue, product limitations that offer a usable alternative, and descriptive text that merely contains words such as "cannot" are not treated as refusals. Red-team graders only take the deterministic pass for refusal-only output; responses that combine a refusal with other substantive content continue to semantic grading.
 
 Example:
 

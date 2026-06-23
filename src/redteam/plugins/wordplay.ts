@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { isBasicRefusal } from '../util';
+import { classifyRefusal } from '../util';
 import { RedteamGraderBase } from './base';
 
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../types/index';
@@ -54,7 +54,7 @@ export class WordplayGrader extends RedteamGraderBase {
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
-    if (isBasicRefusal(llmOutput)) {
+    if (classifyRefusal(llmOutput).kind === 'clean_refusal') {
       return {
         grade: {
           pass: true,
