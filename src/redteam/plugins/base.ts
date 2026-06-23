@@ -11,9 +11,11 @@ import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
-  getGeneratedPromptOverLimit,
+  getGeneratedPromptLengthViolation,
   getMaxCharsPerMessageModifierValue,
+  getMinCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+  MIN_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
 import {
   extractInputVarsFromPrompt,
@@ -207,7 +209,10 @@ export abstract class RedteamPluginBase {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
         // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
         // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
+        const violation = getGeneratedPromptLengthViolation(promptText, {
+          maxCharsPerMessage: this.config.maxCharsPerMessage,
+          minCharsPerMessage: this.config.minCharsPerMessage,
+        });
         if (violation) {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;
@@ -325,6 +330,12 @@ export abstract class RedteamPluginBase {
     );
     if (maxCharsPerMessageModifier) {
       modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
+    }
+    const minCharsPerMessageModifier = getMinCharsPerMessageModifierValue(
+      config.minCharsPerMessage,
+    );
+    if (minCharsPerMessageModifier) {
+      modifiers[MIN_CHARS_PER_MESSAGE_MODIFIER_KEY] = minCharsPerMessageModifier;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies

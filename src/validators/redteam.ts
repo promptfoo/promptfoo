@@ -243,6 +243,11 @@ export const RedteamGenerateOptionsSchema = z.object({
     .positive()
     .optional()
     .describe('Maximum number of characters allowed per generated user message'),
+  minCharsPerMessage: z
+    .int()
+    .positive()
+    .optional()
+    .describe('Minimum number of characters required per generated user message'),
   numTests: z.int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
@@ -323,6 +328,11 @@ export const RedteamConfigSchema = z
       .positive()
       .optional()
       .describe('Maximum number of characters allowed per generated user message'),
+    minCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Minimum number of characters required per generated user message'),
     delay: z
       .int()
       .nonnegative()
@@ -572,6 +582,7 @@ export const RedteamConfigSchema = z
     return {
       numTests: data.numTests,
       ...(data.maxCharsPerMessage ? { maxCharsPerMessage: data.maxCharsPerMessage } : {}),
+      ...(data.minCharsPerMessage ? { minCharsPerMessage: data.minCharsPerMessage } : {}),
       plugins: uniquePlugins,
       strategies,
       ...(frameworks ? { frameworks } : {}),

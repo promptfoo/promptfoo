@@ -530,6 +530,20 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('returns an error before calling the target when the prompt is below minCharsPerMessage', async () => {
+      setCliStateConfig({ redteam: { minCharsPerMessage: 9 } });
+      const mockProvider = createMockProvider({
+        response: { output: 'test response', tokenUsage: { numRequests: 1 } },
+      });
+      const result = await getTargetResponse(mockProvider, 'too short');
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt is below minCharsPerMessage=9: 9 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
     it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
       setCliStateConfig({
         redteam: {

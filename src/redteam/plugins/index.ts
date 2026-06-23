@@ -35,9 +35,11 @@ import {
   requiresRemoteMaterialization,
 } from '../remoteMaterialization';
 import {
-  getGeneratedPromptOverLimit,
+  getGeneratedPromptLengthViolation,
   getMaxCharsPerMessageModifierValue,
+  getMinCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+  MIN_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
@@ -97,7 +99,7 @@ type PluginClass<T extends PluginConfig> = new (
   targetId?: string,
 ) => RedteamPluginBase;
 
-const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
+const CHAR_LIMITS_RETRY_MODIFIER_KEY = '__charsPerMessageRetry';
 
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
@@ -119,6 +121,10 @@ function computeModifiersFromConfig(config: PluginConfig | undefined): Record<st
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
     modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsModifier;
+  }
+  const minCharsModifier = getMinCharsPerMessageModifierValue(config?.minCharsPerMessage);
+  if (minCharsModifier) {
+    modifiers[MIN_CHARS_PER_MESSAGE_MODIFIER_KEY] = minCharsModifier;
   }
   return modifiers;
 }
@@ -160,12 +166,12 @@ function applyDefaultRemotePluginConfig(
   };
 }
 
-function isValidMaxCharsPerMessage(limit: unknown): limit is number {
+function isValidCharsPerMessage(limit: unknown): limit is number {
   return typeof limit === 'number' && Number.isInteger(limit) && limit > 0;
 }
 
 function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): number | undefined {
-  if (isValidMaxCharsPerMessage(config?.maxCharsPerMessage)) {
+  if (isValidCharsPerMessage(config?.maxCharsPerMessage)) {
     return config.maxCharsPerMessage;
   }
 
@@ -182,7 +188,22 @@ function getMaxCharsPerMessageFromConfig(config: PluginConfig | undefined): numb
   }
 
   const maxCharsPerMessage = Number(match[1]);
-  return isValidMaxCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
+  return isValidCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
+}
+
+function getMinCharsPerMessageFromConfig(config: PluginConfig | undefined): number | undefined {
+  if (isValidCharsPerMessage(config?.minCharsPerMessage)) {
+    return config.minCharsPerMessage;
+  }
+  const minCharsModifier = (config?.modifiers as Record<string, string> | undefined)?.[
+    MIN_CHARS_PER_MESSAGE_MODIFIER_KEY
+  ];
+  const match =
+    typeof minCharsModifier === 'string'
+      ? /must be (\d+) characters or more\./.exec(minCharsModifier)
+      : undefined;
+  const minCharsPerMessage = match ? Number(match[1]) : undefined;
+  return isValidCharsPerMessage(minCharsPerMessage) ? minCharsPerMessage : undefined;
 }
 
 function clonePluginConfig(config: PluginConfig | undefined): PluginConfig | undefined {
@@ -209,7 +230,7 @@ function buildRetryConfig(
 
   retryConfig.modifiers = {
     ...((retryConfig.modifiers as Record<string, string> | undefined) ?? {}),
-    [MAX_CHARS_RETRY_MODIFIER_KEY]: retryInstructions,
+    [CHAR_LIMITS_RETRY_MODIFIER_KEY]: retryInstructions,
   };
 
   return retryConfig;
@@ -218,11 +239,11 @@ function buildRetryConfig(
 function stripRetryModifier(testCase: TestCase): TestCase {
   const pluginConfig = testCase.metadata?.pluginConfig;
   const modifiers = pluginConfig?.modifiers as Record<string, string> | undefined;
-  if (!modifiers || !(MAX_CHARS_RETRY_MODIFIER_KEY in modifiers)) {
+  if (!modifiers || !(CHAR_LIMITS_RETRY_MODIFIER_KEY in modifiers)) {
     return testCase;
   }
 
-  const { [MAX_CHARS_RETRY_MODIFIER_KEY]: _retryInstructions, ...remainingModifiers } = modifiers;
+  const { [CHAR_LIMITS_RETRY_MODIFIER_KEY]: _retryInstructions, ...remainingModifiers } = modifiers;
 
   return {
     ...testCase,
@@ -267,27 +288,34 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
   return deduped;
 }
 
-function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?: number): string {
+function buildCharLimitsRetryInstructions(
+  rejectedPromptLengths: number[],
+  violationKind?: 'max' | 'min',
+  limit?: number,
+): string {
   const longestRejectedPromptText =
     rejectedPromptLengths.length > 0
       ? `${Math.max(...rejectedPromptLengths)} characters`
       : 'unknown length';
 
+  const comparison = violationKind === 'min' ? 'below' : 'above';
+  const requiredDirection = violationKind === 'min' ? 'at least' : 'at most';
   return dedent`
     Your previous response included ${rejectedPromptLengths.length} generated prompt${
       rejectedPromptLengths.length === 1 ? '' : 's'
-    } that exceeded the ${limit ?? 'configured'}-character limit.
-    The longest rejected prompt was ${longestRejectedPromptText}.
-    Generate replacement prompts only, and keep every user message within the character limit.
+    } that were ${comparison} the ${limit ?? 'configured'}-character limit.
+    The most recently rejected prompt length was ${longestRejectedPromptText}.
+    Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
   `.trim();
 }
 
-function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
+function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
-      if (!maxCharsPerMessage) {
+      const minCharsPerMessage = getMinCharsPerMessageFromConfig(params.config);
+      if (!maxCharsPerMessage && !minCharsPerMessage) {
         return pluginFactory.action(params);
       }
 
@@ -303,15 +331,20 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
         let rejectedPromptLimit: number | undefined;
+        let rejectedPromptKind: 'max' | 'min' | undefined;
 
         for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptOverLimit(
+          const violation = getGeneratedPromptLengthViolation(
             String(testCase.vars?.[params.injectVar] ?? ''),
-            maxCharsPerMessage,
+            {
+              maxCharsPerMessage,
+              minCharsPerMessage: getMinCharsPerMessageFromConfig(params.config),
+            },
           );
           if (violation) {
             rejectedPromptLengths.push(violation.length);
             rejectedPromptLimit = violation.limit;
+            rejectedPromptKind = violation.kind;
             continue;
           }
 
@@ -320,7 +353,11 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
 
         retryInstructions =
           rejectedPromptLengths.length > 0
-            ? buildMaxCharsRetryInstructions(rejectedPromptLengths, rejectedPromptLimit)
+            ? buildCharLimitsRetryInstructions(
+                rejectedPromptLengths,
+                rejectedPromptKind,
+                rejectedPromptLimit,
+              )
             : undefined;
 
         return validTestCases;
@@ -365,10 +402,12 @@ async function fetchRemoteTestCases(
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
-  if (maxCharsModifier) {
+  const minCharsModifier = getMinCharsPerMessageModifierValue(config?.minCharsPerMessage);
+  if (maxCharsModifier || minCharsModifier) {
     configForRemote.modifiers = {
       ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
-      [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
+      ...(maxCharsModifier ? { [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier } : {}),
+      ...(minCharsModifier ? { [MIN_CHARS_PER_MESSAGE_MODIFIER_KEY]: minCharsModifier } : {}),
     };
   }
   const body = JSON.stringify({
@@ -720,4 +759,4 @@ export const Plugins: PluginFactory[] = [
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,
-].map(withMaxCharsRetries);
+].map(withCharLimitRetries);

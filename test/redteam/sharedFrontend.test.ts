@@ -229,6 +229,11 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.maxCharsPerMessage).toBe(125);
   });
 
+  it('should include minCharsPerMessage if provided', () => {
+    const result = getUnifiedConfig({ ...baseConfig, minCharsPerMessage: 125 });
+    expect(result.redteam.minCharsPerMessage).toBe(125);
+  });
+
   it('should omit plugin config if empty', () => {
     const configWithEmptyPluginConfig: SavedRedteamConfig = {
       ...baseConfig,

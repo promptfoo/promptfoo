@@ -155,6 +155,17 @@ describe('redteamGenerateOptionsSchema', () => {
     expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 
+  it('should require minCharsPerMessage to be a positive integer', () => {
+    expect(
+      RedteamGenerateOptionsSchema.safeParse({
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        minCharsPerMessage: 0,
+      }).success,
+    ).toBe(false);
+  });
+
   it('should require maxCharsPerMessage to be a positive integer', () => {
     const input = {
       cache: true,

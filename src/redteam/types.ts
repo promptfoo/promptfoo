@@ -159,6 +159,7 @@ export const PluginConfigSchema = z.object({
   // Keys are variable names, values are descriptions of what each variable should contain
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
+  minCharsPerMessage: z.number().int().positive().optional(),
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
@@ -253,6 +254,7 @@ type CommonOptions = {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxConcurrency?: number;
   tracing?: TracingConfig;
 };
@@ -358,6 +360,7 @@ export interface SavedRedteamConfig {
   extensions?: string[];
   numTests?: number;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];
   provider?: string | ProviderOptions;

@@ -1,6 +1,7 @@
 import cliState from '../../cliState';
 
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
+export const MIN_CHARS_PER_MESSAGE_MODIFIER_KEY = 'minCharsPerMessage';
 
 type ChatMessage = {
   content: string;
@@ -8,22 +9,31 @@ type ChatMessage = {
   role: string;
 };
 
+type PromptLengthViolation = {
+  kind: 'max' | 'min';
+  length: number;
+  limit: number;
+  path: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function getMaxCharsPerMessage(limit?: number): number | undefined {
-  const maxCharsPerMessage = limit ?? cliState.config?.redteam?.maxCharsPerMessage;
-
-  if (
-    typeof maxCharsPerMessage !== 'number' ||
-    !Number.isInteger(maxCharsPerMessage) ||
-    maxCharsPerMessage <= 0
-  ) {
+function getCharsPerMessageLimit(limit: number | undefined): number | undefined {
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit <= 0) {
     return undefined;
   }
 
-  return maxCharsPerMessage;
+  return limit;
+}
+
+function getMaxCharsPerMessage(limit?: number): number | undefined {
+  return getCharsPerMessageLimit(limit ?? cliState.config?.redteam?.maxCharsPerMessage);
+}
+
+function getMinCharsPerMessage(limit?: number): number | undefined {
+  return getCharsPerMessageLimit(limit ?? cliState.config?.redteam?.minCharsPerMessage);
 }
 
 function parseChatMessages(prompt: string): ChatMessage[] | undefined {
@@ -83,37 +93,38 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
 
 function getPromptLengthViolation(
   prompt: string,
-  limit?: number,
-): { length: number; limit: number; path: string } | undefined {
-  const maxCharsPerMessage = getMaxCharsPerMessage(limit);
-  if (!maxCharsPerMessage) {
+  {
+    maxCharsPerMessage,
+    minCharsPerMessage,
+  }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): PromptLengthViolation | undefined {
+  const maxChars = getMaxCharsPerMessage(maxCharsPerMessage);
+  const minChars = getMinCharsPerMessage(minCharsPerMessage);
+  if (!maxChars && !minChars) {
     return undefined;
   }
+
+  const getViolation = (
+    message: Pick<ChatMessage, 'content' | 'path'>,
+  ): PromptLengthViolation | undefined => {
+    if (maxChars && message.content.length > maxChars) {
+      return { kind: 'max', length: message.content.length, limit: maxChars, path: message.path };
+    }
+    if (minChars && message.content.length < minChars) {
+      return { kind: 'min', length: message.content.length, limit: minChars, path: message.path };
+    }
+    return undefined;
+  };
 
   const messages = parseChatMessages(prompt);
   if (messages) {
-    const oversizedMessage = messages.find(
-      (message) => message.role === 'user' && message.content.length > maxCharsPerMessage,
-    );
-
-    return oversizedMessage
-      ? {
-          length: oversizedMessage.content.length,
-          limit: maxCharsPerMessage,
-          path: oversizedMessage.path,
-        }
-      : undefined;
+    return messages
+      .filter((message) => message.role === 'user')
+      .map(getViolation)
+      .find((violation) => violation !== undefined);
   }
 
-  if (prompt.length <= maxCharsPerMessage) {
-    return undefined;
-  }
-
-  return {
-    length: prompt.length,
-    limit: maxCharsPerMessage,
-    path: 'prompt',
-  };
+  return getViolation({ content: prompt, path: 'prompt' });
 }
 
 export function getMaxCharsPerMessageModifierValue(limit?: number): string | undefined {
@@ -125,28 +136,54 @@ export function getMaxCharsPerMessageModifierValue(limit?: number): string | und
   return `Each generated user message must be ${maxCharsPerMessage} characters or fewer.`;
 }
 
+export function getMinCharsPerMessageModifierValue(limit?: number): string | undefined {
+  const minCharsPerMessage = getMinCharsPerMessage(limit);
+  if (!minCharsPerMessage) {
+    return undefined;
+  }
+
+  return `Each generated user message must be ${minCharsPerMessage} characters or more.`;
+}
+
+export function getGeneratedPromptLengthViolation(
+  prompt: string,
+  {
+    maxCharsPerMessage,
+    minCharsPerMessage,
+  }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): PromptLengthViolation | undefined {
+  return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
+}
+
 export function getGeneratedPromptOverLimit(
   prompt: string,
   limit?: number,
 ): { length: number; limit: number } | undefined {
-  const violation = getPromptLengthViolation(prompt, limit);
-  if (!violation) {
-    return undefined;
-  }
-
-  return {
-    length: violation.length,
-    limit: violation.limit,
-  };
+  const violation = getPromptLengthViolation(prompt, { maxCharsPerMessage: limit });
+  return violation && violation.kind === 'max'
+    ? { length: violation.length, limit: violation.limit }
+    : undefined;
 }
 
-export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
-  const violation = getPromptLengthViolation(prompt, limit);
+export function throwIfTargetPromptViolatesCharLimits(
+  prompt: string,
+  {
+    maxCharsPerMessage,
+    minCharsPerMessage,
+  }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): void {
+  const violation = getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
   if (!violation) {
     return;
   }
 
+  const comparator = violation.kind === 'max' ? 'exceeds' : 'is below';
+  const configKey = violation.kind === 'max' ? 'maxCharsPerMessage' : 'minCharsPerMessage';
   throw new Error(
-    `Target prompt message at ${violation.path} exceeds maxCharsPerMessage=${violation.limit}: ${violation.length} characters.`,
+    `Target prompt message at ${violation.path} ${comparator} ${configKey}=${violation.limit}: ${violation.length} characters.`,
   );
+}
+
+export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
+  throwIfTargetPromptViolatesCharLimits(prompt, { maxCharsPerMessage: limit });
 }

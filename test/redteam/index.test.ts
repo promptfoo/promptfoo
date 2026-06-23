@@ -329,6 +329,39 @@ describe('synthesize', () => {
       );
     });
 
+    it('should pass minCharsPerMessage through synthesize and drop short generated tests', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([{ vars: { query: 'short' } }, { vars: { query: 'long enough' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+      const result = await synthesize({
+        minCharsPerMessage: 10,
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            minCharsPerMessage: 10,
+            modifiers: expect.objectContaining({
+              minCharsPerMessage: 'Each generated user message must be 10 characters or more.',
+            }),
+          }),
+        }),
+      );
+      expect(result.testCases).toEqual([
+        expect.objectContaining({
+          vars: { query: 'long enough' },
+          metadata: expect.objectContaining({
+            pluginConfig: expect.objectContaining({ minCharsPerMessage: 10 }),
+          }),
+        }),
+      ]);
+    });
+
     it('should pass shared generation options through custom file plugins', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-shared-options.yaml';
