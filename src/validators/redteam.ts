@@ -389,6 +389,24 @@ export const RedteamConfigSchema = z
         path: ['minCharsPerMessage'],
       });
     }
+    for (const [index, strategy] of (data.strategies ?? []).entries()) {
+      if (typeof strategy === 'string' || !strategy.config) {
+        continue;
+      }
+      const effectiveRange = {
+        maxCharsPerMessage:
+          data.maxCharsPerMessage ?? getCharsPerMessageLimit(strategy.config.maxCharsPerMessage),
+        minCharsPerMessage:
+          data.minCharsPerMessage ?? getCharsPerMessageLimit(strategy.config.minCharsPerMessage),
+      };
+      if (!hasValidCharsPerMessageRange(effectiveRange)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+          path: ['strategies', index, 'config', 'minCharsPerMessage'],
+        });
+      }
+    }
     for (const [index, plugin] of (data.plugins ?? []).entries()) {
       if (typeof plugin === 'string' || !plugin.config) {
         continue;

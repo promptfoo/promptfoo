@@ -822,9 +822,9 @@ async function renderRunEvalPrompt({
     const testCharLimits = getTargetPromptCharLimits({ test } as CallApiContextParams);
     throwIfTargetPromptViolatesCharLimits(renderedPrompt, {
       maxCharsPerMessage:
-        testCharLimits.maxCharsPerMessage ?? testSuite?.redteam?.maxCharsPerMessage,
+        testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
       minCharsPerMessage:
-        testCharLimits.minCharsPerMessage ?? testSuite?.redteam?.minCharsPerMessage,
+        testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage,
     });
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);

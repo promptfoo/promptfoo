@@ -25,6 +25,7 @@ describe('RunOptionsContent', () => {
   const defaultProps = {
     numTests: 10,
     maxCharsPerMessage: 250,
+    minCharsPerMessage: 50,
     runOptions: {
       delay: 0,
       maxConcurrency: 1,
@@ -59,6 +60,10 @@ describe('RunOptionsContent', () => {
       const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
       expect(maxCharsPerMessageInput).toBeInTheDocument();
       expect(maxCharsPerMessageInput).toHaveValue(defaultProps.maxCharsPerMessage);
+
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+      expect(minCharsPerMessageInput).toBeInTheDocument();
+      expect(minCharsPerMessageInput).toHaveValue(defaultProps.minCharsPerMessage);
 
       const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
       expect(debugSwitch).toBeInTheDocument();
@@ -184,6 +189,21 @@ describe('RunOptionsContent', () => {
       await user.tab();
 
       expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 120);
+    });
+
+    it('should call updateConfig with minCharsPerMessage when that field is set to a valid value', async () => {
+      const user = userEvent.setup();
+      renderWithTooltipProvider(
+        <RunOptionsContent {...defaultProps} minCharsPerMessage={undefined} />,
+      );
+      const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
+
+      await user.click(minCharsPerMessageInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('120');
+      await user.tab();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', 120);
     });
 
     it('should clear maxCharsPerMessage when the field is emptied', async () => {

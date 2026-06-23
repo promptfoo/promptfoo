@@ -20,6 +20,11 @@ export const RUNOPTIONS_TEXT = {
       'Optional character cap for each generated user message and final prompt sent to the target. Leave blank for no limit.',
     error: 'Max chars per message must be greater than 0',
   },
+  minCharsPerMessage: {
+    helper:
+      'Optional character floor for each generated user message and final prompt sent to the target. Leave blank for no limit.',
+    error: 'Min chars per message must be greater than 0',
+  },
   delayBetweenApiCalls: {
     helper:
       'Add a delay between API calls to avoid rate limits. This will not override a delay set on the target.',
@@ -40,6 +45,7 @@ export const RUNOPTIONS_TEXT = {
 interface RunOptionsProps {
   numTests: number | undefined;
   maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   runOptions?: Partial<RedteamRunOptions>;
   updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   updateRunOption: (
@@ -166,6 +172,48 @@ export const MaxCharsPerMessageInput = ({
       }}
       readOnly={readOnly}
       helperText={error ? error : RUNOPTIONS_TEXT.maxCharsPerMessage.helper}
+      error={Boolean(error)}
+    />
+  );
+};
+
+export const MinCharsPerMessageInput = ({
+  value,
+  setValue,
+  updateConfig,
+  readOnly,
+}: MaxCharsPerMessageInputProps) => {
+  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.minCharsPerMessage.error : undefined;
+
+  return (
+    <NumberInput
+      fullWidth
+      label="Min chars per message"
+      value={value}
+      min={1}
+      onChange={(v) => {
+        setValue(v?.toString() || '');
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        if (value.trim() === '') {
+          updateConfig('minCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        const parsed = Number(value);
+        if (Number.isNaN(parsed) || parsed < 1) {
+          updateConfig('minCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        updateConfig('minCharsPerMessage', parsed);
+        setValue(String(parsed));
+      }}
+      readOnly={readOnly}
+      helperText={error ? error : RUNOPTIONS_TEXT.minCharsPerMessage.helper}
       error={Boolean(error)}
     />
   );
@@ -308,6 +356,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
 export const RunOptionsContent = ({
   numTests,
   maxCharsPerMessage,
+  minCharsPerMessage,
   runOptions,
   updateConfig,
   updateRunOption,
@@ -323,6 +372,9 @@ export const RunOptionsContent = ({
   );
   const [maxCharsPerMessageInput, setMaxCharsPerMessageInput] = useState<string>(
     maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage),
+  );
+  const [minCharsPerMessageInput, setMinCharsPerMessageInput] = useState<string>(
+    minCharsPerMessage === undefined ? '' : String(minCharsPerMessage),
   );
   const [delayInput, setDelayInput] = useState<string>(
     runOptions?.delay === undefined ? '0' : String(runOptions.delay),
@@ -355,6 +407,12 @@ export const RunOptionsContent = ({
       <MaxCharsPerMessageInput
         value={maxCharsPerMessageInput}
         setValue={setMaxCharsPerMessageInput}
+        updateConfig={updateConfig}
+      />
+
+      <MinCharsPerMessageInput
+        value={minCharsPerMessageInput}
+        setValue={setMinCharsPerMessageInput}
         updateConfig={updateConfig}
       />
 

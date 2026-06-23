@@ -1126,6 +1126,7 @@ export default function Review({
                 <RunOptionsContent
                   numTests={config.numTests}
                   maxCharsPerMessage={config.maxCharsPerMessage}
+                  minCharsPerMessage={config.minCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,
