@@ -1450,6 +1450,7 @@ export async function synthesize({
               injectVar,
               `Plugin ${plugin.id}`,
               maxCharsPerMessage,
+              minCharsPerMessage,
             );
 
             return {
