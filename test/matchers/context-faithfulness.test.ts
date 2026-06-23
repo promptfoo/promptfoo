@@ -282,6 +282,7 @@ describe('matchesContextFaithfulness', () => {
         1,
         0.5,
       ],
+      ['inline numbered list', 3, `${marker} 1) Yes 2) No 3) Yes`, 2 / 3, 0.5],
       ['comma-separated list', 3, `${marker} Yes, No, Yes`, 2 / 3, 0.5],
       [
         'No explanation containing yes',
@@ -302,6 +303,14 @@ describe('matchesContextFaithfulness', () => {
       ['unknown verdict slot', 2, `${marker} Yes. Maybe.`, 0.5, 0.75],
       ['compact unknown verdict slot', 2, `${marker} N/A. Yes.`, 0.5, 0.75],
       ['unknown verdict in comma list', 3, `${marker} Yes, Maybe, Yes`, 2 / 3, 0.5],
+      ['wrapped unknown verdict in comma list', 3, `${marker} “Yes”, **N/A**, “Yes”`, 2 / 3, 0.5],
+      [
+        'annotated unknown verdict in comma list',
+        3,
+        `${marker} Yes: supported, Unknown: insufficient evidence, Yes: supported`,
+        2 / 3,
+        0.5,
+      ],
       ['missing verdict slots', 3, `${marker} Yes.`, 1 / 3, 0.5],
       [
         'yes/no substrings in larger words',
@@ -341,11 +350,39 @@ describe('matchesContextFaithfulness', () => {
         0,
         0.75,
       ],
+      [
+        'Unicode-dash bullet unknown before extra verdict',
+        2,
+        `${marker}\n— Not sure.\n– Yes.\n— Yes.`,
+        0,
+        0.75,
+      ],
       ['repeated final-answer marker', 2, `${marker} No. No. ${marker} Yes. Yes.`, 0, 0.75],
+      [
+        'repeated final-answer marker with spacing variation',
+        1,
+        `${marker} Yes. Final verdict for each statement in order : No.`,
+        0,
+        0.5,
+      ],
+      [
+        'final-answer marker words in explanation prose',
+        1,
+        `${marker} Yes. The final verdict for each statement in order was clear.`,
+        1,
+        0.5,
+      ],
       ['extra positive verdicts', 2, `${marker} Yes. Yes. No. No.`, 0, 0.75],
       ['bold final-answer marker', 1, `**${marker}** Yes.`, 1, 0.5],
       ['smart-quoted verdicts', 2, `${marker} “Yes”. “No”.`, 0.5, 0.5],
       ['statement-labelled verdicts', 2, `${marker} Statement 1: Yes. Statement 2: Yes.`, 1, 0.75],
+      [
+        'period-delimited statement labels',
+        2,
+        `${marker} Statement 1. Yes. Statement 2. Yes.`,
+        1,
+        0.75,
+      ],
       ['hyphen-labelled statements', 2, `${marker} Statement 1 - Yes. Statement 2 - Yes.`, 1, 0.75],
       [
         'Unicode-dash statement labels',
@@ -355,6 +392,13 @@ describe('matchesContextFaithfulness', () => {
         0.5,
       ],
       ['verdict followed by because', 1, `${marker} Yes because the context supports it.`, 1, 0.5],
+      [
+        'explanation containing dotted abbreviation',
+        2,
+        `${marker} Yes because the U.S. source supports it. No.`,
+        0.5,
+        0.5,
+      ],
       ['parenthesized explanation', 1, `${marker} Yes (supported).`, 1, 0.5],
       ['trailing comma', 3, `${marker} Yes, No, Yes,`, 2 / 3, 0.5],
       [
@@ -372,6 +416,16 @@ describe('matchesContextFaithfulness', () => {
         0.75,
       ],
       ['unparseable final list', 2, `${marker} Maybe. Perhaps.`, 0, 0.5],
+      ['duplicate statement label', 2, `${marker} Statement 1: Yes. Statement 1: Yes.`, 0, 0.5],
+      ['out-of-range statement label', 2, `${marker} Statement 1: Yes. Statement 3: Yes.`, 0, 0.5],
+      [
+        'unique reordered statement labels',
+        2,
+        `${marker} Statement 2: No. Statement 1: Yes.`,
+        0.5,
+        0.5,
+      ],
+      ['excess inline numbered entries', 2, `${marker} 1) Yes 2) Yes 3) Yes`, 0, 0.5],
     ];
 
     it.each(cases)('%s', async (_name, statementCount, verdicts, expectedScore, threshold) => {
