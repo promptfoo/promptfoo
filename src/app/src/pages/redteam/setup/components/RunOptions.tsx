@@ -23,7 +23,7 @@ export const RUNOPTIONS_TEXT = {
   minCharsPerMessage: {
     helper:
       'Optional character floor for each generated user message and final prompt sent to the target. Leave blank for no limit.',
-    error: 'Min chars per message must be greater than 0',
+    error: 'Min chars per message must be greater than 0 and no greater than max chars per message',
   },
   delayBetweenApiCalls: {
     helper:
@@ -133,6 +133,8 @@ export interface MaxCharsPerMessageInputProps {
   setValue: (value: string) => void;
   updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   readOnly?: boolean;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
 }
 
 export const MaxCharsPerMessageInput = ({
@@ -140,8 +142,16 @@ export const MaxCharsPerMessageInput = ({
   setValue,
   updateConfig,
   readOnly,
+  minCharsPerMessage,
 }: MaxCharsPerMessageInputProps) => {
-  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxCharsPerMessage.error : undefined;
+  const parsedValue = Number(value);
+  const error =
+    isBelowMin(value, 1) ||
+    (minCharsPerMessage !== undefined &&
+      !Number.isNaN(parsedValue) &&
+      parsedValue < minCharsPerMessage)
+      ? RUNOPTIONS_TEXT.maxCharsPerMessage.error
+      : undefined;
 
   return (
     <NumberInput
@@ -167,6 +177,9 @@ export const MaxCharsPerMessageInput = ({
           setValue('');
           return;
         }
+        if (minCharsPerMessage !== undefined && parsed < minCharsPerMessage) {
+          return;
+        }
         updateConfig('maxCharsPerMessage', parsed);
         setValue(String(parsed));
       }}
@@ -182,8 +195,16 @@ export const MinCharsPerMessageInput = ({
   setValue,
   updateConfig,
   readOnly,
+  maxCharsPerMessage,
 }: MaxCharsPerMessageInputProps) => {
-  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.minCharsPerMessage.error : undefined;
+  const parsedValue = Number(value);
+  const error =
+    isBelowMin(value, 1) ||
+    (maxCharsPerMessage !== undefined &&
+      !Number.isNaN(parsedValue) &&
+      parsedValue > maxCharsPerMessage)
+      ? RUNOPTIONS_TEXT.minCharsPerMessage.error
+      : undefined;
 
   return (
     <NumberInput
@@ -207,6 +228,9 @@ export const MinCharsPerMessageInput = ({
         if (Number.isNaN(parsed) || parsed < 1) {
           updateConfig('minCharsPerMessage', undefined);
           setValue('');
+          return;
+        }
+        if (maxCharsPerMessage !== undefined && parsed > maxCharsPerMessage) {
           return;
         }
         updateConfig('minCharsPerMessage', parsed);
@@ -408,12 +432,14 @@ export const RunOptionsContent = ({
         value={maxCharsPerMessageInput}
         setValue={setMaxCharsPerMessageInput}
         updateConfig={updateConfig}
+        minCharsPerMessage={minCharsPerMessage}
       />
 
       <MinCharsPerMessageInput
         value={minCharsPerMessageInput}
         setValue={setMinCharsPerMessageInput}
         updateConfig={updateConfig}
+        maxCharsPerMessage={maxCharsPerMessage}
       />
 
       <MaxNumberOfConcurrentRequestsInput
