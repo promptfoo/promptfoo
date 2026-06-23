@@ -408,17 +408,38 @@ export async function matchesContextFaithfulness(
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
-      // Count standalone "no" verdicts via word-boundary matching, rather than
-      // split('.')-and-substring-testing for "yes" — which miscounted enumerated
-      // lists, comma-separated lists, and explanatory prose (see the "verdict
-      // format robustness" tests). Counting "no" tokens (not "not yes") treats an
-      // unparseable/absent verdict as supported, preserving prior behavior.
-      const finalVerdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const verdictTokens = finalVerdicts.match(/\b(?:yes|no)\b/g) ?? [];
-      if (verdictTokens.length > 0) {
-        const notSupported = verdictTokens.filter((token) => token === 'no').length;
-        score = 1 - notSupported / statements.length;
-      }
+      type FaithfulnessVerdict = 'yes' | 'no';
+
+      const parseVerdict = (
+        value: string,
+        allowExplanation = false,
+      ): FaithfulnessVerdict | undefined => {
+        const normalized = value
+          .trim()
+          .replace(/^(?:(?:[-+•]|\*\s+)|\d+\s*[):\]])\s*/, '')
+          .replace(/^verdict\s*:\s*/, '')
+          .trim();
+        const pattern = allowExplanation
+          ? /^[*_'`"(\[]*(yes|no)[*_'`")\]]*(?=\s*(?:[,:-]|$))/
+          : /^[*_'`"(\[]*(yes|no)[*_'`")\]]*$/;
+        return pattern.exec(normalized)?.[1] as FaithfulnessVerdict | undefined;
+      };
+
+      // Parse list entries instead of every yes/no word so explanation prose
+      // cannot become an extra verdict. Missing or unparseable entries add no support.
+      const finalVerdicts = verdicts.slice(verdicts.lastIndexOf(finalAnswer) + finalAnswer.length);
+      const parsedVerdicts = finalVerdicts.split(/[.;\r\n]+/).flatMap((chunk) => {
+        const commaVerdicts = chunk.split(',').map((item) => parseVerdict(item));
+        if (!commaVerdicts.includes(undefined)) {
+          return commaVerdicts as FaithfulnessVerdict[];
+        }
+        const leadingVerdict = parseVerdict(chunk, true);
+        return leadingVerdict ? [leadingVerdict] : [];
+      });
+      const supported = parsedVerdicts
+        .slice(0, statements.length)
+        .filter((verdict) => verdict === 'yes').length;
+      score = supported / statements.length;
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
       const yesVerdictCount = verdicts.split('verdict: yes').length - 1;

@@ -243,16 +243,15 @@ describe('matchesContextFaithfulness', () => {
   });
 
   describe('verdict format robustness', () => {
-    // The grader's few-shot teaches a period-delimited final line
-    // ("...in order: No. No. Yes."), but models commonly deviate — enumerating
-    // the list, separating with commas, or adding prose. The score must stay
-    // correct (supported statements / total) across these variations.
-    const mockTwoCalls = (statements: string, verdicts: string) => {
+    const mockTwoCalls = (statementCount: number, verdicts: string) => {
       const mockCallApi = vi
         .fn()
         .mockImplementationOnce(() =>
           Promise.resolve({
-            output: statements,
+            output: Array.from(
+              { length: statementCount },
+              (_, index) => `Statement ${index + 1}`,
+            ).join('\n'),
             tokenUsage: { total: 10, prompt: 5, completion: 5 },
           }),
         )
@@ -267,102 +266,71 @@ describe('matchesContextFaithfulness', () => {
       callApiSpy.mockImplementation(mockCallApi);
     };
 
-    it('scores an enumerated final verdict list correctly (all statements supported => 1.0)', async () => {
-      // Final verdicts as "1. Yes." … "5. Yes." — every statement is supported, so
-      // the score must be 1.0. The old split('.')-and-substring parser turned each
-      // "N." enumeration number into a non-"yes" segment and scored a perfect
-      // answer 0.0.
-      mockTwoCalls(
-        'Statement 1\nStatement 2\nStatement 3\nStatement 4\nStatement 5',
-        'Final verdict for each statement in order:\n1. Yes.\n2. Yes.\n3. Yes.\n4. Yes.\n5. Yes.',
-      );
+    type VerdictCase = [
+      name: string,
+      statementCount: number,
+      verdicts: string,
+      expectedScore: number,
+      threshold: number,
+    ];
+    const marker = 'Final verdict for each statement in order:';
+    const cases: VerdictCase[] = [
+      [
+        'enumerated period list',
+        5,
+        `${marker}\n1. Yes.\n2. Yes.\n3. Yes.\n4. Yes.\n5. Yes.`,
+        1,
+        0.5,
+      ],
+      ['comma-separated list', 3, `${marker} Yes, No, Yes`, 2 / 3, 0.5],
+      [
+        'No explanation containing yes',
+        2,
+        `${marker} No, the context never mentions yes. No.`,
+        0,
+        0.5,
+      ],
+      [
+        'Yes explanation containing no',
+        2,
+        `${marker} Yes, there is no contradiction. Yes.`,
+        1,
+        0.75,
+      ],
+      ['unknown verdict slot', 2, `${marker} Yes. Maybe.`, 0.5, 0.75],
+      ['missing verdict slots', 3, `${marker} Yes.`, 1 / 3, 0.5],
+      [
+        'yes/no substrings in larger words',
+        1,
+        `${marker} Yesterday the report cannot be verified.`,
+        0,
+        0.5,
+      ],
+      ['more verdicts than statements', 2, `${marker} No. No. No.`, 0, 0.5],
+      [
+        'bullets, labels, wrappers, and alternate delimiters',
+        3,
+        `${marker} - **Yes**;\n2) Verdict: No;\n• _Yes_`,
+        2 / 3,
+        0.5,
+      ],
+      [
+        'comma-isolated verdict word in explanation',
+        2,
+        `${marker} No, the source says, yes, but only in a quote. No.`,
+        0,
+        0.5,
+      ],
+      ['repeated final-answer marker', 2, `${marker} No. No. ${marker} Yes. Yes.`, 1, 0.75],
+      ['unparseable final list', 2, `${marker} Maybe. Perhaps.`, 0, 0.5],
+    ];
 
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBeCloseTo(1, 5);
-      expect(result.pass).toBe(true);
-    });
+    it.each(cases)('%s', async (_name, statementCount, verdicts, expectedScore, threshold) => {
+      mockTwoCalls(statementCount, verdicts);
 
-    it('scores a comma-separated final verdict list correctly (Yes, No, Yes => 0.67)', async () => {
-      // Commas instead of periods previously collapsed the whole line into one
-      // segment that contained "yes", scoring 1.0 and hiding the "No".
-      mockTwoCalls(
-        'Statement 1\nStatement 2\nStatement 3',
-        'Final verdict for each statement in order: Yes, No, Yes',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBeCloseTo(2 / 3, 5);
-      expect(result.pass).toBe(true);
-    });
-
-    it('does not count the word "yes" inside a "No" verdict explanation (both No => 0.0)', async () => {
-      // A "No" verdict whose text contains the substring "yes" must not be counted
-      // as supported. Both statements are unsupported, so the score must be 0.0;
-      // the old parser scored 0.5 because the "yes" substring matched.
-      mockTwoCalls(
-        'Statement 1\nStatement 2',
-        'Final verdict for each statement in order: No, the context never mentions yes. No.',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBeCloseTo(0, 5);
-      expect(result.pass).toBe(false);
-    });
-
-    it('scores the taught period-delimited format correctly (regression guard)', async () => {
-      // The canonical few-shot format ("...in order: Yes. No. Yes.") must keep
-      // scoring correctly through the token parser: 2 of 3 supported => 0.67.
-      mockTwoCalls(
-        'Statement 1\nStatement 2\nStatement 3',
-        'Final verdict for each statement in order: Yes. No. Yes.',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBeCloseTo(2 / 3, 5);
-      expect(result.pass).toBe(true);
-    });
-
-    it('clamps to 0 when more "no" verdicts are emitted than statements', async () => {
-      // Three "no" tokens against two statements yields a raw score of 1 - 3/2 =
-      // -0.5; it must clamp to 0 (and fail), exercising the [0, 1] clamp on the
-      // token-parsing path (the existing clamp test only covers the else branch).
-      mockTwoCalls(
-        'Statement 1\nStatement 2',
-        'Final verdict for each statement in order: No. No. No.',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBe(0);
-      expect(result.pass).toBe(false);
-    });
-
-    it('ignores yes/no substrings inside larger words via word boundaries', async () => {
-      // Only the standalone "Yes" is a verdict; "yesterday" and "cannot" must not
-      // match, so the single statement is supported => 1.0.
-      mockTwoCalls(
-        'Statement 1',
-        'Final verdict for each statement in order: Yes. Yesterday the report cannot be verified.',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBeCloseTo(1, 5);
-      expect(result.pass).toBe(true);
-    });
-
-    it('KNOWN LIMITATION: a standalone "no" in a "Yes" verdict explanation is over-counted', async () => {
-      // Verdicts are counted globally (not per statement), so a standalone "no"
-      // word inside a supported statement's explanation is counted as unsupported:
-      // "Yes. There is no doubt." -> tokens [yes, no] -> 1 - 1/1 = 0. This is an
-      // accepted tradeoff of the conservative "count no" heuristic — graders are
-      // instructed to emit a bare yes/no per statement. Documented here so a future
-      // change that improves it has to flip this assertion intentionally.
-      mockTwoCalls(
-        'Statement 1',
-        'Final verdict for each statement in order: Yes. There is no doubt.',
-      );
-
-      const result = await matchesContextFaithfulness('q', 'a', 'ctx', 0.5);
-      expect(result.score).toBe(0);
+      const result = await matchesContextFaithfulness('q', 'a', 'ctx', threshold);
+      expect(result.score).toBeCloseTo(expectedScore, 5);
+      expect(result.pass).toBe(expectedScore >= threshold - Number.EPSILON);
     });
   });
 });
