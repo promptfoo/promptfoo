@@ -320,31 +320,57 @@ export async function matchesContextRelevance(
 
 type FaithfulnessVerdict = 'yes' | 'no' | 'unknown';
 
-function parseFaithfulnessVerdict(value: string): FaithfulnessVerdict | undefined {
-  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
-  const entryPrefix = /^(?:(?:(?:statement\s+)?\d+\s*[.):\]]|verdict\s*:)\s*)+/;
-  const hasEntryPrefix = entryPrefix.test(normalized);
-  normalized = normalized.replace(entryPrefix, '').replace(/^[^\p{L}]*/u, '');
+const faithfulnessEntryPrefix = /^(?:(?:(?:statement\s+)?\d+\s*[-.):\]]|verdict\s*:)\s*)+/;
 
-  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1];
-  if (verdict) {
-    return verdict as FaithfulnessVerdict;
+function parseFaithfulnessVerdict(
+  value: string,
+  requireExplicitEntry = false,
+): FaithfulnessVerdict | undefined {
+  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
+  const hasEntryPrefix = faithfulnessEntryPrefix.test(normalized);
+  normalized = normalized.replace(faithfulnessEntryPrefix, '').replace(/^[^\p{L}]*/u, '');
+
+  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1] as 'yes' | 'no' | undefined;
+  if (verdict && !requireExplicitEntry) {
+    return verdict;
+  }
+  const suffix = verdict ? normalized.slice(verdict.length).trim() : '';
+  if (
+    verdict &&
+    (hasEntryPrefix || /^(?:$|[^\p{L}\p{N}]+$|because\b|[:(\[\-\u2013\u2014])/u.test(suffix))
+  ) {
+    return verdict;
+  }
+  if (requireExplicitEntry) {
+    return hasEntryPrefix ? 'unknown' : undefined;
   }
 
-  // A labelled or single-token value is still an ordered slot, even when it is unknown.
+  // A labelled or compact value is still an ordered slot, even when it is unknown.
   const unwrapped = normalized.replace(/[^\p{L}]+$/u, '');
-  return hasEntryPrefix || /^\p{L}+$/u.test(unwrapped) ? 'unknown' : undefined;
+  const isCompactUnknown = /^(?=.*\p{L})[\p{L}\p{N}]+(?:[/_-][\p{L}\p{N}]+)*$/u.test(unwrapped);
+  return hasEntryPrefix || isCompactUnknown ? 'unknown' : undefined;
 }
 
-function parseFaithfulnessChunk(chunk: string): FaithfulnessVerdict[] {
-  const commaParts = chunk.split(',').filter((part) => part.trim() !== '');
-  const commaVerdicts = commaParts.map(parseFaithfulnessVerdict);
-  if (commaVerdicts.length > 1 && commaVerdicts.every((verdict) => verdict !== undefined)) {
-    return commaVerdicts as FaithfulnessVerdict[];
+function parseCommaSeparatedFaithfulnessVerdicts(
+  chunk: string,
+  expectedCount: number,
+): FaithfulnessVerdict[] | undefined {
+  if (!chunk.includes(',')) {
+    return undefined;
   }
 
-  const verdict = parseFaithfulnessVerdict(chunk);
-  return verdict ? [verdict] : [];
+  const parsedVerdicts: FaithfulnessVerdict[] = [];
+  for (const match of chunk.matchAll(/[^,]+/g)) {
+    const verdict = parseFaithfulnessVerdict(match[0], true);
+    if (!verdict) {
+      return undefined;
+    }
+    parsedVerdicts.push(verdict);
+    if (parsedVerdicts.length > expectedCount) {
+      break;
+    }
+  }
+  return parsedVerdicts.length > 1 ? parsedVerdicts : undefined;
 }
 
 function parseFinalFaithfulnessVerdicts(
@@ -358,11 +384,34 @@ function parseFinalFaithfulnessVerdicts(
   }
 
   const finalVerdicts = output.slice(markerIndex + marker.length);
+  const parsedVerdicts: FaithfulnessVerdict[] = [];
+  let pendingOrdinal: string | undefined;
 
   // Keep ordered slots and only accept a comma list when every item looks like an entry.
-  // Duplicate markers and excess entries are ambiguous, so they fail closed.
-  const parsedVerdicts = finalVerdicts.split(/[.\r\n]+/).flatMap(parseFaithfulnessChunk);
-  return parsedVerdicts.length <= expectedCount ? parsedVerdicts : undefined;
+  // Duplicate markers and excess entries are ambiguous, so fail without parsing the remainder.
+  for (const match of finalVerdicts.matchAll(/[^.\r\n]+/g)) {
+    const ordinal = /^\s*(\d+)\s*$/.exec(match[0])?.[1];
+    if (ordinal) {
+      pendingOrdinal = ordinal;
+      continue;
+    }
+
+    const chunk = pendingOrdinal ? `${pendingOrdinal}) ${match[0]}` : match[0];
+    pendingOrdinal = undefined;
+    const commaVerdicts = parseCommaSeparatedFaithfulnessVerdicts(chunk, expectedCount);
+    if (commaVerdicts) {
+      parsedVerdicts.push(...commaVerdicts);
+    } else {
+      const verdict = parseFaithfulnessVerdict(chunk);
+      if (verdict) {
+        parsedVerdicts.push(verdict);
+      }
+    }
+    if (parsedVerdicts.length > expectedCount) {
+      return undefined;
+    }
+  }
+  return parsedVerdicts;
 }
 
 export async function matchesContextFaithfulness(
