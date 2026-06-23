@@ -389,40 +389,40 @@ export const RedteamConfigSchema = z
         path: ['minCharsPerMessage'],
       });
     }
-    for (const [index, strategy] of (data.strategies ?? []).entries()) {
-      if (typeof strategy === 'string' || !strategy.config) {
-        continue;
-      }
-      const effectiveRange = {
-        maxCharsPerMessage:
-          data.maxCharsPerMessage ?? getCharsPerMessageLimit(strategy.config.maxCharsPerMessage),
-        minCharsPerMessage:
-          data.minCharsPerMessage ?? getCharsPerMessageLimit(strategy.config.minCharsPerMessage),
-      };
-      if (!hasValidCharsPerMessageRange(effectiveRange)) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-          path: ['strategies', index, 'config', 'minCharsPerMessage'],
-        });
-      }
-    }
-    for (const [index, plugin] of (data.plugins ?? []).entries()) {
-      if (typeof plugin === 'string' || !plugin.config) {
-        continue;
-      }
-      const effectiveRange = {
-        maxCharsPerMessage:
-          data.maxCharsPerMessage ?? getCharsPerMessageLimit(plugin.config.maxCharsPerMessage),
-        minCharsPerMessage:
-          data.minCharsPerMessage ?? getCharsPerMessageLimit(plugin.config.minCharsPerMessage),
-      };
-      if (!hasValidCharsPerMessageRange(effectiveRange)) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-          path: ['plugins', index, 'config', 'minCharsPerMessage'],
-        });
+    const configuredPlugins = (data.plugins ?? []).filter(
+      (plugin): plugin is RedteamPluginObject =>
+        typeof plugin !== 'string' && Boolean(plugin.config),
+    );
+    const configuredStrategies = (data.strategies ?? []).filter(
+      (strategy): strategy is Exclude<RedteamStrategy, string> =>
+        typeof strategy !== 'string' && Boolean(strategy.config),
+    );
+    const pluginConfigs =
+      configuredPlugins.length > 0 ? configuredPlugins : [{ config: undefined }];
+    const strategyConfigs =
+      configuredStrategies.length > 0 ? configuredStrategies : [{ config: undefined }];
+    for (const [strategyIndex, strategy] of strategyConfigs.entries()) {
+      for (const [pluginIndex, plugin] of pluginConfigs.entries()) {
+        const effectiveRange = {
+          maxCharsPerMessage:
+            data.maxCharsPerMessage ??
+            getCharsPerMessageLimit(strategy.config?.maxCharsPerMessage) ??
+            getCharsPerMessageLimit(plugin.config?.maxCharsPerMessage),
+          minCharsPerMessage:
+            data.minCharsPerMessage ??
+            getCharsPerMessageLimit(strategy.config?.minCharsPerMessage) ??
+            getCharsPerMessageLimit(plugin.config?.minCharsPerMessage),
+        };
+        if (!hasValidCharsPerMessageRange(effectiveRange)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+            path:
+              strategy.config?.minCharsPerMessage === undefined
+                ? ['plugins', pluginIndex, 'config', 'minCharsPerMessage']
+                : ['strategies', strategyIndex, 'config', 'minCharsPerMessage'],
+          });
+        }
       }
     }
   })

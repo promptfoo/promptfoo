@@ -727,12 +727,16 @@ async function applyStrategies(
       }
     }
 
+    const strategyMaxCharsPerMessage =
+      maxCharsPerMessage ?? (strategy.config?.maxCharsPerMessage as number | undefined);
+    const strategyMinCharsPerMessage =
+      minCharsPerMessage ?? (strategy.config?.minCharsPerMessage as number | undefined);
     resultTestCases = filterGeneratedTestCasesByCharLimits(
       resultTestCases,
       injectVar,
       `Strategy ${strategy.id}`,
-      maxCharsPerMessage,
-      minCharsPerMessage,
+      strategyMaxCharsPerMessage,
+      strategyMinCharsPerMessage,
     );
 
     newTestCases.push(

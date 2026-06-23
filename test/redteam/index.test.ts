@@ -329,6 +329,27 @@ describe('synthesize', () => {
       );
     });
 
+    it('should drop short strategy outputs using strategy minCharsPerMessage', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'long enough' } }]),
+        key: 'mockPlugin',
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]),
+        id: 'mockStrategy',
+      });
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'test-strategy', config: { minCharsPerMessage: 10 } }],
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'short' } })]),
+      );
+    });
+
     it('should pass minCharsPerMessage through synthesize and drop short generated tests', async () => {
       const mockPluginAction = vi
         .fn()

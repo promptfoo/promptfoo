@@ -230,7 +230,7 @@ export abstract class RedteamPluginBase {
           Your previous response included ${rejectedPromptLengths.length} generated prompt${
             rejectedPromptLengths.length === 1 ? '' : 's'
           } that were ${comparison} the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The most recently rejected prompt length was ${rejectedPromptLengths.at(-1)} characters.
+          The most recently rejected prompt length was ${rejectedPromptLengths[rejectedPromptLengths.length - 1]} characters.
           Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
         `.trim();
       } else {

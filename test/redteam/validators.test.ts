@@ -287,6 +287,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject combined strategy and plugin message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should reject strategy config with minCharsPerMessage above maxCharsPerMessage', () => {
     expect(
       RedteamConfigSchema.safeParse({
