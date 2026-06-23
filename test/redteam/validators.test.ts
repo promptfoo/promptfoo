@@ -310,6 +310,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should allow unrelated strategy and plugin message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'pii:direct', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject strategy config with minCharsPerMessage above maxCharsPerMessage', () => {
     expect(
       RedteamConfigSchema.safeParse({

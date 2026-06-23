@@ -22,6 +22,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
+  STRATEGY_EXEMPT_PLUGINS,
   TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
@@ -213,6 +214,37 @@ function hasValidCharsPerMessageRange(data: {
     data.maxCharsPerMessage === undefined ||
     data.minCharsPerMessage === undefined ||
     data.minCharsPerMessage <= data.maxCharsPerMessage
+  );
+}
+
+function getStringList(value: unknown): string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : undefined;
+}
+
+function strategyTargetsPlugin(
+  strategyId: string,
+  strategyConfig: Record<string, unknown> | undefined,
+  pluginId: string,
+  pluginConfig: Record<string, unknown> | undefined,
+): boolean {
+  if (!strategyId) {
+    return true;
+  }
+  if (STRATEGY_EXEMPT_PLUGINS.some((exemptPlugin) => exemptPlugin === pluginId)) {
+    return false;
+  }
+  if (getStringList(pluginConfig?.excludeStrategies)?.includes(strategyId)) {
+    return false;
+  }
+  const targetPlugins = getStringList(strategyConfig?.plugins);
+  return (
+    !targetPlugins ||
+    targetPlugins.length === 0 ||
+    targetPlugins.some(
+      (targetPlugin) => targetPlugin === pluginId || pluginId.startsWith(`${targetPlugin}:`),
+    )
   );
 }
 
@@ -421,20 +453,23 @@ export const RedteamConfigSchema = z
         }
       }
     }
-    const configuredPlugins = (data.plugins ?? []).filter(
-      (plugin): plugin is RedteamPluginObject =>
-        typeof plugin !== 'string' && Boolean(plugin.config),
-    );
-    const configuredStrategies = (data.strategies ?? []).filter(
-      (strategy): strategy is Exclude<RedteamStrategy, string> =>
-        typeof strategy !== 'string' && Boolean(strategy.config),
-    );
-    const pluginConfigs =
-      configuredPlugins.length > 0 ? configuredPlugins : [{ config: undefined }];
-    const strategyConfigs =
-      configuredStrategies.length > 0 ? configuredStrategies : [{ config: undefined }];
-    for (const [strategyIndex, strategy] of strategyConfigs.entries()) {
-      for (const [pluginIndex, plugin] of pluginConfigs.entries()) {
+    const pluginConfigs = (data.plugins ?? []).map((plugin, index) => ({
+      index,
+      plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
+    }));
+    const strategyConfigs = (data.strategies ?? []).map((strategy, index) => ({
+      index,
+      strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
+    }));
+    const effectivePlugins =
+      pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
+    const effectiveStrategies =
+      strategyConfigs.length > 0 ? strategyConfigs : [{ index: 0, strategy: { id: '' } }];
+    for (const { index: strategyIndex, strategy } of effectiveStrategies) {
+      for (const { index: pluginIndex, plugin } of effectivePlugins) {
+        if (!strategyTargetsPlugin(strategy.id, strategy.config, plugin.id, plugin.config)) {
+          continue;
+        }
         const effectiveRange = {
           maxCharsPerMessage:
             data.maxCharsPerMessage ??
