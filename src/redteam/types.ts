@@ -163,7 +163,16 @@ export const PluginConfigSchema = z.object({
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
-});
+}).refine(
+  (config) =>
+    config.maxCharsPerMessage === undefined ||
+    config.minCharsPerMessage === undefined ||
+    config.minCharsPerMessage <= config.maxCharsPerMessage,
+  {
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path: ['minCharsPerMessage'],
+  },
+);
 
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 

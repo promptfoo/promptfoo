@@ -247,7 +247,7 @@ describe('Plugins', () => {
       expect(fetchWithCache).toHaveBeenCalledTimes(2);
 
       const retryRequestBody = JSON.parse((vi.mocked(fetchWithCache).mock.calls[1][1] as any).body);
-      expect(retryRequestBody.config.modifiers.__maxCharsPerMessageRetry).toContain(
+      expect(retryRequestBody.config.modifiers.__charsPerMessageRetry).toContain(
         'Generate replacement prompts only',
       );
 
