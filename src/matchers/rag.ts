@@ -318,6 +318,53 @@ export async function matchesContextRelevance(
   };
 }
 
+type FaithfulnessVerdict = 'yes' | 'no' | 'unknown';
+
+function parseFaithfulnessVerdict(value: string): FaithfulnessVerdict | undefined {
+  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
+  const entryPrefix = /^(?:(?:(?:statement\s+)?\d+\s*[.):\]]|verdict\s*:)\s*)+/;
+  const hasEntryPrefix = entryPrefix.test(normalized);
+  normalized = normalized.replace(entryPrefix, '').replace(/^[^\p{L}]*/u, '');
+
+  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1];
+  if (verdict) {
+    return verdict as FaithfulnessVerdict;
+  }
+
+  // A labelled or single-token value is still an ordered slot, even when it is unknown.
+  const unwrapped = normalized.replace(/[^\p{L}]+$/u, '');
+  return hasEntryPrefix || /^\p{L}+$/u.test(unwrapped) ? 'unknown' : undefined;
+}
+
+function parseFaithfulnessChunk(chunk: string): FaithfulnessVerdict[] {
+  const commaParts = chunk.split(',').filter((part) => part.trim() !== '');
+  const commaVerdicts = commaParts.map(parseFaithfulnessVerdict);
+  if (commaVerdicts.length > 1 && commaVerdicts.every((verdict) => verdict !== undefined)) {
+    return commaVerdicts as FaithfulnessVerdict[];
+  }
+
+  const verdict = parseFaithfulnessVerdict(chunk);
+  return verdict ? [verdict] : [];
+}
+
+function parseFinalFaithfulnessVerdicts(
+  output: string,
+  marker: string,
+  expectedCount: number,
+): FaithfulnessVerdict[] | undefined {
+  const markerIndex = output.indexOf(marker);
+  if (markerIndex < 0 || output.indexOf(marker, markerIndex + marker.length) >= 0) {
+    return undefined;
+  }
+
+  const finalVerdicts = output.slice(markerIndex + marker.length);
+
+  // Keep ordered slots and only accept a comma list when every item looks like an entry.
+  // Duplicate markers and excess entries are ambiguous, so they fail closed.
+  const parsedVerdicts = finalVerdicts.split(/[.\r\n]+/).flatMap(parseFaithfulnessChunk);
+  return parsedVerdicts.length <= expectedCount ? parsedVerdicts : undefined;
+}
+
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
@@ -408,38 +455,14 @@ export async function matchesContextFaithfulness(
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
-      type FaithfulnessVerdict = 'yes' | 'no';
-
-      const parseVerdict = (
-        value: string,
-        allowExplanation = false,
-      ): FaithfulnessVerdict | undefined => {
-        const normalized = value
-          .trim()
-          .replace(/^(?:(?:[-+•]|\*\s+)|\d+\s*[):\]])\s*/, '')
-          .replace(/^verdict\s*:\s*/, '')
-          .trim();
-        const pattern = allowExplanation
-          ? /^[*_'`"(\[]*(yes|no)[*_'`")\]]*(?=\s*(?:[,:-]|$))/
-          : /^[*_'`"(\[]*(yes|no)[*_'`")\]]*$/;
-        return pattern.exec(normalized)?.[1] as FaithfulnessVerdict | undefined;
-      };
-
-      // Parse list entries instead of every yes/no word so explanation prose
-      // cannot become an extra verdict. Missing or unparseable entries add no support.
-      const finalVerdicts = verdicts.slice(verdicts.lastIndexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = finalVerdicts.split(/[.;\r\n]+/).flatMap((chunk) => {
-        const commaVerdicts = chunk.split(',').map((item) => parseVerdict(item));
-        if (!commaVerdicts.includes(undefined)) {
-          return commaVerdicts as FaithfulnessVerdict[];
-        }
-        const leadingVerdict = parseVerdict(chunk, true);
-        return leadingVerdict ? [leadingVerdict] : [];
-      });
-      const supported = parsedVerdicts
-        .slice(0, statements.length)
-        .filter((verdict) => verdict === 'yes').length;
-      score = supported / statements.length;
+      const parsedVerdicts = parseFinalFaithfulnessVerdicts(
+        verdicts,
+        finalAnswer,
+        statements.length,
+      );
+      if (parsedVerdicts) {
+        score = parsedVerdicts.filter((verdict) => verdict === 'yes').length / statements.length;
+      }
     } else {
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
       const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
