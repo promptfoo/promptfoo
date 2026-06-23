@@ -378,6 +378,54 @@ function getFaithfulnessOrdinal(value: string): number | undefined {
   return ordinal ? Number(ordinal) : undefined;
 }
 
+function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
+  const entryStarts = [
+    'yes',
+    'no',
+    'maybe',
+    'perhaps',
+    'unknown',
+    'unclear',
+    'undetermined',
+    'n/a',
+    'not sure',
+  ];
+  let chunkStart = 0;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (character !== '.' && character !== '\r' && character !== '\n') {
+      continue;
+    }
+    if (character === '.') {
+      const previous = value[index - 1] ?? '';
+      const next = value[index + 1] ?? '';
+      if (/[\p{L}\p{N}]/u.test(previous) && /[\p{L}\p{N}]/u.test(next)) {
+        let tokenStart = index - 1;
+        while (tokenStart > chunkStart && /[\p{L}\p{N}]/u.test(value[tokenStart - 1])) {
+          tokenStart--;
+        }
+        const leftToken = value.slice(tokenStart, index);
+        const startsEntry = entryStarts.some(
+          (entry) =>
+            value.startsWith(entry, index + 1) &&
+            !/[\p{L}\p{N}]/u.test(value[index + entry.length + 1] ?? ''),
+        );
+        const followsVerdict = leftToken === 'yes' || leftToken === 'no';
+        if (!followsVerdict && !startsEntry) {
+          continue;
+        }
+      }
+    }
+    if (index > chunkStart) {
+      yield value.slice(chunkStart, index);
+    }
+    chunkStart = index + 1;
+  }
+  if (chunkStart < value.length) {
+    yield value.slice(chunkStart);
+  }
+}
+
 function parseCommaSeparatedFaithfulnessVerdicts(
   chunk: string,
   expectedCount: number,
@@ -453,14 +501,14 @@ function parseFinalFaithfulnessVerdicts(
 
   // Keep ordered slots and only accept a comma list when every item looks like an entry.
   // Duplicate markers or ordinals and excess entries are ambiguous, so fail closed.
-  for (const match of finalVerdicts.matchAll(/[^.\r\n]+/g)) {
-    const ordinal = /^\s*((?:statement\s+)?\d+)\s*$/.exec(match[0])?.[1];
+  for (const value of getFaithfulnessVerdictChunks(finalVerdicts)) {
+    const ordinal = /^\s*((?:statement\s+)?\d+)\s*$/.exec(value)?.[1];
     if (ordinal) {
       pendingOrdinal = ordinal;
       continue;
     }
 
-    const chunk = pendingOrdinal ? `${pendingOrdinal}) ${match[0]}` : match[0];
+    const chunk = pendingOrdinal ? `${pendingOrdinal}) ${value}` : value;
     pendingOrdinal = undefined;
     const commaVerdicts = parseCommaSeparatedFaithfulnessVerdicts(chunk, expectedCount);
     if (commaVerdicts === null) {
