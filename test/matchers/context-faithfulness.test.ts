@@ -473,6 +473,13 @@ describe('matchesContextFaithfulness', () => {
         0.5,
       ],
       [
+        'explanation containing verdict-like domain component',
+        2,
+        `${marker} Yes because docs.example.no supports it. Yes.`,
+        1,
+        0.5,
+      ],
+      [
         'explanation containing numeric version',
         2,
         `${marker} Yes because version 1.2.3 supports it. No.`,

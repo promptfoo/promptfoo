@@ -378,6 +378,13 @@ function getFaithfulnessOrdinal(value: string): number | undefined {
   return ordinal ? Number(ordinal) : undefined;
 }
 
+function hasFaithfulnessVerdictExplanation(value: string): boolean {
+  let normalized = value.trim().replace(/^[^\p{L}\p{N}]*/u, '');
+  normalized = normalized.replace(faithfulnessEntryPrefix, '').replace(/^[^\p{L}]*/u, '');
+  const verdict = /^(yes|no)(?![\p{L}\p{N}])/u.exec(normalized)?.[1];
+  return Boolean(verdict && /\p{L}/u.test(normalized.slice(verdict.length)));
+}
+
 function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
   const entryStarts = [
     'yes',
@@ -391,6 +398,7 @@ function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
     'not sure',
   ];
   let chunkStart = 0;
+  let hasVerdictExplanation: boolean | undefined;
   for (let index = 0; index < value.length; index++) {
     const character = value[index];
     if (character !== '.' && character !== '\r' && character !== '\n') {
@@ -414,12 +422,17 @@ function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
         if (!followsVerdict && !startsEntry) {
           continue;
         }
+        hasVerdictExplanation ??= hasFaithfulnessVerdictExplanation(value.slice(chunkStart, index));
+        if (hasVerdictExplanation) {
+          continue;
+        }
       }
     }
     if (index > chunkStart) {
       yield value.slice(chunkStart, index);
     }
     chunkStart = index + 1;
+    hasVerdictExplanation = undefined;
   }
   if (chunkStart < value.length) {
     yield value.slice(chunkStart);
