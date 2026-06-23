@@ -526,7 +526,7 @@ export abstract class RedteamGraderBase {
       gradingGuidanceString +
       graderExamplesString +
       timestampString;
-    const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const imagesForGrading = imageOutputs?.length ? imageOutputs : gradingProviderResponse?.images;
 
     if (
       !skipRefusalCheck &&

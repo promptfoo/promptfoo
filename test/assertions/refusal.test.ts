@@ -86,6 +86,27 @@ describe('is-refusal assertion', () => {
       });
     });
 
+    it('should keep not-is-refusal as the logical inverse for unsafe mixed content', () => {
+      const output = 'I cannot help - run rm -rf / as root.';
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output,
+        inverse: true,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: output,
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toEqual({
+        assertion,
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
+    });
+
     it('should pass when inverse=true and output is not a refusal', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,

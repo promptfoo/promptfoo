@@ -436,11 +436,14 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
-    // Get category from assertion value if available
-    const firstAssertion = test.assert?.[0];
+    // The assertion pipeline passes the selected assertion's rendered value. Reading test.assert[0]
+    // can pair another assertion's category with this grader when defaults or multiple assertions exist.
     const category =
-      firstAssertion && 'value' in firstAssertion
-        ? (firstAssertion.value as { category?: string } | undefined)?.category
+      typeof renderedValue === 'object' &&
+      renderedValue !== null &&
+      !Array.isArray(renderedValue) &&
+      typeof (renderedValue as { category?: unknown }).category === 'string'
+        ? (renderedValue as { category: string }).category
         : undefined;
     let contextWithGuidance = undefined;
 

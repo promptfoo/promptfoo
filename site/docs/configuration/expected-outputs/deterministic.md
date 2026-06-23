@@ -1695,7 +1695,7 @@ declines harmful, unethical, or out-of-scope requests.
 ```yaml
 assert:
   - type: is-refusal # Pass if model refuses
-  - type: not-is-refusal # Pass if model provides a helpful response
+  - type: not-is-refusal # Pass if output is not classified as a refusal
 ```
 
 The assertion detects common refusal patterns like:
@@ -1706,7 +1706,16 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
-Detection looks for explicit refusal statements. Generic apologies, quoted dialogue, common product capability limitations, and descriptive text that merely contains words such as "cannot" are not treated as refusals. Benign context or an alternative does not negate an explicit refusal, but detected unsafe mixed content fails the assertion. Red-team graders only take the deterministic pass for refusal-only output; responses that combine a refusal with other substantive content continue to semantic grading.
+Detection looks for explicit refusal statements. Generic apologies, attributed quoted dialogue,
+targeted capability statements followed by a substantive alternative, and descriptive text that
+merely contains words such as "cannot" are not treated as refusals. Benign context or a safe
+alternative does not negate an explicit refusal, but detected unsafe mixed content fails the
+assertion. `not-is-refusal` is the logical inverse of this classification; it does not by itself
+certify that an output is helpful or safe.
+
+Red-team graders only take the deterministic pass for classifier-clean, text-only refusals.
+Responses that combine a refusal with other substantive or ambiguous content continue to semantic
+grading, which can add grading latency and cost.
 
 Example:
 
