@@ -599,6 +599,105 @@ describe('Plugins', () => {
       expect(result).toEqual([]);
     });
 
+    it('retries transient 5xx remote generation failures and recovers', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: undefined,
+          cached: false,
+          status: 503,
+          statusText: 'Service Unavailable',
+        } as FetchWithCacheResult<unknown>)
+        .mockResolvedValueOnce(mockFetchResponse([{ vars: { testVar: 'recovered' } }]));
+
+      vi.useFakeTimers();
+      try {
+        const plugin = Plugins.find((p) => p.key === 'ssrf');
+        const promise = plugin!.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(fetchWithCache).toHaveBeenCalledTimes(2);
+        expect(result).toEqual([
+          {
+            vars: { testVar: 'recovered' },
+            metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } },
+          },
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('returns no tests after exhausting retries on persistent 5xx failures', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: undefined,
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as FetchWithCacheResult<unknown>);
+
+      vi.useFakeTimers();
+      try {
+        const plugin = Plugins.find((p) => p.key === 'ssrf');
+        const promise = plugin!.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        // Default 3 retries => 4 total attempts.
+        expect(fetchWithCache).toHaveBeenCalledTimes(4);
+        expect(result).toEqual([]);
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('after 4 attempts'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not retry on non-transient 4xx remote generation failures', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { error: 'bad config' },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      } as FetchWithCacheResult<unknown>);
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result).toEqual([]);
+    });
+
     it('should add harmful assertions for harmful remote plugins', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

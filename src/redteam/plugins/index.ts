@@ -1,13 +1,14 @@
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvInt } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -388,30 +389,67 @@ async function fetchRemoteTestCases(
     result?: TestCase[];
   }
 
-  try {
-    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body,
-      },
-      getRequestTimeoutMs(),
-    );
-    if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+  // Transient 5xx responses from the remote generation service are NOT retried by
+  // fetchWithCache/fetchWithRetries (which only retry network errors and 429s unless
+  // PROMPTFOO_RETRY_5XX is set). Under heavy concurrent generation (e.g. a large scan
+  // template) the service can briefly return 5xx, which previously zeroed out a plugin's
+  // tests on the very first failure - surfacing as "No tests generated" for plugins like
+  // special-token-injection / system-prompt-override while lighter plugins succeeded.
+  // Retry transient failures here with exponential backoff so a momentarily-busy server
+  // doesn't silently drop a whole plugin. Client (4xx) and malformed 2xx responses won't
+  // improve on retry, so those still fail fast.
+  const maxAttempts = Math.max(1, getEnvInt('PROMPTFOO_REMOTE_GENERATION_RETRIES', 3) + 1);
+  const backoffMs = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: getRemoteGenerationHeaders(),
+          body,
+        },
+        getRequestTimeoutMs(),
+      );
+
+      if (status === 200 && data && data.result && Array.isArray(data.result)) {
+        if (requiresRemoteMaterialization(config?.inputs)) {
+          assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+        }
+        const ret = data.result;
+        logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+        return ret;
+      }
+
+      // Only server errors (5xx) are worth retrying; 4xx and malformed 2xx bodies are
+      // deterministic and will not improve on retry.
+      const isTransient = status >= 500 && status < 600;
+      const isLastAttempt = attempt === maxAttempts - 1;
+      if (!isTransient || isLastAttempt) {
+        logger.error(
+          `Error generating test cases for ${key}: HTTP ${status} ${statusText} ${JSON.stringify(
+            data,
+          )}${isTransient ? ` (after ${maxAttempts} attempts)` : ''}`,
+        );
+        return [];
+      }
+
+      logger.warn(
+        `Transient remote generation failure for ${key} (HTTP ${status} ${statusText}); retrying (attempt ${attempt + 1}/${maxAttempts})`,
+      );
+    } catch (err) {
+      // Thrown errors here are either a permanent materialization-support failure
+      // (assertRemoteMaterializationHandled) or a network failure that fetchWithCache has
+      // already retried internally - neither benefits from another round trip.
+      logger.error(`Error generating test cases for ${key}: ${err}`);
       return [];
     }
-    if (requiresRemoteMaterialization(config?.inputs)) {
-      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
-    }
-    const ret = data.result;
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
-  } catch (err) {
-    logger.error(`Error generating test cases for ${key}: ${err}`);
-    return [];
+
+    await sleep(Math.pow(2, attempt) * backoffMs);
   }
+
+  return [];
 }
 
 function createPluginFactory<T extends PluginConfig>(
