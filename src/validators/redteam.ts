@@ -373,9 +373,30 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Global grading examples that apply to all plugins'),
   })
-  .refine(hasValidCharsPerMessageRange, {
-    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-    path: ['minCharsPerMessage'],
+  .superRefine((data, ctx) => {
+    if (!hasValidCharsPerMessageRange(data)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+        path: ['minCharsPerMessage'],
+      });
+    }
+    for (const [index, plugin] of (data.plugins ?? []).entries()) {
+      if (typeof plugin === 'string' || !plugin.config) {
+        continue;
+      }
+      const effectiveRange = {
+        maxCharsPerMessage: data.maxCharsPerMessage ?? plugin.config.maxCharsPerMessage,
+        minCharsPerMessage: data.minCharsPerMessage ?? plugin.config.minCharsPerMessage,
+      };
+      if (!hasValidCharsPerMessageRange(effectiveRange)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+          path: ['plugins', index, 'config', 'minCharsPerMessage'],
+        });
+      }
+    }
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
