@@ -248,6 +248,91 @@ function strategyTargetsPlugin(
   );
 }
 
+type ScopedPromptLimitConfig = Record<string, unknown> & {
+  maxCharsPerMessage?: unknown;
+  minCharsPerMessage?: unknown;
+};
+type ScopedPromptLimit = string | { id: string; config?: ScopedPromptLimitConfig };
+
+type PromptLimitConfig = {
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
+  plugins?: ScopedPromptLimit[];
+  strategies?: ScopedPromptLimit[];
+};
+
+function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | number)[]): void {
+  ctx.addIssue({
+    code: 'custom',
+    message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
+    path,
+  });
+}
+
+function validateScopedCharsPerMessageLimits(
+  scopes: ScopedPromptLimit[],
+  scopeName: 'plugins' | 'strategies',
+  ctx: z.RefinementCtx,
+): void {
+  for (const [index, scope] of scopes.entries()) {
+    if (typeof scope === 'string' || !scope.config) {
+      continue;
+    }
+    for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
+      if (!hasValidCharsPerMessageLimit(scope.config[key])) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${key} must be a positive integer`,
+          path: [scopeName, index, 'config', key],
+        });
+      }
+    }
+  }
+}
+
+function validateEffectiveCharsPerMessageRanges(
+  data: PromptLimitConfig,
+  ctx: z.RefinementCtx,
+): void {
+  const pluginConfigs = (data.plugins ?? []).map((plugin, index) => ({
+    index,
+    plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
+  }));
+  const strategyConfigs = (data.strategies ?? []).map((strategy, index) => ({
+    index,
+    strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
+  }));
+  const effectivePlugins =
+    pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
+  const effectiveStrategies =
+    strategyConfigs.length > 0 ? strategyConfigs : [{ index: 0, strategy: { id: '' } }];
+  for (const { index: strategyIndex, strategy } of effectiveStrategies) {
+    for (const { index: pluginIndex, plugin } of effectivePlugins) {
+      if (!strategyTargetsPlugin(strategy.id, strategy.config, plugin.id, plugin.config)) {
+        continue;
+      }
+      const effectiveRange = {
+        maxCharsPerMessage:
+          data.maxCharsPerMessage ??
+          getCharsPerMessageLimit(strategy.config?.maxCharsPerMessage) ??
+          getCharsPerMessageLimit(plugin.config?.maxCharsPerMessage),
+        minCharsPerMessage:
+          data.minCharsPerMessage ??
+          getCharsPerMessageLimit(strategy.config?.minCharsPerMessage) ??
+          getCharsPerMessageLimit(plugin.config?.minCharsPerMessage),
+      };
+      if (!hasValidCharsPerMessageRange(effectiveRange)) {
+        addCharsPerMessageRangeIssue(
+          ctx,
+          strategy.config?.minCharsPerMessage === undefined
+            ? ['plugins', pluginIndex, 'config', 'minCharsPerMessage']
+            : ['strategies', strategyIndex, 'config', 'minCharsPerMessage'],
+        );
+      }
+    }
+  }
+}
+
 /**
  * Schema for `promptfoo redteam generate` command options
  */
@@ -419,79 +504,11 @@ export const RedteamConfigSchema = z
   })
   .superRefine((data, ctx) => {
     if (!hasValidCharsPerMessageRange(data)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-        path: ['minCharsPerMessage'],
-      });
+      addCharsPerMessageRangeIssue(ctx, ['minCharsPerMessage']);
     }
-    for (const [index, plugin] of (data.plugins ?? []).entries()) {
-      if (typeof plugin === 'string' || !plugin.config) {
-        continue;
-      }
-      for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
-        if (!hasValidCharsPerMessageLimit(plugin.config[key])) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `${key} must be a positive integer`,
-            path: ['plugins', index, 'config', key],
-          });
-        }
-      }
-    }
-    for (const [index, strategy] of (data.strategies ?? []).entries()) {
-      if (typeof strategy === 'string' || !strategy.config) {
-        continue;
-      }
-      for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
-        if (!hasValidCharsPerMessageLimit(strategy.config[key])) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `${key} must be a positive integer`,
-            path: ['strategies', index, 'config', key],
-          });
-        }
-      }
-    }
-    const pluginConfigs = (data.plugins ?? []).map((plugin, index) => ({
-      index,
-      plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
-    }));
-    const strategyConfigs = (data.strategies ?? []).map((strategy, index) => ({
-      index,
-      strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
-    }));
-    const effectivePlugins =
-      pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
-    const effectiveStrategies =
-      strategyConfigs.length > 0 ? strategyConfigs : [{ index: 0, strategy: { id: '' } }];
-    for (const { index: strategyIndex, strategy } of effectiveStrategies) {
-      for (const { index: pluginIndex, plugin } of effectivePlugins) {
-        if (!strategyTargetsPlugin(strategy.id, strategy.config, plugin.id, plugin.config)) {
-          continue;
-        }
-        const effectiveRange = {
-          maxCharsPerMessage:
-            data.maxCharsPerMessage ??
-            getCharsPerMessageLimit(strategy.config?.maxCharsPerMessage) ??
-            getCharsPerMessageLimit(plugin.config?.maxCharsPerMessage),
-          minCharsPerMessage:
-            data.minCharsPerMessage ??
-            getCharsPerMessageLimit(strategy.config?.minCharsPerMessage) ??
-            getCharsPerMessageLimit(plugin.config?.minCharsPerMessage),
-        };
-        if (!hasValidCharsPerMessageRange(effectiveRange)) {
-          ctx.addIssue({
-            code: 'custom',
-            message: 'minCharsPerMessage must be less than or equal to maxCharsPerMessage',
-            path:
-              strategy.config?.minCharsPerMessage === undefined
-                ? ['plugins', pluginIndex, 'config', 'minCharsPerMessage']
-                : ['strategies', strategyIndex, 'config', 'minCharsPerMessage'],
-          });
-        }
-      }
-    }
+    validateScopedCharsPerMessageLimits(data.plugins ?? [], 'plugins', ctx);
+    validateScopedCharsPerMessageLimits(data.strategies ?? [], 'strategies', ctx);
+    validateEffectiveCharsPerMessageRanges(data, ctx);
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
