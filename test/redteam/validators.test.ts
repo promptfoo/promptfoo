@@ -287,6 +287,20 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject invalid scoped minCharsPerMessage values', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { minCharsPerMessage: 1.5 } }],
+      }).success,
+    ).toBe(false);
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: ['harmful:hate'],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 0 } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should reject combined strategy and plugin message length ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({
