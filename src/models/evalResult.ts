@@ -74,26 +74,27 @@ function projectRedteamHistoryForOutput(history: unknown, stripFlags: OutputStri
   }
 
   return history.filter(isRecord).map((entry) => {
-    const {
-      promptAudio: _promptAudio,
-      promptImage: _promptImage,
-      outputAudio: _outputAudio,
-      outputImage: _outputImage,
-      inputVars: _inputVars,
-      ...projectedEntry
-    } = entry;
-
     return {
-      ...projectedEntry,
+      ...(typeof entry.id === 'string' && { id: entry.id }),
+      ...(typeof entry.parentId === 'string' && { parentId: entry.parentId }),
+      ...(typeof entry.score === 'number' && { score: entry.score }),
+      ...(typeof entry.depth === 'number' && { depth: entry.depth }),
+      ...(typeof entry.wasSelected === 'boolean' && { wasSelected: entry.wasSelected }),
+      ...(typeof entry.graderPassed === 'boolean' && { graderPassed: entry.graderPassed }),
+      ...(entry.role === 'user' || entry.role === 'assistant' || entry.role === 'system'
+        ? { role: entry.role }
+        : {}),
       ...(stripFlags.shouldStripPromptText
         ? { prompt: '[prompt stripped]' }
         : {
+            ...(entry.prompt !== undefined && { prompt: entry.prompt }),
             ...(entry.promptAudio !== undefined && { promptAudio: entry.promptAudio }),
             ...(entry.promptImage !== undefined && { promptImage: entry.promptImage }),
           }),
       ...(stripFlags.shouldStripResponseOutput
         ? { output: '[output stripped]' }
         : {
+            ...(entry.output !== undefined && { output: entry.output }),
             ...(entry.outputAudio !== undefined && { outputAudio: entry.outputAudio }),
             ...(entry.outputImage !== undefined && { outputImage: entry.outputImage }),
           }),

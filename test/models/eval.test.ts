@@ -1672,6 +1672,7 @@ describe('evaluator', () => {
               componentResults: [
                 null,
                 'malformed',
+                [],
                 {
                   pass: false,
                   score: 0,
@@ -2051,6 +2052,16 @@ describe('evaluator', () => {
                 outputAudio: { data: 'sensitive output audio', format: 'wav' },
                 outputImage: { data: 'sensitive output image', format: 'png' },
                 inputVars: { attackInput: 'sensitive input var' },
+                trace: { insights: ['sensitive trace output'] },
+                traceSummary: 'sensitive trace summary',
+                metadata: {
+                  inputMaterialization: {
+                    prompt: { injectedInstruction: 'sensitive injected instruction' },
+                  },
+                },
+                guardrails: { reason: 'sensitive guardrail reason' },
+                improvement: 'sensitive improvement prompt',
+                sessionId: 'sensitive session id',
                 score: 1,
               },
               null,
