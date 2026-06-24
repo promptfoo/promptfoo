@@ -75,7 +75,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts                            |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                                                |
 | `maxCharsPerMessage`         | `number`                  | Maximum characters allowed in each generated user message                                               | None                                             |
-| `minCharsPerMessage`         | `number`                  | Minimum characters required in each generated user message                                               | None                                             |
+| `minCharsPerMessage`         | `number`                  | Minimum characters required in each generated user message                                              | None                                             |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                                        |
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                                   |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts                            |
