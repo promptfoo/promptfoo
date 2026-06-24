@@ -31,7 +31,7 @@ import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
-import { getSessionId } from './redteam/util';
+import { getRemoteGeneratedTestProvenance, getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -459,7 +459,9 @@ function shouldSkipRedteamInjectVar(
   return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
-const REDTEAM_STRATEGY_DERIVED_INJECT_VARS: Record<string, string[]> = {
+// Generated configs created before remote provenance tracking still need the
+// known built-in display variables protected during evaluation.
+const LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS: Record<string, string[]> = {
   image: ['image_text'],
   'indirect-web-pwn': ['embeddedInjection'],
   video: ['video_text'],
@@ -475,9 +477,13 @@ function getRedteamSkipRenderVars(
     return undefined;
   }
   const strategyId = typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : '';
+  const remoteProvenance = getRemoteGeneratedTestProvenance(test.metadata);
   return [
-    getRedteamInjectVar(test, prompt, testSuite),
-    ...(REDTEAM_STRATEGY_DERIVED_INJECT_VARS[strategyId] ?? []),
+    ...new Set([
+      getRedteamInjectVar(test, prompt, testSuite),
+      ...(LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS[strategyId] ?? []),
+      ...(remoteProvenance?.unsafeRenderVars ?? []),
+    ]),
   ];
 }
 

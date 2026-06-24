@@ -58,7 +58,10 @@ import { RemoteRedteamAssertionContractError } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
+  getRemoteGeneratedTestProvenance,
   getShortPluginId,
+  type RemoteGeneratedTestProvenance,
+  setRemoteGeneratedTestProvenance,
 } from './util';
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
@@ -73,6 +76,66 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+
+function mergeRemoteGeneratedTestProvenance(
+  left: RemoteGeneratedTestProvenance | undefined,
+  right: RemoteGeneratedTestProvenance,
+): RemoteGeneratedTestProvenance {
+  return {
+    metadata: [...new Set([...(left?.metadata ?? []), ...right.metadata])],
+    vars: [...new Set([...(left?.vars ?? []), ...right.vars])],
+    ...((left?.unsafeRenderVars?.length ?? 0) > 0 || (right.unsafeRenderVars?.length ?? 0) > 0
+      ? {
+          unsafeRenderVars: [
+            ...new Set([...(left?.unsafeRenderVars ?? []), ...(right.unsafeRenderVars ?? [])]),
+          ],
+        }
+      : {}),
+  };
+}
+
+type StrategyRemoteProvenance = {
+  byPlugin: Map<string, RemoteGeneratedTestProvenance>;
+  fallback: RemoteGeneratedTestProvenance | undefined;
+};
+
+function collectStrategyRemoteProvenance(
+  testCases: TestCaseWithPlugin[],
+): StrategyRemoteProvenance {
+  const byPlugin = new Map<string, RemoteGeneratedTestProvenance>();
+  let fallback: RemoteGeneratedTestProvenance | undefined;
+  for (const testCase of testCases) {
+    const provenance = getRemoteGeneratedTestProvenance(testCase.metadata);
+    if (!provenance) {
+      continue;
+    }
+    fallback = mergeRemoteGeneratedTestProvenance(fallback, provenance);
+    const pluginId = testCase.metadata.pluginId;
+    byPlugin.set(pluginId, mergeRemoteGeneratedTestProvenance(byPlugin.get(pluginId), provenance));
+  }
+  return { byPlugin, fallback };
+}
+
+function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
+  metadata: T,
+  vars: TestCase['vars'],
+  source: StrategyRemoteProvenance,
+): T {
+  const pluginId = metadata.pluginId;
+  const provenance =
+    getRemoteGeneratedTestProvenance(metadata) ??
+    (typeof pluginId === 'string' ? source.byPlugin.get(pluginId) : source.fallback);
+  if (!provenance) {
+    return metadata;
+  }
+
+  const strategyVarNames = Object.keys(vars ?? {});
+  return setRemoteGeneratedTestProvenance(metadata, {
+    ...provenance,
+    ...(provenance.vars.length > 0 ? { vars: strategyVarNames } : {}),
+    ...(provenance.unsafeRenderVars?.length ? { unsafeRenderVars: strategyVarNames } : {}),
+  });
+}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -670,6 +733,8 @@ async function applyStrategies(
       }
     }
 
+    const remoteProvenance = collectStrategyRemoteProvenance(testCasesToProcess);
+
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       testCasesToProcess,
       injectVar,
@@ -722,28 +787,32 @@ async function applyStrategies(
             ...(t?.metadata?.strategyConfig || {}),
           };
 
+          const pluginId = t.metadata?.pluginId;
+          let metadata = {
+            ...(t?.metadata || {}),
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
+            ...(pluginId && { pluginId }),
+            ...(t?.metadata?.pluginConfig && {
+              pluginConfig: t.metadata.pluginConfig,
+            }),
+            ...(inputMaterialization && {
+              inputMaterialization,
+            }),
+            ...(Object.keys(strategyConfig).length > 0 && {
+              strategyConfig,
+            }),
+            ...getMaterializedMultiInputPromptMetadata(vars),
+          };
+          metadata = propagateStrategyRemoteProvenance(metadata, vars, remoteProvenance);
+
           return {
             ...t,
             vars,
-            metadata: {
-              ...(t?.metadata || {}),
-              // Don't set strategyId for retry strategy (it's not user-facing)
-              ...(strategy.id !== 'retry' && {
-                strategyId: t?.metadata?.strategyId || strategy.id,
-              }),
-              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-              ...(t?.metadata?.pluginConfig && {
-                pluginConfig: t.metadata.pluginConfig,
-              }),
-              ...(inputMaterialization && {
-                inputMaterialization,
-              }),
-              ...(Object.keys(strategyConfig).length > 0 && {
-                strategyConfig,
-              }),
-              ...getMaterializedMultiInputPromptMetadata(vars),
-            },
-          };
+            metadata,
+          } as TestCaseWithPlugin;
         }),
       )),
     );

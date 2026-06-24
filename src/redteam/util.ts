@@ -28,6 +28,72 @@ import type { CallApiContextParams, ProviderResponse } from '../types/index';
 const PROMPT_TAG_REGEX = /<Prompt>([\s\S]*?)<\/Prompt>/i;
 const PROMPT_TAG_REGEX_GLOBAL = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
 
+export const REMOTE_GENERATED_TEST_METADATA_KEY = '__promptfooRemoteGenerated';
+
+export type RemoteGeneratedTestProvenance = {
+  metadata: string[];
+  unsafeRenderVars?: string[];
+  vars: string[];
+};
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+export function getRemoteGeneratedTestProvenance(
+  metadata: Record<string, unknown> | undefined,
+): RemoteGeneratedTestProvenance | undefined {
+  const value = metadata?.[REMOTE_GENERATED_TEST_METADATA_KEY];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const provenance = value as Record<string, unknown>;
+  const strings = (field: string) =>
+    Array.isArray(provenance[field])
+      ? provenance[field].filter((item): item is string => typeof item === 'string')
+      : [];
+  const unsafeRenderVars = strings('unsafeRenderVars');
+
+  return {
+    metadata: strings('metadata'),
+    vars: strings('vars'),
+    ...(unsafeRenderVars.length > 0 ? { unsafeRenderVars } : {}),
+  };
+}
+
+export function setRemoteGeneratedTestProvenance<T extends Record<string, unknown>>(
+  metadata: T,
+  provenance: RemoteGeneratedTestProvenance,
+): T {
+  const unsafeRenderVars = uniqueStrings(provenance.unsafeRenderVars ?? []);
+  return {
+    ...metadata,
+    [REMOTE_GENERATED_TEST_METADATA_KEY]: {
+      metadata: uniqueStrings(provenance.metadata),
+      vars: uniqueStrings(provenance.vars),
+      ...(unsafeRenderVars.length > 0 ? { unsafeRenderVars } : {}),
+    },
+  } as T;
+}
+
+export function trustRemoteGeneratedTestVars<T extends Record<string, unknown>>(
+  metadata: T,
+  trustedVarNames: string[],
+): T {
+  const provenance = getRemoteGeneratedTestProvenance(metadata);
+  if (!provenance || trustedVarNames.length === 0) {
+    return metadata;
+  }
+
+  const trusted = new Set(trustedVarNames);
+  return setRemoteGeneratedTestProvenance(metadata, {
+    ...provenance,
+    vars: provenance.vars.filter((name) => !trusted.has(name)),
+    unsafeRenderVars: provenance.unsafeRenderVars?.filter((name) => !trusted.has(name)),
+  });
+}
+
 /**
  * Extracts the content from the first <Prompt> tag in a string.
  * Used for multi-input mode where prompts are wrapped in <Prompt> tags.

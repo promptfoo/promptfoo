@@ -875,6 +875,11 @@ describe('Plugins', () => {
       });
 
       expect(result?.[0].vars?.testVar).toBe(value);
+      expect(result?.[0].metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['testVar'],
+        vars: [],
+      });
     });
 
     it.each([

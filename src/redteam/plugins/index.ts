@@ -46,7 +46,11 @@ import {
   PluginConfigSchema,
   UnsupportedRemoteRedteamAssertionsError,
 } from '../types';
-import { getShortPluginId } from '../util';
+import {
+  getShortPluginId,
+  REMOTE_GENERATED_TEST_METADATA_KEY,
+  setRemoteGeneratedTestProvenance,
+} from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
@@ -362,11 +366,10 @@ function validateRagPoisoningAssertionValue(key: string, assertion: object): voi
 }
 
 const REMOTE_TEST_CASE_FIELDS = new Set(['assert', 'metadata', 'vars']);
-const REMOTE_GENERATED_METADATA_KEY = '__promptfooRemoteGenerated';
 const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
   ...Object.keys(PluginConfigSchema.shape),
   '_promptfooFileMetadata',
-  REMOTE_GENERATED_METADATA_KEY,
+  REMOTE_GENERATED_TEST_METADATA_KEY,
   'conversationId',
   'contextId',
   'contextVars',
@@ -852,7 +855,7 @@ function normalizeRemoteTestVars(
   testCase: Record<string, unknown>,
   injectVar: string,
   allowedVariableNames: ReadonlySet<string>,
-): TestCase['vars'] {
+): { unsafeRenderVars: string[]; vars: TestCase['vars'] } {
   const vars = testCase.vars;
   if (
     !vars ||
@@ -868,6 +871,7 @@ function normalizeRemoteTestVars(
     );
   }
   const normalizedEntries: [string, string][] = [];
+  const unsafeRenderVars: string[] = [];
   for (const [variableName, value] of Object.entries(vars)) {
     const unsafeVariableReference = getUnsafeRemoteReference(
       value,
@@ -894,9 +898,12 @@ function normalizeRemoteTestVars(
         `expected remote test variable \`${variableName}\` to be a string`,
       );
     }
+    if (variableName === injectVar && getUnsafeRemoteReference(value)) {
+      unsafeRenderVars.push(variableName);
+    }
     normalizedEntries.push([variableName, value]);
   }
-  return Object.fromEntries(normalizedEntries);
+  return { unsafeRenderVars, vars: Object.fromEntries(normalizedEntries) };
 }
 
 function normalizeRemoteTestMetadata(
@@ -964,20 +971,27 @@ function normalizeRemoteTestCase(
   config: PluginConfig,
 ): TestCase {
   validateRemoteTestCaseFields(key, testCase);
-  const vars = normalizeRemoteTestVars(key, testCase, injectVar, allowedVariableNames);
+  const { unsafeRenderVars, vars } = normalizeRemoteTestVars(
+    key,
+    testCase,
+    injectVar,
+    allowedVariableNames,
+  );
   const { metadata, remoteFields } = normalizeRemoteTestMetadata(key, testCase, config);
-  if (key.startsWith('coding-agent:')) {
-    metadata[REMOTE_GENERATED_METADATA_KEY] = {
-      metadata: remoteFields,
-      vars: Object.keys(vars ?? {}),
-    };
-  }
+  const normalizedMetadata =
+    key.startsWith('coding-agent:') || unsafeRenderVars.length > 0
+      ? setRemoteGeneratedTestProvenance(metadata, {
+          metadata: remoteFields,
+          unsafeRenderVars,
+          vars: key.startsWith('coding-agent:') ? Object.keys(vars ?? {}) : [],
+        })
+      : metadata;
   validateRemoteCrossSessionOptions(key, testCase);
 
   return {
     vars,
     ...('assert' in testCase ? { assert: testCase.assert as TestCase['assert'] } : {}),
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(Object.keys(normalizedMetadata).length > 0 ? { metadata: normalizedMetadata } : {}),
     ...(key === 'cross-session-leak' ? { options: { runSerially: true } } : {}),
     ...(key === 'agentic:memory-poisoning' ? { provider: 'agentic:memory-poisoning' } : {}),
   };

@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
+import { getRemoteGeneratedTestProvenance } from '../../util';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';
@@ -590,18 +591,10 @@ function stringsFromAssertionAndTest(
 
 function verifierControlSourcesFromTest(test: AtomicTestCase): unknown[] {
   const metadata = getObject(test.metadata);
-  const remoteOrigin = getObject(metadata?.__promptfooRemoteGenerated);
+  const remoteOrigin = getRemoteGeneratedTestProvenance(metadata);
   if (remoteOrigin) {
-    const remoteVarNames = new Set(
-      Array.isArray(remoteOrigin.vars)
-        ? remoteOrigin.vars.filter((value): value is string => typeof value === 'string')
-        : [],
-    );
-    const remoteMetadataNames = new Set(
-      Array.isArray(remoteOrigin.metadata)
-        ? remoteOrigin.metadata.filter((value): value is string => typeof value === 'string')
-        : [],
-    );
+    const remoteVarNames = new Set(remoteOrigin.vars);
+    const remoteMetadataNames = new Set(remoteOrigin.metadata);
     const trustedVars = Object.fromEntries(
       Object.entries(test.vars ?? {}).filter(([key]) => !remoteVarNames.has(key)),
     );

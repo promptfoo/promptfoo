@@ -64,6 +64,7 @@ import {
   ProbeLimitExceededError,
   RemoteRedteamAssertionContractError,
 } from '../types';
+import { trustRemoteGeneratedTestVars } from '../util';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -746,19 +747,22 @@ async function doGenerateRedteamInternal(
 
       // Tag each test with context metadata and merge context vars
       // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
+      const taggedTests = contextResult.testCases.map((test: any) => {
+        const metadata = {
           ...test.metadata,
           purpose: contextResult.purpose,
           contextId: context.id,
           contextVars: context.vars,
-        },
-      }));
+        };
+        return {
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: trustRemoteGeneratedTestVars(metadata, Object.keys(context.vars ?? {})),
+        };
+      });
 
       redteamTests = redteamTests.concat(taggedTests);
 

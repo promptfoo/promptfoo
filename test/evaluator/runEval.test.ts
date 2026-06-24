@@ -749,6 +749,41 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('Safe encoded payload');
   });
 
+  it('should skip rendering arbitrary strategy variables marked as unsafe remote payloads', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Safe transformed payload',
+          copiedAttack: 'Copied attack text: {{missing | trim}}',
+        },
+        metadata: {
+          __promptfooRemoteGenerated: {
+            metadata: [],
+            unsafeRenderVars: ['prompt', 'copiedAttack'],
+            vars: [],
+          },
+          pluginConfig: {},
+          pluginId: 'ssrf',
+          strategyId: 'file://custom-copy.js',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Safe transformed payload');
+  });
+
   it('should fail before calling the provider when redteam maxCharsPerMessage is exceeded', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
 

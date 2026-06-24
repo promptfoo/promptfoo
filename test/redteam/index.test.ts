@@ -1149,6 +1149,62 @@ describe('synthesize', () => {
       );
     });
 
+    it('should propagate unsafe remote render vars through arbitrary custom strategy outputs', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: attack },
+          metadata: {
+            __promptfooRemoteGenerated: {
+              metadata: [],
+              unsafeRenderVars: ['query'],
+              vars: [],
+            },
+            pluginId: 'test-plugin',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase) => ({
+          ...testCase,
+          vars: {
+            query: 'safe transformed payload',
+            copiedAttack: testCase.vars.query,
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return [{ id: 'custom', action: mockCustomAction }].find(predicate);
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{query}}'],
+        strategies: [{ id: 'custom' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'custom',
+      );
+      expect(strategyTestCase?.vars).toEqual({
+        query: 'safe transformed payload',
+        copiedAttack: attack,
+      });
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: ['query', 'copiedAttack'],
+        vars: [],
+      });
+    });
+
     it('should fall back to base strategy ID for custom variants', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
