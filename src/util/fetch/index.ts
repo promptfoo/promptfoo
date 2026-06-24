@@ -20,7 +20,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
-import { getFetchRetryContextMaxRetries } from './retryContext';
+import { getFetchRetryContextMaxRetries, resolveFetchRetryMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
@@ -779,8 +779,7 @@ export async function fetchWithRetries(
   maxRetries?: number,
 ): Promise<Response> {
   const { retryOnStatusCodes = [], ...requestOptions } = options;
-  const contextMaxRetries = getFetchRetryContextMaxRetries();
-  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  maxRetries = resolveFetchRetryMaxRetries(maxRetries);
   const { hasReplayableBody, isIdempotent } = getRequestRetryProperties(url, requestOptions);
 
   let lastErrorMessage: string | undefined;

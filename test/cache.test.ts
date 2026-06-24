@@ -24,6 +24,7 @@ import {
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
@@ -512,6 +513,37 @@ describe('fetchWithCache', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.data).toEqual(response);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should isolate concurrent requests with different retry budgets', async () => {
+      let resolveFirst: ((response: Response) => void) | undefined;
+      let resolveSecond: ((response: Response) => void) | undefined;
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+
+      const noRetry = withFetchRetryContext(0, () =>
+        fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000),
+      );
+      const retryOnce = withFetchRetryContext(1, () =>
+        fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000),
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(2));
+      resolveFirst?.(mockFetchWithRetriesResponse(true, { data: 'no retry' }));
+      resolveSecond?.(mockFetchWithRetriesResponse(true, { data: 'retry once' }));
+
+      await expect(Promise.all([noRetry, retryOnce])).resolves.toHaveLength(2);
     });
 
     it('should isolate in-flight fetch deduping by namespace', async () => {

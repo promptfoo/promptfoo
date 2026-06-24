@@ -1285,6 +1285,13 @@ describe('fetchWithRetries', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(sleepWithAbort).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvInt).mockReset();
+  });
+
   it('should make exactly one attempt when retries is 0', async () => {
     const successResponse = createMockResponse();
     vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);

@@ -26,3 +26,8 @@ export function withFetchRetryContext<T>(
 export function getFetchRetryContextMaxRetries(): number | undefined {
   return fetchRetryContext.getStore()?.maxRetries;
 }
+
+/** Resolve an explicit or contextual retry budget to the shared fetch default. */
+export function resolveFetchRetryMaxRetries(maxRetries?: number): number {
+  return Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 4);
+}

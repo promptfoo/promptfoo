@@ -19,6 +19,7 @@ import {
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
+import { resolveFetchRetryMaxRetries } from './util/fetch/retryContext';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -566,9 +567,15 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
+function getInflightFetchCacheKey(
+  cacheKey: string,
+  url: RequestInfo,
+  options: RequestInit,
+  maxRetries: number,
+) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  const retryKey = `${cacheKey}:maxRetries:${maxRetries}`;
+  return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;
 }
 
 function serializeFetchResponse(
@@ -825,7 +832,12 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(
+    cacheKey,
+    url,
+    options,
+    resolveFetchRetryMaxRetries(maxRetries),
+  );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
     inflightResponse = (async () => {
