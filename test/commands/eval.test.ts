@@ -1467,6 +1467,11 @@ describe('evalCommand', () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
     const config = {
+      prompts: [
+        'file:///C:/suite/prompts/main.txt',
+        { id: 'file:///C:/suite/prompts/object.js:buildPrompt' },
+      ],
+      providers: ['file:///C:/suite/providers/provider.py:call_api'],
       tests: ['file:///C:/suite/tests.yaml', { path: 'file:///C:/suite/tests-object.yaml' }],
       defaultTest: 'file:///C:/suite/default.yaml',
       scenarios: [
@@ -1498,6 +1503,9 @@ describe('evalCommand', () => {
       const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
       expect(watchPaths).toEqual(
         expect.arrayContaining([
+          'C:\\suite\\prompts\\main.txt',
+          'C:\\suite\\prompts\\object.js',
+          'C:\\suite\\providers\\provider.py',
           'C:\\suite\\tests.yaml',
           'C:\\suite\\tests-object.yaml',
           'C:\\suite\\default.yaml',

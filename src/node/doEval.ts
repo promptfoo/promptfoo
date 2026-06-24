@@ -1182,9 +1182,9 @@ export async function doEval(
           ? (config.prompts
               .map((p) => {
                 if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
+                  return path.resolve(basePath, parseFileUrl(p).filePath);
                 } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
+                  return path.resolve(basePath, parseFileUrl(p.id).filePath);
                 }
                 return null;
               })
@@ -1194,7 +1194,7 @@ export async function doEval(
           ? (config.providers
               .map((p) =>
                 typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
+                  ? path.resolve(basePath, parseFileUrl(p).filePath)
                   : null,
               )
               .filter(Boolean) as string[])
