@@ -203,16 +203,25 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
 async function getConfigHash(
   configPath: string,
-  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+  options: Pick<
+    RedteamCliGenerateOptions,
+    'filterProviders' | 'filterTargets' | 'maxCharsPerMessage' | 'minCharsPerMessage'
+  >,
 ): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
-  const filters = {
+  const runtimeOptions = {
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
+    ...(options.maxCharsPerMessage === undefined
+      ? {}
+      : { maxCharsPerMessage: options.maxCharsPerMessage }),
+    ...(options.minCharsPerMessage === undefined
+      ? {}
+      : { minCharsPerMessage: options.minCharsPerMessage }),
   };
   const hashInput =
-    Object.keys(filters).length > 0
-      ? JSON.stringify({ version: VERSION, content, filters })
+    Object.keys(runtimeOptions).length > 0
+      ? JSON.stringify({ version: VERSION, content, runtimeOptions })
       : `${VERSION}:${content}`;
   return createHash('md5').update(hashInput).digest('hex');
 }

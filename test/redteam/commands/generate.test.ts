@@ -400,7 +400,9 @@ describe('doGenerateRedteam', () => {
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
     ['filter option', { filterProviders: 'team-a' }, { filterTargets: 'team-a' }],
-  ] as const)('should regenerate when the %s changes for an existing output', async (_, initialFilters, changedFilters) => {
+    ['max chars per message', { maxCharsPerMessage: 100 }, { maxCharsPerMessage: 200 }],
+    ['min chars per message', { minCharsPerMessage: 100 }, { minCharsPerMessage: 200 }],
+  ] as const)('should regenerate when the %s changes for an existing output', async (_, initialOptions, changedOptions) => {
     const configPath = 'config.yaml';
     const outputPath = 'output.yaml';
     const configContent = yaml.dump({
@@ -436,7 +438,7 @@ describe('doGenerateRedteam', () => {
       cache: true,
       defaultConfig: {},
       write: false,
-      ...initialFilters,
+      ...initialOptions,
     };
 
     await doGenerateRedteam(options);
@@ -453,7 +455,7 @@ describe('doGenerateRedteam', () => {
     );
 
     vi.clearAllMocks();
-    await doGenerateRedteam({ ...options, ...changedFilters });
+    await doGenerateRedteam({ ...options, ...changedOptions });
 
     expect(synthesize).toHaveBeenCalledTimes(1);
     const changedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
