@@ -95,50 +95,42 @@ describe('createTransformResponse', () => {
     expect(result.output).toBe('raw text');
   });
 
-  it('should strip trailing semicolon from arrow function expression', async () => {
-    const parser = await createTransformResponse('(json) => json.data;');
+  it.each([
+    ['parenthesized arrow', '(json) => json.data;', 'value'],
+    ['single-parameter arrow', 'json => json.data;;\r\n', 'value'],
+    ['anonymous function', 'function(json) { return json.data; };', 'value'],
+  ])('should strip trailing semicolons from %s response expressions', async (_, code, output) => {
+    const parser = await createTransformResponse(code);
+    const result = parser({ data: 'value' }, 'raw');
+    expect(result.output).toBe(output);
+  });
+
+  it('should preserve semicolons inside quoted values and object literals', async () => {
+    const parser = await createTransformResponse(
+      '() => ({ output: "literal;", metadata: { marker: "inner;" } });;',
+    );
+    const result = parser({}, '');
+    expect(result).toEqual({ output: 'literal;', metadata: { marker: 'inner;' } });
+  });
+
+  it('should handle multi-statement function bodies without stripping internal semicolons', async () => {
+    const parser = await createTransformResponse(`(json) => {
+      const suffix = ";";
+      return { output: json.data + suffix };
+    };;   `);
+    const result = parser({ data: 'value' }, '');
+    expect(result.output).toBe('value;');
+  });
+
+  it('should preserve multiline function-valued expression semantics', async () => {
+    const parser = await createTransformResponse('(\n  () => json.data\n)()');
     const result = parser({ data: 'value' }, '');
     expect(result.output).toBe('value');
   });
 
-  it('should strip trailing semicolon from multi-line arrow function', async () => {
-    const parser = await createTransformResponse(`(json, text) => {
-      return json.result;
-    };`);
-    const result = parser({ result: 'success' }, '');
-    expect(result.output).toBe('success');
-  });
-
-  it('should strip trailing semicolon from regular function expression', async () => {
-    const parser = await createTransformResponse('function(json) { return json.data; };');
-    const result = parser({ data: 'value' }, '');
-    expect(result.output).toBe('value');
-  });
-
-  it('should handle function body with return statements (no function wrapper)', async () => {
-    const parser = await createTransformResponse(`
-      const value = json.data;
-      if (value) {
-        return value.toUpperCase();
-      }
-      return text;
-    `);
-    const result = parser({ data: 'hello' }, 'fallback');
-    expect(result.output).toBe('HELLO');
-  });
-
-  it('should handle multi-line function body with complex logic', async () => {
-    const parser = await createTransformResponse(`
-      if (json && json.result) {
-        return json.result;
-      }
-      if (text) {
-        return text;
-      }
-      return 'no data';
-    `);
-    const result = parser({ result: 'success' }, '');
-    expect(result.output).toBe('success');
+  it('should reject bare multi-statement response bodies', async () => {
+    const parser = await createTransformResponse('const value = json.data; return value;');
+    expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
   });
 
   it('should keep expressions containing the word return as expressions', async () => {
@@ -147,6 +139,18 @@ describe('createTransformResponse', () => {
     );
     const result = parser({ message: 'please return this' }, 'fallback');
     expect(result.output).toBe('please return this');
+  });
+
+  it('should not invoke arbitrary function-valued expressions', async () => {
+    const returnedFunction = () => 'value';
+    const parser = await createTransformResponse('json.callback');
+    const result = parser({ callback: returnedFunction }, '');
+    expect(result.output).toBe(returnedFunction);
+  });
+
+  it('should reject serialized async response functions', async () => {
+    const parser = await createTransformResponse('async (json) => json.data;');
+    expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
   });
 });
 
@@ -270,25 +274,64 @@ describe('createTransformRequest', () => {
     expect(result).toEqual({ text: 'hello', extra: 'data' });
   });
 
-  it('should strip trailing semicolon from arrow function expression', async () => {
-    const transform = await createTransformRequest('(prompt) => prompt.toUpperCase();');
+  it.each([
+    ['parenthesized arrow', '(prompt) => prompt.toUpperCase();'],
+    ['single-parameter arrow', 'prompt => prompt.toUpperCase();;\r\n'],
+    ['anonymous function', 'function(prompt) { return prompt.toUpperCase(); };'],
+  ])('should strip trailing semicolons from %s request expressions', async (_, code) => {
+    const transform = await createTransformRequest(code);
     const result = await transform('hello', {} as any);
     expect(result).toBe('HELLO');
   });
 
-  it('should strip trailing semicolon from multi-line arrow function', async () => {
-    const transform = await createTransformRequest(`(prompt, vars) => {
-      return { text: prompt.toUpperCase() };
-    };`);
+  it.each([
+    ['spaced', 'async (prompt) => prompt.toUpperCase();'],
+    ['unspaced', 'async(prompt) => prompt.toUpperCase();;'],
+  ])('should handle %s serialized async request functions', async (_, code) => {
+    const transform = await createTransformRequest(code);
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should preserve quoted return text and nested objects in expressions', async () => {
+    const transform = await createTransformRequest(
+      '({ text: "please return this;", nested: { prompt } })',
+    );
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'please return this;', nested: { prompt: 'hello' } });
+  });
+
+  it('should preserve raw multi-statement request bodies', async () => {
+    const transform = await createTransformRequest(`
+      function decorate(value) {
+        return value.toUpperCase();
+      }
+      return { text: decorate(prompt) };
+    `);
     const result = await transform('hello', {} as any);
     expect(result).toEqual({ text: 'HELLO' });
   });
 
-  it('should strip trailing semicolon from regular function expression', async () => {
-    const transform = await createTransformRequest(
-      'function(prompt) { return prompt.toUpperCase(); };',
-    );
+  it('should preserve multiline function-valued expression semantics', async () => {
+    const transform = await createTransformRequest('(\n  () => prompt.toUpperCase()\n)()');
     const result = await transform('hello', {} as any);
     expect(result).toBe('HELLO');
+  });
+
+  it('should not invoke arbitrary function-valued expressions', async () => {
+    const callback = () => 'value';
+    const transform = await createTransformRequest('vars.callback');
+    const result = await transform('hello', { callback } as any);
+    expect(result).toBe(callback);
+  });
+
+  it('should reject comment-prefixed serialized functions', async () => {
+    const transform = await createTransformRequest('/* lead */ (prompt) => prompt.toUpperCase();');
+    await expect(transform('hello', {} as any)).rejects.toThrow('Failed to transform request');
+  });
+
+  it('should reject malformed request functions', async () => {
+    const transform = await createTransformRequest('(prompt) => { return prompt;');
+    await expect(transform('hello', {} as any)).rejects.toThrow('Failed to transform request');
   });
 });

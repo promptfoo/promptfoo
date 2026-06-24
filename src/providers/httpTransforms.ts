@@ -7,22 +7,18 @@ import { normalizeResponseTransformResult } from './transformResult';
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
-/**
- * Strips trailing semicolons from function expressions.
- * Users often write `(json, text) => { ... };` which causes syntax errors
- * when wrapped as `return ((json, text) => { ... };)(args)`.
- */
-function stripTrailingSemicolon(code: string): string {
-  return code.replace(/;\s*$/, '');
+const FUNCTION_EXPRESSION_PATTERN = /^(?:(?:\(.*?\)|[$A-Z_a-z][$\w]*)\s*=>|function\s*\(.*?\))/;
+const ASYNC_FUNCTION_EXPRESSION_PATTERN = /^async(?:[ \t]*\(.*?\)|[ \t]+[$A-Z_a-z][$\w]*)\s*=>/;
+
+function stripTrailingSemicolons(code: string): string {
+  return code.replace(/;+\s*$/, '');
 }
 
-function looksLikeResponseTransformBody(code: string): boolean {
-  const trimmed = code.trimStart();
-  const startsWithStatement = /^(return|const|let|var|if|switch|for|while|do|try|throw)\b/.test(
-    trimmed,
+function isFunctionExpression(code: string, allowAsync = false): boolean {
+  return (
+    FUNCTION_EXPRESSION_PATTERN.test(code) ||
+    (allowAsync && ASYNC_FUNCTION_EXPRESSION_PATTERN.test(code))
   );
-
-  return startsWithStatement && /\breturn\b/.test(trimmed);
 }
 
 export interface TransformResponseContext {
@@ -61,33 +57,21 @@ export async function createTransformResponse(
   } else if (typeof parser === 'string') {
     return (data, text, context) => {
       try {
-        let trimmedParser = parser.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
-        if (isFunctionExpression) {
-          trimmedParser = stripTrailingSemicolon(trimmedParser);
-        }
-
-        let functionBody: string;
-        const errorSuffix = `' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)`;
-        if (isFunctionExpression) {
-          // For function expressions, call them with the arguments
-          functionBody = `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ${errorSuffix}); }`;
-        } else {
-          // Treat explicit statement bodies differently from ordinary expressions.
-          // This avoids misclassifying quoted text such as `"return"` as a body.
-          const hasReturn = looksLikeResponseTransformBody(trimmedParser);
-          if (hasReturn) {
-            // Use as function body if it has return statements
-            functionBody = `try { ${trimmedParser} } catch(e) { throw new Error('Transform failed: ${errorSuffix}); }`;
-          } else {
-            // Wrap simple expressions with return
-            functionBody = `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ${errorSuffix}); }`;
-          }
-        }
-
+        const originalParser = parser.trim();
+        const parserIsFunction = isFunctionExpression(originalParser);
+        const trimmedParser = parserIsFunction
+          ? stripTrailingSemicolons(originalParser)
+          : originalParser;
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
-        const transformFn = new Function('json', 'text', 'context', 'process', functionBody);
+        const transformFn = new Function(
+          'json',
+          'text',
+          'context',
+          'process',
+          parserIsFunction
+            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
+            : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
+        );
         let resp: ProviderResponse | string;
         const processShim = getProcessShim();
         if (context) {
@@ -139,30 +123,34 @@ export async function createTransformRequest(
   } else if (typeof transform === 'string') {
     return async (prompt, vars, context) => {
       try {
-        let trimmedTransform = transform.trim();
-        // Check if it's a function expression (either arrow or regular)
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
-        if (isFunctionExpression) {
-          trimmedTransform = stripTrailingSemicolon(trimmedTransform);
-        }
+        const trimmedTransform = transform.trim();
+        const transformIsFunction = isFunctionExpression(trimmedTransform, true);
+        const expressionTransform = transformIsFunction
+          ? stripTrailingSemicolons(trimmedTransform)
+          : trimmedTransform;
 
         let transformFn: Function;
-        // Add process parameter for ESM compatibility - allows process.mainModule.require to work
-        if (isFunctionExpression) {
-          // For function expressions, call them with the arguments
-          transformFn = new Function(
-            'prompt',
-            'vars',
-            'context',
-            'process',
-            `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
-          );
-        } else {
-          // Check if it contains a return statement
-          const hasReturn = /\breturn\b/.test(trimmedTransform);
-
-          if (hasReturn) {
-            // Use as function body if it has return statements
+        try {
+          // Add process parameter for ESM compatibility - allows process.mainModule.require to work
+          transformFn = transformIsFunction
+            ? new Function(
+                'prompt',
+                'vars',
+                'context',
+                'process',
+                `try { return (${expressionTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
+              )
+            : new Function(
+                'prompt',
+                'vars',
+                'context',
+                'process',
+                `try { return (${expressionTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
+              );
+        } catch (error) {
+          // Preserve support for raw function bodies while letting valid expressions
+          // containing the word "return" compile as expressions first.
+          if (error instanceof SyntaxError && /\breturn\b/.test(trimmedTransform)) {
             transformFn = new Function(
               'prompt',
               'vars',
@@ -171,14 +159,7 @@ export async function createTransformRequest(
               `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           } else {
-            // Wrap simple expressions with return
-            transformFn = new Function(
-              'prompt',
-              'vars',
-              'context',
-              'process',
-              `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-            );
+            throw error;
           }
         }
 
