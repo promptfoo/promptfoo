@@ -693,6 +693,11 @@ describe('ResultsCharts', () => {
       // Should render charts (the specific chart type logic is tested indirectly)
       const canvasElements = container.querySelectorAll('canvas');
       expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+      expect(
+        screen.getByRole('img', { name: 'Named score metric chart' }),
+      ).toHaveAccessibleDescription(
+        'Normalized named scores by provider. test-provider-1: accuracy 100.00%, precision 100.00%, recall 100.00%; test-provider-2: accuracy 88.89%, precision 87.50%, recall 85.71%.',
+      );
     });
 
     it('should render finite metric chart values if named scores are all zero', () => {

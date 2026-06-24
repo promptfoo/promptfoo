@@ -251,13 +251,12 @@ export function MediaFilters({
           }}
         >
           <span id={evalFilterDescriptionId} className="sr-only">
-            Current evaluation: {selectedEvalLabel || 'All Evaluations'}
+            Filter media by evaluation
           </span>
           <PopoverTrigger asChild>
             <Button
               ref={evalFilterTriggerRef}
               variant="outline"
-              aria-label="Filter by evaluation"
               aria-describedby={evalFilterDescriptionId}
               aria-expanded={evalSearchOpen}
               aria-haspopup="listbox"

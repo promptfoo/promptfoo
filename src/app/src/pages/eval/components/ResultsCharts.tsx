@@ -541,11 +541,41 @@ function MetricChart({ table }: ChartProps) {
   const titleId = useId();
   const summaryId = useId();
 
-  const summary = useMemo(() => {
-    const metricCount = Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length;
-    return metricCount > 0
-      ? `Normalized metric comparison for ${metricCount} named scores across ${table.head.prompts.length} prompts.`
-      : 'No named-score metrics are available for the metric chart.';
+  const metricChartData = useMemo(() => {
+    const labels = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
+    // Compute each metric's normalization value once; it depends only on the key, not the prompt.
+    const normalizationValueByKey = new Map(
+      labels.map((key) => {
+        const values = table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0);
+        const maxValue = Math.max(...values);
+        return [key, maxValue > 0 ? maxValue : Math.max(...values.map(Math.abs))];
+      }),
+    );
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: `${prompt.provider}`,
+      data: labels.map((key) => {
+        const value = prompt.metrics?.namedScores[key] || 0;
+        const normalizationValue = normalizationValueByKey.get(key) ?? 0;
+        return normalizationValue > 0 ? value / normalizationValue : 0;
+      }),
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
+    const summary =
+      labels.length > 0
+        ? `Normalized named scores by provider. ${datasets
+            .map(
+              (dataset) =>
+                `${dataset.label}: ${labels
+                  .map(
+                    (label, metricIdx) =>
+                      `${label} ${((dataset.data[metricIdx] ?? 0) * 100).toFixed(2)}%`,
+                  )
+                  .join(', ')}`,
+            )
+            .join('; ')}.`
+        : 'No named-score metrics are available for the metric chart.';
+
+    return { datasets, labels, summary };
   }, [table]);
 
   useEffect(() => {
@@ -557,28 +587,7 @@ function MetricChart({ table }: ChartProps) {
       metricChartInstance.current.destroy();
     }
 
-    const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
-    const labels = namedScoreKeys;
-    // Compute each metric's normalization value once; it depends only on the key, not the prompt.
-    const normalizationValueByKey = new Map(
-      namedScoreKeys.map((key) => {
-        const values = table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0);
-        const maxValue = Math.max(...values);
-        return [key, maxValue > 0 ? maxValue : Math.max(...values.map(Math.abs))];
-      }),
-    );
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const data = namedScoreKeys.map((key) => {
-        const value = prompt.metrics?.namedScores[key] || 0;
-        const normalizationValue = normalizationValueByKey.get(key) ?? 0;
-        return normalizationValue > 0 ? value / normalizationValue : 0;
-      });
-      return {
-        label: `${table.head.prompts[promptIdx].provider}`,
-        data,
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const { datasets, labels } = metricChartData;
 
     const config = {
       type: 'bar' as const,
@@ -621,7 +630,7 @@ function MetricChart({ table }: ChartProps) {
       },
     };
     metricChartInstance.current = new Chart(metricCanvasRef.current, config);
-  }, [table]);
+  }, [metricChartData]);
 
   return (
     <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
@@ -629,7 +638,7 @@ function MetricChart({ table }: ChartProps) {
         Named score metric chart
       </h3>
       <p id={summaryId} className="sr-only">
-        {summary}
+        {metricChartData.summary}
       </p>
       <canvas
         ref={metricCanvasRef}

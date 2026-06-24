@@ -137,10 +137,10 @@ describe('MediaFilters', () => {
     it('renders the eval filter opener with durable accessible naming', () => {
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
       expect(evalFilterButton).toHaveAttribute('aria-haspopup', 'listbox');
       expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.getByText('Current evaluation: All Evaluations')).toBeInTheDocument();
+      expect(evalFilterButton).toHaveAccessibleDescription('Filter media by evaluation');
     });
 
     it('shows "All Evaluations" when no filter is selected', () => {
@@ -152,15 +152,16 @@ describe('MediaFilters', () => {
     it('shows the selected evaluation description', () => {
       render(<MediaFilters {...defaultProps} evals={mockEvals} evalFilter="eval-2" />);
 
-      expect(screen.getByText('Second Evaluation')).toBeInTheDocument();
-      expect(screen.getByText('Current evaluation: Second Evaluation')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Second Evaluation' })).toHaveAccessibleDescription(
+        'Filter media by evaluation',
+      );
     });
 
     it('opens the popover on click', async () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       // The popover should show search input and eval options
       expect(await screen.findByLabelText('Search evaluations')).toHaveFocus();
@@ -170,7 +171,7 @@ describe('MediaFilters', () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       expect(await screen.findByRole('option', { name: 'All Evaluations' })).toHaveAttribute(
         'tabindex',
@@ -193,7 +194,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
       evalFilterButton.focus();
 
       await user.keyboard('{ArrowDown}');
@@ -218,7 +219,7 @@ describe('MediaFilters', () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      const evalFilterButton = screen.getByRole('button', { name: 'All Evaluations' });
       evalFilterButton.focus();
 
       await user.keyboard('{ArrowDown}');
@@ -243,7 +244,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       const searchInput = await screen.findByLabelText('Search evaluations');
       await user.type(searchInput, 'Sec');
@@ -265,7 +266,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       const searchInput = await screen.findByLabelText('Search evaluations');
       searchInput.focus();
@@ -357,7 +358,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
 
       expect(await screen.findByLabelText('Search evaluations')).toBeInTheDocument();
 
