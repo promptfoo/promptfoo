@@ -328,6 +328,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(true);
   });
 
+  it('should ignore default coding-agent strategy exclusions in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'coding-agent:core', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'base64', config: { maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject collection plugin ranges targeted after expansion', () => {
     expect(
       RedteamConfigSchema.safeParse({

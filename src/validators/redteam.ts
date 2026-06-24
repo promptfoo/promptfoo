@@ -4,6 +4,7 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
+  CANARY_BREAKING_STRATEGY_IDS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
@@ -234,6 +235,14 @@ function strategyTargetsPlugin(
     return true;
   }
   if (STRATEGY_EXEMPT_PLUGINS.some((exemptPlugin) => exemptPlugin === pluginId)) {
+    return false;
+  }
+  if (
+    CANARY_BREAKING_STRATEGY_IDS.includes(strategyId) &&
+    getExpandedPluginIds(pluginId).some((expandedPluginId) =>
+      expandedPluginId.startsWith('coding-agent:'),
+    )
+  ) {
     return false;
   }
   if (getStringList(pluginConfig?.excludeStrategies)?.includes(strategyId)) {
