@@ -178,7 +178,7 @@ export class OpenClawAgentProvider implements ApiProvider {
     // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
     const sessionKey = buildOpenClawSessionKey(
       this.agentId,
-      this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`,
+      this.openclawConfig.session_key?.trim() || `promptfoo-${crypto.randomUUID()}`,
     );
 
     const firstResult = await this.callApiOnce(prompt, sessionKey);

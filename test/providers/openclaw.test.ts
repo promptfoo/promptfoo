@@ -2428,6 +2428,29 @@ describe('OpenClaw Provider', () => {
       await promise;
     });
 
+    it.each([
+      [undefined, /^promptfoo-[0-9a-f-]{36}$/],
+      ['main', /^agent:main:promptfoo-[0-9a-f-]{36}$/],
+    ])('should replace whitespace-only configured sessions for agent %s', async (agentId, expectedSessionKey) => {
+      const provider = new OpenClawAgentProvider(agentId, {
+        config: { gateway_url: 'http://test:18789', session_key: '   ' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.sessionKey).toMatch(expectedSessionKey);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
     it('should scope unscoped configured session keys for explicit agents', async () => {
       const provider = new OpenClawAgentProvider('dev', {
         config: { gateway_url: 'http://test:18789', session_key: 'my-session' },
