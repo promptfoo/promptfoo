@@ -82,6 +82,27 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it.each([
+    { type: 'tokens-used', value: {} },
+    {
+      type: 'trajectory:tool-set',
+      value: { tools: [{ name: 'search', pattern: '   ' }] },
+    },
+  ])('should block invalid assertion configuration before running', (assertion) => {
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ assert: [assertion as any] }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-describedby', 'run-eval-help');
+    expect(screen.getByText(/required assertion values/)).toBeInTheDocument();
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',

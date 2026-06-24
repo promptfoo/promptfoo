@@ -447,6 +447,40 @@ describe('handleTokensUsed', () => {
     );
   });
 
+  it('rejects present malformed provider token usage instead of ignoring it', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1, source: 'response' } },
+      renderedValue: { max: 1, source: 'response' },
+      providerResponse: {
+        ...baseParams.providerResponse,
+        tokenUsage: { prompt: -100, completion: 1, total: 1 },
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      'Invalid provider token usage field "prompt": expected a finite non-negative number',
+    );
+  });
+
+  it('ignores malformed provider usage when trace is explicitly selected', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1000, source: 'trace' } },
+      renderedValue: { max: 1000, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: traceWithTokens,
+      },
+      providerResponse: {
+        ...baseParams.providerResponse,
+        tokenUsage: { prompt: -100, completion: 1, total: 1 },
+      },
+    };
+
+    expect(handleTokensUsed(params).pass).toBe(true);
+  });
+
   it('uses the larger provider total when an automatic trace reports zero', () => {
     const params: AssertionParams = {
       ...baseParams,

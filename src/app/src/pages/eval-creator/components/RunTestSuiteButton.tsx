@@ -9,12 +9,7 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  countTests,
-  normalizePrompts,
-  normalizePromptsForJob,
-  normalizeProviders,
-} from './setupReadiness';
+import { getSetupReadiness, normalizePromptsForJob } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
@@ -58,16 +53,10 @@ const RunTestSuiteButton = () => {
     };
   }, [clearPollInterval]);
 
-  const normalizedProviders = normalizeProviders(providers);
-  const normalizedPrompts = normalizePrompts(prompts);
   const jobPrompts = normalizePromptsForJob(prompts);
-  const testCount = countTests(tests);
+  const readiness = getSetupReadiness(config);
 
-  const isDisabled =
-    isRunning ||
-    normalizedProviders.length === 0 ||
-    normalizedPrompts.length === 0 ||
-    testCount === 0;
+  const isDisabled = isRunning || !readiness.isReadyToRun;
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -181,6 +170,7 @@ const RunTestSuiteButton = () => {
       <Button
         onClick={runTestSuite}
         disabled={isDisabled}
+        aria-describedby={!isRunning && isDisabled ? 'run-eval-help' : undefined}
         className="dark:bg-blue-600 dark:hover:bg-blue-500"
       >
         {isRunning ? (
@@ -192,6 +182,12 @@ const RunTestSuiteButton = () => {
           'Run Eval'
         )}
       </Button>
+      {!isRunning && isDisabled && (
+        <p id="run-eval-help" className="text-xs text-muted-foreground">
+          {readiness.issues[0]?.message ||
+            'Resolve the required setup items above to run this evaluation.'}
+        </p>
+      )}
       {runError && (
         <Alert variant="destructive">
           <AlertContent>

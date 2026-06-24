@@ -125,6 +125,15 @@ function tokensFromProviderResponse(params: AssertionParams): number | undefined
     return undefined;
   }
 
+  for (const field of ['prompt', 'completion', 'total'] as const) {
+    const value = usage[field];
+    if (value !== undefined && value !== null && nonNegativeTokenValue(value) === undefined) {
+      throw new Error(
+        `Invalid provider token usage field "${field}": expected a finite non-negative number`,
+      );
+    }
+  }
+
   const prompt = nonNegativeTokenValue(usage.prompt);
   const completion = nonNegativeTokenValue(usage.completion);
   const componentTotal =
@@ -153,9 +162,9 @@ function resolveTokenUsage(
   pattern: string,
 ): { total: number; usedSource: 'trace' | 'response' } {
   const trace = params.assertionValueContext.trace;
-  const responseTotal = tokensFromProviderResponse(params);
 
   if (source === 'response') {
+    const responseTotal = tokensFromProviderResponse(params);
     if (responseTotal === undefined) {
       throw new Error(
         'No token usage data available for tokens-used assertion from provider response',
@@ -188,6 +197,8 @@ function resolveTokenUsage(
     }
     return { total: traceUsage.total, usedSource: 'trace' };
   }
+
+  const responseTotal = tokensFromProviderResponse(params);
 
   if (trace?.spans && trace.spans.length > 0) {
     const traceUsage = tokensFromTrace(trace.spans as TraceSpan[], pattern);
