@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createGeminiRetrySignal,
   getGeminiErrorHeaders,
+  getGeminiErrorStatusText,
   getGeminiMaxRetries,
   getGeminiRetryAfterMs,
   getGeminiRetryDelay,
+  isGeminiHardQuotaError,
+  isGeminiRetryableError,
   isGeminiRetryableHttpResponse,
   isGeminiRetryableResponseData,
   isGeminiRetryableStatus,
@@ -38,6 +41,34 @@ describe('Gemini retry policy', () => {
     ).toBe(false);
     expect(getGeminiMaxRetries({ maxRetries: 100 })).toBe(100);
     expect(getGeminiMaxRetries({ maxRetries: 0 })).toBe(0);
+  });
+
+  it('recognizes only valid structural rate-limit errors from custom transports', () => {
+    const permanentError = Object.assign(new Error('Unauthorized'), {
+      name: 'HttpRateLimitError',
+      status: 401,
+      statusText: 'Unauthorized',
+      kind: 'rate_limit',
+    });
+    const malformedError = Object.assign(new Error('Malformed'), {
+      name: 'HttpRateLimitError',
+      status: 429,
+      statusText: 17,
+      kind: 'quota',
+    });
+    const validRateLimitError = Object.assign(new Error('Rate limited'), {
+      name: 'HttpRateLimitError',
+      status: 429,
+      statusText: 'Too Many Requests',
+      kind: 'rate_limit',
+      retryAfterMs: 1000,
+    });
+
+    expect(isGeminiRetryableError(permanentError)).toBe(false);
+    expect(isGeminiRetryableError(malformedError)).toBe(true);
+    expect(getGeminiErrorStatusText(malformedError)).toBe('Unknown Error');
+    expect(isGeminiHardQuotaError(malformedError)).toBe(false);
+    expect(isGeminiRetryableError(validRateLimitError)).toBe(true);
   });
 
   it('caps local exponential backoff but never shortens Retry-After', () => {

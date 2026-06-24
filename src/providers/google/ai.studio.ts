@@ -389,7 +389,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     let data: GeminiResponseData | undefined;
     let cached = false;
-    const maxRetries = getGeminiMaxRetries(config);
+    const maxRetries = getGeminiMaxRetries(config, logger);
     const requestTimeoutMs = getRequestTimeoutMs();
     const retryDeadline = Date.now() + requestTimeoutMs;
     const retrySignal = createGeminiRetrySignal(options?.abortSignal, requestTimeoutMs);
@@ -474,6 +474,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             maxRetries,
             getGeminiRetryAfterMs(result, result.data),
             retrySignal,
+            logger,
           );
           continue;
         }
@@ -503,7 +504,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         if (isGeminiRetryableResponseData(result.data)) {
           await result.deleteFromCache?.();
           if (attempt < maxRetries) {
-            await waitBeforeGeminiRetry(config, attempt, maxRetries, undefined, retrySignal);
+            await waitBeforeGeminiRetry(
+              config,
+              attempt,
+              maxRetries,
+              undefined,
+              retrySignal,
+              logger,
+            );
             continue;
           }
         }
@@ -528,6 +536,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               maxRetries,
               getGeminiRetryAfterMs(err),
               retrySignal,
+              logger,
             );
           } catch (waitError) {
             if (options?.abortSignal?.aborted) {

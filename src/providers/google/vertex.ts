@@ -630,7 +630,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     if (response === undefined) {
       let data;
-      const maxRetries = getGeminiMaxRetries(config);
+      const maxRetries = getGeminiMaxRetries(config, logger);
       const requestTimeoutMs = getRequestTimeoutMs();
       const retryDeadline = Date.now() + requestTimeoutMs;
       const retrySignal = createGeminiRetrySignal(options?.abortSignal, requestTimeoutMs);
@@ -698,6 +698,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
                   maxRetries,
                   getGeminiRetryAfterMs(res, errorData),
                   retrySignal,
+                  logger,
                 );
                 continue;
               }
@@ -769,7 +770,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
           if (isGeminiRetryableResponseData(data)) {
             if (attempt < maxRetries) {
-              await waitBeforeGeminiRetry(config, attempt, maxRetries, undefined, retrySignal);
+              await waitBeforeGeminiRetry(
+                config,
+                attempt,
+                maxRetries,
+                undefined,
+                retrySignal,
+                logger,
+              );
               continue;
             }
           }
@@ -792,6 +800,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
                 maxRetries,
                 getGeminiRetryAfterMs(err),
                 retrySignal,
+                logger,
               );
             } catch (waitError) {
               if (options?.abortSignal?.aborted) {

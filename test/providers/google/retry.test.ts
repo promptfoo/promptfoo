@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
+import * as retryPrimitives from '../../../src/providers/google/retryPrimitives';
 import * as util from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
@@ -11,7 +12,6 @@ import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
-import * as timeUtil from '../../../src/util/time';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -120,13 +120,11 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-// Mock sleep to avoid actual delays in tests
-vi.mock('../../../src/util/time', async (importOriginal) => {
-  const sleep = vi.fn().mockResolvedValue(undefined);
+// Keep provider-level retries deterministic without bypassing the retry policy.
+vi.mock('../../../src/providers/google/retryPrimitives', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    sleep,
-    sleepWithAbort: vi.fn((ms: number) => sleep(ms)),
+    sleepForGeminiRetry: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -158,12 +156,7 @@ describe('Google Gemini provider retry logic', () => {
     vi.resetAllMocks();
     vi.mocked(cache.fetchWithCache).mockReset();
     vi.mocked(fetchUtil.fetchWithProxy).mockReset();
-    vi.mocked(timeUtil.sleep).mockReset().mockResolvedValue(undefined);
-    vi.mocked(timeUtil.sleepWithAbort)
-      .mockReset()
-      .mockImplementation(async (ms: number) => {
-        await timeUtil.sleep(ms);
-      });
+    vi.mocked(retryPrimitives.sleepForGeminiRetry).mockReset().mockResolvedValue(undefined);
     mockGoogleClientRequest();
     mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input: any) => input);
     mockMaybeLoadFromExternalFile.mockReset().mockImplementation((input: any) => input);
@@ -207,7 +200,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
       expect(vi.mocked(cache.fetchWithCache).mock.calls[0][5]).toBe(0);
       expect(vi.mocked(cache.fetchWithCache).mock.calls[0][1]).not.toHaveProperty('signal');
       expect(vi.mocked(cache.fetchWithCache).mock.calls[0][2]).toBeGreaterThan(0);
@@ -263,7 +256,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.output).toBe('test response');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
       expect(deleteFromCache).toHaveBeenCalledOnce();
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
     });
 
     it('should aggregate request, token, and cost accounting across responses', async () => {
@@ -325,7 +318,10 @@ describe('Google Gemini provider retry logic', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.output).toBe('test response');
-      expect(timeUtil.sleep).toHaveBeenCalledWith(2500);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledWith(
+        2500,
+        expect.any(AbortSignal),
+      );
       random.mockRestore();
     });
 
@@ -344,7 +340,7 @@ describe('Google Gemini provider retry logic', () => {
       const result = await provider.callApi('test prompt');
 
       expect(cache.fetchWithCache).toHaveBeenCalledOnce();
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
       expect(result.metadata?.rateLimitKind).toBe('quota');
     });
 
@@ -370,7 +366,7 @@ describe('Google Gemini provider retry logic', () => {
       const result = await provider.callApi('test prompt');
 
       expect(cache.fetchWithCache).toHaveBeenCalledOnce();
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
       expect(result.metadata?.rateLimitKind).toBe('quota');
     });
 
@@ -383,12 +379,14 @@ describe('Google Gemini provider retry logic', () => {
         response: { status: 503 },
       });
       vi.mocked(cache.fetchWithCache).mockRejectedValue(error503);
-      vi.mocked(timeUtil.sleepWithAbort).mockImplementationOnce(
-        (_ms: number, signal: AbortSignal) =>
-          new Promise((_, reject) => {
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          }),
-      );
+      vi.mocked(retryPrimitives.sleepForGeminiRetry).mockImplementationOnce((_ms, signal) => {
+        if (!signal) {
+          return Promise.reject(new Error('Expected Gemini retry signal'));
+        }
+        return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
 
       const pending = provider.callApi('test prompt', undefined, {
         abortSignal: controller.signal,
@@ -468,7 +466,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('Response blocked: SAFETY');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
 
     it('should retry on HTTP 503 and eventually succeed', async () => {
@@ -488,7 +486,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
     });
 
     it('should use prompt-level retry config overrides', async () => {
@@ -515,7 +513,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on HTTP 429 rate limit errors', async () => {
@@ -680,7 +678,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('API call error');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
 
     it('should NOT retry non-retryable HTTP statuses even when the message mentions quota', async () => {
@@ -697,7 +695,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('API call error');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
 
     it('should NOT retry unstructured quota configuration errors', async () => {
@@ -713,7 +711,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('API call error');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
 
     it('should NOT retry on HTTP 401 auth errors', async () => {
@@ -750,7 +748,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toContain('API call error');
       // 1 initial + 2 retries = 3 total attempts
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(3);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(2);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(2);
     });
 
     it('should disable retries when maxRetries is 0', async () => {
@@ -767,7 +765,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('API call error');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
 
     it('should use the safe default for invalid negative maxRetries', async () => {
@@ -788,7 +786,7 @@ describe('Google Gemini provider retry logic', () => {
 
       expect(result.error).toContain('API call error');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(4);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(3);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(3);
     });
 
     it('should default to 3 retries when maxRetries is not specified', async () => {
@@ -810,7 +808,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toContain('API call error');
       // 1 initial + 3 retries = 4 total attempts
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(4);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(3);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -885,7 +883,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
       expect(fetchUtil.fetchWithProxy).toHaveBeenCalledTimes(2);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on HTTP 429 in express mode', async () => {
@@ -950,7 +948,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toContain('API call error');
       expect(result.error).toContain('invalid request');
       expect(fetchUtil.fetchWithProxy).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
   });
 
@@ -1141,7 +1139,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
       expect(mockRequest).toHaveBeenCalledTimes(2);
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(1);
     });
 
     it('should consume a complete stream before classifying an empty leading chunk', async () => {
@@ -1172,7 +1170,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('stream complete');
       expect(mockRequest).toHaveBeenCalledOnce();
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(retryPrimitives.sleepForGeminiRetry).not.toHaveBeenCalled();
     });
   });
 
@@ -1198,10 +1196,22 @@ describe('Google Gemini provider retry logic', () => {
 
       // Check that sleep was called with increasing delays
       // Jitter is 20% of the exponential delay, with Math.random() fixed at 0.5.
-      expect(timeUtil.sleep).toHaveBeenCalledTimes(3);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(1, 110);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(2, 220);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(3, 440);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenCalledTimes(3);
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenNthCalledWith(
+        1,
+        110,
+        expect.any(AbortSignal),
+      );
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenNthCalledWith(
+        2,
+        220,
+        expect.any(AbortSignal),
+      );
+      expect(retryPrimitives.sleepForGeminiRetry).toHaveBeenNthCalledWith(
+        3,
+        440,
+        expect.any(AbortSignal),
+      );
 
       mockRandom.mockRestore();
     });

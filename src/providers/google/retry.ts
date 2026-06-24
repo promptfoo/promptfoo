@@ -1,19 +1,12 @@
-import logger from '../../logger';
-import { parseRetryAfter } from '../../scheduler/headerParser';
-import { DEFAULT_RETRY_POLICY, getRetryDelay } from '../../scheduler/retryPolicy';
-import {
-  extractRateLimitErrorCode,
-  isHardQuotaCode,
-  isHttpRateLimitError,
-  isTransientConnectionError,
-} from '../../util/fetch/errors';
-import { sleep, sleepWithAbort } from '../../util/time';
+import { sleepForGeminiRetry } from './retryPrimitives';
 
 import type { CompletionOptions } from './types';
 import type { GeminiApiResponse, GeminiResponseData } from './util';
 
 const DEFAULT_GEMINI_MAX_RETRIES = 3;
 const DEFAULT_GEMINI_BASE_RETRY_DELAY_MS = 1000;
+const DEFAULT_GEMINI_JITTER_FACTOR = 0.2;
+const MAX_GEMINI_LOCAL_RETRY_DELAY_MS = 60_000;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const RETRYABLE_GEMINI_STATUSES: ReadonlySet<number> = new Set([408, 429, 500, 502, 503, 504]);
 const RETRYABLE_NETWORK_CODES: ReadonlySet<string> = new Set([
@@ -25,6 +18,89 @@ const RETRYABLE_NETWORK_CODES: ReadonlySet<string> = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_SOCKET',
 ]);
+const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
+  'insufficient_quota',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+  'quota_exceeded',
+]);
+
+interface GeminiRetryLogger {
+  debug(message: string, context?: Record<string, unknown>): void;
+  warn(message: string, context?: Record<string, unknown>): void;
+}
+
+interface HttpRateLimitErrorLike extends Error {
+  status: number;
+  statusText: string;
+  retryAfterMs?: number;
+  code?: string;
+  kind: 'quota' | 'rate_limit';
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+function isHttpRateLimitError(error: unknown): error is HttpRateLimitErrorLike {
+  if (!(error instanceof Error) || error.name !== 'HttpRateLimitError') {
+    return false;
+  }
+  const candidate = error as Partial<HttpRateLimitErrorLike>;
+  return (
+    candidate.status === 429 &&
+    typeof candidate.statusText === 'string' &&
+    (candidate.kind === 'quota' || candidate.kind === 'rate_limit') &&
+    (candidate.retryAfterMs === undefined ||
+      (Number.isFinite(candidate.retryAfterMs) && candidate.retryAfterMs >= 0)) &&
+    (candidate.code === undefined || typeof candidate.code === 'string') &&
+    (candidate.headers === undefined ||
+      (typeof candidate.headers === 'object' && candidate.headers !== null))
+  );
+}
+
+function isHardQuotaCode(code: string | undefined): boolean {
+  return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
+}
+
+function extractRateLimitErrorCode(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') {
+    return undefined;
+  }
+  const root = body as Record<string, unknown>;
+  if (root.error && typeof root.error === 'object') {
+    const error = root.error as Record<string, unknown>;
+    if (typeof error.code === 'string' && error.code.length > 0) {
+      return error.code;
+    }
+    if (typeof error.type === 'string' && error.type.length > 0) {
+      return error.type;
+    }
+  }
+  if (typeof root.code === 'string' && root.code.length > 0) {
+    return root.code;
+  }
+  return typeof root.type === 'string' && root.type.length > 0 ? root.type : undefined;
+}
+
+function parseRetryAfter(value: string): number | null {
+  const seconds = Number.parseInt(value, 10);
+  const durationMs = seconds * 1000;
+  if (
+    Number.isFinite(seconds) &&
+    seconds >= 0 &&
+    String(seconds) === value.trim() &&
+    Number.isFinite(durationMs)
+  ) {
+    return durationMs;
+  }
+
+  const timestamp = Date.parse(value);
+  const now = Date.now();
+  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+  return Number.isFinite(timestamp) && timestamp > now - oneYearMs && timestamp < now + oneYearMs
+    ? Math.max(0, timestamp - now)
+    : null;
+}
 
 type GeminiResponseDatum = {
   candidates?: Array<{
@@ -339,7 +415,15 @@ export function isGeminiRetryableError(error: unknown): boolean {
   if ([...RETRYABLE_NETWORK_CODES].some((code) => upperMessage.includes(code))) {
     return true;
   }
-  if (isTransientConnectionError(error)) {
+  const isPermanentTlsError =
+    upperMessage.includes('EPROTO') &&
+    ['WRONG VERSION NUMBER', 'SELF SIGNED', 'UNABLE TO VERIFY', 'UNKNOWN CA', 'CERT'].some((text) =>
+      upperMessage.includes(text),
+    );
+  if (
+    !isPermanentTlsError &&
+    ['BAD RECORD MAC', 'EPROTO', 'SOCKET HANG UP'].some((text) => upperMessage.includes(text))
+  ) {
     return true;
   }
 
@@ -442,13 +526,21 @@ export function getGeminiRetryDelay(
     if (retryAfterMs === 0) {
       return 0;
     }
-    const jitter = retryAfterMs * DEFAULT_RETRY_POLICY.jitterFactor * Math.random();
+    const jitter = retryAfterMs * DEFAULT_GEMINI_JITTER_FACTOR * Math.random();
     return retryAfterMs + jitter;
   }
-  return getRetryDelay(attempt, { ...DEFAULT_RETRY_POLICY, baseDelayMs });
+  const exponentialDelay = Math.min(
+    baseDelayMs * Math.pow(2, attempt),
+    MAX_GEMINI_LOCAL_RETRY_DELAY_MS,
+  );
+  const jitter = exponentialDelay * DEFAULT_GEMINI_JITTER_FACTOR * Math.random();
+  return Math.min(exponentialDelay + jitter, MAX_GEMINI_LOCAL_RETRY_DELAY_MS);
 }
 
-export function getGeminiMaxRetries(config: CompletionOptions): number {
+export function getGeminiMaxRetries(
+  config: CompletionOptions,
+  retryLogger?: GeminiRetryLogger,
+): number {
   const raw: unknown = config.maxRetries;
   if (raw === undefined) {
     return DEFAULT_GEMINI_MAX_RETRIES;
@@ -461,7 +553,7 @@ export function getGeminiMaxRetries(config: CompletionOptions): number {
         ? Number(raw)
         : Number.NaN;
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    logger.warn('[Google] Ignoring invalid maxRetries; expected a non-negative integer.', {
+    retryLogger?.warn('[Google] Ignoring invalid maxRetries; expected a non-negative integer.', {
       maxRetries: raw,
     });
     return DEFAULT_GEMINI_MAX_RETRIES;
@@ -493,9 +585,10 @@ export async function waitBeforeGeminiRetry(
   maxRetries: number,
   retryAfterMs?: number,
   signal?: AbortSignal,
+  retryLogger?: GeminiRetryLogger,
 ): Promise<void> {
   const delay = getGeminiRetryDelay(config, attempt, retryAfterMs);
-  logger.debug('[Google] Retrying Gemini API call', {
+  retryLogger?.debug('[Google] Retrying Gemini API call', {
     attempt: attempt + 1,
     maxRetries,
     delayMs: Math.round(delay),
@@ -503,15 +596,13 @@ export async function waitBeforeGeminiRetry(
   let remainingDelay = delay;
   do {
     const timerDelay = Math.min(remainingDelay, MAX_TIMER_DELAY_MS);
-    if (signal) {
-      try {
-        await sleepWithAbort(timerDelay, signal);
-      } catch {
+    try {
+      await sleepForGeminiRetry(timerDelay, signal);
+    } catch {
+      if (signal) {
         throwIfGeminiAborted(signal);
-        throw new Error('Gemini retry wait failed');
       }
-    } else {
-      await sleep(timerDelay);
+      throw new Error('Gemini retry wait failed');
     }
     remainingDelay -= timerDelay;
   } while (remainingDelay > 0);
