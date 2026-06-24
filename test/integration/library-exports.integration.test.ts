@@ -13,6 +13,7 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -31,7 +32,7 @@ const contractsDeclarationClosureBudgetBytes = 95_000;
 
 function resolveLocalModule(importerPath: string, specifier: string): string {
   const resolvedPath = path.resolve(path.dirname(importerPath), specifier);
-  const candidates = [resolvedPath];
+  const candidates: string[] = [];
   const declarationExtension = importerPath.endsWith('.d.cts')
     ? '.d.cts'
     : importerPath.endsWith('.d.mts')
@@ -59,7 +60,17 @@ function resolveLocalModule(importerPath: string, specifier: string): string {
     }
   }
 
-  const existingPath = candidates.find((candidate) => fs.existsSync(candidate));
+  // Declaration files resolve their declaration siblings first; keep the emitted runtime path as
+  // a fallback for packages that intentionally ship JavaScript without a declaration sibling.
+  candidates.push(resolvedPath);
+
+  const existingPath = candidates.find((candidate) => {
+    try {
+      return fs.statSync(candidate).isFile();
+    } catch {
+      return false;
+    }
+  });
   if (!existingPath) {
     throw new Error(
       `Unable to resolve local import ${specifier} from ${importerPath}; tried ${candidates.join(', ')}`,
@@ -101,6 +112,49 @@ function readModuleClosure(entryPath: string): { totalBytes: number; bareSpecifi
 
   return { totalBytes, bareSpecifiers };
 }
+
+describe('declaration module resolution', () => {
+  it.each([
+    ['entry.d.ts', 'dep.js', 'dep.d.ts'],
+    ['entry.d.cts', 'dep.cjs', 'dep.d.cts'],
+    ['entry.d.mts', 'dep.mjs', 'dep.d.mts'],
+  ])('prefers declaration siblings for %s imports', (importerName, emittedName, declarationName) => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
+    try {
+      const importerPath = path.join(tempDir, importerName);
+      fs.writeFileSync(importerPath, `export * from './${emittedName}';`);
+      fs.writeFileSync(path.join(tempDir, emittedName), 'export const runtime = true;');
+      fs.writeFileSync(
+        path.join(tempDir, declarationName),
+        "import 'declaration-only-dependency';",
+      );
+
+      const { bareSpecifiers } = readModuleClosure(importerPath);
+      expect([...bareSpecifiers]).toEqual(['declaration-only-dependency']);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves extensionless declaration directory indexes as files', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
+    try {
+      const importerPath = path.join(tempDir, 'entry.d.ts');
+      const dependencyDir = path.join(tempDir, 'dependency');
+      fs.mkdirSync(dependencyDir);
+      fs.writeFileSync(importerPath, "export * from './dependency';");
+      fs.writeFileSync(
+        path.join(dependencyDir, 'index.d.ts'),
+        "import 'declaration-index-dependency';",
+      );
+
+      const { bareSpecifiers } = readModuleClosure(importerPath);
+      expect([...bareSpecifiers]).toEqual(['declaration-index-dependency']);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
 
 describeIfBuildExists('Library Exports', () => {
   describe('Build artifacts', () => {
