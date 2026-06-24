@@ -1,7 +1,7 @@
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { isTemplatingDisabled, shouldDisableTemplateProcessEnvVars } from './templatePolicy';
 
 import type { NunjucksFilterMap } from '../types/index';
 
@@ -427,10 +427,6 @@ function astReferencesVariable(
  * Nunjucks is always enabled in grader mode.
  * @returns A configured Nunjucks environment.
  */
-export function isTemplatingDisabled(): boolean {
-  return getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
-}
-
 export function getNunjucksEngine(
   filters?: NunjucksFilterMap,
   throwOnUndefined: boolean = false,
@@ -450,10 +446,7 @@ export function getNunjucksEngine(
   // Configure environment variables as template globals
   // PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS now specifically controls process.env access (defaults to true in self-hosted mode)
   // Config env variables from the config file are always available
-  const processEnvVarsDisabled = getEnvBool(
-    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-  );
+  const processEnvVarsDisabled = shouldDisableTemplateProcessEnvVars();
 
   const envGlobals = {
     ...(processEnvVarsDisabled ? {} : process.env),

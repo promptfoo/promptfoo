@@ -1,4 +1,4 @@
-import { isTemplatingDisabled } from './templates';
+import { isTemplatingDisabled } from './templatePolicy';
 
 import type { GradingResult, Vars } from '../types/index';
 
