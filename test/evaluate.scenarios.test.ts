@@ -9,7 +9,7 @@ import { evaluate } from '../src/node/evaluate';
 import { REDACTED } from '../src/util/sanitizer';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
-import type { ApiProvider, ProviderOptions } from '../src/types';
+import type { ApiProvider, ProviderOptions, TestCase } from '../src/types';
 
 function createMockProvider(id: string): ApiProvider {
   return {
@@ -579,7 +579,11 @@ describe('programmatic scenario config expansion', () => {
 
     const summary = await record.toEvaluateSummary();
     const scenario = record.config.scenarios?.[0];
-    const persistedTest = typeof scenario === 'object' ? scenario.tests[0] : undefined;
+    const persistedTests =
+      typeof scenario === 'object' && Array.isArray(scenario.tests)
+        ? (scenario.tests as TestCase[])
+        : [];
+    const persistedTest = persistedTests[0];
 
     expect(summary.results[0].response?.output).toBe('scenario-test-output');
     expect(persistedTest?.provider).toBe(`file://${path.join(scenarioDir, 'provider.cjs')}`);

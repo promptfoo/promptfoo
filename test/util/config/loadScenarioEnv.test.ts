@@ -3,10 +3,13 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { __resolveScenarioTargetProviderReferencesForTests } from '../../../src/evaluator';
+import { type ApiProvider, type Scenario, type TestSuite } from '../../../src/types/index';
 import { combineConfigs } from '../../../src/util/config/load';
 import {
   expandScenarioConfigValues,
   getScenarioSourceContext,
+  loadScenarioConfigs,
 } from '../../../src/util/config/scenarioMatrix';
 import { readScenarioTests } from '../../../src/util/testCaseReader';
 
@@ -142,11 +145,37 @@ describe('multi-config scenario env provenance', () => {
       sourceContext?.basePath,
       sourceContext?.envOverrides,
     );
-    const provider = tests?.[0].provider as
-      | { id: () => string; callApi: () => Promise<{ output: string }> }
+    const provider = tests?.[0]?.provider;
+
+    expect(sourceContext?.envOverrides?.PROVIDER).toBe('provider-a.cjs');
+    expect(provider).toBe(`file://${path.join(sourceDir, 'provider-a.cjs')}`);
+  });
+
+  it('uses the source config env when instantiating scenario providers', async () => {
+    const root = makeDir();
+    const sourceDir = path.join(root, 'a');
+    const sourceScenarioPath = path.join(sourceDir, 'scenario.json');
+    writeJson(sourceScenarioPath, [{ config: [{ provider: 'echo' }], tests: [{}] }]);
+
+    const scenarios = (await loadScenarioConfigs([`file://${sourceScenarioPath}`], root, {
+      OPENAI_API_KEY: 'from-source',
+    })) as Scenario[];
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite',
+      callApi: async () => ({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [{ raw: '{{ value }}', label: 'prompt' }],
+      scenarios,
+      env: { OPENAI_API_KEY: 'from-combined-suite' },
+    };
+
+    const resolvedSuite = await __resolveScenarioTargetProviderReferencesForTests(testSuite);
+    const provider = resolvedSuite.scenarios?.[0].config[0].provider as
+      | { options?: { env?: Record<string, string> } }
       | undefined;
 
-    expect(provider?.id()).toBe('A');
-    await expect(provider?.callApi()).resolves.toEqual({ output: 'A' });
+    expect(provider?.options?.env?.OPENAI_API_KEY).toBe('from-source');
   });
 });

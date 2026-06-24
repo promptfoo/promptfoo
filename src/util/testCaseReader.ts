@@ -730,13 +730,7 @@ export async function readScenarioTests(
   const normalizedTests: TestCase[] = [];
   for (const test of Array.isArray(tests) ? tests : [tests]) {
     if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
-      normalizedTests.push(
-        await readTest(
-          resolveScenarioTestCaseProviderRefs(basePath, test, envOverrides) as TestCaseWithVarsFile,
-          basePath,
-          true,
-        ),
-      );
+      normalizedTests.push(await readTest(test as TestCaseWithVarsFile, basePath, true));
       continue;
     }
     for (const loadedTest of await loadScenarioTestSource(test, basePath, envOverrides)) {

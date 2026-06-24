@@ -271,6 +271,34 @@ describe('scenarioMatrix (real filesystem)', () => {
       ]);
     });
 
+    it('canonicalizes bare matrix provider map keys against the matrix file', async () => {
+      const matrixPath = write(
+        'matrices/provider-map.yaml',
+        `- vars:
+    case: provider-map
+  provider:
+    "./provider.cjs":
+      label: local-provider
+`,
+      );
+
+      const expanded = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+      );
+
+      expect(expanded).toEqual([
+        {
+          vars: { case: 'provider-map' },
+          provider: {
+            [path.join(tmpDir, 'matrices/provider.cjs')]: {
+              label: 'local-provider',
+            },
+          },
+        },
+      ]);
+    });
+
     it('materializes matrix row file refs against the matrix file', async () => {
       const matrixPath = write(
         'matrices/rows.yaml',

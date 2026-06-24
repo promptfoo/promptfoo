@@ -15,6 +15,7 @@ import {
   expandScenarioConfigValues,
   getScenarioSourceContext,
   loadScenarioConfigs,
+  transferScenarioSourceContext,
 } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
@@ -302,7 +303,7 @@ async function createRuntimeTestSuite(
             sourceContext.basePath,
             sourceContext.envOverrides,
           );
-          return {
+          return transferScenarioSourceContext(scenario, {
             ...scenario,
             ...(scenarioTests === undefined ? {} : { tests: scenarioTests }),
             config: await expandScenarioConfigValues(
@@ -310,7 +311,7 @@ async function createRuntimeTestSuite(
               sourceContext.basePath,
               sourceContext.envOverrides,
             ),
-          };
+          });
         }),
       )
     : undefined;

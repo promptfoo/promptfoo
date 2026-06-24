@@ -12,8 +12,18 @@ import {
   renderEnvOnlyInStringForFilePath,
 } from '../file';
 import { isJavascriptFile } from '../fileExtensions';
-import { normalizeFilePath, parseFileUrl } from '../functions/loadFunction';
+import {
+  getScenarioConfigSourceContext,
+  getScenarioSourceContext,
+  normalizeFilePath,
+  parseFileUrl,
+  setScenarioConfigSourceContext,
+  setScenarioSourceContext,
+  transferScenarioSourceContext,
+} from '../functions/loadFunction';
 import { ConfigResolutionError } from './errors';
+
+export { getScenarioSourceContext, transferScenarioSourceContext };
 
 import type {
   EnvOverrides,
@@ -37,28 +47,6 @@ interface DiagnosticKeySummary {
 }
 
 type ScenarioInput = Exclude<NonNullable<TestSuiteConfig['scenarios']>[number], string>;
-
-interface ScenarioConfigSourceContext {
-  basePath: string;
-  envOverrides?: EnvOverrides;
-}
-
-const scenarioConfigSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
-const scenarioSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
-
-export function getScenarioSourceContext(
-  scenario: object,
-): ScenarioConfigSourceContext | undefined {
-  return scenarioSourceContexts.get(scenario);
-}
-
-export function transferScenarioSourceContext<T extends object>(source: object, target: T): T {
-  const sourceContext = scenarioSourceContexts.get(source);
-  if (sourceContext) {
-    scenarioSourceContexts.set(target, sourceContext);
-  }
-  return target;
-}
 
 function createDiagnosticKeySummary(): DiagnosticKeySummary {
   return { keys: [], omitted: 0 };
@@ -186,9 +174,9 @@ export function resolveScenarioConfigValuesRefs(
         ...entry,
         $values: resolveFileRefFromBase(basePath, entry.$values, envOverrides),
       };
-      scenarioConfigSourceContexts.set(
+      setScenarioConfigSourceContext(
         resolved,
-        scenarioConfigSourceContexts.get(entry) ?? { basePath, envOverrides },
+        getScenarioConfigSourceContext(entry) ?? { basePath, envOverrides },
       );
       return resolved;
     }),
@@ -430,7 +418,9 @@ function resolveScenarioProviderRef(
   let changed = false;
   for (const [key, value] of Object.entries(record)) {
     const renderedKey = renderSourceEnvTemplates(key, envOverrides);
-    const resolvedKey = resolveFileRefFromBase(basePath, renderedKey, envOverrides);
+    const resolvedKey = isBareLocalProviderPath(renderedKey)
+      ? resolveProviderPathFromBase(basePath, renderedKey)
+      : resolveFileRefFromBase(basePath, renderedKey, envOverrides);
     const resolvedValue = resolveScenarioProviderRef(basePath, value, envOverrides, seen);
     if (resolvedKey !== key || resolvedValue !== value) {
       changed = true;
@@ -619,13 +609,13 @@ export function resolveScenarioFileRefs(
   scenario: ScenarioInput,
   envOverrides?: EnvOverrides,
 ): ScenarioInput {
-  const sourceContext = scenarioSourceContexts.get(scenario) ?? { basePath, envOverrides };
+  const sourceContext = getScenarioSourceContext(scenario) ?? { basePath, envOverrides };
   const resolved = resolveScenarioTestsRefs(
     sourceContext.basePath,
     resolveScenarioConfigValuesRefs(sourceContext.basePath, scenario, sourceContext.envOverrides),
     sourceContext.envOverrides,
   );
-  scenarioSourceContexts.set(resolved, sourceContext);
+  setScenarioSourceContext(resolved, sourceContext);
   return resolved;
 }
 
@@ -874,7 +864,7 @@ export async function expandScenarioConfigValues(
     }
 
     const ref = assertValidValuesRef(entry, `scenario config entry ${entryIndex + 1}`);
-    const sourceContext = scenarioConfigSourceContexts.get(ref) ?? { basePath, envOverrides };
+    const sourceContext = getScenarioConfigSourceContext(ref) ?? { basePath, envOverrides };
     const valuesRef = resolveFileRefFromBase(
       sourceContext.basePath,
       ref.$values,

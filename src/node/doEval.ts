@@ -55,6 +55,7 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
+import { sanitizeObject } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -219,6 +220,69 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       `,
     );
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function sanitizeScenarioProviderRef(provider: unknown): unknown {
+  return sanitizeObject(provider, {
+    context: 'scenario provider',
+    maxDepth: Number.POSITIVE_INFINITY,
+  });
+}
+
+function toPersistableScenarioTestCase(testCase: unknown): unknown {
+  if (!isPlainRecord(testCase)) {
+    return testCase;
+  }
+
+  let persisted: Record<string, unknown> | undefined;
+  const ensurePersisted = () => {
+    persisted ??= { ...testCase };
+    return persisted;
+  };
+
+  if (Object.prototype.hasOwnProperty.call(testCase, 'provider')) {
+    const provider = sanitizeScenarioProviderRef(testCase.provider);
+    if (provider !== testCase.provider) {
+      ensurePersisted().provider = provider;
+    }
+  }
+
+  if (isPlainRecord(testCase.options)) {
+    const options = toPersistableScenarioTestCase(testCase.options);
+    if (options !== testCase.options) {
+      ensurePersisted().options = options;
+    }
+  }
+
+  if (Array.isArray(testCase.assert)) {
+    const originalAssertions = testCase.assert;
+    const assertions = originalAssertions.map(toPersistableScenarioTestCase);
+    if (assertions.some((assertion, index) => assertion !== originalAssertions[index])) {
+      ensurePersisted().assert = assertions;
+    }
+  }
+
+  return persisted ?? testCase;
+}
+
+function toPersistableScenario(scenario: Scenario): Scenario {
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config)
+      ? { config: scenario.config.map(toPersistableScenarioTestCase) }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? { tests: scenario.tests.map(toPersistableScenarioTestCase) }
+      : {}),
+  } as Scenario;
 }
 
 export async function doEval(
@@ -777,11 +841,21 @@ export async function doEval(
 
     // Create or load eval record
     const author = getAuthor();
+    const persistedConfig =
+      Array.isArray(config.scenarios) && config.scenarios.length > 0
+        ? {
+            ...config,
+            scenarios: config.scenarios.map((scenario) =>
+              typeof scenario === 'object' ? toPersistableScenario(scenario as Scenario) : scenario,
+            ),
+          }
+        : config;
+
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(persistedConfig, testSuite.prompts, { author, runtimeOptions })
+        : new Eval(persistedConfig, { author, runtimeOptions });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

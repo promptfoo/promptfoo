@@ -5,7 +5,12 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { __buildTestsFromSuiteForTests, evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import {
+  type ApiProvider,
+  type CompletedPrompt,
+  type EvaluateSummaryV3,
+  type TestSuite,
+} from '../../src/types/index';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -310,14 +315,15 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
 
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].provider.id).toBe('scenario-override');
     expect(summary.results[0].prompt.raw).toBe('one');
-    expect(summary.prompts.filter((prompt) => prompt.provider === 'scenario-override')).toEqual([
-      expect.objectContaining({ raw: 'one' }),
-    ]);
+    const scenarioPrompts = summary.prompts.filter(
+      (prompt: CompletedPrompt) => prompt.provider === 'scenario-override',
+    );
+    expect(scenarioPrompts).toEqual([expect.objectContaining({ raw: 'one' })]);
   });
 
   it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {

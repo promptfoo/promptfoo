@@ -71,7 +71,12 @@ import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
-import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import {
+  getScenarioSourceContext,
+  loadFunction,
+  parseFileUrl,
+  transferScenarioSourceContext,
+} from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
   resolveConfiguredProviderReference,
@@ -2255,18 +2260,31 @@ async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Pr
   let scenariosChanged = false;
   const resolvedScenarios = [];
   for (const scenario of testSuite.scenarios) {
-    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, testSuite.env);
+    const sourceEnv = getScenarioSourceContext(scenario)?.envOverrides ?? testSuite.env;
+    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, sourceEnv);
     const resolvedTests = scenario.tests
-      ? await resolveScenarioProviderRows(scenario.tests, testSuite.env)
+      ? await resolveScenarioProviderRows(scenario.tests, sourceEnv)
       : scenario.tests;
     if (resolvedConfig !== scenario.config || resolvedTests !== scenario.tests) {
       scenariosChanged = true;
-      resolvedScenarios.push({ ...scenario, config: resolvedConfig, tests: resolvedTests });
+      resolvedScenarios.push(
+        transferScenarioSourceContext(scenario, {
+          ...scenario,
+          config: resolvedConfig,
+          tests: resolvedTests,
+        }),
+      );
     } else {
       resolvedScenarios.push(scenario);
     }
   }
   return scenariosChanged ? { ...testSuite, scenarios: resolvedScenarios } : testSuite;
+}
+
+export async function __resolveScenarioTargetProviderReferencesForTests(
+  testSuite: TestSuite,
+): Promise<TestSuite> {
+  return resolveScenarioTargetProviderReferences(testSuite);
 }
 
 function getDefaultTest(testSuite: TestSuite) {
