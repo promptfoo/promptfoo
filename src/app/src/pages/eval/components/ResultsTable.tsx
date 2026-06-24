@@ -1090,7 +1090,11 @@ async function saveManualRating({
       });
 
   if (!response.ok) {
-    if (response.status >= 400 && response.status < 500) {
+    if (
+      response.status >= 400 &&
+      response.status < 500 &&
+      ![408, 425, 429].includes(response.status)
+    ) {
       throw new ConfirmedRatingPersistenceError('Network response was not ok');
     }
     throw new Error(`Ambiguous rating response status: ${response.status}`);
@@ -1797,6 +1801,11 @@ function ResultsTable({
         return scope.mounted && scope.generation === scopeGeneration && scope.evalId === evalId;
       };
       const queueKey = version && version >= 4 ? resultId : `legacy:${evalId ?? ''}`;
+      const queuedLocation = findRatingOutput(latestTableRef.current, resultId);
+      if (!queuedLocation) {
+        return;
+      }
+      const queuedOutput = queuedLocation.output;
       let currentRequest: Promise<void>;
       const runRating = async () => {
         if (!isScopeActive()) {
@@ -1804,14 +1813,10 @@ function ResultsTable({
         }
         const currentTable = latestTableRef.current;
         const currentLocation = findRatingOutput(currentTable, resultId);
-        if (!currentLocation) {
+        if (!currentLocation && (!version || version < 4)) {
           return;
         }
-        const {
-          output: existingOutput,
-          promptIndex: currentPromptIndex,
-          rowIndex: currentRowIndex,
-        } = currentLocation;
+        const existingOutput = currentLocation?.output ?? queuedOutput;
         const ratingUpdate = getManualRatingUpdate({
           existingOutput,
           isPass,
@@ -1825,19 +1830,24 @@ function ResultsTable({
           score,
           comment,
         });
-        const newTable = buildRatingTableUpdate({
-          head: currentTable.head,
-          body: currentTable.body,
-          rowIndex: currentRowIndex,
-          promptIndex: currentPromptIndex,
-          ratingUpdate,
-          gradingResult,
-        });
-        const optimisticOutput = newTable.body[currentRowIndex].outputs[currentPromptIndex];
-        invariant(optimisticOutput, 'Optimistic rating output is required');
+        const newTable = currentLocation
+          ? buildRatingTableUpdate({
+              head: currentTable.head,
+              body: currentTable.body,
+              rowIndex: currentLocation.rowIndex,
+              promptIndex: currentLocation.promptIndex,
+              ratingUpdate,
+              gradingResult,
+            })
+          : currentTable;
+        const optimisticOutput = currentLocation
+          ? newTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex]
+          : undefined;
 
-        latestTableRef.current = newTable;
-        setTable(newTable);
+        if (optimisticOutput) {
+          latestTableRef.current = newTable;
+          setTable(newTable);
+        }
         if (inComparisonMode) {
           showToast('Ratings are not saved in comparison mode', 'warning');
           return;
@@ -1862,7 +1872,10 @@ function ResultsTable({
           if (!isScopeActive()) {
             return;
           }
-          if (persistedResult && findRatingOutput(latestTableRef.current, resultId)) {
+          const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+          const ownsOptimisticOutput =
+            optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
+          if (persistedResult && ownsOptimisticOutput) {
             const reconciledTable = applyPersistedRatingResult({
               table: latestTableRef.current,
               resultId,
@@ -1872,10 +1885,14 @@ function ResultsTable({
             setTable(reconciledTable);
           }
           const query = latestRatingQueryRef.current;
+          const stalePersistedResponse = persistedResult && !ownsOptimisticOutput;
           if (
             persistedResult &&
             pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
-            (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
+            (stalePersistedResponse ||
+              query.filterMode !== 'all' ||
+              Boolean(query.searchText) ||
+              query.filters.length > 0)
           ) {
             await refreshCurrentPage();
           }
@@ -1888,7 +1905,7 @@ function ResultsTable({
           }
           if (error instanceof ConfirmedRatingPersistenceError) {
             const latestLocation = findRatingOutput(latestTableRef.current, resultId);
-            if (latestLocation?.output === optimisticOutput) {
+            if (optimisticOutput && latestLocation?.output === optimisticOutput) {
               const rolledBackTable = replaceRatingOutput(
                 latestTableRef.current,
                 resultId,
@@ -1903,6 +1920,7 @@ function ResultsTable({
             }
             const query = latestRatingQueryRef.current;
             if (
+              optimisticOutput !== undefined &&
               latestLocation?.output === optimisticOutput &&
               pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
               (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)

@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -4484,7 +4485,50 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
   });
 
-  it('cancels a queued rating when its result leaves the current page', async () => {
+  it('persists a rating queued while a filtered refresh removes the result', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    let resolveRefresh!: (value: { table: EvaluateTable }) => void;
+    const refreshResponse = new Promise<{ table: EvaluateTable }>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const mockFetchEvalData = vi.fn().mockReturnValue(refreshResponse);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'test-output-1',
+        success: false,
+        score: 0.35,
+        failureReason: 2,
+        gradingResult: { pass: false, score: 0.35 },
+      }),
+    } as any);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} filterMode="user-rated" />);
+    const clearButton = screen.getByRole('button', { name: 'Clear rating' });
+    await user.click(clearButton);
+    await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
+    await user.click(clearButton);
+    resolveRefresh({ table: { head: mockTable.head, body: [] } });
+
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
+  });
+
+  it('persists a queued v4 rating when its result leaves the current page', async () => {
     const user = userEvent.setup();
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
@@ -4542,9 +4586,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(
-      mockCallApi.mock.calls.filter(([url]: [string]) => url.includes('/results/')).length,
-    ).toBe(1);
+    await waitFor(() =>
+      expect(
+        mockCallApi.mock.calls.filter(([url]: [string]) => url.includes('/results/')).length,
+      ).toBe(2),
+    );
   });
 
   it('does not update the global table after unmounting with a rating in flight', async () => {
@@ -4817,11 +4863,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(mockSetTable).toHaveBeenCalledTimes(1);
   });
 
-  it('refetches instead of rolling back after an ambiguous server error', async () => {
+  it('refetches instead of rolling back after an ambiguous request timeout', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-    mockCallApi.mockResolvedValueOnce({ ok: false, status: 503 } as any);
+    mockCallApi.mockResolvedValueOnce({ ok: false, status: 408 } as any);
 
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -4839,6 +4885,55 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
+    expect(mockSetTable).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not apply a stale success response over newer same-result state', async () => {
+    const user = userEvent.setup();
+    let currentTable = createMockTableWithHumanAssertion();
+    const mockFetchEvalData = vi.fn().mockResolvedValue(null);
+    let resolveResponse!: (response: any) => void;
+    const response = new Promise<any>((resolve) => {
+      resolveResponse = resolve;
+    });
+    mockCallApi.mockReturnValueOnce(response);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: currentTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    currentTable = structuredClone(currentTable);
+    currentTable.body[0].outputs[0] = {
+      ...currentTable.body[0].outputs[0],
+      pass: true,
+      score: 0.8,
+      gradingResult: { pass: true, score: 0.8, reason: 'Newer external rating' },
+    };
+    rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+    resolveResponse({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'test-output-1',
+        success: false,
+        score: 0.35,
+        failureReason: 2,
+        gradingResult: { pass: false, score: 0.35, reason: 'Stale response' },
+      }),
+    });
 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
     expect(mockSetTable).toHaveBeenCalledTimes(1);
