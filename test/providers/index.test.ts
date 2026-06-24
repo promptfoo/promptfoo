@@ -773,14 +773,19 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with litellm uses the OpenAI key fallback', async () => {
-    const provider = await loadApiProvider('litellm:gpt-5.1-mini', {
-      options: { env: { OPENAI_API_KEY: 'test-openai-api-key' } },
-    });
-    expect(provider.id()).toBe('litellm:gpt-5.1-mini');
-    expect(provider.toString()).toBe('[LiteLLM Provider gpt-5.1-mini]');
-    expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
-    expect(provider.config.apiKeyEnvar).toBe('OPENAI_API_KEY');
-    expect((provider as LiteLLMProvider).getApiKey?.()).toBe('test-openai-api-key');
+    const restoreEnv = mockProcessEnv({ LITELLM_API_KEY: undefined });
+    try {
+      const provider = await loadApiProvider('litellm:gpt-5.1-mini', {
+        options: { env: { OPENAI_API_KEY: 'test-openai-api-key' } },
+      });
+      expect(provider.id()).toBe('litellm:gpt-5.1-mini');
+      expect(provider.toString()).toBe('[LiteLLM Provider gpt-5.1-mini]');
+      expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
+      expect(provider.config.apiKeyEnvar).toBe('OPENAI_API_KEY');
+      expect((provider as LiteLLMProvider).getApiKey?.()).toBe('test-openai-api-key');
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('loadApiProvider with litellm:chat', async () => {
