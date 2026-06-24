@@ -139,10 +139,6 @@ export function MediaFilters({
   };
 
   const moveHighlightedEval = (direction: 1 | -1) => {
-    if (evalOptions.length === 0) {
-      return;
-    }
-
     setHighlightedEvalIndex((currentIndex) => {
       if (currentIndex === -1) {
         return direction === 1 ? 0 : evalOptions.length - 1;
@@ -334,29 +330,40 @@ export function MediaFilters({
               aria-label="Evaluations"
               className="max-h-[300px] overflow-y-auto p-1"
             >
-              {/* All Evaluations option */}
-              <button
-                id={`${evalFilterListboxId}-option-0`}
-                type="button"
-                role="option"
-                tabIndex={-1}
-                aria-selected={!evalFilter}
-                data-highlighted={highlightedEvalIndex === 0 || undefined}
-                className={cn(
-                  'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
-                  'hover:bg-accent hover:text-accent-foreground',
-                  highlightedEvalIndex === 0 && 'bg-accent text-accent-foreground',
-                  !evalFilter && 'bg-accent',
-                )}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setHighlightedEvalIndex(0)}
-                onClick={() => selectEvalOption('')}
-              >
-                <Check className={cn('mr-2 h-4 w-4', evalFilter ? 'opacity-0' : 'opacity-100')} />
-                <span>All Evaluations</span>
-              </button>
+              {evalOptions.map((option, optionIndex) => {
+                const isSelected = evalFilter === option.value;
 
-              {/* Filtered eval options */}
+                return (
+                  <button
+                    key={`evaluation:${option.value}`}
+                    id={`${evalFilterListboxId}-option-${optionIndex}`}
+                    type="button"
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={isSelected}
+                    data-highlighted={highlightedEvalIndex === optionIndex || undefined}
+                    className={cn(
+                      'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
+                      'hover:bg-accent hover:text-accent-foreground',
+                      highlightedEvalIndex === optionIndex && 'bg-accent text-accent-foreground',
+                      isSelected && 'bg-accent',
+                    )}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setHighlightedEvalIndex(optionIndex)}
+                    onClick={() => selectEvalOption(option.value)}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        optionIndex > 0 && 'shrink-0',
+                        isSelected ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    <span className={cn(optionIndex > 0 && 'truncate')}>{option.label}</span>
+                  </button>
+                );
+              })}
+
               {evalsLoading ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                   <Spinner className="h-4 w-4" />
@@ -371,40 +378,7 @@ export function MediaFilters({
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   No evaluations found
                 </div>
-              ) : (
-                evals.map((e, index) => {
-                  const optionIndex = index + 1;
-
-                  return (
-                    <button
-                      key={e.evalId}
-                      id={`${evalFilterListboxId}-option-${optionIndex}`}
-                      type="button"
-                      role="option"
-                      tabIndex={-1}
-                      aria-selected={evalFilter === e.evalId}
-                      data-highlighted={highlightedEvalIndex === optionIndex || undefined}
-                      className={cn(
-                        'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
-                        'hover:bg-accent hover:text-accent-foreground',
-                        highlightedEvalIndex === optionIndex && 'bg-accent text-accent-foreground',
-                        evalFilter === e.evalId && 'bg-accent',
-                      )}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onMouseEnter={() => setHighlightedEvalIndex(optionIndex)}
-                      onClick={() => selectEvalOption(e.evalId)}
-                    >
-                      <Check
-                        className={cn(
-                          'mr-2 h-4 w-4 shrink-0',
-                          evalFilter === e.evalId ? 'opacity-100' : 'opacity-0',
-                        )}
-                      />
-                      <span className="truncate">{e.description}</span>
-                    </button>
-                  );
-                })
-              )}
+              ) : null}
               {evalsTruncated && !evalsLoading && !evalsError && (
                 <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
                   {evalSearchQuery

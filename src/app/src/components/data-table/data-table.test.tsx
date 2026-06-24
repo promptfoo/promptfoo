@@ -214,9 +214,18 @@ describe('DataTable', () => {
       },
     ];
 
-    render(<DataTable columns={groupedColumns} data={[{ id: '1', name: 'Grouped row' }]} />);
+    const { container } = render(
+      <DataTable columns={groupedColumns} data={[{ id: '1', name: 'Grouped row' }]} />,
+    );
 
     expect(screen.getByText('Identity').closest('th')).toHaveAttribute('colspan', '2');
+    expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '3');
+    expect(container.querySelectorAll('thead tr')[0]).toHaveAttribute('aria-rowindex', '1');
+    expect(container.querySelectorAll('thead tr')[1]).toHaveAttribute('aria-rowindex', '2');
+    expect(container.querySelector('tbody tr[data-rowindex]')).toHaveAttribute(
+      'aria-rowindex',
+      '3',
+    );
   });
 
   it('lists hideable grouped leaf columns with explicit toggle labels', async () => {
@@ -450,6 +459,17 @@ describe('DataTable', () => {
       const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
       expect(renderedRows.length).toBeGreaterThan(0);
       expect(renderedRows.length).toBeLessThan(100);
+      expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '1001');
+      expect(container.querySelector('thead tr')).toHaveAttribute('aria-rowindex', '1');
+      renderedRows.forEach((row) => {
+        expect(row).toHaveAttribute(
+          'aria-rowindex',
+          String(Number(row.getAttribute('data-rowindex')) + 2),
+        );
+      });
+      container.querySelectorAll('tbody tr[aria-hidden="true"]').forEach((row) => {
+        expect(row).not.toHaveAttribute('aria-rowindex');
+      });
       expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     });
 
@@ -543,6 +563,17 @@ describe('DataTable', () => {
       );
 
       await screen.findByText('Loaded row 25');
+
+      expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '101');
+      expect(screen.getByText('Loaded row 25').closest('tr')).toHaveAttribute(
+        'aria-rowindex',
+        '27',
+      );
+      const firstSkeletonRow = document.querySelector('tbody tr[aria-busy="true"]');
+      expect(firstSkeletonRow).toHaveAttribute(
+        'aria-rowindex',
+        String(Number(firstSkeletonRow?.getAttribute('data-rowindex')) + 2),
+      );
 
       const checkboxes = screen.getAllByRole('checkbox');
       expect(checkboxes).toHaveLength(2);

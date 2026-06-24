@@ -3,11 +3,10 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
-import type { EvalSummary } from '@promptfoo/types';
 
 vi.mock('@app/utils/api');
 
-const virtualizedReports: EvalSummary[] = Array.from({ length: 240 }, (_, index) => {
+const virtualizedReports = Array.from({ length: 240 }, (_, index) => {
   const sequence = index + 1;
 
   return {
@@ -67,5 +66,15 @@ describe('ReportIndex virtualization layout', () => {
     expect(renderedRows.length).toBeGreaterThan(0);
     expect(renderedRows.length).toBeLessThan(100);
     expect(renderedRows.length).toBeLessThan(virtualizedReports.length);
+
+    const table = screen.getByRole('table');
+    expect(table).toHaveAttribute('aria-rowcount', '241');
+    expect(table.querySelector('thead tr')).toHaveAttribute('aria-rowindex', '1');
+    renderedRows.forEach((row) => {
+      expect(row).toHaveAttribute(
+        'aria-rowindex',
+        String(Number(row.getAttribute('data-rowindex')) + 2),
+      );
+    });
   });
 });
