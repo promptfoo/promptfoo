@@ -15,6 +15,7 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
@@ -28,6 +29,45 @@ vi.mock('os', async (importOriginal) => {
 });
 
 const ORIGINAL_HOME_DIR = os.homedir();
+const VITEST_WORKER_MARKER = '__vitest_worker__';
+const JEST_NATIVE_PROMISE_MARKER = Symbol.for('jest-native-promise');
+
+function withTestRunnerMarkers<T>(
+  markers: { vitest?: boolean; jest?: boolean },
+  callback: () => T,
+): T {
+  const markerKeys: PropertyKey[] = [VITEST_WORKER_MARKER, JEST_NATIVE_PROMISE_MARKER];
+  const descriptors = markerKeys.map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
+
+  try {
+    for (const key of markerKeys) {
+      Reflect.deleteProperty(globalThis, key);
+    }
+    if (markers.vitest) {
+      Object.defineProperty(globalThis, VITEST_WORKER_MARKER, {
+        configurable: true,
+        value: true,
+      });
+    }
+    if (markers.jest) {
+      Object.defineProperty(globalThis, JEST_NATIVE_PROMISE_MARKER, {
+        configurable: true,
+        value: Promise,
+      });
+    }
+    return callback();
+  } finally {
+    for (const [key, descriptor] of descriptors) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, key, descriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, key);
+      }
+    }
+  }
+}
 
 describe('database', () => {
   let tempConfigDir: string;
@@ -75,21 +115,88 @@ describe('database', () => {
     });
 
     it('should allow the default user database when only NODE_ENV is test', () => {
-      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
       vi.stubEnv('NODE_ENV', 'test');
       vi.stubEnv('VITEST', undefined);
       vi.stubEnv('JEST_WORKER_ID', undefined);
 
-      expect(() => getDbPath()).not.toThrow();
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
     });
 
     it('should not use Promptfoo env overrides to identify a test process', () => {
-      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
       cliState.config = { env: { VITEST: 'true', JEST_WORKER_ID: '1' } };
       vi.stubEnv('VITEST', undefined);
       vi.stubEnv('JEST_WORKER_ID', undefined);
 
-      expect(() => getDbPath()).not.toThrow();
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it('should detect Vitest after the process environment is cleared', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+      let error: unknown;
+
+      try {
+        getDbPath();
+      } catch (caught) {
+        error = caught;
+      } finally {
+        restoreEnv();
+      }
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should detect Jest after the process environment is cleared', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+      let error: unknown;
+
+      try {
+        withTestRunnerMarkers({ jest: true }, () => getDbPath());
+      } catch (caught) {
+        error = caught;
+      } finally {
+        restoreEnv();
+      }
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should not identify generic Jest workers as test processes', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', '1');
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it.each(['', '0', 'false'])('should ignore VITEST=%j outside Vitest', (value) => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('VITEST', value);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
     });
 
     it('should refuse an alias that resolves to the default user database', () => {
@@ -111,17 +218,37 @@ describe('database', () => {
       );
     });
 
-    it('should respect filesystem case sensitivity when default directories are absent', () => {
-      const fakeHomeDir = path.join(tempConfigDir, 'missing-home');
-      const caseProbeDir = path.join(fakeHomeDir, 'case-probe');
+    it('should refuse a hard link to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'hard-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'hard-link-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.writeFileSync(path.join(defaultConfigDir, 'promptfoo.db'), 'database');
+      fs.linkSync(
+        path.join(defaultConfigDir, 'promptfoo.db'),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should respect filesystem case sensitivity for existing databases', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'case-home');
       const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
       const differentlyCasedConfigDir = path.join(fakeHomeDir, '.PROMPTFOO');
-      fs.mkdirSync(caseProbeDir, { recursive: true });
-      const isCaseInsensitive = fs.existsSync(path.join(fakeHomeDir, 'CASE-PROBE'));
-      fs.rmSync(caseProbeDir, { recursive: true });
-
-      expect(fs.existsSync(defaultConfigDir)).toBe(false);
-      expect(fs.existsSync(differentlyCasedConfigDir)).toBe(false);
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.writeFileSync(path.join(defaultConfigDir, 'promptfoo.db'), 'default database');
+      const isCaseInsensitive = fs.existsSync(differentlyCasedConfigDir);
+      if (!isCaseInsensitive) {
+        fs.mkdirSync(differentlyCasedConfigDir);
+        fs.writeFileSync(path.join(differentlyCasedConfigDir, 'promptfoo.db'), 'other database');
+      }
 
       vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
       vi.mocked(getConfigDirectoryPath).mockReturnValue(differentlyCasedConfigDir);
@@ -143,6 +270,14 @@ describe('database', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
 
       expect(getDbSignalPath()).toBe(path.resolve(configPath, 'evalLastWritten'));
+    });
+
+    it('should allow the default signal path for in-memory tests', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(getDbSignalPath()).toBe(path.join(defaultConfigDir, 'evalLastWritten'));
     });
   });
 

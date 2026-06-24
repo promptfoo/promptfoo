@@ -35,105 +35,67 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
-const caseInsensitiveFileSystemCache = new Map<string, boolean>();
-
-function swapFirstLetterCase(value: string): string {
-  return value.replace(/[a-zA-Z]/, (character) =>
-    character === character.toLowerCase() ? character.toUpperCase() : character.toLowerCase(),
-  );
-}
-
-function isCaseInsensitiveFileSystem(existingPath: string): boolean {
-  if (process.platform === 'win32') {
+function databasePathsReferToSameFile(firstPath: string, secondPath: string): boolean {
+  const resolvedFirstPath = path.resolve(firstPath);
+  const resolvedSecondPath = path.resolve(secondPath);
+  if (resolvedFirstPath === resolvedSecondPath) {
     return true;
   }
 
-  const cachedResult = caseInsensitiveFileSystemCache.get(existingPath);
-  if (cachedResult !== undefined) {
-    return cachedResult;
+  try {
+    const firstStats = fs.statSync(resolvedFirstPath, { bigint: true });
+    const secondStats = fs.statSync(resolvedSecondPath, { bigint: true });
+    if (
+      firstStats.ino !== 0n &&
+      firstStats.dev === secondStats.dev &&
+      firstStats.ino === secondStats.ino
+    ) {
+      return true;
+    }
+  } catch {
+    // Missing files can still resolve through a shared directory alias below.
   }
 
-  let currentPath = existingPath;
-  while (true) {
-    const basename = path.basename(currentPath);
-    const swappedBasename = swapFirstLetterCase(basename);
-    if (swappedBasename !== basename) {
-      try {
-        const swappedPath = path.join(path.dirname(currentPath), swappedBasename);
-        const isCaseInsensitive =
-          fs.realpathSync.native(swappedPath) === fs.realpathSync.native(currentPath);
-        caseInsensitiveFileSystemCache.set(existingPath, isCaseInsensitive);
-        return isCaseInsensitive;
-      } catch {
-        caseInsensitiveFileSystemCache.set(existingPath, false);
-        return false;
-      }
-    }
-
-    const parentPath = path.dirname(currentPath);
-    if (parentPath === currentPath) {
-      caseInsensitiveFileSystemCache.set(existingPath, false);
-      return false;
-    }
-    currentPath = parentPath;
-  }
-}
-
-function getComparableDatabasePath(dbPath: string): string {
-  const resolvedPath = path.resolve(dbPath);
-  const unresolvedParts: string[] = [];
-  let currentPath = resolvedPath;
-
-  // Resolve from the nearest existing ancestor so missing paths inherit the
-  // filesystem's actual casing behavior.
-  while (true) {
-    try {
-      const existingPath = fs.realpathSync.native(currentPath);
-      const comparablePath = path.join(existingPath, ...unresolvedParts);
-      return isCaseInsensitiveFileSystem(existingPath)
-        ? comparablePath.toLowerCase()
-        : comparablePath;
-    } catch {
-      const parentPath = path.dirname(currentPath);
-      if (parentPath === currentPath) {
-        return process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath;
-      }
-      unresolvedParts.unshift(path.basename(currentPath));
-      currentPath = parentPath;
-    }
+  try {
+    return (
+      path.join(
+        fs.realpathSync.native(path.dirname(resolvedFirstPath)),
+        path.basename(resolvedFirstPath),
+      ) ===
+      path.join(
+        fs.realpathSync.native(path.dirname(resolvedSecondPath)),
+        path.basename(resolvedSecondPath),
+      )
+    );
+  } catch {
+    return false;
   }
 }
 
-function assertSafeTestDatabasePath(dbPath: string): void {
+export function getDbPath() {
+  const configDirectoryPath = getConfigDirectoryPath();
+  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
+  // Runner-owned globals survive helpers that clear process.env; JEST_WORKER_ID alone does not
+  // identify Jest because the generic jest-worker package sets it for ordinary tasks.
   const isTestProcess =
-    process.env.VITEST !== undefined || process.env.JEST_WORKER_ID !== undefined;
-  if (!isTestProcess) {
-    return;
-  }
-
-  const defaultUserDbPath = path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db');
-  if (getComparableDatabasePath(dbPath) === getComparableDatabasePath(defaultUserDbPath)) {
+    process.env.VITEST === 'true' ||
+    Object.hasOwn(globalThis, '__vitest_worker__') ||
+    Object.hasOwn(globalThis, Symbol.for('jest-native-promise'));
+  if (
+    isTestProcess &&
+    databasePathsReferToSameFile(dbPath, path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db'))
+  ) {
     throw new Error(
       'Refusing to open the default Promptfoo database while running tests. ' +
         'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
     );
   }
-}
-
-function getSafeDatabaseDirectoryPath(): string {
-  const configDirectoryPath = getConfigDirectoryPath();
-  const dbPath = path.resolve(configDirectoryPath, 'promptfoo.db');
-  assertSafeTestDatabasePath(dbPath);
   getConfigDirectoryPath(true /* createIfNotExists */);
-  return configDirectoryPath;
-}
-
-export function getDbPath() {
-  return path.resolve(getSafeDatabaseDirectoryPath(), 'promptfoo.db');
+  return dbPath;
 }
 
 export function getDbSignalPath() {
-  return path.resolve(getSafeDatabaseDirectoryPath(), 'evalLastWritten');
+  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
 async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
