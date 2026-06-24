@@ -70,7 +70,7 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -84,19 +84,51 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
+      const matches = Array.from(value.matchAll(regex));
+      const referencesProtectedValue = matches.some(
+        ([, varName]) =>
+          skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName),
+      );
+      const waitsForResolvableDependency =
+        referencesProtectedValue &&
+        matches.some(([, varName]) => {
+          const dependency = variables[varName];
+          return (
+            typeof dependency === 'string' &&
+            !skipResolveVars?.includes(varName) &&
+            !varsResolvedFromSkipped?.has(varName) &&
+            Array.from(dependency.matchAll(regex)).some(
+              ([, dependencyName]) => variables[dependencyName] !== undefined,
+            )
+          );
+        });
+      if (waitsForResolvableDependency) {
+        // Resolve user-authored helper chains before inserting protected values. Once a
+        // protected value is inserted, this key is intentionally opaque to later passes.
+        continue;
+      }
+      let replaced = false;
+      let resolvedFromSkipped = false;
+      const nextValue = value.replace(regex, (placeholder, varName: string) => {
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
+          return placeholder;
         }
+        replaced = true;
+        resolvedFromSkipped ||=
+          Boolean(skipResolveVars?.includes(varName)) ||
+          Boolean(varsResolvedFromSkipped?.has(varName));
+        // A callback inserts stored/provider output literally, including replacement tokens
+        // such as $&, and does not rescan placeholders introduced by that output.
+        return String(variables[varName]);
+      });
+      if (replaced) {
+        variables[key] = nextValue;
+        if (resolvedFromSkipped) {
+          varsResolvedFromSkipped?.add(key);
+        }
+        resolved = false; // Indicate that we've made a replacement and should check again
       }
     }
     iterations++;

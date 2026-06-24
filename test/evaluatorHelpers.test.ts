@@ -2377,6 +2377,72 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it('should replace all protected placeholders before marking the destination protected', () => {
+      const variables = {
+        favoriteFruit: 'apple',
+        reason: 'crisp',
+        message: '{{ favoriteFruit }} is {{ reason }}; repeat: {{ favoriteFruit }}',
+      };
+      const resolvedFromProtected = new Set<string>();
+
+      expect(
+        resolveVariables(variables, ['favoriteFruit', 'reason'], resolvedFromProtected),
+      ).toEqual({
+        favoriteFruit: 'apple',
+        reason: 'crisp',
+        message: 'apple is crisp; repeat: apple',
+      });
+      expect(resolvedFromProtected).toEqual(new Set(['message']));
+    });
+
+    it('should treat replacement-pattern characters as literal protected values', () => {
+      const variables = {
+        message: '{{ whole }}|{{ dollars }}|{{ prefix }}|{{ suffix }}|{{ missing }}',
+        whole: '$&',
+        dollars: '$$',
+        prefix: '$`',
+        suffix: "$'",
+      };
+      const resolvedFromProtected = new Set<string>();
+
+      expect(
+        resolveVariables(
+          variables,
+          ['whole', 'dollars', 'prefix', 'suffix'],
+          resolvedFromProtected,
+        ),
+      ).toEqual({
+        message: ['$&', '$$', '$`', "$'", '{{ missing }}'].join('|'),
+        whole: '$&',
+        dollars: '$$',
+        prefix: '$`',
+        suffix: "$'",
+      });
+      expect(resolvedFromProtected).toEqual(new Set(['message']));
+    });
+
+    it('should preserve deep ordinary helper chains when protected vars are unrelated', () => {
+      const variables = {
+        unused: 'stored',
+        v0: '{{ v1 }}',
+        v1: '{{ v2 }}',
+        v2: '{{ v3 }}',
+        v3: '{{ v4 }}',
+        v4: '{{ v5 }}',
+        v5: '{{ v6 }}',
+        v6: '{{ v7 }}',
+        v7: '{{ v8 }}',
+        v8: '{{ v9 }}',
+        v9: 'done',
+      };
+      const resolvedFromProtected = new Set<string>();
+
+      resolveVariables(variables, ['unused'], resolvedFromProtected);
+
+      expect(variables.v0).toBe('done');
+      expect(resolvedFromProtected).toEqual(new Set());
+    });
   });
 
   describe('runExtensionHook', () => {
