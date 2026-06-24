@@ -68,6 +68,16 @@ function getRetryDelayMs(attempt: number, configuredBackoffMs: number): number {
   return MAX_RETRY_DELAY_MS - 1000 * random;
 }
 
+function getBoundedRetryAfterDelayMs(value: string): number | undefined {
+  const retryAfterMs = parseRetryAfter(value);
+  if (retryAfterMs === null) {
+    return undefined;
+  }
+  const jitter = Math.floor(Math.random() * 1000);
+  const delayWithJitter = retryAfterMs + jitter;
+  return delayWithJitter <= MAX_RETRY_DELAY_MS ? delayWithJitter : MAX_RETRY_DELAY_MS - jitter;
+}
+
 async function discardResponseBody(response: Response): Promise<void> {
   try {
     await response.body?.cancel();
@@ -135,8 +145,18 @@ async function waitForTransientResponseRetry({
   url: RequestInfo;
 }): Promise<void> {
   await discardResponseBody(response);
-  if (response.headers.has('Retry-After')) {
-    await handleRateLimit(response, signal ?? undefined);
+  const retryAfter = response.headers.get('Retry-After');
+  const retryAfterDelayMs = retryAfter ? getBoundedRetryAfterDelayMs(retryAfter) : undefined;
+  if (retryAfterDelayMs !== undefined) {
+    logger.debug('[fetch] Transient HTTP response honoring Retry-After', {
+      url: urlForLog(url),
+      status: response.status,
+      statusText: response.statusText,
+      attempt: attempt + 1,
+      maxAttempts: maxRetries + 1,
+      waitTime: retryAfterDelayMs,
+    });
+    await sleepForRetry(retryAfterDelayMs, signal);
     return;
   }
   const waitTime = getRetryDelayMs(attempt, backoff);

@@ -15,6 +15,7 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+import { checkRemoteHealth } from '../../../src/util/apiHealth';
 import {
   createMockProvider,
   createProviderResponse,
@@ -307,6 +308,10 @@ describe('Plugins', () => {
         targetId: 'cloud-target-123',
       });
 
+      expect(checkRemoteHealth).toHaveBeenCalledWith(
+        'http://test-health-url',
+        abortController.signal,
+      );
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -615,7 +620,6 @@ describe('Plugins', () => {
 
       const abortController = new AbortController();
       abortController.abort();
-      vi.mocked(fetchWithCache).mockRejectedValue(abortController.signal.reason);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
       await expect(
@@ -629,6 +633,58 @@ describe('Plugins', () => {
           abortSignal: abortController.signal,
         }),
       ).rejects.toBe(abortController.signal.reason);
+      expect(checkRemoteHealth).not.toHaveBeenCalled();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should cancel while checking remote generation health', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const abortController = new AbortController();
+      vi.mocked(checkRemoteHealth).mockImplementationOnce(async (_url, signal) => {
+        abortController.abort();
+        signal?.throwIfAborted();
+        return { status: 'OK', message: 'API is healthy' };
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+          abortSignal: abortController.signal,
+        }),
+      ).rejects.toBe(abortController.signal.reason);
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should propagate cancellation after a cached remote generation response', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const abortController = new AbortController();
+      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+        abortController.abort();
+        return {
+          ...mockFetchResponse([{ vars: { testVar: 'cached test' } }]),
+          cached: true,
+        };
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+          abortSignal: abortController.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(abortController.signal.aborted).toBe(true);
     });
 
     it('should log invalid remote responses without including their body', async () => {

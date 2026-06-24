@@ -505,13 +505,23 @@ The fifth argument accepts either the legacy boolean cache-bust flag or an optio
 ```typescript
 export async function fetchWithCache<T>(
   url: string,
-  options?: RequestInit,
+  options?: FetchOptions,
   timeout?: number,
   format?: 'json' | 'text',
   bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
+
+interface FetchOptions extends RequestInit {
+  compress?: boolean;
+  disableTransientRetries?: boolean;
+  retryOnStatusCodes?: readonly number[];
+}
 ```
+
+`retryOnStatusCodes` explicitly opts selected HTTP statuses into the shared retry budget, including
+for non-idempotent methods when the request body is replayable. Use it only when an endpoint's
+contract makes replay safe.
 
 **Example:**
 

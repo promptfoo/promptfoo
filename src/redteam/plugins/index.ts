@@ -6,7 +6,6 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
-import { isAbortError } from '../../util/fetch/errors';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
 import {
@@ -353,10 +352,14 @@ async function fetchRemoteTestCases(
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
+  abortSignal?.throwIfAborted();
+
   // Health check remote before generating test cases
   const remoteHealth = await checkRemoteHealth(
     getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
+    abortSignal,
   );
+  abortSignal?.throwIfAborted();
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
@@ -404,13 +407,13 @@ async function fetchRemoteTestCases(
         headers: getRemoteGenerationHeaders(),
         body,
         signal: abortSignal,
-        // The cloud task API uses 500 for transient task failures. Gateway statuses use
-        // fetchWithRetries' shared transient classifier.
+        // The cloud task API treats these as retryable task or gateway failures.
         retryOnStatusCodes: [500, 502, 503, 504, 524],
       },
       getRequestTimeoutMs(),
       'text',
     );
+    abortSignal?.throwIfAborted();
     if (status !== 200) {
       await deleteFromCache?.();
       logger.error(`Error generating test cases for ${key}`, { status, statusText });
@@ -454,7 +457,7 @@ async function fetchRemoteTestCases(
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
-    if (abortSignal?.aborted || isAbortError(err)) {
+    if (abortSignal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
       throw err;
     }
     logger.error(`Error generating test cases for ${key}`, { error: err });

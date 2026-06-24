@@ -1552,6 +1552,52 @@ describe('fetchWithRetries', () => {
     }
   });
 
+  it('should bound Retry-After on retryable transient responses', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': '9999999999' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    try {
+      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+      expect(sleep).toHaveBeenCalledOnce();
+      expect(sleep).toHaveBeenCalledWith(59_500);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should use normal backoff for malformed Retry-After values', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': 'garbage' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+      expect(sleep).toHaveBeenCalledOnce();
+      expect(sleep).toHaveBeenCalledWith(5000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('should cap retry delays and reject invalid backoff values safely', async () => {
     const transientResponse = createMockResponse({
       status: 503,
