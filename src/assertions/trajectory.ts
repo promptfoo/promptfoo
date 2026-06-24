@@ -18,6 +18,7 @@ import {
   summarizeTrajectoryForJudge,
   type TrajectoryStep,
   type TrajectoryStepMatcher,
+  type TrajectoryStepType,
 } from './trajectoryUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -49,6 +50,15 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
 }
 
 const REDACTED_ARGS_LABEL = '[redacted]';
+const TRAJECTORY_STEP_TYPES = new Set<TrajectoryStepType>([
+  'command',
+  'message',
+  'reasoning',
+  'search',
+  'span',
+  'tool',
+]);
+const TOOL_STEP_TYPES = new Set<TrajectoryStepType>(['tool']);
 
 function getTraceOrThrow(params: AssertionParams) {
   const trace = params.assertionValueContext.trace;
@@ -70,15 +80,39 @@ function requireNamedTrajectoryMatcher(
   matcher: TrajectoryStepMatcher,
   assertionType: string,
   index?: number,
+  options: {
+    allowedTypes?: ReadonlySet<TrajectoryStepType>;
+    requireName?: boolean;
+  } = {},
 ) {
-  if (matcher.pattern || matcher.name) {
-    return;
+  const { allowedTypes = TOOL_STEP_TYPES, requireName = true } = options;
+  const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
+  for (const field of ['name', 'pattern'] as const) {
+    const value = matcher[field] as unknown;
+    if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+      throw new Error(
+        `${assertionType} assertion ${stepLabel} ${field} must be a non-empty string`,
+      );
+    }
   }
 
-  const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
-  throw new Error(
-    `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
-  );
+  if (requireName && matcher.pattern === undefined && matcher.name === undefined) {
+    throw new Error(
+      `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
+    );
+  }
+
+  const rawType = matcher.type as unknown;
+  const matcherTypes = Array.isArray(rawType) ? rawType : rawType === undefined ? [] : [rawType];
+  if (
+    rawType !== undefined &&
+    (matcherTypes.length === 0 ||
+      matcherTypes.some(
+        (type) => typeof type !== 'string' || !allowedTypes.has(type as TrajectoryStepType),
+      ))
+  ) {
+    throw new Error(`${assertionType} assertion ${stepLabel} has an invalid type`);
+  }
 }
 
 function resolveTrajectoryCountBounds(
@@ -131,22 +165,29 @@ function resolveToolMatchers(
   | { kind: 'list'; matchers: TrajectoryStepMatcher[] }
   | { kind: 'count'; matcher: TrajectoryCountValue } {
   if (typeof value === 'string') {
+    const matcher = normalizeTrajectoryMatcher(value, 'tool');
+    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used');
     return {
       kind: 'list',
-      matchers: [normalizeTrajectoryMatcher(value, 'tool')],
+      matchers: [matcher],
     };
   }
 
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    const matchers = value.map((item) => normalizeTrajectoryMatcher(item, 'tool'));
+    matchers.forEach((matcher, index) =>
+      requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used', index),
+    );
     return {
       kind: 'list',
-      matchers: value.map((item) => normalizeTrajectoryMatcher(item, 'tool')),
+      matchers,
     };
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const rawValue = value as Record<string, unknown>;
     const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher, 'tool');
+    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used');
     return {
       kind: 'count',
       matcher: {
@@ -174,12 +215,6 @@ function handleCountedToolUsed(
   }
   const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
   const max = matcher.max;
-  if (!matcher.pattern && !matcher.name) {
-    throw new Error(
-      'trajectory:tool-used assertion object must include a name or pattern property',
-    );
-  }
-
   const matchingSteps = steps.filter((step) => matchesTrajectoryStep(step, matcher));
   const count = matchingSteps.length;
   const matcherLabel = matcher.pattern || matcher.name || '*';
@@ -630,6 +665,10 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
 
   const rawValue = value as Record<string, unknown>;
   const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher);
+  requireNamedTrajectoryMatcher(matcher, 'trajectory:step-count', undefined, {
+    allowedTypes: TRAJECTORY_STEP_TYPES,
+    requireName: false,
+  });
   return {
     ...matcher,
     ...resolveTrajectoryCountBounds(rawValue, 'trajectory:step-count'),

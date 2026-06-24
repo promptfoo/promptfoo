@@ -78,6 +78,9 @@ describe('traceAssertionConfig shared validators', () => {
       expect(traceErrorSpansConfigError({ pattern: '' })).toBe(
         'trace-error-spans assertion pattern must be a non-empty string',
       );
+      expect(traceErrorSpansConfigError({ pattern: '   ' })).toBe(
+        'trace-error-spans assertion pattern must be a non-empty string',
+      );
       expect(traceErrorSpansConfigError({ requirePresence: 'no' })).toBe(
         'trace-error-spans assertion requirePresence must be a boolean',
       );
