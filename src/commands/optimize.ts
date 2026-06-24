@@ -1,10 +1,17 @@
 import chalk from 'chalk';
 import { Command, InvalidArgumentError } from 'commander';
+import cliState from '../cliState';
 import logger from '../logger';
 import { optimizePromptTestSuite } from '../optimizer/promptOptimizer';
 import telemetry from '../telemetry';
-import { type CommandLineOptions, type EvaluateOptions, type UnifiedConfig } from '../types/index';
+import {
+  type CommandLineOptions,
+  type EvaluateOptions,
+  type TestSuite,
+  type UnifiedConfig,
+} from '../types/index';
 import { resolveConfigs } from '../util/config/load';
+import { filterTests } from '../util/eval/filterTests';
 import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 
@@ -29,23 +36,60 @@ function applyCommandLineEvaluateOptions(
   if (commandLineOptions?.filterRange !== undefined) {
     overrides.filterRange = commandLineOptions.filterRange;
   }
-  if (commandLineOptions?.generateSuggestions !== undefined) {
-    overrides.generateSuggestions = commandLineOptions.generateSuggestions;
-  }
   if (commandLineOptions?.maxConcurrency !== undefined) {
     overrides.maxConcurrency = commandLineOptions.maxConcurrency;
   }
   if (commandLineOptions?.repeat !== undefined) {
     overrides.repeat = commandLineOptions.repeat;
   }
-  const generateSuggestions =
-    commandLineOptions?.generateSuggestions ?? config.evaluateOptions?.generateSuggestions;
-  if (generateSuggestions === true && commandLineOptions?.suggestionsCount !== undefined) {
-    overrides.suggestionsCount = commandLineOptions.suggestionsCount;
-  }
   return Object.keys(overrides).length > 0
     ? { ...config, evaluateOptions: { ...config.evaluateOptions, ...overrides } }
     : config;
+}
+
+async function applyOptimizationTestFilters(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+  commandLineOptions: Partial<CommandLineOptions> | undefined,
+): Promise<{ config: Partial<UnifiedConfig>; testSuite: TestSuite }> {
+  const range = config.evaluateOptions?.filterRange;
+  const sample = commandLineOptions?.filterSample;
+  if (range === undefined && sample === undefined) {
+    return { config, testSuite };
+  }
+
+  const hasScenarios = Boolean(testSuite.scenarios?.length);
+  const explicitTestCount = testSuite.tests?.length ?? 0;
+  // A defaultTest-only suite has one implicit row. Sampling cannot reduce it,
+  // and the optimizer already delegates range handling to the evaluator.
+  if (explicitTestCount === 0 && testSuite.scenarios === undefined) {
+    return { config, testSuite };
+  }
+
+  const tests = await filterTests(testSuite, {
+    range: hasScenarios ? undefined : range,
+    sample,
+    sampleSeed: commandLineOptions?.filterSampleSeed,
+  });
+  const shouldSuppressImplicitDefaultTest =
+    !hasScenarios && tests.length === 0 && explicitTestCount > 0;
+
+  return {
+    config:
+      range === undefined
+        ? config
+        : { ...config, evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } },
+    testSuite: {
+      ...testSuite,
+      tests,
+      ...(shouldSuppressImplicitDefaultTest ? { scenarios: [] } : {}),
+    },
+  };
+}
+
+function getOptimizationConcurrency(config: Partial<UnifiedConfig>): number | undefined {
+  const { delay, maxConcurrency } = config.evaluateOptions ?? {};
+  return typeof delay === 'number' && !Number.isNaN(delay) && delay > 0 ? 1 : maxConcurrency;
 }
 
 export async function doOptimize(options: OptimizeOptions): Promise<void> {
@@ -83,15 +127,27 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     validationSplit: options.validationSplit ?? 0,
   });
 
-  const optimizationConfig = applyCommandLineEvaluateOptions(
+  const mergedConfig = applyCommandLineEvaluateOptions(
     resolved.config,
     resolved.commandLineOptions,
   );
-  const result = await optimizePromptTestSuite(optimizationConfig, resolved.testSuite, {
-    promptIndex: options.promptIndex ?? 0,
-    providerIndex: options.providerIndex ?? 0,
-    validationSplit: options.validationSplit,
-  });
+  const { config: optimizationConfig, testSuite: optimizationTestSuite } =
+    await applyOptimizationTestFilters(
+      mergedConfig,
+      resolved.testSuite,
+      resolved.commandLineOptions,
+    );
+  const runOptimization = () =>
+    optimizePromptTestSuite(optimizationConfig, optimizationTestSuite, {
+      promptIndex: options.promptIndex ?? 0,
+      providerIndex: options.providerIndex ?? 0,
+      validationSplit: options.validationSplit,
+    });
+  const concurrency = getOptimizationConcurrency(optimizationConfig);
+  const result =
+    concurrency === undefined
+      ? await runOptimization()
+      : await cliState.withMaxConcurrency(concurrency, runOptimization);
 
   printBorder();
   logger.info(chalk.bold('Prompt optimization result'));

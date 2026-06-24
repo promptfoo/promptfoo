@@ -168,6 +168,36 @@ describe('prompt optimizer', () => {
     expect(getDefaultProviders).not.toHaveBeenCalled();
   });
 
+  it('uses a config evaluateOptions abort signal when no optimizer signal is supplied', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      optimizePromptTestSuite({ evaluateOptions: { abortSignal: controller.signal } } as any, {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        tests: [{}],
+      }),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(getDefaultProviders).not.toHaveBeenCalled();
+  });
+
+  it('prefers an explicit optimizer abort signal over the config signal', async () => {
+    const configController = new AbortController();
+    const optimizerController = new AbortController();
+    const internalEvalOptions = await collectInternalEvalOptions(
+      { evaluateOptions: { abortSignal: configController.signal } } as any,
+      {},
+      { abortSignal: optimizerController.signal },
+    );
+
+    for (const options of internalEvalOptions) {
+      expect(options?.abortSignal).toBe(optimizerController.signal);
+    }
+  });
+
   it('does not return partial candidate results after cancellation', async () => {
     const controller = new AbortController();
     const provider = createMockProvider({
@@ -482,9 +512,11 @@ describe('prompt optimizer', () => {
       evaluateOptions: {
         cache: true,
         delay: 50,
+        generateSuggestions: true,
         maxConcurrency: 1,
         repeat: 2,
         showProgressBar: true,
+        suggestionsCount: 4,
       },
     });
 
@@ -493,10 +525,12 @@ describe('prompt optimizer', () => {
         cache: false,
         delay: 50,
         eventSource: 'library',
+        generateSuggestions: false,
         maxConcurrency: 1,
         repeat: 2,
         showProgressBar: false,
         silent: true,
+        suggestionsCount: undefined,
       }),
     );
   });

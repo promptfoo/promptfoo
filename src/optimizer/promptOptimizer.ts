@@ -769,8 +769,10 @@ function createEvaluationOptions(
     abortSignal,
     cache: false,
     eventSource: 'library',
+    generateSuggestions: false,
     showProgressBar: false,
     silent: true,
+    suggestionsCount: undefined,
     isRedteam: testSuite.redteam != null,
   };
   if (omitFilterRange) {
@@ -810,7 +812,9 @@ export async function optimizePromptTestSuite(
   options: PromptOptimizationOptions = {},
 ): Promise<PromptOptimizationResult> {
   validateOptimizationOptions(options);
-  const abortSignal = options.abortSignal;
+  const configuredAbortSignal = (config.evaluateOptions as InternalEvaluateOptions | undefined)
+    ?.abortSignal;
+  const abortSignal = options.abortSignal ?? configuredAbortSignal;
   throwIfOptimizationAborted(abortSignal);
 
   if (testSuite.prompts.length === 0) {

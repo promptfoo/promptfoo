@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { doOptimize, optimizeCommand } from '../../src/commands/optimize';
 import logger from '../../src/logger';
 import { optimizePromptTestSuite } from '../../src/optimizer/promptOptimizer';
@@ -31,6 +32,7 @@ vi.mock('../../src/logger', () => ({
     debug: vi.fn(),
     info: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -41,6 +43,7 @@ vi.mock('../../src/util/promptfooCommand', () => ({
 describe('optimize command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    cliState.maxConcurrency = undefined;
     process.exitCode = undefined;
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {},
@@ -60,6 +63,8 @@ describe('optimize command', () => {
   });
 
   afterEach(() => {
+    cliState.maxConcurrency = undefined;
+    vi.restoreAllMocks();
     vi.resetAllMocks();
     process.exitCode = undefined;
   });
@@ -132,27 +137,26 @@ describe('optimize command', () => {
   });
 
   it('applies commandLineOptions eval settings to optimization', async () => {
+    const concurrencySpy = vi.spyOn(cliState, 'withMaxConcurrency');
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {
         evaluateOptions: {
-          generateSuggestions: false,
           maxConcurrency: 9,
-          suggestionsCount: 4,
         },
       },
       testSuite: {
         providers: [],
         prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        tests: [{}],
+        tests: Array.from({ length: 5 }, (_, id) => ({ vars: { id } })),
       },
       basePath: '',
       commandLineOptions: {
         delay: 25,
-        filterRange: '1:3',
-        generateSuggestions: true,
+        filterRange: '0:4',
+        filterSample: 2,
+        filterSampleSeed: 7,
         maxConcurrency: 5,
         repeat: 2,
-        suggestionsCount: 3,
       },
     } as any);
 
@@ -162,23 +166,29 @@ describe('optimize command', () => {
       {
         evaluateOptions: {
           delay: 25,
-          filterRange: '1:3',
-          generateSuggestions: true,
+          filterRange: undefined,
           maxConcurrency: 5,
           repeat: 2,
-          suggestionsCount: 3,
         },
       },
-      expect.any(Object),
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({ vars: { id: expect.any(Number) } }),
+        ]),
+      }),
       expect.any(Object),
     );
+    const filteredSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
+    expect(filteredSuite.tests).toHaveLength(2);
+    expect(filteredSuite.tests?.every((test) => Number(test.vars?.id) < 4)).toBe(true);
+    expect(concurrencySpy).toHaveBeenCalledWith(1, expect.any(Function));
   });
 
-  it('lets commandLineOptions disable evaluateOptions prompt suggestions', async () => {
+  it('does not merge command prompt-suggestion settings into optimizer eval config', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {
         evaluateOptions: {
-          generateSuggestions: true,
+          generateSuggestions: false,
           suggestionsCount: 4,
         },
       },
@@ -189,7 +199,7 @@ describe('optimize command', () => {
       },
       basePath: '',
       commandLineOptions: {
-        generateSuggestions: false,
+        generateSuggestions: true,
         suggestionsCount: 3,
       },
     } as any);
@@ -209,6 +219,7 @@ describe('optimize command', () => {
   });
 
   it('lets commandLineOptions delay zero disable a positive evaluateOptions delay', async () => {
+    const concurrencySpy = vi.spyOn(cliState, 'withMaxConcurrency');
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: { evaluateOptions: { delay: 100, maxConcurrency: 8 } },
       testSuite: {
@@ -225,6 +236,29 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith(
       { evaluateOptions: { delay: 0, maxConcurrency: 4 } },
       expect.any(Object),
+      expect.any(Object),
+    );
+    expect(concurrencySpy).toHaveBeenCalledWith(4, expect.any(Function));
+  });
+
+  it('suppresses the implicit default row when command filters select no explicit tests', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        defaultTest: { vars: { fallback: true } },
+        tests: [{ vars: { id: 0 } }],
+      },
+      basePath: '',
+      commandLineOptions: { filterRange: '2:3' },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      { evaluateOptions: { filterRange: undefined } },
+      expect.objectContaining({ tests: [], scenarios: [] }),
       expect.any(Object),
     );
   });
