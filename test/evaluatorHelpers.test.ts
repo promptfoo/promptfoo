@@ -560,12 +560,12 @@ describe('evaluatorHelpers', () => {
         ['payload'],
       );
 
-      // With a red-team payload present, nested preprocessing is disabled as a whole
-      // so aliases through arbitrary object graphs cannot bypass the skip boundary.
+      // The file can be inspected, but content that references a skipped payload is
+      // restored to the original reference instead of being recursively rendered.
       expect(vars.context.message).toBe('file:///path/to/message.txt');
       expect(renderedPrompt).toBe('file:///path/to/message.txt');
       expect(renderedPrompt).not.toContain('must-not-render');
-      expect(readFile).not.toHaveBeenCalled();
+      expect(readFile).toHaveBeenCalledTimes(1);
       mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: undefined });
     });
 
@@ -599,7 +599,7 @@ describe('evaluatorHelpers', () => {
         expect(vars.context.message).toBe('file:///path/to/message.txt');
         expect(renderedPrompt).toBe('file:///path/to/message.txt');
         expect(renderedPrompt).not.toContain(needle);
-        expect(readFile).not.toHaveBeenCalled();
+        expect(readFile).toHaveBeenCalledWith('/path/to/message.txt');
         vi.restoreAllMocks();
       }
     });
@@ -623,7 +623,7 @@ describe('evaluatorHelpers', () => {
 
       expect(vars.context.message).toBe('file:///path/to/message.txt');
       expect(renderedPrompt).not.toContain('INJECTED-OBJECT-PAYLOAD');
-      expect(readFile).not.toHaveBeenCalled();
+      expect(readFile).toHaveBeenCalledTimes(1);
     });
 
     it('should not evaluate skipped-var control tags loaded through nested files (issue #1613)', async () => {
@@ -647,7 +647,8 @@ describe('evaluatorHelpers', () => {
 
       expect(renderedPrompt).not.toContain('SECRET-A');
       expect(renderedPrompt).not.toContain('SECRET-B');
-      expect(readFile).not.toHaveBeenCalled();
+      expect(vars.context.message).toBe('file:///path/to/message.txt');
+      expect(readFile).toHaveBeenCalledTimes(1);
     });
 
     it('should not leak skipped payloads referenced by exotic Nunjucks syntax (issue #1613)', async () => {
@@ -684,7 +685,7 @@ describe('evaluatorHelpers', () => {
         );
         expect(fileRendered, `file path leaked for: ${template}`).not.toContain(SECRET);
         expect(fileVars.context.message).toBe('file:///path/to/message.txt');
-        expect(readFile).not.toHaveBeenCalled();
+        expect(readFile).toHaveBeenCalledWith('/path/to/message.txt');
         vi.restoreAllMocks();
 
         // form-2 path: the exotic template is a plain nested string.
@@ -1378,6 +1379,342 @@ describe('evaluatorHelpers', () => {
       expect(readFile).not.toHaveBeenCalled();
     });
 
+    it('should resolve unrelated nested refs when a visible skipped graph is complete', async () => {
+      const vars: Record<string, any> = {
+        payload: 'attack',
+        context: { report: 'file:///path/to/report.txt' },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('file content');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        vars,
+        {},
+        undefined,
+        ['payload'],
+      );
+
+      expect(renderedPrompt).toBe('file content');
+      expect(vars.context.report).toBe('file content');
+      expect(readFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not dereference nested string aliases of a skipped scalar', async () => {
+      const skippedReference = 'file:///path/to/skipped.txt';
+      const vars: Record<string, any> = {
+        payload: skippedReference,
+        context: { report: skippedReference },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        vars,
+        {},
+        undefined,
+        ['payload'],
+      );
+
+      expect(renderedPrompt).toBe(skippedReference);
+      expect(vars.context.report).toBe(skippedReference);
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not preprocess templates through object aliases of skipped vars', async () => {
+      const shared = { evil: 'secret' };
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: { alias: shared },
+        message: '{{ context.alias.evil | upper }}',
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('{{ context.alias.evil | upper }}');
+    });
+
+    it('should render a static path disjoint from a protected alias in the same root', async () => {
+      const shared = { evil: 'secret' };
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: { attack: shared, name: 'Alice' },
+        system: 'Hello {{ context.name | upper }}',
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ system }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
+    it.each([
+      ['object path', { context: { name: 'Alice' } }, 'context.name'],
+      ['array path', { items: ['Alice'] }, 'items[0]'],
+    ])('should render an unrelated filtered %s', async (_name, unrelatedVars, reference) => {
+      const vars: Record<string, any> = {
+        payload: 'attack',
+        ...unrelatedVars,
+        system: `Hello {{ ${reference} | upper }}`,
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ system }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
+    it.each([
+      '{{ context.name | default(context.attack.evil) }}',
+      '{{ context[key] }}',
+    ])('should preserve protected or dynamic same-root paths: %s', async (template) => {
+      const shared = { evil: 'secret' };
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: { attack: shared, name: 'Alice' },
+        key: 'name',
+        message: template,
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe(template);
+    });
+
+    it('should preserve protected aliases reached through escaped bracket keys', async () => {
+      const shared = { evil: 'secret' };
+      const template = "{{ context['att\\nack'].evil | upper }}";
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: {
+          'att\nack': shared,
+          'att\\nack': { evil: 'decoy' },
+        },
+        message: template,
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe(template);
+    });
+
+    it.each([
+      ['direct inherited access', {}, '{{ context.__promptfooAttack9419.evil | upper }}'],
+      ['filter-derived access', [{}], '{{ (context | first).__promptfooAttack9419.evil | upper }}'],
+      [
+        'parenthesized own-prefix access',
+        { safe: {} },
+        '{{ (context.safe).__promptfooAttack9419.evil | upper }}',
+      ],
+    ])('should preserve protected aliases reached through %s', async (_name, context, template) => {
+      const shared = { evil: 'secret' };
+      Object.defineProperty(Object.prototype, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const vars: Record<string, any> = {
+        payload: shared,
+        context,
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (Object.prototype as Record<string, unknown>).__promptfooAttack9419;
+      }
+    });
+
+    it.each([
+      ['String', String.prototype, 'Alice'],
+      ['Number', Number.prototype, 7],
+    ])('should preserve aliases added to %s.prototype', async (_name, prototype, value) => {
+      const shared = { evil: 'secret' };
+      Object.defineProperty(prototype, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const template = '{{ value.__promptfooAttack9419.evil | upper }}';
+      const vars: Record<string, any> = { payload: shared, value, message: template };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (prototype as unknown as Record<string, unknown>).__promptfooAttack9419;
+      }
+    });
+
+    it('should preserve aliases hidden in replaced primitive prototype chains', async () => {
+      const shared = { evil: 'secret' };
+      const originalPrototype = Object.getPrototypeOf(String.prototype);
+      const maliciousPrototype = Object.create(originalPrototype);
+      Object.defineProperty(maliciousPrototype, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      Object.setPrototypeOf(String.prototype, maliciousPrototype);
+      const template = '{{ value.__promptfooAttack9419.evil | upper }}';
+      const vars: Record<string, any> = {
+        payload: shared,
+        value: 'Alice',
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        Object.setPrototypeOf(String.prototype, originalPrototype);
+      }
+    });
+
+    it('should preserve aliases added beneath inherited built-in methods', async () => {
+      const shared = { evil: 'secret' };
+      Object.defineProperty(Object.prototype.toString, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const template = '{{ context.toString.__promptfooAttack9419.evil | upper }}';
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: {},
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (Object.prototype.toString as unknown as Record<string, unknown>)
+          .__promptfooAttack9419;
+      }
+    });
+
+    it('should preserve aliases added beneath inherited built-in accessors', async () => {
+      const shared = { evil: 'secret' };
+      const getter = Object.getOwnPropertyDescriptor(Object.prototype, '__proto__')?.get;
+      expect(getter).toBeTypeOf('function');
+      Object.defineProperty(getter!, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const template =
+        '{{ context.__lookupGetter__("__proto__").__promptfooAttack9419.evil | upper }}';
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: {},
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (getter as unknown as Record<string, unknown>).__promptfooAttack9419;
+      }
+    });
+
+    it.each([
+      'values',
+      'entries',
+    ])('should preserve aliases reached through callable iterator prototypes: %s', async (method) => {
+      const shared = { evil: 'secret' };
+      const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
+      Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const template = `{{ context.${method}().__promptfooAttack9419.evil | upper }}`;
+      const vars: Record<string, any> = {
+        payload: shared,
+        context: [1],
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
+      }
+    });
+
+    it.each([
+      'values',
+      'entries',
+    ])('should preserve callable iterator aliases rooted in Nunjucks globals: %s', async (method) => {
+      const shared = { evil: 'secret' };
+      const iteratorPrototype = Object.getPrototypeOf([][Symbol.iterator]());
+      Object.defineProperty(iteratorPrototype, '__promptfooAttack9419', {
+        configurable: true,
+        value: shared,
+      });
+      const template = `{{ range(0, 1).${method}().__promptfooAttack9419.evil | upper }}`;
+      const vars: Record<string, any> = { payload: shared, message: template };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        delete (iteratorPrototype as Record<string, unknown>).__promptfooAttack9419;
+      }
+    });
+
+    it('should preserve member calls separated from roots by whitespace', async () => {
+      const shared = { evil: 'secret' };
+      const iteratorPrototype = Object.getPrototypeOf('A'.matchAll(/A/g));
+      Object.defineProperty(iteratorPrototype, 'toString', {
+        configurable: true,
+        value: () => shared.evil.toUpperCase(),
+      });
+      const template = '{{ name . matchAll("A") }}';
+      const vars: Record<string, any> = {
+        payload: shared,
+        name: 'A',
+        message: template,
+      };
+
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+          'payload',
+        ]);
+
+        expect(renderedPrompt).toBe(template);
+      } finally {
+        Reflect.deleteProperty(iteratorPrototype, 'toString');
+      }
+    });
+
     it('should not dereference skipped refs reached through class instance wrappers (issue #1613)', async () => {
       class Box {
         declare child: { report: string };
@@ -1480,6 +1817,85 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
       expect(ownKeys).not.toHaveBeenCalled();
       expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'Proxy',
+        (shared: object) =>
+          new Proxy(
+            { shared },
+            {
+              ownKeys: () => [],
+            },
+          ),
+      ],
+      [
+        'accessor',
+        (shared: object) => {
+          const payload = {};
+          Object.defineProperty(payload, 'shared', { get: () => shared });
+          return payload;
+        },
+      ],
+      ['WeakMap', (shared: object) => new WeakMap([[shared, { value: true }]])],
+      [
+        'class private field',
+        (shared: object) =>
+          new (class {
+            #shared: object;
+
+            constructor() {
+              this.#shared = shared;
+            }
+          })(),
+      ],
+    ])('should disable all preprocessing when a skipped %s graph is incomplete', async (_kind, createPayload) => {
+      const shared = { evil: 'secret' };
+      const vars: Record<string, any> = {
+        payload: createPayload(shared),
+        context: shared,
+        message: '{{ context.evil | upper }}',
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('{{ context.evil | upper }}');
+    });
+
+    it('should not load hidden scalar aliases when skipped graph inspection is incomplete', async () => {
+      const hiddenReference = 'file:///path/to/skipped.txt';
+      const ownKeys = vi.fn(() => []);
+      const vars: Record<string, any> = {
+        payload: new Proxy({ hiddenReference }, { ownKeys }),
+        alias: hiddenReference,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ alias }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe(hiddenReference);
+      expect(vars.alias).toBe(hiddenReference);
+      expect(ownKeys).not.toHaveBeenCalled();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not preprocess aliases of skipped numeric scalars', async () => {
+      const vars: Record<string, any> = {
+        payload: 41,
+        alias: 41,
+        message: '{{ alias + 1 }}',
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ message }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('{{ alias + 1 }}');
     });
 
     it('should keep aliases hidden behind accessors opaque without invoking getters', async () => {

@@ -5,7 +5,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -104,6 +104,55 @@ export function rebaseTestCaseVarFileReferences(
   return testCase;
 }
 
+function loadTopLevelVarsFileReferences(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      descriptor.writable !== true ||
+      typeof descriptor.value !== 'string' ||
+      !descriptor.value.startsWith('file://')
+    ) {
+      continue;
+    }
+
+    const { filePath, functionName } = parseFileUrl(descriptor.value);
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(declaringBasePath, filePath);
+    const absoluteReference = `file://${toPosixPath(absolutePath)}${functionName ? `:${functionName}` : ''}`;
+    const extension = path.extname(filePath).toLowerCase();
+    const shouldParseStructuredFile =
+      !hasMagic(filePath, { windowsPathsNoEscape: true }) &&
+      (extension === '.json' || extension === '.yaml' || extension === '.yml');
+    const loadedValue = shouldParseStructuredFile
+      ? maybeLoadConfigFromExternalFile(absoluteReference)
+      : absoluteReference;
+    Object.defineProperty(value, key, { ...descriptor, value: loadedValue });
+    if (typeof loadedValue === 'object' && loadedValue !== null) {
+      resolveVarFileReferences(
+        loadedValue,
+        path.dirname(absolutePath),
+        resolutionBasePath,
+        true,
+        visited,
+      );
+    }
+  }
+
+  return value;
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -125,8 +174,15 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData, 'vars');
-      resolveVarFileReferences(yamlData, path.dirname(p), basePath || process.cwd());
+      const resolutionBasePath = basePath || process.cwd();
+      const visited = new WeakSet<object>();
+      const yamlData = loadTopLevelVarsFileReferences(
+        rawData,
+        path.dirname(p),
+        resolutionBasePath,
+        visited,
+      );
+      resolveVarFileReferences(yamlData, path.dirname(p), resolutionBasePath, false, visited);
       Object.assign(ret, yamlData);
     }
   }

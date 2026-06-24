@@ -459,13 +459,17 @@ export function analyzeTemplateReference(
 export function analyzeTemplateReferences(
   template: string,
   variableNames: Iterable<string>,
-): { parsed: boolean; referenced: Set<string> } {
+): { allReferenced: Set<string>; parsed: boolean; referenced: Set<string> } {
   const candidates = Array.from(new Set(variableNames)).filter(Boolean);
   const parseResult = parseNunjucksTemplate(template);
   if (!parseResult.ok) {
+    const referenced = new Set(
+      candidates.filter((variableName) => template.includes(variableName)),
+    );
     return {
+      allReferenced: referenced,
       parsed: false,
-      referenced: new Set(candidates.filter((variableName) => template.includes(variableName))),
+      referenced,
     };
   }
 
@@ -473,6 +477,7 @@ export function analyzeTemplateReferences(
   collectAstReferences(parseResult.ast, undefined, new Set(), allReferences);
 
   return {
+    allReferenced: allReferences,
     parsed: true,
     referenced: new Set(candidates.filter((variableName) => allReferences.has(variableName))),
   };

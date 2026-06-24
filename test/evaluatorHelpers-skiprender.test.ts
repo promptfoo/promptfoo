@@ -70,6 +70,19 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toContain('Payload: {{dangerous}}');
   });
 
+  it('should render unrelated filtered variables when another var is skipped', async () => {
+    const prompt = { raw: '{{system}}', label: 'test' };
+    const vars = {
+      name: 'Alice',
+      payload: 'attack',
+      system: 'Hello {{ name | upper }}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['payload']);
+
+    expect(result).toBe('Hello ALICE');
+  });
+
   it('should not resolve nested variable references inside skipRenderVars values', async () => {
     const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
     const vars = {

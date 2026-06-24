@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
@@ -41,9 +41,10 @@ vi.mock('proxy-agent', () => ({
 }));
 vi.mock('glob', () => ({
   globSync: vi.fn(),
-  hasMagic: vi.fn((pattern: string | string[]) => {
+  hasMagic: vi.fn((pattern: string | string[], options?: { windowsPathsNoEscape?: boolean }) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+    const parsed = options?.windowsPathsNoEscape ? p.replace(/\\/g, '/') : p.replace(/\\./g, '');
+    return /[*?[\]{}]|[+@!](?=\()/.test(parsed);
   }),
 }));
 vi.mock('../../src/providers', () => ({
@@ -1798,11 +1799,68 @@ describe('readVarsFiles', () => {
 
     const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
 
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.anything(), 'vars');
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
     expect(result).toEqual({
       context: { report: 'file://fixtures/data/report.txt' },
       items: ['plain', 'file://fixtures/data/item.txt'],
     });
+  });
+
+  it('should parse top-level vars-file references while preserving nested references', async () => {
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
+      if (context === 'vars' || typeof config !== 'string' || !config.startsWith('file://')) {
+        return config;
+      }
+      const fileContent = mockReadFileSync(config.slice('file://'.length), 'utf-8');
+      return config.endsWith('.json')
+        ? JSON.parse(String(fileContent))
+        : yaml.load(String(fileContent));
+    });
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      String(filePath).endsWith('vars.yaml')
+        ? dedent`
+            context: file://context.json
+            settings: file://settings.yaml
+            nested:
+              report: file://reports/body.txt
+            script: file://generator.js
+            python: file://generator.py
+            pdf: file://document.pdf
+            image: file://image.png
+            audio: file://audio.mp3
+            glob: file://data/*.txt
+            extglob: file://data/+(foo|bar).json
+          `
+        : String(filePath).endsWith('context.json')
+          ? JSON.stringify({ foo: 'bar' })
+          : 'enabled: true',
+    );
+
+    try {
+      const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+      expect(result).toEqual({
+        context: { foo: 'bar' },
+        settings: { enabled: true },
+        nested: { report: 'file://fixtures/reports/body.txt' },
+        script: `file://${path.resolve('/suite/fixtures/generator.js').replace(/\\/g, '/')}`,
+        python: `file://${path.resolve('/suite/fixtures/generator.py').replace(/\\/g, '/')}`,
+        pdf: `file://${path.resolve('/suite/fixtures/document.pdf').replace(/\\/g, '/')}`,
+        image: `file://${path.resolve('/suite/fixtures/image.png').replace(/\\/g, '/')}`,
+        audio: `file://${path.resolve('/suite/fixtures/audio.mp3').replace(/\\/g, '/')}`,
+        glob: `file://${path.resolve('/suite/fixtures/data/*.txt').replace(/\\/g, '/')}`,
+        extglob: `file://${path.resolve('/suite/fixtures/data/+(foo|bar).json').replace(/\\/g, '/')}`,
+      });
+      expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(2);
+      expect(hasMagic).toHaveBeenCalledWith(expect.any(String), {
+        windowsPathsNoEscape: true,
+      });
+    } finally {
+      vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(
+        mockMaybeLoadConfigFromExternalFileImpl,
+      );
+    }
   });
 });
 

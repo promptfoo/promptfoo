@@ -235,44 +235,170 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-/**
- * Marks every object reachable through own data properties without invoking
- * user-defined getters or iterators. Nested var resolution consults this set so
- * aliases of opaque roots (`_conversation`, red-team payloads, and runtime
- * registers) stay opaque too.
- */
-function collectProtectedContainers(value: unknown, protectedContainers: WeakSet<object>): boolean {
-  if (typeof value !== 'object' || value === null) {
-    return true;
-  }
+function isObjectLike(value: unknown): value is object {
+  return (typeof value === 'object' && value !== null) || typeof value === 'function';
+}
 
-  const pending: object[] = [value];
+const builtinPrototypeDescriptors = (() => {
+  const roots: object[] = [
+    Object,
+    Object.prototype,
+    Array,
+    Array.prototype,
+    Map,
+    Map.prototype,
+    Set,
+    Set.prototype,
+    String,
+    String.prototype,
+    Number,
+    Number.prototype,
+    Boolean,
+    Boolean.prototype,
+    BigInt,
+    BigInt.prototype,
+    Symbol,
+    Symbol.prototype,
+    Function,
+    Function.prototype,
+  ];
+  const baselines = new Map<
+    object,
+    { descriptors: Map<PropertyKey, PropertyDescriptor>; prototype: object | null }
+  >();
+  const pending = [...roots];
+  while (pending.length > 0) {
+    const builtinObject = pending.pop()!;
+    if (baselines.has(builtinObject)) {
+      continue;
+    }
+    const descriptors = new Map<PropertyKey, PropertyDescriptor>();
+    for (const key of Reflect.ownKeys(builtinObject)) {
+      const descriptor = Object.getOwnPropertyDescriptor(builtinObject, key);
+      if (!descriptor) {
+        continue;
+      }
+      descriptors.set(key, descriptor);
+      if ('value' in descriptor && isObjectLike(descriptor.value)) {
+        pending.push(descriptor.value);
+      } else if (!('value' in descriptor)) {
+        if (isObjectLike(descriptor.get)) {
+          pending.push(descriptor.get);
+        }
+        if (isObjectLike(descriptor.set)) {
+          pending.push(descriptor.set);
+        }
+      }
+    }
+    baselines.set(builtinObject, {
+      descriptors,
+      prototype: Object.getPrototypeOf(builtinObject),
+    });
+  }
+  return baselines;
+})();
+
+function descriptorsMatch(current: PropertyDescriptor, baseline: PropertyDescriptor): boolean {
+  if (
+    current.configurable !== baseline.configurable ||
+    current.enumerable !== baseline.enumerable
+  ) {
+    return false;
+  }
+  if ('value' in current && 'value' in baseline) {
+    return current.writable === baseline.writable && Object.is(current.value, baseline.value);
+  }
+  return (
+    !('value' in current) &&
+    !('value' in baseline) &&
+    current.get === baseline.get &&
+    current.set === baseline.set
+  );
+}
+
+type BuiltinMutationSnapshot = {
+  complete: boolean;
+  values: unknown[];
+};
+
+function collectChangedBuiltinValues(): BuiltinMutationSnapshot {
+  let complete = true;
+  const values: unknown[] = [];
+  for (const [builtinObject, baseline] of builtinPrototypeDescriptors) {
+    if (Object.getPrototypeOf(builtinObject) !== baseline.prototype) {
+      complete = false;
+    }
+    for (const key of Reflect.ownKeys(builtinObject)) {
+      const descriptor = Object.getOwnPropertyDescriptor(builtinObject, key);
+      const baselineDescriptor = baseline.descriptors.get(key);
+      if (!descriptor || (baselineDescriptor && descriptorsMatch(descriptor, baselineDescriptor))) {
+        continue;
+      }
+      if ('value' in descriptor) {
+        values.push(descriptor.value);
+      } else {
+        complete = false;
+      }
+    }
+  }
+  return { complete, values };
+}
+
+function hasKnownBuiltinPrototypeChain(prototype: object | null): boolean {
+  for (
+    let currentPrototype = prototype;
+    currentPrototype !== null;
+    currentPrototype = Object.getPrototypeOf(currentPrototype)
+  ) {
+    if (!builtinPrototypeDescriptors.has(currentPrototype)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function walkVisibleValueGraph(
+  value: unknown,
+  visitObject: (value: object) => boolean,
+  visitPrimitive: (value: unknown) => void,
+): boolean {
+  const pending: unknown[] = [value];
+  const visited = new WeakSet<object>();
   let complete = true;
   const enqueue = (nestedValue: unknown): void => {
-    if (typeof nestedValue === 'object' && nestedValue !== null) {
+    if (isObjectLike(nestedValue)) {
       pending.push(nestedValue);
+    } else {
+      visitPrimitive(nestedValue);
     }
   };
 
   while (pending.length > 0) {
-    const container = pending.pop()!;
-    if (protectedContainers.has(container)) {
+    const next = pending.pop();
+    if (!isObjectLike(next)) {
+      visitPrimitive(next);
       continue;
     }
-    protectedContainers.add(container);
+    if (visited.has(next)) {
+      continue;
+    }
+    visited.add(next);
+    if (!visitObject(next)) {
+      continue;
+    }
 
     // A Proxy can hide reachable aliases while returning successful reflection
     // results. Private/internal slots on exotic objects are likewise not
     // enumerable. Only traverse container kinds whose complete graph is visible.
-    if (utilTypes.isProxy(container)) {
+    if (utilTypes.isProxy(next)) {
       complete = false;
       continue;
     }
-    const prototype = Object.getPrototypeOf(container);
+    const prototype = Object.getPrototypeOf(next);
     const isMap = prototype === Map.prototype;
     const isSet = prototype === Set.prototype;
     if (
-      !Array.isArray(container) &&
+      !Array.isArray(next) &&
       prototype !== Object.prototype &&
       prototype !== null &&
       !isMap &&
@@ -282,39 +408,160 @@ function collectProtectedContainers(value: unknown, protectedContainers: WeakSet
       continue;
     }
 
-    try {
-      if (isMap) {
-        Map.prototype.forEach.call(container, (nestedValue: unknown, key: unknown) => {
-          enqueue(key);
-          enqueue(nestedValue);
-        });
-      } else if (isSet) {
-        Set.prototype.forEach.call(container, (nestedValue: unknown) => enqueue(nestedValue));
-      }
-    } catch {
-      // A proxy or exotic container may reject intrinsic access. Disable nested
-      // preprocessing rather than risk dereferencing an alias hidden inside it.
+    if (!hasKnownBuiltinPrototypeChain(prototype)) {
       complete = false;
     }
 
     try {
-      for (const key of Reflect.ownKeys(container)) {
-        const descriptor = Object.getOwnPropertyDescriptor(container, key);
+      if (isMap) {
+        Map.prototype.forEach.call(next, (nestedValue: unknown, key: unknown) => {
+          enqueue(key);
+          enqueue(nestedValue);
+        });
+      } else if (isSet) {
+        Set.prototype.forEach.call(next, (nestedValue: unknown) => enqueue(nestedValue));
+      }
+    } catch {
+      complete = false;
+    }
+
+    try {
+      for (const key of Reflect.ownKeys(next)) {
+        const descriptor = Object.getOwnPropertyDescriptor(next, key);
         if (descriptor && 'value' in descriptor) {
           enqueue(descriptor.value);
         } else if (descriptor) {
-          // Never invoke accessors; they may hide shared aliases.
           complete = false;
         }
       }
     } catch {
-      // Proxy traps can reject reflection too. The root itself is protected, but
-      // its undiscoverable aliases require the same conservative fallback.
       complete = false;
     }
   }
 
   return complete;
+}
+
+/** Marks all safely visible containers and string leaves under an opaque root. */
+function collectProtectedContainers(
+  value: unknown,
+  protectedContainers: WeakSet<object>,
+  protectedPrimitiveValues: Set<unknown>,
+): boolean {
+  return walkVisibleValueGraph(
+    value,
+    (container) => {
+      if (protectedContainers.has(container)) {
+        return false;
+      }
+      protectedContainers.add(container);
+      return true;
+    },
+    (primitiveValue) => protectedPrimitiveValues.add(primitiveValue),
+  );
+}
+
+/**
+ * Checks whether a visible value graph aliases a protected container or string.
+ * Incomplete reflection is reported separately so callers can retain the
+ * conservative global fallback for proxies, accessors, and opaque containers.
+ */
+function inspectProtectedAliases(
+  value: unknown,
+  protectedContainers: WeakSet<object>,
+  protectedPrimitiveValues: ReadonlySet<unknown>,
+): { complete: boolean; containsProtected: boolean } {
+  let containsProtected = false;
+  const complete = walkVisibleValueGraph(
+    value,
+    (container) => {
+      if (protectedContainers.has(container)) {
+        containsProtected = true;
+        return false;
+      }
+      return true;
+    },
+    (primitiveValue) => {
+      containsProtected ||= protectedPrimitiveValues.has(primitiveValue);
+    },
+  );
+
+  return { complete, containsProtected };
+}
+
+function referencesProtectedAliasPath(
+  template: string,
+  vars: Record<string, VarValue>,
+  protectedPathRootNames: ReadonlySet<string>,
+  protectedContainers: WeakSet<object>,
+  protectedPrimitiveValues: ReadonlySet<unknown>,
+): boolean {
+  if (protectedPathRootNames.size === 0) {
+    return false;
+  }
+  if (!template.includes('{')) {
+    return false;
+  }
+
+  const evaluatedTemplate = template
+    .replace(/{#[\s\S]*?#}/g, '')
+    .replace(/{%-?\s*raw\s*-?%}[\s\S]*?{%-?\s*endraw\s*-?%}/g, '');
+  const hasEvaluatedSyntax = /{{|{%/.test(evaluatedTemplate);
+  if (!hasEvaluatedSyntax) {
+    return false;
+  }
+  const analysis = analyzeTemplateReferences(template, protectedPathRootNames);
+  if (!analysis.parsed) {
+    return hasEvaluatedSyntax;
+  }
+  if (
+    Array.from(analysis.allReferenced).some((rootName) => !protectedPathRootNames.has(rootName))
+  ) {
+    return true;
+  }
+  if (analysis.referenced.size === 0) {
+    return hasEvaluatedSyntax;
+  }
+
+  // A parenthesized/filter result can be dereferenced after the static prefix
+  // (for example `(items | first).polluted`). The prefix alone cannot prove the
+  // final value safe, so preserve the template conservatively.
+  if (analysis.referenced.size > 0 && /\)\s*(?:\.|\[)/.test(template)) {
+    return true;
+  }
+
+  for (const rootName of analysis.referenced) {
+    const escapedRoot = rootName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const staticPathPattern = new RegExp(
+      `\\b${escapedRoot}(?![A-Za-z0-9_])(?:\\.[A-Za-z_]\\w*|\\[(?:\\d+|"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\])*`,
+      'g',
+    );
+    const references = Array.from(template.matchAll(staticPathPattern));
+    if (references.length === 0) {
+      return true;
+    }
+    for (const match of references) {
+      const reference = match[0];
+      const suffix = template.slice((match.index ?? 0) + reference.length);
+      if (/^\s*(?:\.|\[)/.test(suffix)) {
+        return true;
+      }
+      const resolved = resolveStaticTemplateReference(reference, vars, true);
+      if (!resolved) {
+        return true;
+      }
+      const inspection = inspectProtectedAliases(
+        resolved.value,
+        protectedContainers,
+        protectedPrimitiveValues,
+      );
+      if (!inspection.complete || inspection.containsProtected || isObjectLike(resolved.value)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -328,6 +575,7 @@ type NestedRenderTarget = {
   filePath?: string;
   fromFile: boolean;
   key: string;
+  originalValue?: string;
   rootVarName: string;
   template: string;
   topLevelFileVarName?: string;
@@ -416,6 +664,8 @@ async function resolveNestedFileRefs(
   varName: string,
   topLevelFileVarNames: ReadonlySet<string>,
   protectedContainers: WeakSet<object>,
+  protectedPrimitiveValues: ReadonlySet<unknown>,
+  referencesProtectedTemplate: (template: string) => boolean,
   visited: WeakSet<object>,
   targetsByContainer: WeakMap<object, Map<string, NestedRenderTarget>>,
 ): Promise<NestedRenderTarget[]> {
@@ -442,6 +692,12 @@ async function resolveNestedFileRefs(
       if (knownTarget) {
         continue;
       }
+      if (protectedPrimitiveValues.has(nestedValue)) {
+        continue;
+      }
+      if (isString && referencesProtectedTemplate(nestedValue)) {
+        continue;
+      }
       if (isString && nestedValue.startsWith('file://') && descriptor.writable === true) {
         const result = await loadNestedFileRef(nestedValue, basePath, varName);
         if (result.loaded) {
@@ -454,6 +710,7 @@ async function resolveNestedFileRefs(
             filePath: result.filePath,
             fromFile: true,
             key,
+            originalValue: nestedValue,
             rootVarName: varName,
             template: result.value,
             ...(loadedTopLevelFileVarName && topLevelFileVarNames.has(loadedTopLevelFileVarName)
@@ -518,7 +775,10 @@ function renderTopLevelStringVar(
   }
 }
 
-function parseStaticTemplatePath(reference: string): string[] | undefined {
+function parseStaticTemplatePath(
+  reference: string,
+  rejectEscapedQuotedKeys = false,
+): string[] | undefined {
   const root = /^([A-Za-z_]\w*)/.exec(reference);
   if (!root) {
     return undefined;
@@ -551,6 +811,12 @@ function parseStaticTemplatePath(reference: string): string[] | undefined {
       (token.startsWith('"') && token.endsWith('"')) ||
       (token.startsWith("'") && token.endsWith("'"))
     ) {
+      // Nunjucks' string-escape semantics are broader than JSON and the small
+      // single-quote decoder below. Treat escaped property names as dynamic so
+      // skipped-variable alias checks fail closed instead of resolving a decoy.
+      if (rejectEscapedQuotedKeys && token.slice(1, -1).includes('\\')) {
+        return undefined;
+      }
       try {
         segments.push(
           token.startsWith('"')
@@ -573,8 +839,9 @@ function parseStaticTemplatePath(reference: string): string[] | undefined {
 function resolveStaticTemplateReference(
   reference: string,
   vars: Record<string, VarValue>,
+  rejectEscapedQuotedKeys = false,
 ): { key?: string; parent?: object; value: unknown } | undefined {
-  const segments = parseStaticTemplatePath(reference);
+  const segments = parseStaticTemplatePath(reference, rejectEscapedQuotedKeys);
   if (!segments) {
     return undefined;
   }
@@ -608,16 +875,17 @@ function renderNestedTarget(
   target: NestedRenderTarget,
   templateVars: Record<string, VarValue>,
   strictNunjucks: ReturnType<typeof getNunjucksEngine>,
-  protectedVarNames: string[] | undefined,
-  varsResolvedFromProtected: Set<string>,
+  referencesProtectedTemplate: (template: string) => boolean,
 ): void {
   const { template } = target;
   const current = getWritableStringProp(target.container, target.key);
-  if (
-    current === undefined ||
-    current !== template ||
-    referencesSkippedVariables(template, protectedVarNames, varsResolvedFromProtected)
-  ) {
+  if (current === undefined || current !== template) {
+    return;
+  }
+  if (referencesProtectedTemplate(template)) {
+    if (target.fromFile && target.originalValue !== undefined) {
+      setNestedValue(target.container, target.key, target.originalValue);
+    }
     return;
   }
 
@@ -661,8 +929,8 @@ function renderNestedFileRefTemplates(
   vars: Record<string, VarValue>,
   nunjucks: ReturnType<typeof getNunjucksEngine>,
   strictNunjucks: ReturnType<typeof getNunjucksEngine>,
-  protectedVarNames: string[] | undefined,
-  varsResolvedFromProtected: Set<string>,
+  protectedDirectVarNames: ReadonlySet<string>,
+  referencesProtectedTemplate: (template: string) => boolean,
 ): Map<string, VarValue> {
   const renderedTopLevelVars = new Map<string, VarValue>();
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
@@ -814,8 +1082,8 @@ function renderNestedFileRefTemplates(
         rootName &&
         !visitedTopLevelVars.has(rootName) &&
         typeof value === 'string' &&
-        !protectedVarNames?.includes(rootName) &&
-        !referencesSkippedVariables(value, protectedVarNames, varsResolvedFromProtected)
+        !protectedDirectVarNames.has(rootName) &&
+        !referencesProtectedTemplate(value)
       ) {
         visitedTopLevelVars.add(rootName);
         reachabilityTemplates.push(value);
@@ -831,9 +1099,8 @@ function renderNestedFileRefTemplates(
       state === 'done' ||
       state === 'visiting' ||
       typeof value !== 'string' ||
-      protectedVarNames?.includes(rootName) ||
-      varsResolvedFromProtected.has(rootName) ||
-      referencesSkippedVariables(value, protectedVarNames, varsResolvedFromProtected)
+      protectedDirectVarNames.has(rootName) ||
+      referencesProtectedTemplate(value)
     ) {
       return;
     }
@@ -879,13 +1146,7 @@ function renderNestedFileRefTemplates(
       }
     }
 
-    renderNestedTarget(
-      target,
-      templateVars,
-      strictNunjucks,
-      protectedVarNames,
-      varsResolvedFromProtected,
-    );
+    renderNestedTarget(target, templateVars, strictNunjucks, referencesProtectedTemplate);
     states.set(target, 'done');
   }
 
@@ -1006,37 +1267,97 @@ export async function renderPrompt(
   const nestedRenderTargets: NestedRenderTarget[] = [];
   const nestedTargetsByContainer = new WeakMap<object, Map<string, NestedRenderTarget>>();
   const protectedNestedContainers = new WeakSet<object>();
+  const protectedPrimitiveValues = new Set<unknown>();
   const protectedVarNames = Array.from(
     new Set([...(skipRenderVars ?? []), ...(runtimeRegisterNames ?? [])]),
   );
-  const topLevelFileVarNames = new Set(
-    Object.entries(vars)
-      .filter(
-        ([varName, value]) =>
-          varName !== '_conversation' &&
-          !protectedVarNames.includes(varName) &&
-          typeof value === 'string' &&
-          value.startsWith('file://'),
-      )
-      .map(([varName]) => varName),
-  );
-  // Red-team payloads can be aliased through arbitrary object graphs (including
-  // YAML anchors and class/Map/Set wrappers). Conservatively preserve all nested
-  // values when any payload root is marked skipped.
-  let nestedResolutionDisabled = Boolean(skipRenderVars?.length);
+  const hasProtectedRoots =
+    protectedVarNames.length > 0 || Object.prototype.hasOwnProperty.call(vars, '_conversation');
+  const builtinMutations = hasProtectedRoots
+    ? collectChangedBuiltinValues()
+    : { complete: true, values: [] };
+  let preprocessingDisabled = !builtinMutations.complete;
 
   let basePrompt = prompt.raw;
 
   for (const [varName, value] of Object.entries(vars)) {
     if (varName === '_conversation' || protectedVarNames.includes(varName)) {
-      nestedResolutionDisabled =
-        !collectProtectedContainers(value, protectedNestedContainers) || nestedResolutionDisabled;
+      preprocessingDisabled =
+        !collectProtectedContainers(value, protectedNestedContainers, protectedPrimitiveValues) ||
+        preprocessingDisabled;
     }
   }
 
+  if (hasProtectedRoots) {
+    const builtinMutationInspection = inspectProtectedAliases(
+      builtinMutations.values,
+      protectedNestedContainers,
+      protectedPrimitiveValues,
+    );
+    preprocessingDisabled ||=
+      !builtinMutationInspection.complete || builtinMutationInspection.containsProtected;
+  }
+
+  const protectedAliasRootNames = new Set<string>();
+  const protectedPathRootNames = new Set<string>();
+  if (hasProtectedRoots) {
+    for (const [varName, value] of Object.entries(vars)) {
+      if (varName === '_conversation' || protectedVarNames.includes(varName)) {
+        continue;
+      }
+      protectedPathRootNames.add(varName);
+      if (!isObjectLike(value)) {
+        if (protectedPrimitiveValues.has(value)) {
+          protectedAliasRootNames.add(varName);
+        }
+        continue;
+      }
+      const inspection = inspectProtectedAliases(
+        value,
+        protectedNestedContainers,
+        protectedPrimitiveValues,
+      );
+      if (inspection.containsProtected) {
+        protectedAliasRootNames.add(varName);
+      }
+      if (!inspection.complete) {
+        preprocessingDisabled = true;
+      }
+    }
+  }
+  const protectedDirectVarNames = new Set([...protectedVarNames, ...protectedAliasRootNames]);
+  const protectedTemplateVarNames = Array.from(protectedDirectVarNames);
+  const varsResolvedFromProtected = new Set<string>();
+  const referencesProtectedTemplate = (template: string): boolean =>
+    referencesSkippedVariables(template, protectedVarNames, varsResolvedFromProtected) ||
+    referencesProtectedAliasPath(
+      template,
+      vars,
+      protectedPathRootNames,
+      protectedNestedContainers,
+      protectedPrimitiveValues,
+    );
+  const topLevelFileVarNames = new Set(
+    Object.entries(vars)
+      .filter(
+        ([varName, value]) =>
+          varName !== '_conversation' &&
+          !protectedDirectVarNames.has(varName) &&
+          typeof value === 'string' &&
+          value.startsWith('file://'),
+      )
+      .map(([varName]) => varName),
+  );
+
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
+    if (preprocessingDisabled) {
+      continue;
+    }
     if (varName === '_conversation' || protectedVarNames.includes(varName)) {
+      continue;
+    }
+    if (typeof value === 'string' && protectedAliasRootNames.has(varName)) {
       continue;
     }
 
@@ -1166,7 +1487,7 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (!nestedResolutionDisabled && (Array.isArray(value) || isPlainObject(value))) {
+    } else if (!preprocessingDisabled && (Array.isArray(value) || isPlainObject(value))) {
       const basePath = cliState.basePath || '';
       nestedRenderTargets.push(
         ...(await resolveNestedFileRefs(
@@ -1175,6 +1496,8 @@ export async function renderPrompt(
           varName,
           topLevelFileVarNames,
           protectedNestedContainers,
+          protectedPrimitiveValues,
+          referencesProtectedTemplate,
           new WeakSet<object>(),
           nestedTargetsByContainer,
         )),
@@ -1210,14 +1533,17 @@ export async function renderPrompt(
   }
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !protectedVarNames.includes(key)) {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
+  if (!preprocessingDisabled) {
+    for (const key of Object.keys(vars)) {
+      if (typeof vars[key] === 'string' && !protectedDirectVarNames.has(key)) {
+        vars[key] = (vars[key] as string).replace(/\n$/, '');
+      }
     }
   }
   // Resolve variable mappings
-  const varsResolvedFromProtected = new Set<string>();
-  resolveVariables(vars, protectedVarNames, varsResolvedFromProtected);
+  if (!preprocessingDisabled) {
+    resolveVariables(vars, protectedTemplateVarNames, varsResolvedFromProtected);
+  }
   const strictNunjucks = getNunjucksEngine(nunjucksFilters, true);
   const nestedRenderedTopLevelVars = renderNestedFileRefTemplates(
     nestedRenderTargets,
@@ -1225,8 +1551,8 @@ export async function renderPrompt(
     vars,
     nunjucks,
     strictNunjucks,
-    protectedVarNames,
-    varsResolvedFromProtected,
+    protectedDirectVarNames,
+    referencesProtectedTemplate,
   );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
@@ -1320,13 +1646,10 @@ export async function renderPrompt(
       Object.entries(vars).map(([key, value]) => {
         if (
           typeof value !== 'string' ||
-          protectedVarNames.includes(key) ||
+          preprocessingDisabled ||
+          protectedDirectVarNames.has(key) ||
           varsResolvedFromProtected.has(key) ||
-          // A red-team payload may be reachable through an alias whose root name
-          // is not statically identifiable. Avoid every preprocessing pass when
-          // a skipped payload is present; final interpolation remains one-pass.
-          Boolean(skipRenderVars?.length) ||
-          referencesSkippedVariables(value, protectedVarNames, varsResolvedFromProtected)
+          referencesProtectedTemplate(value)
         ) {
           return [key, value];
         }
