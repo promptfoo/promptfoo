@@ -18,7 +18,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
-import { maybeLoadConfigFromExternalFile } from './file';
+import { loadConfigFromFilePath, maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { toPosixPath } from './pathUtils';
@@ -68,32 +68,16 @@ function resolveVarFileReference(
   const absolutePath = path.isAbsolute(filePath)
     ? filePath
     : path.resolve(declaringBasePath, filePath);
-  if (loadStructuredReference && isStructuredVarFilePath(filePath)) {
-    const absoluteReference = `file://${toPosixPath(absolutePath)}${
-      functionName ? `:${functionName}` : ''
-    }`;
-    const loadedValue = maybeLoadConfigFromExternalFile(absoluteReference);
-    if (typeof loadedValue === 'string' && loadedValue.startsWith('file://')) {
-      return resolveVarFileReference(
-        loadedValue,
-        path.dirname(absolutePath),
-        resolutionBasePath,
-        true,
-        visited,
-        false,
-      );
-    }
-    if (typeof loadedValue === 'object' && loadedValue !== null) {
-      resolveVarFileReferences(
-        loadedValue,
-        path.dirname(absolutePath),
-        resolutionBasePath,
-        true,
-        visited,
-        false,
-      );
-    }
-    return loadedValue;
+  const structuredPaths = loadStructuredReference
+    ? getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath)
+    : undefined;
+  if (structuredPaths) {
+    return loadStructuredVarFileReference(
+      absolutePath,
+      structuredPaths,
+      resolutionBasePath,
+      visited,
+    );
   }
 
   if (path.isAbsolute(filePath)) {
@@ -149,12 +133,133 @@ function resolveVarFileReferences(
   }
 }
 
-function isStructuredVarFilePath(filePath: string): boolean {
-  const extension = path.extname(filePath).toLowerCase();
+const STRUCTURED_VAR_FILE_EXTENSIONS = new Set(['.csv', '.json', '.yaml', '.yml']);
+
+type StructuredVarFileSource = {
+  isGlob: boolean;
+  matchedPaths: string[];
+};
+
+function hasStructuredVarFileExtension(filePath: string): boolean {
+  return STRUCTURED_VAR_FILE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function hasStructuredVarFileExtensionPattern(filePath: string): boolean {
+  const extensionPattern = path.extname(filePath).toLowerCase();
   return (
-    !hasMagic(filePath, { magicalBraces: true, windowsPathsNoEscape: true }) &&
-    (extension === '.json' || extension === '.yaml' || extension === '.yml')
+    STRUCTURED_VAR_FILE_EXTENSIONS.has(extensionPattern) ||
+    /\.(?:csv|json|yaml|yml)(?=$|[)}|,])/.test(filePath.toLowerCase()) ||
+    /(?:^|[({|,])(?:csv|json|yaml|yml)(?=$|[)}|,])/.test(extensionPattern)
   );
+}
+
+function getStructuredVarFilePaths(
+  filePath: string,
+  absolutePath: string,
+  declaringBasePath: string,
+): StructuredVarFileSource | undefined {
+  const hasLoaderMagic = hasMagic(filePath, { windowsPathsNoEscape: true });
+  if (hasLoaderMagic) {
+    const extensionPattern = path.extname(filePath);
+    const hasStructuredExtensionPattern = hasStructuredVarFileExtensionPattern(filePath);
+    const hasLiteralExtension = /^\.[a-z0-9_-]+$/i.test(extensionPattern);
+    if (hasLiteralExtension && !hasStructuredExtensionPattern) {
+      return undefined;
+    }
+    const matchedPaths = path.isAbsolute(filePath)
+      ? globSync(filePath, { windowsPathsNoEscape: true })
+      : globSync(filePath, {
+          absolute: true,
+          cwd: declaringBasePath,
+          windowsPathsNoEscape: true,
+        });
+    if (matchedPaths.length === 0) {
+      return hasStructuredExtensionPattern ? { isGlob: true, matchedPaths } : undefined;
+    }
+    return matchedPaths.every(hasStructuredVarFileExtension)
+      ? { isGlob: true, matchedPaths }
+      : undefined;
+  }
+
+  const hasBraceMagic = hasMagic(filePath, {
+    magicalBraces: true,
+    windowsPathsNoEscape: true,
+  });
+  return !hasBraceMagic && hasStructuredVarFileExtension(filePath)
+    ? { isGlob: false, matchedPaths: [absolutePath] }
+    : undefined;
+}
+
+function rebaseLoadedStructuredValue(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+): unknown {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return resolveVarFileReference(
+      value,
+      declaringBasePath,
+      resolutionBasePath,
+      true,
+      visited,
+      false,
+    );
+  }
+  if (typeof value === 'object' && value !== null) {
+    resolveVarFileReferences(value, declaringBasePath, resolutionBasePath, true, visited, false);
+  }
+  return value;
+}
+
+function loadStructuredVarFileReference(
+  absolutePath: string,
+  source: StructuredVarFileSource,
+  resolutionBasePath: string,
+  visited: WeakSet<object>,
+): unknown {
+  if (!source.isGlob) {
+    return rebaseLoadedStructuredValue(
+      loadConfigFromFilePath(absolutePath),
+      path.dirname(absolutePath),
+      resolutionBasePath,
+      visited,
+    );
+  }
+
+  if (source.matchedPaths.length === 0) {
+    throw new Error(`No files found matching pattern: ${absolutePath}`);
+  }
+
+  const loadedValues: unknown[] = [];
+  for (const matchedPath of source.matchedPaths) {
+    let loadedValue: unknown;
+    try {
+      loadedValue = loadConfigFromFilePath(matchedPath);
+    } catch (error) {
+      if (error instanceof Error && error.message === `File does not exist: ${matchedPath}`) {
+        logger.debug(`File disappeared during glob expansion: ${matchedPath}`);
+        continue;
+      }
+      throw error;
+    }
+    const extension = path.extname(matchedPath).toLowerCase();
+    if ((extension === '.yaml' || extension === '.yml') && loadedValue == null) {
+      continue;
+    }
+    const rebasedValue = rebaseLoadedStructuredValue(
+      loadedValue,
+      path.dirname(matchedPath),
+      resolutionBasePath,
+      visited,
+    );
+    if (Array.isArray(rebasedValue)) {
+      loadedValues.push(...rebasedValue);
+    } else {
+      loadedValues.push(rebasedValue);
+    }
+  }
+  return loadedValues;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -206,29 +311,11 @@ function loadTopLevelVarsFileReferences(
       ? filePath
       : path.resolve(declaringBasePath, filePath);
     const absoluteReference = `file://${toPosixPath(absolutePath)}${functionName ? `:${functionName}` : ''}`;
-    let loadedValue = isStructuredVarFilePath(filePath)
-      ? maybeLoadConfigFromExternalFile(absoluteReference)
+    const structuredPaths = getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath);
+    const loadedValue = structuredPaths
+      ? loadStructuredVarFileReference(absolutePath, structuredPaths, resolutionBasePath, visited)
       : absoluteReference;
-    if (typeof loadedValue === 'string' && loadedValue.startsWith('file://')) {
-      loadedValue = resolveVarFileReference(
-        loadedValue,
-        path.dirname(absolutePath),
-        resolutionBasePath,
-        true,
-        visited,
-        false,
-      );
-    }
     Object.defineProperty(value, key, { ...descriptor, value: loadedValue });
-    if (typeof loadedValue === 'object' && loadedValue !== null) {
-      resolveVarFileReferences(
-        loadedValue,
-        path.dirname(absolutePath),
-        resolutionBasePath,
-        true,
-        visited,
-      );
-    }
   }
 
   return value;

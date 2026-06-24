@@ -231,7 +231,8 @@ function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: stri
   if (typeof config.defaultTest === 'string') {
     addLocalPath(config.defaultTest);
   }
-  for (const scenario of config.scenarios ?? []) {
+  const scenarios = config.scenarios as UnifiedConfig['scenarios'] | string | undefined;
+  for (const scenario of Array.isArray(scenarios) ? scenarios : scenarios ? [scenarios] : []) {
     if (typeof scenario === 'string') {
       addLocalPath(scenario);
     } else if (typeof scenario.tests === 'string') {

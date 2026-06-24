@@ -637,10 +637,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       );
     }
 
-    if (Array.isArray(config.scenarios)) {
-      for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
+    const scenarios = config.scenarios as UnifiedConfig['scenarios'] | string | undefined;
+    if (typeof scenarios === 'string') {
+      config.scenarios = [rebaseConfigFileReference(scenarios, sourceBasePath)];
+    } else if (Array.isArray(scenarios)) {
+      for (const [scenarioIndex, scenario] of scenarios.entries()) {
         if (typeof scenario === 'string') {
-          config.scenarios[scenarioIndex] = rebaseConfigFileReference(scenario, sourceBasePath);
+          scenarios[scenarioIndex] = rebaseConfigFileReference(scenario, sourceBasePath);
           continue;
         }
         for (const test of scenario.config ?? []) {

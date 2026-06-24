@@ -475,6 +475,34 @@ describe('combineConfigs', () => {
     expect(result.scenarios).toContain('file://../b/scenarios/scenario.yaml');
   });
 
+  it('rebases scalar scenario sources from later configs', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      scenarios: 'file://scenarios/scenario.yaml',
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.scenarios).toEqual(['file://../b/scenarios/scenario.yaml']);
+    expect(getConfigDependencyPaths(result)).toContain(
+      path.resolve('/suite/b/scenarios/scenario.yaml'),
+    );
+    expect(getConfigDependencyPaths(result)).not.toContain(
+      path.resolve('/suite/a/scenarios/scenario.yaml'),
+    );
+  });
+
   it('preserves named exports when rebasing executable test sources', async () => {
     const firstConfig = {
       providers: ['echo'],

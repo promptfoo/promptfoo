@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
@@ -15,7 +16,7 @@ import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { readAzureBlobText } from '../../src/util/azureBlob';
-import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
+import { loadConfigFromFilePath, maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -41,11 +42,17 @@ vi.mock('proxy-agent', () => ({
 }));
 vi.mock('glob', () => ({
   globSync: vi.fn(),
-  hasMagic: vi.fn((pattern: string | string[], options?: { windowsPathsNoEscape?: boolean }) => {
-    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    const parsed = options?.windowsPathsNoEscape ? p.replace(/\\/g, '/') : p.replace(/\\./g, '');
-    return /[*?[\]{}]|[+@!](?=\()/.test(parsed);
-  }),
+  hasMagic: vi.fn(
+    (
+      pattern: string | string[],
+      options?: { magicalBraces?: boolean; windowsPathsNoEscape?: boolean },
+    ) => {
+      const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+      const parsed = options?.windowsPathsNoEscape ? p.replace(/\\/g, '/') : p.replace(/\\./g, '');
+      const magic = options?.magicalBraces ? /[*?[\]{}]|[+@!](?=\()/ : /[*?[\]]|[+@!](?=\()/;
+      return magic.test(parsed);
+    },
+  ),
 }));
 vi.mock('path', async () => ({
   ...(await vi.importActual<typeof import('path')>('path')),
@@ -178,6 +185,7 @@ vi.mock('../../src/esm', () => ({
 }));
 
 vi.mock('../../src/util/file', () => ({
+  loadConfigFromFilePath: vi.fn(),
   maybeLoadConfigFromExternalFile: vi.fn(mockMaybeLoadConfigFromExternalFileImpl),
 }));
 
@@ -194,6 +202,20 @@ const clearAllMocks = () => {
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
   vi.mocked(readAzureBlobText).mockReset();
+  vi.mocked(loadConfigFromFilePath).mockReset();
+  vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+    const contents = String(mockReadFileSync(filePath, 'utf8'));
+    if (filePath.endsWith('.json')) {
+      return JSON.parse(contents);
+    }
+    if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      return yaml.load(contents);
+    }
+    if (filePath.endsWith('.csv')) {
+      return parseCsv(contents, { columns: true });
+    }
+    return contents;
+  });
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(importModule).mockReset();
   mockParseXlsxFileState.implementation = undefined;
@@ -1845,6 +1867,12 @@ describe('readVarsFiles', () => {
   });
 
   it('should parse top-level vars-file references while preserving nested references', async () => {
+    const varsPath = path.resolve('/suite/fixtures/vars.yaml');
+    const extglobPath = 'data/+(foo|bar).json';
+    const textExtglobPath = 'data/@(foo.json).txt';
+    const fooPath = path.resolve('/suite/fixtures/data/foo.json');
+    const barPath = path.resolve('/suite/fixtures/data/bar.json');
+    const textPath = path.resolve('/suite/fixtures/data/foo.json.txt');
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
       if (context === 'vars' || typeof config !== 'string' || !config.startsWith('file://')) {
         return config;
@@ -1854,7 +1882,19 @@ describe('readVarsFiles', () => {
         ? JSON.parse(String(fileContent))
         : yaml.load(String(fileContent));
     });
-    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+    vi.mocked(globSync).mockImplementation((input) => {
+      const value = String(input);
+      if (value === varsPath) {
+        return [varsPath];
+      }
+      if (value === extglobPath) {
+        return [fooPath, barPath];
+      }
+      if (value === textExtglobPath) {
+        return [textPath];
+      }
+      return [];
+    });
     vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
       String(filePath).endsWith('vars.yaml')
         ? dedent`
@@ -1870,10 +1910,15 @@ describe('readVarsFiles', () => {
             glob: file://data/*.txt
             braceGlob: file://data/{foo,bar}.json
             extglob: file://data/+(foo|bar).json
+            textExtglob: file://data/@(foo.json).txt
           `
         : String(filePath).endsWith('context.json')
           ? JSON.stringify({ foo: 'bar' })
-          : 'enabled: true',
+          : String(filePath).endsWith('foo.json')
+            ? JSON.stringify({ marker: 'foo' })
+            : String(filePath).endsWith('bar.json')
+              ? JSON.stringify({ marker: 'bar' })
+              : 'enabled: true',
     );
 
     try {
@@ -1890,7 +1935,8 @@ describe('readVarsFiles', () => {
         audio: `file://${path.resolve('/suite/fixtures/audio.mp3').replace(/\\/g, '/')}`,
         glob: `file://${path.resolve('/suite/fixtures/data/*.txt').replace(/\\/g, '/')}`,
         braceGlob: `file://${path.resolve('/suite/fixtures/data/{foo,bar}.json').replace(/\\/g, '/')}`,
-        extglob: `file://${path.resolve('/suite/fixtures/data/+(foo|bar).json').replace(/\\/g, '/')}`,
+        extglob: [{ marker: 'foo' }, { marker: 'bar' }],
+        textExtglob: `file://${path.resolve('/suite/fixtures', textExtglobPath).replace(/\\/g, '/')}`,
       });
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://context.json', 'vars');
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://generator.js', 'vars');
@@ -1907,19 +1953,20 @@ describe('readVarsFiles', () => {
   });
 
   it('should parse structured references already nested in a vars file', async () => {
-    const nestedReference = `file://${path.resolve('/suite/fixtures/nested.yaml').replace(/\\/g, '/')}`;
-    const deeperReference = `file://${path.resolve('/suite/fixtures/deeper.yaml').replace(/\\/g, '/')}`;
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
       if (context === 'vars') {
         return config;
       }
-      if (config === nestedReference) {
+      return config;
+    });
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === path.resolve('/suite/fixtures/nested.yaml')) {
         return { foo: 'nested-value', descendant: 'file://deeper.yaml' };
       }
-      if (config === deeperReference) {
+      if (filePath === path.resolve('/suite/fixtures/deeper.yaml')) {
         return { shouldNotLoadRecursively: true };
       }
-      return config;
+      return undefined;
     });
     vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
@@ -1939,29 +1986,234 @@ describe('readVarsFiles', () => {
         braceGlob: 'file://fixtures/data/{alpha,beta}.json',
       },
     });
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(nestedReference);
-    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(deeperReference);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(
+      path.resolve('/suite/fixtures/nested.yaml'),
+    );
+    expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(
+      path.resolve('/suite/fixtures/deeper.yaml'),
+    );
+  });
+
+  it('should parse structured globs with provenance from each matched file', async () => {
+    const varsPath = path.resolve('/suite/fixtures/vars.yaml');
+    const globPath = 'data/*/case.@(yaml|json)';
+    const namedGlobPath = 'data/@(alpha/case.yaml|beta/case.json)';
+    const extensionlessGlobPath = 'data/*';
+    const alphaPath = path.resolve('/suite/fixtures/data/alpha/case.yaml');
+    const betaPath = path.resolve('/suite/fixtures/data/beta/case.json');
+    const emptyPath = path.resolve('/suite/fixtures/data/empty/case.yaml');
+    const nullPath = path.resolve('/suite/fixtures/data/null/case.json');
+    vi.mocked(globSync).mockImplementation((input) => {
+      const value = String(input);
+      if (value === varsPath) {
+        return [varsPath];
+      }
+      if (value === globPath) {
+        return [alphaPath, betaPath, emptyPath, nullPath];
+      }
+      if (value === namedGlobPath) {
+        return [alphaPath, betaPath];
+      }
+      if (value === extensionlessGlobPath) {
+        return [alphaPath, betaPath];
+      }
+      return [];
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      bundle: file://data/*/case.@(yaml|json)
+      namedBundle: 'file://data/@(alpha/case.yaml|beta/case.json)'
+      extensionlessBundle: file://data/*
+    `);
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === alphaPath) {
+        return [{ marker: 'alpha', report: 'file://report.txt' }];
+      }
+      if (filePath === betaPath) {
+        return { marker: 'beta', report: 'file://report.txt' };
+      }
+      if (filePath === emptyPath) {
+        return undefined;
+      }
+      if (filePath === nullPath) {
+        return null;
+      }
+      return undefined;
+    });
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(result).toEqual({
+      bundle: [
+        { marker: 'alpha', report: 'file://fixtures/data/alpha/report.txt' },
+        { marker: 'beta', report: 'file://fixtures/data/beta/report.txt' },
+        null,
+      ],
+      namedBundle: [
+        { marker: 'alpha', report: 'file://fixtures/data/alpha/report.txt' },
+        { marker: 'beta', report: 'file://fixtures/data/beta/report.txt' },
+      ],
+      extensionlessBundle: [
+        { marker: 'alpha', report: 'file://fixtures/data/alpha/report.txt' },
+        { marker: 'beta', report: 'file://fixtures/data/beta/report.txt' },
+      ],
+    });
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(alphaPath);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(betaPath);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(emptyPath);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(nullPath);
+    expect(globSync).toHaveBeenCalledWith(globPath, {
+      absolute: true,
+      cwd: path.resolve('/suite/fixtures'),
+      windowsPathsNoEscape: true,
+    });
+  });
+
+  it.each([
+    'set[ab]',
+    'set{a,b}',
+    'set@(x)',
+  ])('should keep declaring-directory metacharacters literal: %s', async (directory) => {
+    const basePath = path.resolve('/suite');
+    const declaringBasePath = path.resolve(basePath, directory, 'fixtures');
+    const varsPath = path.resolve(declaringBasePath, 'vars.yaml');
+    const dataPath = path.resolve(declaringBasePath, 'data.json');
+    const matchedPath = path.resolve(declaringBasePath, 'data/item.json');
+    const decoyPath = path.resolve(basePath, 'decoy/data/item.json');
+    const outerGlob = path.resolve(basePath, '*/fixtures/vars.yaml');
+    vi.mocked(globSync).mockImplementation((input, options) => {
+      const value = String(input);
+      if (value === outerGlob) {
+        return [varsPath];
+      }
+      if (value === 'data/*.json' && options?.cwd === declaringBasePath) {
+        return [matchedPath];
+      }
+      if (path.isAbsolute(value) && value.endsWith('data/*.json')) {
+        return [decoyPath];
+      }
+      return [];
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+        direct: file://data.json
+        bundle: file://data/*.json
+      `);
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === dataPath) {
+        return { marker: 'direct' };
+      }
+      if (filePath === matchedPath) {
+        return { marker: 'matched', report: 'file://report.txt' };
+      }
+      if (filePath === decoyPath) {
+        return { marker: 'decoy' };
+      }
+      return undefined;
+    });
+
+    const result = await readTestFiles('*/fixtures/vars.yaml', basePath);
+
+    expect(result).toEqual({
+      direct: { marker: 'direct' },
+      bundle: [
+        {
+          marker: 'matched',
+          report: `file://${path.posix.join(directory, 'fixtures/data/report.txt')}`,
+        },
+      ],
+    });
+    expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(decoyPath);
+  });
+
+  it('should skip a structured glob match that disappears before loading', async () => {
+    const varsPath = path.resolve('/suite/fixtures/vars.yaml');
+    const globPath = 'data/*.json';
+    const presentPath = path.resolve('/suite/fixtures/data/present.json');
+    const missingPath = path.resolve('/suite/fixtures/data/missing.json');
+    vi.mocked(globSync).mockImplementation((input) => {
+      const value = String(input);
+      if (value === varsPath) {
+        return [varsPath];
+      }
+      if (value === globPath) {
+        return [presentPath, missingPath];
+      }
+      return [];
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue('bundle: file://data/*.json');
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === presentPath) {
+        return { marker: 'present' };
+      }
+      if (filePath === missingPath) {
+        throw new Error(`File does not exist: ${missingPath}`);
+      }
+      return undefined;
+    });
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(result).toEqual({ bundle: [{ marker: 'present' }] });
+  });
+
+  it.each([
+    'vars.yaml',
+    'vars.json',
+  ])('should parse CSV references from an external vars file: %s', async (varsFile) => {
+    const varsPath = path.resolve('/suite/fixtures', varsFile);
+    const csvPath = path.resolve('/suite/fixtures/data/rows.csv');
+    const csvReference = `file://${csvPath.replace(/\\/g, '/')}`;
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input) === varsPath ? [varsPath] : [],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      varsFile.endsWith('.json')
+        ? JSON.stringify({ context: csvReference, nested: { rows: csvReference } })
+        : `context: ${csvReference}\nnested:\n  rows: ${csvReference}`,
+    );
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === csvPath) {
+        return [
+          { marker: 'alpha', report: 'file://alpha.txt' },
+          { marker: 'beta', report: 'file://beta.txt' },
+        ];
+      }
+      return undefined;
+    });
+
+    const result = await readTestFiles(
+      path.posix.join('fixtures', varsFile),
+      path.resolve('/suite'),
+    );
+
+    const expectedRows = [
+      { marker: 'alpha', report: 'file://fixtures/data/alpha.txt' },
+      { marker: 'beta', report: 'file://fixtures/data/beta.txt' },
+    ];
+    expect(result).toEqual({ context: expectedRows, nested: { rows: expectedRows } });
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(csvPath);
   });
 
   it('should rebase file references returned as structured scalar values', async () => {
-    const topReference = `file://${path.resolve('/suite/fixtures/top.yaml').replace(/\\/g, '/')}`;
-    const nestedReference = `file://${path.resolve('/suite/fixtures/nested.json').replace(/\\/g, '/')}`;
-    const topChildReference = `file://${path.resolve('/suite/fixtures/top-child.txt').replace(/\\/g, '/')}`;
-    const nestedChildReference = `file://${path.resolve('/suite/fixtures/nested-child.txt').replace(/\\/g, '/')}`;
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
       if (context === 'vars') {
         return config;
       }
-      if (config === topReference) {
+      return config;
+    });
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
+      if (filePath === path.resolve('/suite/fixtures/top.yaml')) {
         return 'file://top-child.txt';
       }
-      if (config === nestedReference) {
+      if (filePath === path.resolve('/suite/fixtures/nested.json')) {
         return 'file://nested-child.txt';
       }
-      if (config === topChildReference || config === nestedChildReference) {
+      if (
+        filePath === path.resolve('/suite/fixtures/top-child.txt') ||
+        filePath === path.resolve('/suite/fixtures/nested-child.txt')
+      ) {
         return 'should-not-load-recursively';
       }
-      return config;
+      return undefined;
     });
     vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
@@ -1976,8 +2228,12 @@ describe('readVarsFiles', () => {
       top: 'file://fixtures/top-child.txt',
       context: { nested: 'file://fixtures/nested-child.txt' },
     });
-    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(topChildReference);
-    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(nestedChildReference);
+    expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(
+      path.resolve('/suite/fixtures/top-child.txt'),
+    );
+    expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(
+      path.resolve('/suite/fixtures/nested-child.txt'),
+    );
   });
 
   it('should render nested vars-file paths before rebasing them', async () => {
@@ -2008,11 +2264,9 @@ describe('readVarsFiles', () => {
       if (config === reference && context === 'vars') {
         return renderedReference;
       }
-      if (config === renderedReference) {
-        return { marker: 'rendered-before-resolution' };
-      }
       return config;
     });
+    vi.mocked(loadConfigFromFilePath).mockReturnValue({ marker: 'rendered-before-resolution' });
     vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
     vi.mocked(fs.readFileSync).mockReturnValue(`context: '${reference}'`);
 
@@ -2020,7 +2274,7 @@ describe('readVarsFiles', () => {
 
     expect(result).toEqual({ context: { marker: 'rendered-before-resolution' } });
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(renderedReference);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(path.resolve('/external/context.json'));
   });
 });
 

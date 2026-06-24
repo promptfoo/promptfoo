@@ -1350,6 +1350,33 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it('should watch a scalar scenario source from the default config', async () => {
+    const defaultConfig = {
+      scenarios: 'file://scenarios/scenario.yaml',
+    } as unknown as UnifiedConfig;
+    const config = { prompts: [], providers: [], tests: [] } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([path.resolve('/suite/scenarios/scenario.yaml')]),
+      { ignored: /^\./, persistent: true },
+    );
+  });
+
   it('should normalize canonical Windows file URLs for direct watch sources', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const resolveSpy = vi

@@ -205,7 +205,7 @@ tests:
 
 Relative nested references in an external YAML or JSON test/vars file are resolved from the directory containing that file. Inline references are resolved from the configuration base directory.
 
-During prompt rendering, nested text files are loaded as trimmed strings and YAML files as JSON strings. The external vars-file loader preserves its existing one-pass behavior: direct JSON/YAML references already present in that file are parsed as structured values, but references found inside a newly loaded structured file are not parsed recursively. Binary files and JavaScript, Python, PDF, or media references remain literal when nested; use a top-level variable for the existing executable, PDF, and media behavior.
+During prompt rendering, nested text files are loaded as trimmed strings and YAML files as JSON strings. The external vars-file loader preserves its existing one-pass behavior: direct JSON, YAML, and CSV references already present in that file are parsed as structured values, including wildcard and extglob patterns for those formats, but references found inside a newly loaded structured file are not parsed recursively. Top-level brace-only patterns remain deferred to normal variable expansion. Binary files and JavaScript, Python, PDF, or media references remain literal when nested; use a top-level variable for the existing executable, PDF, and media behavior.
 
 Javascript and Python variable files are supported. For example:
 

@@ -59,6 +59,46 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 }
 
 /**
+ * Loads one exact local file without interpreting glob metacharacters in its path.
+ */
+export function loadConfigFromFilePath(filePath: string): any {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    throw new Error(`Failed to read file ${filePath}: ${error}`);
+  }
+  if (filePath.endsWith('.json')) {
+    try {
+      return JSON.parse(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse JSON file ${filePath}: ${error}`);
+    }
+  }
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    try {
+      return yaml.load(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse YAML file ${filePath}: ${error}`);
+    }
+  }
+  if (filePath.endsWith('.csv')) {
+    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
+    };
+    const records = csvParse<Record<string, string>>(contents, csvOptions);
+    if (records.length > 0 && Object.keys(records[0]).length === 1) {
+      return records.map((record) => Object.values(record)[0]);
+    }
+    return records;
+  }
+  return contents;
+}
+
+/**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
  *
@@ -190,44 +230,7 @@ export function maybeLoadFromExternalFile(
     return allContents;
   }
 
-  // Original single file logic
-  const finalPath = resolvedPath;
-
-  let contents: string;
-  try {
-    contents = fs.readFileSync(finalPath, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`File does not exist: ${finalPath}`);
-    }
-    throw new Error(`Failed to read file ${finalPath}: ${error}`);
-  }
-  if (finalPath.endsWith('.json')) {
-    try {
-      return JSON.parse(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    try {
-      return yaml.load(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.csv')) {
-    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-      columns: true as const,
-    };
-    const records = csvParse<Record<string, string>>(contents, csvOptions);
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
+  return loadConfigFromFilePath(resolvedPath);
 }
 
 /**
