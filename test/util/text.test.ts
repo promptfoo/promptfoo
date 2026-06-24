@@ -37,9 +37,6 @@ describe('ellipsize', () => {
     expect(ellipsize('hello', 2)).toBe('he');
     expect(ellipsize('hello', 1)).toBe('h');
     expect(ellipsize('hello', 0)).toBe('');
-    for (const maxLen of [0, 1, 2]) {
-      expect(ellipsize('hello', maxLen).length).toBeLessThanOrEqual(maxLen);
-    }
     expect(ellipsize('hello', 3)).toBe('...');
   });
 });
