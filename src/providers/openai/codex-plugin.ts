@@ -747,6 +747,12 @@ async function collectArtifactReferences(
   if (!pathExists(runtime.artifactDir)) {
     return references;
   }
+  const artifactRootStat = await withAbort(fs.promises.lstat(runtime.artifactDir), signal);
+  if (artifactRootStat.isSymbolicLink() || !artifactRootStat.isDirectory()) {
+    throw new Error('Codex plugin artifact root must be a directory without symlinks');
+  }
+  const resolvedArtifactRoot = await withAbort(fs.promises.realpath(runtime.artifactDir), signal);
+  assertContainedPath(runtime.root, resolvedArtifactRoot, 'Codex plugin artifact root');
 
   const collect = async (directory: string): Promise<void> => {
     for (const entry of await withAbort(
