@@ -3,16 +3,15 @@ import * as path from 'path';
 
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import { z } from 'zod';
-import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { isScenarioConfigValuesRef, TestCaseSchema } from '../../types/index';
 import {
   getNunjucksEngineForFilePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
+  renderEnvOnlyInStringForFilePath,
 } from '../file';
 import { normalizeFilePath, parseFileUrl } from '../functions/loadFunction';
-import { renderEnvOnlyInObject } from '../render';
 import { ConfigResolutionError } from './errors';
 
 import type {
@@ -314,17 +313,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-function getSourceEnv(envOverrides?: EnvOverrides): EnvOverrides {
-  const processEnvVarsDisabled = getEnvBool(
-    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-  );
-  return {
-    ...(processEnvVarsDisabled ? {} : process.env),
-    ...(envOverrides ?? {}),
-  };
-}
-
 function isLiveProvider(value: Record<string, unknown>): boolean {
   return (
     Object.prototype.hasOwnProperty.call(value, 'id') &&
@@ -336,11 +324,11 @@ function isLiveProvider(value: Record<string, unknown>): boolean {
 
 function renderSourceEnvTemplates<T>(
   value: T,
-  sourceEnv: EnvOverrides,
+  envOverrides?: EnvOverrides,
   seen = new WeakMap<object, unknown>(),
 ): T {
   if (typeof value === 'string') {
-    return renderEnvOnlyInObject(value, sourceEnv, true) as T;
+    return renderEnvOnlyInStringForFilePath(value, envOverrides) as T;
   }
   if (!value || typeof value !== 'object') {
     return value;
@@ -354,7 +342,7 @@ function renderSourceEnvTemplates<T>(
     seen.set(value, rendered);
     let changed = false;
     for (const item of value) {
-      const renderedItem = renderSourceEnvTemplates(item, sourceEnv, seen);
+      const renderedItem = renderSourceEnvTemplates(item, envOverrides, seen);
       changed ||= renderedItem !== item;
       rendered.push(renderedItem);
     }
@@ -373,7 +361,7 @@ function renderSourceEnvTemplates<T>(
   seen.set(value, rendered);
   let changed = false;
   for (const [key, nested] of Object.entries(record)) {
-    const renderedValue = renderSourceEnvTemplates(nested, sourceEnv, seen);
+    const renderedValue = renderSourceEnvTemplates(nested, envOverrides, seen);
     changed ||= renderedValue !== nested;
     defineRecordProperty(rendered, key, renderedValue);
   }
@@ -385,11 +373,10 @@ function resolveScenarioProviderRef(
   provider: unknown,
   envOverrides?: EnvOverrides,
 ): unknown {
-  const sourceEnv = getSourceEnv(envOverrides);
   if (typeof provider === 'string') {
     return resolveFileRefFromBase(
       basePath,
-      renderSourceEnvTemplates(provider, sourceEnv),
+      renderSourceEnvTemplates(provider, envOverrides),
       envOverrides,
     );
   }
@@ -405,14 +392,14 @@ function resolveScenarioProviderRef(
     return provider;
   }
   if (typeof providerId === 'string') {
-    const renderedRecord = renderSourceEnvTemplates(record, sourceEnv);
+    const renderedRecord = renderSourceEnvTemplates(record, envOverrides);
     return resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
   }
 
   let resolved: Record<string, unknown> | undefined;
   for (const [key, value] of Object.entries(record)) {
-    const renderedKey = renderSourceEnvTemplates(key, sourceEnv);
-    const renderedValue = renderSourceEnvTemplates(value, sourceEnv);
+    const renderedKey = renderSourceEnvTemplates(key, envOverrides);
+    const renderedValue = renderSourceEnvTemplates(value, envOverrides);
     const resolvedKey = resolveFileRefFromBase(basePath, renderedKey, envOverrides);
     const resolvedValue = resolveNestedFileRefs(basePath, renderedValue, envOverrides);
     if (resolvedKey !== key || resolvedValue !== value) {

@@ -70,6 +70,48 @@ export function getNunjucksEngineForFilePath(envOverrides?: EnvOverrides): nunju
   return env;
 }
 
+export function renderEnvOnlyInStringForFilePath(
+  template: string,
+  envOverrides?: EnvOverrides,
+): string {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return template;
+  }
+
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  const envGlobals = {
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...(envOverrides ?? {}),
+  };
+  const nunjucksEngine = getNunjucksEngineForFilePath(envOverrides ?? {});
+
+  return template.replace(/\{\{(?:[^}]|\}(?!\}))*\}\}/g, (match) => {
+    if (!match.match(/\benv\.|env\[/)) {
+      return match;
+    }
+
+    const varMatch = match.match(/env\.(\w+)|env\[['"]([^'"]+)['"]\]/);
+    const varName = varMatch?.[1] || varMatch?.[2];
+    const hasFilter = match.includes('|');
+
+    if (!hasFilter && (!varName || !(varName in envGlobals) || envGlobals[varName] === undefined)) {
+      return match;
+    }
+
+    try {
+      return nunjucksEngine.renderString(match, {});
+    } catch (error) {
+      logger.debug(
+        `Failed to render env template "${match}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return match;
+    }
+  });
+}
+
 function parseGlobFile(matchedFile: string, contents: string): any[] {
   if (matchedFile.endsWith('.json')) {
     const parsed = JSON.parse(contents);
