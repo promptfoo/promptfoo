@@ -1,4 +1,4 @@
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
@@ -36,14 +36,30 @@ const mockTracer = {
     return fn(mockSpan);
   }),
 };
+let mockActiveSpan: any = mockSpan;
 
 vi.mock('@opentelemetry/api', async () => {
   const actual = await vi.importActual('@opentelemetry/api');
   return {
     ...actual,
+    context: {
+      ...(actual as any).context,
+      active: vi.fn(() => ({})),
+      with: vi.fn((ctx: { __span?: unknown }, fn: (...args: any[]) => unknown, ...args: any[]) => {
+        const previous = mockActiveSpan;
+        mockActiveSpan = ctx.__span ?? previous;
+        try {
+          return fn(...args);
+        } finally {
+          mockActiveSpan = previous;
+        }
+      }),
+    },
     trace: {
+      ...(actual as any).trace,
       getTracer: vi.fn(() => mockTracer),
-      getActiveSpan: vi.fn(() => mockSpan),
+      getActiveSpan: vi.fn(() => mockActiveSpan),
+      setSpan: vi.fn((_ctx: unknown, span: unknown) => ({ __span: span })),
     },
     SpanKind: {
       CLIENT: 2,
@@ -59,6 +75,7 @@ vi.mock('@opentelemetry/api', async () => {
 describe('genaiTracer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockActiveSpan = mockSpan;
     mockSpan.status = { code: SpanStatusCode.UNSET };
     mockSpan.setStatus.mockImplementation((status: { code: number; message?: string }) => {
       if (status.code !== SpanStatusCode.UNSET && mockSpan.status.code !== SpanStatusCode.OK) {
@@ -215,6 +232,48 @@ describe('genaiTracer', () => {
         expect(mockSpan.setStatus.mock.calls).toEqual([
           [{ code: SpanStatusCode.ERROR, message: 'aborted' }],
         ]);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should track active-span errors from result extractors on write-only spans', async () => {
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+      const statuses: Array<{ code: number; message?: string }> = [];
+      const writeOnlySpan = Object.freeze({
+        setAttribute: vi.fn(),
+        setAttributes: vi.fn(),
+        setStatus: vi.fn((status: { code: number; message?: string }) => {
+          statuses.push(status);
+        }),
+        addEvent: vi.fn(),
+        addLink: vi.fn(),
+        addLinks: vi.fn(),
+        end: vi.fn(),
+        isRecording: vi.fn(() => true),
+        recordException: vi.fn(),
+        spanContext: vi.fn(() => ({ traceId: 'trace', spanId: 'span', traceFlags: 1 })),
+        updateName: vi.fn(),
+      });
+      mockTracer.startActiveSpan.mockImplementationOnce((_name, _options, arg3, arg4) => {
+        const fn = typeof arg4 === 'function' ? arg4 : arg3;
+        return fn(writeOnlySpan);
+      });
+
+      try {
+        await withGenAISpan(
+          baseContext,
+          async () => ({ output: 'partial result' }),
+          () => {
+            trace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: 'extractor failed',
+            });
+            return {};
+          },
+        );
+
+        expect(statuses).toEqual([{ code: SpanStatusCode.ERROR, message: 'extractor failed' }]);
       } finally {
         restoreEnv();
       }
@@ -597,6 +656,7 @@ describe('genaiTracer', () => {
             providerName: 'xai',
             operationName: 'invoke_agent',
             model: 'grok-code',
+            requestModel: 'grok-code-actual',
             providerId: 'xai:grok-code',
             agentName: 'reviewer',
             agentId: 'agent-123',
@@ -615,11 +675,36 @@ describe('genaiTracer', () => {
         expect(attributes).toMatchObject({
           [GenAIAttributes.PROVIDER_NAME]: 'x_ai',
           [GenAIAttributes.OPERATION_NAME]: 'invoke_agent',
+          [GenAIAttributes.REQUEST_MODEL]: 'grok-code-actual',
           [GenAIAttributes.REQUEST_STREAM]: true,
           'gen_ai.agent.name': 'reviewer',
           'gen_ai.agent.id': 'agent-123',
         });
         expect(attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should omit placeholder request models from current agent spans', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      try {
+        await withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'invoke_agent',
+            model: 'agent-id-used-for-legacy-name',
+            providerId: 'openai:assistant:agent-id',
+            agentId: 'agent-id',
+          },
+          async () => ({ output: 'test' }),
+        );
+
+        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+        expect(attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
       } finally {
         restoreEnv();
       }
@@ -760,6 +845,153 @@ describe('genaiTracer', () => {
       expect(sanitized.session_summary).toBe('safe summary');
     });
 
+    it.each([
+      ['AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'],
+      ['AZURE_OPENAI_API_KEY', 'azure-opaque-value'],
+      ['OPENAI_API_KEY', 'openai-opaque-value'],
+      ['GITHUB_TOKEN', 'ghp_abcdefghijklmnopqrstuvwxyz123456'],
+      ['HF_TOKEN', 'hf_abcdefghijklmnopqrstuvwxyz123456'],
+      ['HUGGINGFACE_API_KEY', 'huggingface-opaque-value'],
+      ['GOOGLE_API_KEY', 'AIzaSyExampleKeyMaterial'],
+      ['DATABRICKS_TOKEN', 'dapiabcdefghijklmnopqrstuvwxyz'],
+    ])('should redact provider-prefixed credential field %s', (field, value) => {
+      const json = sanitizeBody(JSON.stringify({ [field]: value }));
+      const formValue = encodeURIComponent(value);
+      const form = sanitizeBody(`${encodeURIComponent(field)}=${formValue}`);
+      const assignment = sanitizeBody(`${field}=${value}`);
+
+      expect(json).not.toContain(value);
+      expect(form).not.toContain(formValue);
+      expect(assignment).not.toContain(value);
+    });
+
+    it('should redact standard credential carriers and URL query credentials', () => {
+      const body = JSON.stringify({
+        'Proxy-Authorization': 'Basic dXNlcjpwYXNz',
+        'Ocp-Apim-Subscription-Key': 'opaque-subscription-value',
+        key: 'AIzaSySyntheticKeyMaterial',
+      });
+      const form =
+        'subscription-key=opaque-subscription-value&x-functions-key=opaque-function-value';
+      const url =
+        'https://example.test/run?code=opaque-function-code&key=AIzaSySyntheticKeyMaterial';
+      const encodedUrl =
+        'https://example.test/run?%6B%65%79=opaque-synthetic-provider-secret&co%64e=opaque-function-code&api%5Fkey=encoded-api-secret&access%5Ftoken=encoded-access-secret&subscription%2Dkey=encoded-subscription-secret';
+
+      expect(sanitizeBody(body)).not.toContain('dXNlcjpwYXNz');
+      expect(sanitizeBody(body)).not.toContain('opaque-subscription-value');
+      expect(sanitizeBody(body)).not.toContain('AIzaSySyntheticKeyMaterial');
+      expect(sanitizeBody(form)).not.toContain('opaque-subscription-value');
+      expect(sanitizeBody(form)).not.toContain('opaque-function-value');
+      expect(sanitizeBody(url)).not.toContain('opaque-function-code');
+      expect(sanitizeBody(url)).not.toContain('AIzaSySyntheticKeyMaterial');
+      expect(sanitizeBody(encodedUrl)).not.toContain('opaque-synthetic-provider-secret');
+      expect(sanitizeBody(encodedUrl)).not.toContain('opaque-function-code');
+      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-api-secret');
+      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-access-secret');
+      expect(sanitizeBody(encodedUrl)).not.toContain('encoded-subscription-secret');
+    });
+
+    it('should sanitize assignments embedded in JSON string values', () => {
+      const secret = 'opaque-synthetic-provider-secret';
+      const body = JSON.stringify({
+        messages: [{ role: 'user', content: `debug dump: OPENAI_API_KEY=${secret}` }],
+      });
+
+      expect(sanitizeBody(body)).not.toContain(secret);
+    });
+
+    it('should scan large non-sensitive assignment text without quadratic work', () => {
+      const secret = 'opaque-synthetic-provider-secret';
+      const body = `${'a='.repeat(100_000)} OPENAI_API_KEY=${secret}`;
+
+      expect(sanitizeBody(body)).not.toContain(secret);
+    });
+
+    it('should sanitize escaped credential keys in oversized JSON', () => {
+      const secret = 'opaque-synthetic-provider-secret';
+      const body = `{"OPENAI\\u005fAPI\\u005fKEY":"${secret}","padding":"${'x'.repeat(17_000)}"}`;
+      const nestedBody = JSON.stringify({
+        credentials: { username: 'alice', value: secret },
+        padding: 'x'.repeat(17_000),
+      });
+
+      expect(sanitizeBody(body)).not.toContain(secret);
+      expect(sanitizeBody(nestedBody)).not.toContain(secret);
+    });
+
+    it('should fail closed for JSON beyond the bounded parser limit', () => {
+      const body = JSON.stringify({ message: 'x'.repeat(300_000) });
+      const unicodeBody = JSON.stringify({ message: 'é'.repeat(140_000) });
+      const surrogateBody = `{"message":"${'\ud800'.repeat(100_000)}"}`;
+
+      expect(sanitizeBody(body)).toBe('<REDACTED_OVERSIZED_JSON>');
+      expect(sanitizeBody(unicodeBody)).toBe('<REDACTED_OVERSIZED_JSON>');
+      expect(sanitizeBody(surrogateBody)).toBe('<REDACTED_OVERSIZED_JSON>');
+      expect(sanitizeBody('a'.repeat(300_000))).toBe('<REDACTED_OVERSIZED_BODY>');
+    });
+
+    it('should handle deeply nested JSON without failing tracing', () => {
+      const secret = 'opaque-secret-value-1234567890';
+      const body =
+        '{"a":'.repeat(5_000) +
+        JSON.stringify({ credentials: { username: 'alice', value: secret } }) +
+        '}'.repeat(5_000);
+
+      expect(() => sanitizeBody(body)).not.toThrow();
+      expect(sanitizeBody(body)).not.toContain(secret);
+    });
+
+    it('should fail closed instead of changing unsafe JSON numbers during redaction', () => {
+      const body =
+        '{"OPENAI_API_KEY":"opaque-synthetic-provider-secret","large":1e400,"id":9007199254740993}';
+      const underflowBody = '{"password":"secret","p":1e-400}';
+      const safeBody = '{"password":"secret","timestamp_us":1719234567890123}';
+      const smallestBody = '{"password":"secret","p":5e-324}';
+
+      expect(sanitizeBody(body)).toBe('<REDACTED_UNSANITIZABLE_JSON>');
+      expect(sanitizeBody(underflowBody)).toBe('<REDACTED_UNSANITIZABLE_JSON>');
+      expect(JSON.parse(sanitizeBody(safeBody)).timestamp_us).toBe(1719234567890123);
+      expect(JSON.parse(sanitizeBody(smallestBody)).p).toBe(5e-324);
+    });
+
+    it('should preserve benign fields that only contain credential words', () => {
+      const body = JSON.stringify({
+        token_count: 4,
+        max_tokens: 128,
+        input_tokens: 32,
+        github_token_count: 2,
+        session_summary: 'safe',
+        public_key: 'public',
+        monkey: 'banana',
+        api_key_hint: 'last four',
+        tokenizer: 'cl100k_base',
+        authorization_mode: 'rbac',
+        password_policy: 'strong',
+        signature_algorithm: 'sha256',
+        secret_recipe: 'cake',
+        access_key_description: 'identifier only',
+        oauth: 'enabled',
+        bos_token: '<s>',
+        eos_token: '</s>',
+        pad_token: '[PAD]',
+        continuation_token: 'page-2',
+        next_token: 'page-3',
+        is_secret: false,
+        has_password: false,
+        requires_credentials: false,
+        keyboard_access_key: 'menu-shortcut',
+      });
+
+      expect(sanitizeBody(body)).toBe(body);
+      expect(sanitizeBody('https://example.test/search?code=200&key=id')).toBe(
+        'https://example.test/search?code=200&key=id',
+      );
+      expect(sanitizeBody('has_password=false&is_secret=true')).toBe(
+        'has_password=false&is_secret=true',
+      );
+    });
+
     it('should redact form, header, and PEM credentials without partial suffixes', () => {
       const form = sanitizeBody(
         'message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D&client_secret=short%2F%2B%3D',
@@ -777,7 +1009,9 @@ describe('genaiTracer', () => {
       const privateKey = sanitizeBody(
         '-----BEGIN RSA PRIVATE KEY-----\nsecret material\n-----END RSA PRIVATE KEY-----',
       );
+      const unmatchedPrivateKeys = sanitizeBody('-----BEGIN PRIVATE KEY-----\n'.repeat(1_000));
       expect(privateKey).toBe('<REDACTED_PRIVATE_KEY>');
+      expect(unmatchedPrivateKeys).toBe('<REDACTED_PRIVATE_KEY>');
     });
 
     it('should preserve benign hashes, slash text, and JSON formatting', () => {

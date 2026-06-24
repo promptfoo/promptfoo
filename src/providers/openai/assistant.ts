@@ -226,6 +226,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       system: 'openai',
       operationName: 'invoke_agent',
       model: this.assistantConfig.modelName || this.assistantId,
+      requestModel: this.assistantConfig.modelName,
       agentId: this.assistantId,
       providerId: this.id(),
       prompt,

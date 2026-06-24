@@ -5,7 +5,7 @@
  * provider calls correctly create spans with GenAI semantic conventions.
  */
 
-import { SpanStatusCode } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -160,6 +160,26 @@ describe('OpenTelemetry Tracing Integration', () => {
             },
           ),
         message: 'aborted: hook_stopped',
+      },
+      {
+        name: 'active-span partial-result error',
+        run: () =>
+          withGenAISpan(
+            {
+              system: 'anthropic',
+              operationName: 'invoke_agent',
+              model: 'claude-agent',
+              providerId: 'anthropic:claude-agent',
+            },
+            async () => {
+              trace.getActiveSpan()?.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: 'stream closed early',
+              });
+              return { output: 'partial result' };
+            },
+          ),
+        message: 'stream closed early',
       },
     ])('should preserve ERROR for $name', async ({ run, message }) => {
       await run();

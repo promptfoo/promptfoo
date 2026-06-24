@@ -19,11 +19,12 @@ import asyncio
 import importlib.util
 import inspect
 import json
+import math
 import os
 import re
 import sys
 import traceback
-from typing import Any
+from typing import Any, Optional, Tuple
 from urllib.parse import quote, unquote_plus
 
 # ============================================================================
@@ -205,7 +206,12 @@ def _gen_ai_operation_name(function_name: str, use_latest: bool) -> str:
 
 
 _REDACTED_BODY_VALUE = "<REDACTED>"
+_REDACTED_OVERSIZED_BODY_VALUE = "<REDACTED_OVERSIZED_BODY>"
+_REDACTED_OVERSIZED_JSON_VALUE = "<REDACTED_OVERSIZED_JSON>"
+_REDACTED_UNSANITIZABLE_JSON_VALUE = "<REDACTED_UNSANITIZABLE_JSON>"
+_MAX_BODY_SANITIZE_LENGTH = 256 * 1024
 _SENSITIVE_BODY_FIELD_NAMES = {
+    "key",
     "password",
     "passwd",
     "pwd",
@@ -257,39 +263,152 @@ _SENSITIVE_BODY_FIELD_NAMES = {
     "pfxcontent",
     "keycontent",
     "certcontent",
+    "proxyauthorization",
+    "ocpapimsubscriptionkey",
+    "subscriptionkey",
+    "xfunctionskey",
+    "functionkey",
+    "githubtoken",
+    "hftoken",
+    "huggingfacetoken",
+    "databrickstoken",
+    "awssessiontoken",
+    "xamzsecuritytoken",
+    "awssecretaccesskey",
+    "secretaccesskey",
 }
+_SENSITIVE_BODY_FIELD_SUFFIXES = (
+    "apikey",
+    "apisecret",
+    "apitoken",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "bearertoken",
+    "authtoken",
+    "sessiontoken",
+    "csrftoken",
+    "clientsecret",
+    "webhooksecret",
+    "secretkey",
+    "password",
+    "passwd",
+    "pwd",
+    "credentials",
+    "accesskey",
+    "accesskeyid",
+    "privatekey",
+    "certkey",
+    "encryptionkey",
+    "signingkey",
+    "passphrase",
+    "subscriptionkey",
+    "functionskey",
+    "authorization",
+)
 _API_KEY_VALUE_PATTERN = re.compile(r"\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}")
 _AWS_ACCESS_KEY_PATTERN = re.compile(r"\bAKIA[A-Z0-9]{16}\b")
+_GOOGLE_API_KEY_PATTERN = re.compile(r"\bAIza[0-9A-Za-z_-]{10,}")
+_GITHUB_TOKEN_PATTERN = re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}")
+_HUGGINGFACE_TOKEN_PATTERN = re.compile(r"\bhf_[A-Za-z0-9]{20,}")
+_DATABRICKS_TOKEN_PATTERN = re.compile(r"\bdapi[A-Za-z0-9]{20,}")
 _SENSITIVE_BODY_VALUE_PATTERNS = [
     (_API_KEY_VALUE_PATTERN, "<REDACTED_API_KEY>"),
+    (_GOOGLE_API_KEY_PATTERN, "<REDACTED_API_KEY>"),
+    (_GITHUB_TOKEN_PATTERN, "<REDACTED_TOKEN>"),
+    (_HUGGINGFACE_TOKEN_PATTERN, "<REDACTED_TOKEN>"),
+    (_DATABRICKS_TOKEN_PATTERN, "<REDACTED_TOKEN>"),
     (_AWS_ACCESS_KEY_PATTERN, "<REDACTED_AWS_KEY>"),
-    (
-        re.compile(
-            r"-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?"
-            r"-----END [^-\r\n]*PRIVATE KEY-----"
-        ),
-        "<REDACTED_PRIVATE_KEY>",
-    ),
 ]
-_BODY_ASSIGNMENT_PATTERN = re.compile(
+_BODY_ASSIGNMENT_START_PATTERN = re.compile(
     r"(^|[^A-Za-z0-9_-])([\"']?)([A-Za-z][A-Za-z0-9_.\-]{0,64})\2"
-    r"(\s*[:=]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,}\r\n]+)",
+    r"(\s*[:=]\s*)",
     re.MULTILINE,
+)
+_BODY_ASSIGNMENT_VALUE_PATTERN = re.compile(
+    r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,}\r\n]+"
+)
+_BODY_ASSIGNMENT_TOKEN_VALUE_PATTERN = re.compile(
+    r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,}&;]+"
 )
 _FORM_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$")
 _FORM_PAIR_PATTERN = re.compile(r"(^|[&;])([^=&;]+)=([^&;]*)")
+_JSON_STRING_PROPERTY_PATTERN = re.compile(
+    r'("(?:\\.|[^"\\])*")(\s*:\s*)'
+    r'("(?:\\.|[^"\\])*"|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)'
+)
+_JSON_STRING_TOKEN_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"')
+_JSON_NUMBER_TOKEN_PATTERN = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?")
+_URL_QUERY_PAIR_PATTERN = re.compile(r"([?&])([^=&#\s]+)=([^&#\s]*)")
+_PRIVATE_KEY_BEGIN_PATTERN = re.compile(r"-----BEGIN [^-\r\n]*PRIVATE KEY-----")
+_PRIVATE_KEY_END_PATTERN = re.compile(r"-----END [^-\r\n]*PRIVATE KEY-----")
 
 
 def _normalize_body_field_name(field_name: str) -> str:
     return re.sub(r"[-_\s=]", "", field_name.lower())
 
 
-def _is_sensitive_body_field(field_name: str) -> bool:
-    return any(
-        _normalize_body_field_name(part) in _SENSITIVE_BODY_FIELD_NAMES
-        for part in re.split(r"[.\[\]]+", field_name)
-        if part
+def _looks_like_opaque_credential(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    unquoted = value.strip("\"'")
+    return (
+        len(unquoted) >= 16
+        and not any(char.isspace() for char in unquoted)
+        and unquoted.lower() not in {"true", "false", "null", "undefined"}
     )
+
+
+def _exceeds_body_sanitization_limit(text: str) -> bool:
+    return len(text) > _MAX_BODY_SANITIZE_LENGTH or len(
+        text.encode("utf-8", errors="surrogatepass")
+    ) > (_MAX_BODY_SANITIZE_LENGTH)
+
+
+def _is_sensitive_body_field(field_name: str, value: Any = None) -> bool:
+    for part in re.split(r"[.\[\]]+", field_name):
+        if not part:
+            continue
+        normalized = _normalize_body_field_name(part)
+        if isinstance(value, bool) or (
+            isinstance(value, str) and value.lower() in {"true", "false"}
+        ):
+            continue
+        if normalized == "key":
+            if _looks_like_opaque_credential(value):
+                return True
+            continue
+        if normalized in _SENSITIVE_BODY_FIELD_NAMES:
+            return True
+        suffix = next(
+            (
+                candidate
+                for candidate in _SENSITIVE_BODY_FIELD_SUFFIXES
+                if normalized.endswith(candidate)
+            ),
+            None,
+        )
+        if suffix in {"accesskey", "accesskeyid"}:
+            if _looks_like_opaque_credential(value):
+                return True
+            continue
+        if suffix is not None:
+            return True
+    return False
+
+
+def _could_be_sensitive_body_field(field_name: str) -> bool:
+    for part in re.split(r"[.\[\]]+", field_name):
+        if not part:
+            continue
+        normalized = _normalize_body_field_name(part)
+        if (
+            normalized == "key"
+            or normalized in _SENSITIVE_BODY_FIELD_NAMES
+            or normalized.endswith(_SENSITIVE_BODY_FIELD_SUFFIXES)
+        ):
+            return True
+    return False
 
 
 def _body_redaction_marker(value: Any) -> str:
@@ -298,79 +417,254 @@ def _body_redaction_marker(value: Any) -> str:
             return "<REDACTED_API_KEY>"
         if _AWS_ACCESS_KEY_PATTERN.search(value):
             return "<REDACTED_AWS_KEY>"
+        if any(
+            pattern.search(value)
+            for pattern in (
+                _GOOGLE_API_KEY_PATTERN,
+                _GITHUB_TOKEN_PATTERN,
+                _HUGGINGFACE_TOKEN_PATTERN,
+                _DATABRICKS_TOKEN_PATTERN,
+            )
+        ):
+            return "<REDACTED_TOKEN>"
     return _REDACTED_BODY_VALUE
 
 
-def _sanitize_json_body(text: str) -> str:
-    stripped = text.strip()
-    if not stripped or len(text) > 4096 * 4 or stripped[0] not in ("{", "["):
-        return text
+def _sanitize_url_query_credentials(text: str) -> str:
+    def replace_query_credential(match):
+        key = unquote_plus(match.group(2))
+        value = unquote_plus(match.group(3))
+        is_opaque_generic_credential = key.lower() in {
+            "code",
+            "key",
+        } and _looks_like_opaque_credential(value)
+        if (
+            not _is_sensitive_body_field(key, value)
+            and not is_opaque_generic_credential
+        ):
+            return match.group(0)
+        return (
+            f"{match.group(1)}{match.group(2)}={quote(_REDACTED_BODY_VALUE, safe='')}"
+        )
+
+    return _URL_QUERY_PAIR_PATTERN.sub(replace_query_credential, text)
+
+
+def _redact_private_keys(text: str) -> str:
+    replacements = []
+    cursor = 0
+    scan_position = 0
+    while True:
+        begin = _PRIVATE_KEY_BEGIN_PATTERN.search(text, scan_position)
+        if begin is None:
+            break
+        end = _PRIVATE_KEY_END_PATTERN.search(text, begin.end())
+        replacements.extend((text[cursor : begin.start()], "<REDACTED_PRIVATE_KEY>"))
+        if end is None:
+            cursor = len(text)
+            break
+        cursor = end.end()
+        scan_position = cursor
+    return "".join(replacements) + text[cursor:] if replacements else text
+
+
+def _apply_sensitive_value_patterns(text: str) -> str:
+    sanitized = _redact_private_keys(text)
+    for pattern, replacement in _SENSITIVE_BODY_VALUE_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
+def _sanitize_unstructured_body_text(text: str) -> str:
+    form_body = _sanitize_form_body(text)
+    sanitized = form_body if form_body is not None else _sanitize_body_assignments(text)
+    return _apply_sensitive_value_patterns(_sanitize_url_query_credentials(sanitized))
+
+
+def _sanitize_parsed_json(value: Any) -> Tuple[Any, bool]:
+    if isinstance(value, str):
+        sanitized = _sanitize_unstructured_body_text(value)
+        return sanitized, sanitized != value
+    if isinstance(value, list):
+        changed = False
+        sanitized_items = []
+        for item in value:
+            sanitized, item_changed = _sanitize_parsed_json(item)
+            sanitized_items.append(sanitized)
+            changed = changed or item_changed
+        return sanitized_items, changed
+    if not isinstance(value, dict):
+        return value, False
+
     changed = False
+    sanitized_dict = {}
+    for key, child in value.items():
+        if _is_sensitive_body_field(str(key), child):
+            sanitized_dict[key] = _body_redaction_marker(child)
+            changed = True
+            continue
+        sanitized, child_changed = _sanitize_parsed_json(child)
+        sanitized_dict[key] = sanitized
+        changed = changed or child_changed
+    return sanitized_dict, changed
 
-    def sanitize_pairs(pairs):
-        nonlocal changed
-        sanitized = {}
-        for key, value in pairs:
-            if _is_sensitive_body_field(str(key)):
-                sanitized[key] = _body_redaction_marker(value)
-                changed = True
-            else:
-                sanitized[key] = value
-        return sanitized
 
+def _has_unsafe_json_numbers(text: str) -> bool:
+    without_strings = _JSON_STRING_TOKEN_PATTERN.sub('""', text)
+    for match in _JSON_NUMBER_TOKEN_PATTERN.finditer(without_strings):
+        token = match.group(0)
+        try:
+            value = float(token)
+        except (OverflowError, ValueError):
+            return True
+        if not math.isfinite(value):
+            return True
+        significand = re.split(r"[eE]", token, maxsplit=1)[0]
+        significand = significand.replace("-", "").replace(".", "")
+        if value == 0 and any(char != "0" for char in significand):
+            return True
+        has_fraction_or_exponent = any(char in token for char in ".eE")
+        if not has_fraction_or_exponent and abs(int(token)) > (2**53 - 1):
+            return True
+        if has_fraction_or_exponent and len(significand.lstrip("0")) > 15:
+            return True
+    return False
+
+
+def _sanitize_json_body(text: str) -> Optional[str]:
+    stripped = text.strip()
+    if not stripped or stripped[0] not in ("{", "["):
+        return None
     try:
-        parsed = json.loads(text, object_pairs_hook=sanitize_pairs)
+        parsed = json.loads(text)
+    except RecursionError:
+        return _REDACTED_UNSANITIZABLE_JSON_VALUE
     except (TypeError, ValueError):
-        return text
+        return None
     if not isinstance(parsed, (dict, list)):
-        return text
-    return json.dumps(parsed, separators=(",", ":")) if changed else text
+        return None
+    try:
+        sanitized, changed = _sanitize_parsed_json(parsed)
+        if changed and _has_unsafe_json_numbers(text):
+            return _REDACTED_UNSANITIZABLE_JSON_VALUE
+        return (
+            json.dumps(sanitized, separators=(",", ":"), allow_nan=False)
+            if changed
+            else text
+        )
+    except (TypeError, ValueError, RecursionError):
+        return _REDACTED_UNSANITIZABLE_JSON_VALUE
 
 
-def _sanitize_form_body(text: str) -> str:
+def _sanitize_json_string_properties(text: str) -> str:
+    def replace_property(match):
+        raw_key, separator, raw_value = match.groups()
+        try:
+            key = json.loads(raw_key)
+            value = json.loads(raw_value)
+        except (TypeError, ValueError):
+            return match.group(0)
+        if _is_sensitive_body_field(str(key), value):
+            return (
+                f"{raw_key}{separator}"
+                f"{json.dumps(_body_redaction_marker(value), separators=(',', ':'))}"
+            )
+        if isinstance(value, str):
+            sanitized = _sanitize_unstructured_body_text(value)
+            if sanitized != value:
+                return f"{raw_key}{separator}{json.dumps(sanitized, separators=(',', ':'))}"
+        return match.group(0)
+
+    return _JSON_STRING_PROPERTY_PATTERN.sub(replace_property, text)
+
+
+def _sanitize_form_body(text: str) -> Optional[str]:
     if "=" not in text or any(char in text for char in "\r\n\t"):
-        return text
+        return None
     segments = [segment for segment in re.split(r"[&;]", text) if segment]
     if not segments or not all(
         _FORM_SEGMENT_PATTERN.fullmatch(item) for item in segments
     ):
-        return text
+        return None
 
     def replace_pair(match):
         separator, raw_key, raw_value = match.groups()
         if not raw_value:
             return match.group(0)
         decoded_key = unquote_plus(raw_key)
-        if not _is_sensitive_body_field(decoded_key):
+        try:
+            decoded_value = unquote_plus(raw_value)
+        except (TypeError, ValueError):
+            decoded_value = raw_value
+        if _is_sensitive_body_field(decoded_key, decoded_value):
+            return f"{separator}{raw_key}={quote(_REDACTED_BODY_VALUE, safe='')}"
+        sanitized_raw_value = _apply_sensitive_value_patterns(
+            _sanitize_url_query_credentials(_sanitize_body_assignments(raw_value))
+        )
+        if sanitized_raw_value != raw_value:
+            return f"{separator}{raw_key}={sanitized_raw_value}"
+        sanitized_value = _apply_sensitive_value_patterns(
+            _sanitize_url_query_credentials(_sanitize_body_assignments(decoded_value))
+        )
+        if sanitized_value == decoded_value:
             return match.group(0)
-        return f"{separator}{raw_key}={quote(_REDACTED_BODY_VALUE, safe='')}"
+        return f"{separator}{raw_key}={quote(sanitized_value, safe='')}"
 
     return _FORM_PAIR_PATTERN.sub(replace_pair, text)
 
 
 def _sanitize_body_assignments(text: str) -> str:
-    def replace_assignment(match):
-        prefix, key_quote, key, separator, value = match.groups()
-        if not _is_sensitive_body_field(key):
-            return match.group(0)
-        return (
+    replacements = []
+    cursor = 0
+    scan_position = 0
+    while True:
+        match = _BODY_ASSIGNMENT_START_PATTERN.search(text, scan_position)
+        if match is None:
+            break
+        prefix, key_quote, key, separator = match.groups()
+        if not _could_be_sensitive_body_field(key):
+            scan_position = max(match.start() + 1, match.end() - 1)
+            continue
+        token_value_match = _BODY_ASSIGNMENT_TOKEN_VALUE_PATTERN.match(
+            text, match.end()
+        )
+        if token_value_match is None or not _is_sensitive_body_field(
+            key, token_value_match.group(0)
+        ):
+            scan_position = match.end()
+            continue
+        value_match = _BODY_ASSIGNMENT_VALUE_PATTERN.match(text, match.end())
+        if value_match is None:
+            scan_position = match.end()
+            continue
+
+        value = value_match.group(0)
+
+        replacements.append(text[cursor : match.start()])
+        replacements.append(
             f"{prefix}{key_quote}{key}{key_quote}{separator}"
             f"{_body_redaction_marker(value)}"
         )
+        cursor = value_match.end()
+        scan_position = cursor
 
-    return _BODY_ASSIGNMENT_PATTERN.sub(replace_assignment, text)
+    return "".join(replacements) + text[cursor:] if replacements else text
 
 
 def _sanitize_body(text: str) -> str:
     """Redact common credential shapes from traced request and response bodies."""
+    if _exceeds_body_sanitization_limit(text):
+        return (
+            _REDACTED_OVERSIZED_JSON_VALUE
+            if re.match(r"^\s*[\[{]", text)
+            else _REDACTED_OVERSIZED_BODY_VALUE
+        )
     sanitized = _sanitize_json_body(text)
-    if sanitized == text:
-        sanitized = _sanitize_form_body(text)
+    if sanitized is None:
+        sanitized = _sanitize_json_string_properties(text)
         if sanitized == text:
-            sanitized = _sanitize_body_assignments(text)
-    for pattern, replacement in _SENSITIVE_BODY_VALUE_PATTERNS:
-        sanitized = pattern.sub(replacement, sanitized)
-    return sanitized
+            sanitized = _sanitize_unstructured_body_text(text)
+    return _apply_sensitive_value_patterns(_sanitize_url_query_credentials(sanitized))
 
 
 def _truncate_body(text: Any, max_length: int = 4096) -> str:

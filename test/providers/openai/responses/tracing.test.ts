@@ -19,7 +19,7 @@ function installTracerSpy(): RecordedSpan[] {
   const make = (name: string, attributes: Record<string, any> = {}) => {
     const entry: RecordedSpan = { name, attributes: { ...attributes }, ended: false };
     spans.push(entry);
-    return {
+    return Object.freeze({
       setAttribute: (key: string, value: unknown) => {
         entry.attributes[key] = value;
       },
@@ -35,7 +35,7 @@ function installTracerSpy(): RecordedSpan[] {
       spanContext: () => ({ traceId: 'x', spanId: 'y' }),
       isRecording: () => true,
       updateName: () => undefined,
-    };
+    });
   };
   vi.spyOn(trace, 'getTracer').mockReturnValue({
     startSpan: (name: string, options?: { attributes?: Record<string, unknown> }) =>

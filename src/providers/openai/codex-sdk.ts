@@ -1994,27 +1994,31 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     };
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
+    const model = typeof config.model === 'string' && config.model ? config.model : undefined;
+    const cliModel = config.cli_config?.model;
     const requestedModel =
-      typeof config.model === 'string' && config.model ? config.model : undefined;
+      model ?? (typeof cliModel === 'string' && cliModel ? cliModel : undefined);
 
     // Wrap the API call in a GenAI span
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
-      this.buildCodexSpanContext(prompt, context, requestedModel),
+      this.buildCodexSpanContext(prompt, context, model, requestedModel),
       () => this.callApiInternal(prompt, context, callOptions, config),
-      (response) => this.extractCodexSpanResult(response, requestedModel),
+      (response) => this.extractCodexSpanResult(response),
     );
   }
 
   private buildCodexSpanContext(
     prompt: string,
     context: CallApiContextParams | undefined,
+    model: string | undefined,
     requestedModel: string | undefined,
   ): GenAISpanContext {
     return {
       system: 'openai',
       operationName: 'invoke_agent',
-      model: requestedModel ?? 'codex',
+      model: model ?? 'codex',
+      requestModel: requestedModel,
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -2027,10 +2031,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     };
   }
 
-  private extractCodexSpanResult(
-    response: ProviderResponse,
-    requestedModel: string | undefined,
-  ): GenAISpanResult {
+  private extractCodexSpanResult(response: ProviderResponse): GenAISpanResult {
     const result: GenAISpanResult = {};
 
     if (response.tokenUsage) {
@@ -2043,10 +2044,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (response.cached !== undefined) {
       result.cacheHit = response.cached;
     }
-    if (requestedModel) {
-      result.responseModel = requestedModel;
-    }
-
     this.setCodexSpanResponseBody(result, response.output);
     this.setCodexSpanRawAttributes(result, response.raw);
 

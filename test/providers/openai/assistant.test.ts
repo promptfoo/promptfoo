@@ -257,6 +257,14 @@ describe('OpenAI Provider', () => {
           'gen_ai.agent.id': 'test-assistant-id',
           'gen_ai.conversation.id': 'thread_123',
         });
+        expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
+
+        const modeledProvider = new OpenAiAssistantProvider('test-assistant-id', {
+          config: { apiKey: 'test-key', modelName: 'gpt-4.1' },
+        });
+        await modeledProvider.callApi('Test prompt');
+        const modeledSpan = spans.filter((span) => span.name === 'invoke_agent').at(-1);
+        expect(modeledSpan?.attributes['gen_ai.request.model']).toBe('gpt-4.1');
       } finally {
         restoreEnv();
       }

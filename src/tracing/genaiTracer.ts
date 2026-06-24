@@ -1,11 +1,16 @@
 import {
   type Attributes,
   context,
+  type Exception,
+  type Link,
   propagation,
   ROOT_CONTEXT,
   type Span,
+  type SpanAttributes,
+  type SpanAttributeValue,
   SpanKind,
   SpanStatusCode,
+  type TimeInput,
   type Tracer,
   trace,
 } from '@opentelemetry/api';
@@ -201,9 +206,14 @@ export const PromptfooAttributes = {
 
 /** Maximum length for request/response body attributes (characters) */
 const MAX_BODY_LENGTH = 4096;
+const MAX_BODY_SANITIZE_LENGTH = 256 * 1024;
 
 const REDACTED_BODY_VALUE = '<REDACTED>';
+const REDACTED_OVERSIZED_BODY_VALUE = '<REDACTED_OVERSIZED_BODY>';
+const REDACTED_OVERSIZED_JSON_VALUE = '<REDACTED_OVERSIZED_JSON>';
+const REDACTED_UNSANITIZABLE_JSON_VALUE = '<REDACTED_UNSANITIZABLE_JSON>';
 const SENSITIVE_BODY_FIELD_NAMES = new Set([
+  'key',
   'password',
   'passwd',
   'pwd',
@@ -255,9 +265,55 @@ const SENSITIVE_BODY_FIELD_NAMES = new Set([
   'pfxcontent',
   'keycontent',
   'certcontent',
+  'proxyauthorization',
+  'ocpapimsubscriptionkey',
+  'subscriptionkey',
+  'xfunctionskey',
+  'functionkey',
+  'githubtoken',
+  'hftoken',
+  'huggingfacetoken',
+  'databrickstoken',
+  'awssessiontoken',
+  'xamzsecuritytoken',
+  'awssecretaccesskey',
+  'secretaccesskey',
 ]);
+const SENSITIVE_BODY_FIELD_SUFFIXES = [
+  'apikey',
+  'apisecret',
+  'apitoken',
+  'accesstoken',
+  'refreshtoken',
+  'idtoken',
+  'bearertoken',
+  'authtoken',
+  'sessiontoken',
+  'csrftoken',
+  'clientsecret',
+  'webhooksecret',
+  'secretkey',
+  'password',
+  'passwd',
+  'pwd',
+  'credentials',
+  'accesskey',
+  'accesskeyid',
+  'privatekey',
+  'certkey',
+  'encryptionkey',
+  'signingkey',
+  'passphrase',
+  'subscriptionkey',
+  'functionskey',
+  'authorization',
+] as const;
 const API_KEY_VALUE_PATTERN = /\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}/;
 const AWS_ACCESS_KEY_PATTERN = /\bAKIA[A-Z0-9]{16}\b/;
+const GOOGLE_API_KEY_PATTERN = /\bAIza[0-9A-Za-z_-]{10,}/;
+const GITHUB_TOKEN_PATTERN = /\bgh[pousr]_[A-Za-z0-9_]{20,}/;
+const HUGGINGFACE_TOKEN_PATTERN = /\bhf_[A-Za-z0-9]{20,}/;
+const DATABRICKS_TOKEN_PATTERN = /\bdapi[A-Za-z0-9]{20,}/;
 
 /** Conservative credential-value fallbacks for non-structured body text. */
 const SENSITIVE_VALUE_PATTERNS: Array<{
@@ -268,17 +324,45 @@ const SENSITIVE_VALUE_PATTERNS: Array<{
     pattern: /\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}/g,
     replacement: '<REDACTED_API_KEY>',
   },
-  {
-    pattern: /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/g,
-    replacement: '<REDACTED_PRIVATE_KEY>',
-  },
+  { pattern: /\bAIza[0-9A-Za-z_-]{10,}/g, replacement: '<REDACTED_API_KEY>' },
+  { pattern: /\bgh[pousr]_[A-Za-z0-9_]{20,}/g, replacement: '<REDACTED_TOKEN>' },
+  { pattern: /\bhf_[A-Za-z0-9]{20,}/g, replacement: '<REDACTED_TOKEN>' },
+  { pattern: /\bdapi[A-Za-z0-9]{20,}/g, replacement: '<REDACTED_TOKEN>' },
   { pattern: /\b(AKIA[A-Z0-9]{16})/g, replacement: '<REDACTED_AWS_KEY>' },
 ];
 
-const BODY_ASSIGNMENT_PATTERN =
-  /(^|[^A-Za-z0-9_-])(["']?)([A-Za-z][A-Za-z0-9_.\-]{0,64})\2(\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,}\r\n]+)/gm;
+const BODY_ASSIGNMENT_START_PATTERN =
+  /(^|[^A-Za-z0-9_-])(["']?)([A-Za-z][A-Za-z0-9_.\-]{0,64})\2(\s*[:=]\s*)/gm;
+const BODY_ASSIGNMENT_VALUE_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,}\r\n]+)/y;
+const BODY_ASSIGNMENT_TOKEN_VALUE_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}&;]+)/y;
 const FORM_SEGMENT_PATTERN = /^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$/;
 const FORM_PAIR_PATTERN = /(^|[&;])([^=&;]+)=([^&;]*)/g;
+const JSON_STRING_PROPERTY_PATTERN =
+  /("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*"|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+const JSON_STRING_TOKEN_PATTERN = /"(?:\\.|[^"\\])*"/g;
+const JSON_NUMBER_TOKEN_PATTERN = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+const URL_QUERY_PAIR_PATTERN = /([?&])([^=&#\s]+)=([^&#\s]*)/g;
+const PRIVATE_KEY_BEGIN_PATTERN = /-----BEGIN [^-\r\n]*PRIVATE KEY-----/g;
+const PRIVATE_KEY_END_PATTERN = /-----END [^-\r\n]*PRIVATE KEY-----/g;
+
+function looksLikeOpaqueCredential(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const unquoted = value.replace(/^["']|["']$/g, '');
+  return (
+    unquoted.length >= 16 &&
+    !/\s/.test(unquoted) &&
+    !['true', 'false', 'null', 'undefined'].includes(unquoted.toLowerCase())
+  );
+}
+
+function exceedsBodySanitizationLimit(body: string): boolean {
+  return (
+    body.length > MAX_BODY_SANITIZE_LENGTH ||
+    Buffer.byteLength(body, 'utf8') > MAX_BODY_SANITIZE_LENGTH
+  );
+}
 
 function getBodyRedactionMarker(value: unknown): string {
   if (typeof value === 'string') {
@@ -288,46 +372,212 @@ function getBodyRedactionMarker(value: unknown): string {
     if (AWS_ACCESS_KEY_PATTERN.test(value)) {
       return '<REDACTED_AWS_KEY>';
     }
+    if (
+      GOOGLE_API_KEY_PATTERN.test(value) ||
+      GITHUB_TOKEN_PATTERN.test(value) ||
+      HUGGINGFACE_TOKEN_PATTERN.test(value) ||
+      DATABRICKS_TOKEN_PATTERN.test(value)
+    ) {
+      return '<REDACTED_TOKEN>';
+    }
   }
   return REDACTED_BODY_VALUE;
 }
 
-function isSensitiveBodyField(fieldName: string): boolean {
-  return fieldName
-    .split(/[.\[\]]+/)
-    .some((part) => SENSITIVE_BODY_FIELD_NAMES.has(part.toLowerCase().replace(/[-_\s=]/g, '')));
+function isSensitiveBodyField(fieldName: string, value?: unknown): boolean {
+  return fieldName.split(/[.\[\]]+/).some((part) => {
+    const normalized = part.toLowerCase().replace(/[-_\s=]/g, '');
+    if (
+      typeof value === 'boolean' ||
+      (typeof value === 'string' && ['true', 'false'].includes(value.toLowerCase()))
+    ) {
+      return false;
+    }
+    if (normalized === 'key') {
+      return looksLikeOpaqueCredential(value);
+    }
+    if (SENSITIVE_BODY_FIELD_NAMES.has(normalized)) {
+      return true;
+    }
+    const suffix = SENSITIVE_BODY_FIELD_SUFFIXES.find((candidate) =>
+      normalized.endsWith(candidate),
+    );
+    return suffix === 'accesskey' || suffix === 'accesskeyid'
+      ? looksLikeOpaqueCredential(value)
+      : suffix !== undefined;
+  });
 }
 
-function sanitizeJsonBody(body: string): string {
+function couldBeSensitiveBodyField(fieldName: string): boolean {
+  return fieldName.split(/[.\[\]]+/).some((part) => {
+    const normalized = part.toLowerCase().replace(/[-_\s=]/g, '');
+    return (
+      normalized === 'key' ||
+      SENSITIVE_BODY_FIELD_NAMES.has(normalized) ||
+      SENSITIVE_BODY_FIELD_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
+    );
+  });
+}
+
+function sanitizeUrlQueryCredentials(body: string): string {
+  return body.replace(URL_QUERY_PAIR_PATTERN, (match, separator, rawKey, rawValue) => {
+    let key = rawKey;
+    let value = rawValue;
+    try {
+      key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+      value = decodeURIComponent(rawValue.replace(/\+/g, ' '));
+    } catch {
+      // Use raw values when percent-encoding is malformed.
+    }
+    const isOpaqueGenericCredential =
+      ['code', 'key'].includes(key.toLowerCase()) && looksLikeOpaqueCredential(value);
+    return isSensitiveBodyField(key, value) || isOpaqueGenericCredential
+      ? `${separator}${rawKey}=${encodeURIComponent(REDACTED_BODY_VALUE)}`
+      : match;
+  });
+}
+
+function redactPrivateKeys(body: string): string {
+  const replacements: string[] = [];
+  let cursor = 0;
+  PRIVATE_KEY_BEGIN_PATTERN.lastIndex = 0;
+
+  let begin: RegExpExecArray | null;
+  while ((begin = PRIVATE_KEY_BEGIN_PATTERN.exec(body)) !== null) {
+    PRIVATE_KEY_END_PATTERN.lastIndex = PRIVATE_KEY_BEGIN_PATTERN.lastIndex;
+    const end = PRIVATE_KEY_END_PATTERN.exec(body);
+    replacements.push(body.slice(cursor, begin.index), '<REDACTED_PRIVATE_KEY>');
+    if (!end) {
+      cursor = body.length;
+      break;
+    }
+    cursor = end.index + end[0].length;
+    PRIVATE_KEY_BEGIN_PATTERN.lastIndex = cursor;
+  }
+
+  return replacements.length > 0 ? replacements.join('') + body.slice(cursor) : body;
+}
+
+function applySensitiveValuePatterns(body: string): string {
+  let sanitized = redactPrivateKeys(body);
+  for (const { pattern, replacement } of SENSITIVE_VALUE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
+function sanitizeUnstructuredBodyText(body: string): string {
+  const formBody = sanitizeFormBody(body);
+  const sanitized = formBody ?? sanitizeBodyAssignments(body);
+  return applySensitiveValuePatterns(sanitizeUrlQueryCredentials(sanitized));
+}
+
+function sanitizeParsedJson(value: unknown): { value: unknown; changed: boolean } {
+  if (typeof value === 'string') {
+    const sanitized = sanitizeUnstructuredBodyText(value);
+    return { value: sanitized, changed: sanitized !== value };
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const sanitized = value.map((item) => {
+      const result = sanitizeParsedJson(item);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { value: sanitized, changed };
+  }
+  if (!value || typeof value !== 'object') {
+    return { value, changed: false };
+  }
+
+  let changed = false;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isSensitiveBodyField(key, child)) {
+      sanitized[key] = getBodyRedactionMarker(child);
+      changed = true;
+      continue;
+    }
+    const result = sanitizeParsedJson(child);
+    sanitized[key] = result.value;
+    changed ||= result.changed;
+  }
+  return { value: sanitized, changed };
+}
+
+function hasUnsafeJsonNumbers(body: string): boolean {
+  const withoutStrings = body.replace(JSON_STRING_TOKEN_PATTERN, '""');
+  return [...withoutStrings.matchAll(JSON_NUMBER_TOKEN_PATTERN)].some(([token]) => {
+    const value = Number(token);
+    if (!Number.isFinite(value)) {
+      return true;
+    }
+    const significand = token.split(/[eE]/, 1)[0].replace(/[-.]/g, '');
+    if (value === 0 && /[1-9]/.test(significand)) {
+      return true;
+    }
+    const hasFractionOrExponent = /[.eE]/.test(token);
+    if (!hasFractionOrExponent && !Number.isSafeInteger(value)) {
+      return true;
+    }
+    const significantDigits = significand.replace(/^0+/, '').length;
+    return hasFractionOrExponent && significantDigits > 15;
+  });
+}
+
+function sanitizeJsonBody(body: string): string | undefined {
   const trimmed = body.trim();
-  if (!trimmed || body.length > MAX_BODY_LENGTH * 4 || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
-    return body;
+  if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (error) {
+    return error instanceof RangeError ? REDACTED_UNSANITIZABLE_JSON_VALUE : undefined;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return undefined;
   }
   try {
-    let changed = false;
-    const parsed = JSON.parse(body, (key, value) => {
-      if (key && isSensitiveBodyField(key)) {
-        changed = true;
-        return getBodyRedactionMarker(value);
-      }
-      return value;
-    });
-    if (!parsed || typeof parsed !== 'object') {
-      return body;
+    const result = sanitizeParsedJson(parsed);
+    if (result.changed && hasUnsafeJsonNumbers(body)) {
+      return REDACTED_UNSANITIZABLE_JSON_VALUE;
     }
-    return changed ? JSON.stringify(parsed) : body;
+    return result.changed ? JSON.stringify(result.value) : body;
   } catch {
-    return body;
+    return REDACTED_UNSANITIZABLE_JSON_VALUE;
   }
 }
 
-function sanitizeFormBody(body: string): string {
+function sanitizeJsonStringProperties(body: string): string {
+  return body.replace(JSON_STRING_PROPERTY_PATTERN, (match, rawKey, separator, rawValue) => {
+    try {
+      const key = JSON.parse(rawKey);
+      const value = JSON.parse(rawValue);
+      if (isSensitiveBodyField(key, value)) {
+        return `${rawKey}${separator}${JSON.stringify(getBodyRedactionMarker(value))}`;
+      }
+      if (typeof value === 'string') {
+        const sanitized = sanitizeUnstructuredBodyText(value);
+        if (sanitized !== value) {
+          return `${rawKey}${separator}${JSON.stringify(sanitized)}`;
+        }
+      }
+    } catch {
+      return match;
+    }
+    return match;
+  });
+}
+
+function sanitizeFormBody(body: string): string | undefined {
   if (!body.includes('=') || /[\r\n\t]/.test(body)) {
-    return body;
+    return undefined;
   }
   const segments = body.split(/[&;]/).filter(Boolean);
   if (segments.length === 0 || !segments.every((segment) => FORM_SEGMENT_PATTERN.test(segment))) {
-    return body;
+    return undefined;
   }
 
   return body.replace(FORM_PAIR_PATTERN, (match, separator, rawKey, rawValue) => {
@@ -340,18 +590,67 @@ function sanitizeFormBody(body: string): string {
     } catch {
       return match;
     }
-    return isSensitiveBodyField(decodedKey)
-      ? `${separator}${rawKey}=${encodeURIComponent(REDACTED_BODY_VALUE)}`
-      : match;
+    let decodedValue = rawValue;
+    try {
+      decodedValue = decodeURIComponent(rawValue.replace(/\+/g, ' '));
+    } catch {
+      // Preserve the raw value for conservative field-name matching.
+    }
+    if (isSensitiveBodyField(decodedKey, decodedValue)) {
+      return `${separator}${rawKey}=${encodeURIComponent(REDACTED_BODY_VALUE)}`;
+    }
+    const sanitizedRawValue = applySensitiveValuePatterns(
+      sanitizeUrlQueryCredentials(sanitizeBodyAssignments(rawValue)),
+    );
+    if (sanitizedRawValue !== rawValue) {
+      return `${separator}${rawKey}=${sanitizedRawValue}`;
+    }
+    const sanitizedValue = applySensitiveValuePatterns(
+      sanitizeUrlQueryCredentials(sanitizeBodyAssignments(decodedValue)),
+    );
+    return sanitizedValue === decodedValue
+      ? match
+      : `${separator}${rawKey}=${encodeURIComponent(sanitizedValue)}`;
   });
 }
 
 function sanitizeBodyAssignments(body: string): string {
-  return body.replace(BODY_ASSIGNMENT_PATTERN, (match, prefix, quote, key, separator, value) =>
-    isSensitiveBodyField(key)
-      ? `${prefix}${quote}${key}${quote}${separator}${getBodyRedactionMarker(value)}`
-      : match,
-  );
+  const replacements: string[] = [];
+  let cursor = 0;
+  BODY_ASSIGNMENT_START_PATTERN.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = BODY_ASSIGNMENT_START_PATTERN.exec(body)) !== null) {
+    const [, prefix, quote, key, separator] = match;
+    if (!couldBeSensitiveBodyField(key)) {
+      BODY_ASSIGNMENT_START_PATTERN.lastIndex = Math.max(
+        match.index + 1,
+        BODY_ASSIGNMENT_START_PATTERN.lastIndex - 1,
+      );
+      continue;
+    }
+    BODY_ASSIGNMENT_TOKEN_VALUE_PATTERN.lastIndex = BODY_ASSIGNMENT_START_PATTERN.lastIndex;
+    const tokenValueMatch = BODY_ASSIGNMENT_TOKEN_VALUE_PATTERN.exec(body);
+    if (!tokenValueMatch || !isSensitiveBodyField(key, tokenValueMatch[0])) {
+      continue;
+    }
+    BODY_ASSIGNMENT_VALUE_PATTERN.lastIndex = BODY_ASSIGNMENT_START_PATTERN.lastIndex;
+    const valueMatch = BODY_ASSIGNMENT_VALUE_PATTERN.exec(body);
+    if (!valueMatch) {
+      continue;
+    }
+
+    const value = valueMatch[0];
+
+    replacements.push(body.slice(cursor, match.index));
+    replacements.push(
+      `${prefix}${quote}${key}${quote}${separator}${getBodyRedactionMarker(value)}`,
+    );
+    cursor = valueMatch.index + value.length;
+    BODY_ASSIGNMENT_START_PATTERN.lastIndex = cursor;
+  }
+
+  return replacements.length > 0 ? replacements.join('') + body.slice(cursor) : body;
 }
 
 /**
@@ -365,8 +664,10 @@ export interface GenAISpanContext {
   providerName?: string;
   /** The operation type (chat, text_completion, embeddings, generate_content, or invoke_agent). Legacy names (completion, embedding) are also accepted and auto-normalized. */
   operationName: GenAIOperationName | LegacyOperationName;
-  /** The requested model name */
+  /** Model used by inference spans and as the legacy invoke_agent fallback. */
   model: string;
+  /** Exact requested model for latest invoke_agent spans; omitted when unavailable. */
+  requestModel?: string;
   /** The promptfoo provider ID */
   providerId: string;
   /** Human-readable agent name, used only for invoke_agent spans when available. */
@@ -456,12 +757,111 @@ function extractErrorMessage(rawError: unknown): string {
 /**
  * Read the status exposed by the OpenTelemetry SDK's recording span.
  *
- * The API-level Span interface intentionally omits readable state, so custom
- * non-recording implementations may not expose it. In that case, callers must
- * conservatively avoid assigning a success status that could mask an error.
+ * The API-level Span interface intentionally omits readable state. Write-only
+ * implementations are handled by the callback facade below.
  */
 function getReadableSpanStatusCode(span: Span): SpanStatusCode | undefined {
   return (span as Span & { status?: { code?: SpanStatusCode } }).status?.code;
+}
+
+/**
+ * Wrap an API-conformant write-only span so callback-set errors remain
+ * observable without mutating the underlying implementation.
+ */
+interface StatusTracker {
+  span: Span;
+  hasErrorStatus: () => boolean;
+}
+
+function createStatusTrackingSpan(span: Span): StatusTracker {
+  let hasErrorStatus = false;
+  const trackingSpan: Span = {
+    spanContext: () => span.spanContext(),
+    setAttribute(key: string, value: SpanAttributeValue) {
+      span.setAttribute(key, value);
+      return this;
+    },
+    setAttributes(attributes: SpanAttributes) {
+      span.setAttributes(attributes);
+      return this;
+    },
+    addEvent(
+      name: string,
+      attributesOrStartTime?: SpanAttributes | TimeInput,
+      startTime?: TimeInput,
+    ) {
+      span.addEvent(name, attributesOrStartTime, startTime);
+      return this;
+    },
+    addLink(link: Link) {
+      span.addLink(link);
+      return this;
+    },
+    addLinks(links: Link[]) {
+      span.addLinks(links);
+      return this;
+    },
+    setStatus(status) {
+      if (status.code === SpanStatusCode.ERROR) {
+        hasErrorStatus = true;
+      }
+      span.setStatus(status);
+      return this;
+    },
+    updateName(name: string) {
+      span.updateName(name);
+      return this;
+    },
+    end: (endTime?: TimeInput) => span.end(endTime),
+    isRecording: () => span.isRecording(),
+    recordException: (exception: Exception, time?: TimeInput) =>
+      span.recordException(exception, time),
+  };
+  return { span: trackingSpan, hasErrorStatus: () => hasErrorStatus };
+}
+
+function finalizeGenAISpanSuccess<T>(args: {
+  value: T;
+  span: Span;
+  callbackSpan: Span;
+  statusTracker?: StatusTracker;
+  resultExtractor?: (value: T) => GenAISpanResult;
+  sanitizeBodies?: boolean;
+  useLatest: boolean;
+}): void {
+  const { value, span, callbackSpan, statusTracker, resultExtractor, sanitizeBodies, useLatest } =
+    args;
+
+  if (resultExtractor) {
+    const result = statusTracker
+      ? context.with(trace.setSpan(context.active(), callbackSpan), () => resultExtractor(value))
+      : resultExtractor(value);
+    setGenAIResponseAttributes(span, result, sanitizeBodies, useLatest);
+  }
+
+  const valueAsRecord = value as Record<string, unknown>;
+  const rawError = valueAsRecord?.error;
+  const hasError =
+    (typeof rawError === 'string' && rawError) || (rawError && typeof rawError === 'object');
+
+  if (hasError) {
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: extractErrorMessage(rawError),
+    });
+    span.setAttribute(
+      ATTR_ERROR_TYPE,
+      extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
+    );
+  } else if (
+    !useLatest &&
+    !statusTracker?.hasErrorStatus() &&
+    getReadableSpanStatusCode(span) !== SpanStatusCode.ERROR
+  ) {
+    // Preserve historical explicit OK for successful legacy spans without
+    // overwriting callback- or extractor-assigned errors.
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
 }
 
 /**
@@ -533,37 +933,26 @@ export async function withGenAISpan<T>(
 
   // Create the span within the parent context
   const spanCallback = async (span: Span): Promise<T> => {
+    const statusTracker =
+      !useLatest && getReadableSpanStatusCode(span) === undefined
+        ? createStatusTrackingSpan(span)
+        : undefined;
+    const callbackSpan = statusTracker?.span ?? span;
+
     try {
-      const value = await fn(span);
+      const value = statusTracker
+        ? await context.with(trace.setSpan(context.active(), callbackSpan), () => fn(callbackSpan))
+        : await fn(callbackSpan);
 
-      // Set response attributes if extractor provided
-      if (resultExtractor) {
-        const result = resultExtractor(value);
-        setGenAIResponseAttributes(span, result, ctx.sanitizeBodies, useLatest);
-      }
-
-      // Check if response contains an error (ProviderResponse pattern)
-      // Many providers return { error: "..." } instead of throwing
-      const valueAsRecord = value as Record<string, unknown>;
-      const rawError = valueAsRecord?.error;
-      const hasError =
-        (typeof rawError === 'string' && rawError) || (rawError && typeof rawError === 'object');
-
-      if (hasError) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: extractErrorMessage(rawError),
-        });
-        span.setAttribute(
-          ATTR_ERROR_TYPE,
-          extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
-        );
-      } else if (!useLatest && getReadableSpanStatusCode(span) === SpanStatusCode.UNSET) {
-        // Preserve the historical explicit OK status for successful legacy
-        // spans. OpenTelemetry treats OK as terminal, so it must be assigned
-        // only after the callback has had a chance to mark the span as ERROR.
-        span.setStatus({ code: SpanStatusCode.OK });
-      }
+      finalizeGenAISpanSuccess({
+        value,
+        span,
+        callbackSpan,
+        statusTracker,
+        resultExtractor,
+        sanitizeBodies: ctx.sanitizeBodies,
+        useLatest,
+      });
       return value;
     } catch (error) {
       span.setStatus({
@@ -606,13 +995,18 @@ function buildRequestAttributes(
   emittedOperation: string,
   useLatest: boolean,
 ): Attributes {
+  const requestModel =
+    useLatest && ctx.operationName === 'invoke_agent' ? ctx.requestModel : ctx.model;
   const attrs: Attributes = {
     [GenAIAttributes.OPERATION_NAME]: emittedOperation,
-    [GenAIAttributes.REQUEST_MODEL]: ctx.model,
 
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  if (requestModel) {
+    attrs[GenAIAttributes.REQUEST_MODEL] = requestModel;
+  }
 
   Object.assign(attrs, getGenAIProviderAttributes(ctx.system, ctx.providerName, useLatest));
 
@@ -673,17 +1067,17 @@ function buildRequestAttributes(
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
 export function sanitizeBody(body: string): string {
+  if (exceedsBodySanitizationLimit(body)) {
+    return /^\s*[\[{]/.test(body) ? REDACTED_OVERSIZED_JSON_VALUE : REDACTED_OVERSIZED_BODY_VALUE;
+  }
   let sanitized = sanitizeJsonBody(body);
-  if (sanitized === body) {
-    sanitized = sanitizeFormBody(body);
+  if (sanitized === undefined) {
+    sanitized = sanitizeJsonStringProperties(body);
     if (sanitized === body) {
-      sanitized = sanitizeBodyAssignments(body);
+      sanitized = sanitizeUnstructuredBodyText(body);
     }
   }
-  for (const { pattern, replacement } of SENSITIVE_VALUE_PATTERNS) {
-    sanitized = sanitized.replace(pattern, replacement);
-  }
-  return sanitized;
+  return applySensitiveValuePatterns(sanitizeUrlQueryCredentials(sanitized));
 }
 
 /**
@@ -867,6 +1261,7 @@ export function buildChatSpanContext(args: {
   providerName?: string;
   operationName?: GenAIOperationName;
   model: string;
+  requestModel?: string;
   agentName?: string;
   agentId?: string;
   providerId: string;
@@ -882,6 +1277,7 @@ export function buildChatSpanContext(args: {
     providerName,
     operationName = 'chat',
     model,
+    requestModel,
     agentName,
     agentId,
     providerId,
@@ -894,6 +1290,7 @@ export function buildChatSpanContext(args: {
     providerName,
     operationName,
     model,
+    requestModel,
     agentName,
     agentId,
     providerId,

@@ -1341,6 +1341,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           system: 'anthropic',
           operationName: 'invoke_agent',
           model: config.model || 'default',
+          requestModel: config.model,
           providerId: this.providerId,
           traceparent: context?.traceparent,
           maxTokens: config.max_thinking_tokens,

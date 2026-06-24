@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from types import ModuleType
 from typing import Any, Dict
+from urllib.parse import quote_plus
 from unittest.mock import MagicMock, call, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1000,6 +1001,236 @@ class TestTracedCall(unittest.TestCase):
         self.assertEqual(sanitized["token_count"], 42)
         self.assertEqual(sanitized["session_summary"], "safe summary")
 
+    def test_body_sanitizer_redacts_provider_prefixed_credentials(self) -> None:
+        credentials = {
+            "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "AZURE_OPENAI_API_KEY": "azure-opaque-value",
+            "OPENAI_API_KEY": "openai-opaque-value",
+            "GITHUB_TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz123456",
+            "HF_TOKEN": "hf_abcdefghijklmnopqrstuvwxyz123456",
+            "HUGGINGFACE_API_KEY": "huggingface-opaque-value",
+            "GOOGLE_API_KEY": "AIzaSyExampleKeyMaterial",
+            "DATABRICKS_TOKEN": "dapiabcdefghijklmnopqrstuvwxyz",
+        }
+
+        for field, value in credentials.items():
+            with self.subTest(field=field):
+                json_body = persistent_wrapper._sanitize_body(
+                    json.dumps({field: value})
+                )
+                encoded_value = quote_plus(value)
+                form_body = persistent_wrapper._sanitize_body(
+                    f"{quote_plus(field)}={encoded_value}"
+                )
+                assignment = persistent_wrapper._sanitize_body(f"{field}={value}")
+
+                self.assertNotIn(value, json_body)
+                self.assertNotIn(encoded_value, form_body)
+                self.assertNotIn(value, assignment)
+
+    def test_body_sanitizer_preserves_benign_credential_like_fields(self) -> None:
+        body = json.dumps(
+            {
+                "token_count": 4,
+                "max_tokens": 128,
+                "input_tokens": 32,
+                "github_token_count": 2,
+                "session_summary": "safe",
+                "public_key": "public",
+                "monkey": "banana",
+                "api_key_hint": "last four",
+                "tokenizer": "cl100k_base",
+                "authorization_mode": "rbac",
+                "password_policy": "strong",
+                "signature_algorithm": "sha256",
+                "secret_recipe": "cake",
+                "access_key_description": "identifier only",
+                "oauth": "enabled",
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "pad_token": "[PAD]",
+                "continuation_token": "page-2",
+                "next_token": "page-3",
+                "is_secret": False,
+                "has_password": False,
+                "requires_credentials": False,
+                "keyboard_access_key": "menu-shortcut",
+            }
+        )
+
+        self.assertEqual(persistent_wrapper._sanitize_body(body), body)
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(
+                "https://example.test/search?code=200&key=id"
+            ),
+            "https://example.test/search?code=200&key=id",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body("has_password=false&is_secret=true"),
+            "has_password=false&is_secret=true",
+        )
+
+    def test_body_sanitizer_redacts_standard_credential_carriers(self) -> None:
+        body = json.dumps(
+            {
+                "Proxy-Authorization": "Basic dXNlcjpwYXNz",
+                "Ocp-Apim-Subscription-Key": "opaque-subscription-value",
+                "key": "AIzaSySyntheticKeyMaterial",
+            }
+        )
+        form = (
+            "subscription-key=opaque-subscription-value"
+            "&x-functions-key=opaque-function-value"
+        )
+        url = (
+            "https://example.test/run?code=opaque-function-code"
+            "&key=AIzaSySyntheticKeyMaterial"
+        )
+        encoded_url = (
+            "https://example.test/run?%6B%65%79=opaque-synthetic-provider-secret"
+            "&co%64e=opaque-function-code&api%5Fkey=encoded-api-secret"
+            "&access%5Ftoken=encoded-access-secret"
+            "&subscription%2Dkey=encoded-subscription-secret"
+        )
+
+        self.assertNotIn("dXNlcjpwYXNz", persistent_wrapper._sanitize_body(body))
+        self.assertNotIn(
+            "opaque-subscription-value", persistent_wrapper._sanitize_body(body)
+        )
+        self.assertNotIn(
+            "AIzaSySyntheticKeyMaterial", persistent_wrapper._sanitize_body(body)
+        )
+        self.assertNotIn(
+            "opaque-subscription-value", persistent_wrapper._sanitize_body(form)
+        )
+        self.assertNotIn(
+            "opaque-function-value", persistent_wrapper._sanitize_body(form)
+        )
+        self.assertNotIn("opaque-function-code", persistent_wrapper._sanitize_body(url))
+        self.assertNotIn(
+            "AIzaSySyntheticKeyMaterial", persistent_wrapper._sanitize_body(url)
+        )
+        self.assertNotIn(
+            "opaque-synthetic-provider-secret",
+            persistent_wrapper._sanitize_body(encoded_url),
+        )
+        self.assertNotIn(
+            "opaque-function-code", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-api-secret", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-access-secret", persistent_wrapper._sanitize_body(encoded_url)
+        )
+        self.assertNotIn(
+            "encoded-subscription-secret",
+            persistent_wrapper._sanitize_body(encoded_url),
+        )
+
+    def test_body_sanitizer_redacts_assignments_in_json_strings(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = json.dumps(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"debug dump: OPENAI_API_KEY={secret}",
+                    }
+                ]
+            }
+        )
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_scans_large_non_sensitive_assignment_text(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = ("a=" * 10_000) + f" OPENAI_API_KEY={secret}"
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_redacts_escaped_keys_in_oversized_json(self) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = (
+            r'{"OPENAI\u005fAPI\u005fKEY":"'
+            + secret
+            + r'","padding":"'
+            + ("x" * 17_000)
+            + r'"}'
+        )
+        nested_body = json.dumps(
+            {
+                "credentials": {"username": "alice", "value": secret},
+                "padding": "x" * 17_000,
+            }
+        )
+
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(nested_body))
+
+    def test_body_sanitizer_fails_closed_beyond_parser_limit(self) -> None:
+        body = json.dumps({"message": "x" * 300_000})
+        unicode_body = json.dumps({"message": "é" * 140_000}, ensure_ascii=False)
+        surrogate_body = '{"message":"' + ("\ud800" * 100_000) + '"}'
+
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(body), "<REDACTED_OVERSIZED_JSON>"
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(unicode_body),
+            "<REDACTED_OVERSIZED_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(surrogate_body),
+            "<REDACTED_OVERSIZED_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body("a" * 300_000),
+            "<REDACTED_OVERSIZED_BODY>",
+        )
+
+    def test_body_sanitizer_handles_deeply_nested_json(self) -> None:
+        secret = "opaque-secret-value-1234567890"
+        body = (
+            ('{"a":' * 1_000)
+            + json.dumps({"credentials": {"username": "alice", "value": secret}})
+            + ("}" * 1_000)
+        )
+
+        self.assertIsInstance(persistent_wrapper._sanitize_body(body), str)
+        self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_fails_closed_for_unsafe_json_numbers(self) -> None:
+        body = (
+            '{"OPENAI_API_KEY":"opaque-synthetic-provider-secret",'
+            '"large":1e400,"id":9007199254740993}'
+        )
+        underflow_body = '{"password":"secret","p":1e-400}'
+        safe_body = '{"password":"secret","timestamp_us":1719234567890123}'
+        smallest_body = '{"password":"secret","p":5e-324}'
+
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(body),
+            "<REDACTED_UNSANITIZABLE_JSON>",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(underflow_body),
+            "<REDACTED_UNSANITIZABLE_JSON>",
+        )
+        self.assertEqual(
+            json.loads(persistent_wrapper._sanitize_body(safe_body))["timestamp_us"],
+            1719234567890123,
+        )
+        self.assertEqual(
+            json.loads(persistent_wrapper._sanitize_body(smallest_body))["p"],
+            5e-324,
+        )
+
+    def test_body_sanitizer_handles_lone_unicode_surrogates(self) -> None:
+        body = '{"message":"\ud800"}'
+
+        self.assertIsInstance(persistent_wrapper._sanitize_body(body), str)
+
     def test_body_sanitizer_redacts_form_headers_and_private_keys(self) -> None:
         form = persistent_wrapper._sanitize_body(
             "message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D"
@@ -1021,7 +1252,11 @@ class TestTracedCall(unittest.TestCase):
             "secret material\n"
             "-----END RSA PRIVATE KEY-----"
         )
+        unmatched_private_keys = persistent_wrapper._sanitize_body(
+            "-----BEGIN PRIVATE KEY-----\n" * 1_000
+        )
         self.assertEqual(private_key, "<REDACTED_PRIVATE_KEY>")
+        self.assertEqual(unmatched_private_keys, "<REDACTED_PRIVATE_KEY>")
 
     def test_body_sanitizer_preserves_benign_values_and_formatting(self) -> None:
         body = (

@@ -482,6 +482,7 @@ describe('AzureFoundryAgentProvider', () => {
           'gen_ai.response.id': 'resp_123',
           'gen_ai.conversation.id': 'conv_123',
         });
+        expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
       } finally {
         restoreLatest();
       }

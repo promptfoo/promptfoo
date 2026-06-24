@@ -1169,25 +1169,29 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
+    const model = typeof config.model === 'string' && config.model ? config.model : undefined;
+    const cliModel = config.cli_config?.model;
     const requestedModel =
-      typeof config.model === 'string' && config.model ? config.model : undefined;
+      model ?? (typeof cliModel === 'string' && cliModel ? cliModel : undefined);
 
     return withGenAISpan(
-      this.buildSpanContext(prompt, context, requestedModel),
+      this.buildSpanContext(prompt, context, model, requestedModel),
       () => this.callApiInternal(prompt, context, callOptions, config),
-      (response) => this.extractSpanResult(response, requestedModel),
+      (response) => this.extractSpanResult(response),
     );
   }
 
   private buildSpanContext(
     prompt: string,
     context: CallApiContextParams | undefined,
+    model: string | undefined,
     requestedModel: string | undefined,
   ): GenAISpanContext {
     return {
       system: 'openai',
       operationName: 'invoke_agent',
-      model: requestedModel ?? 'codex-app-server',
+      model: model ?? 'codex-app-server',
+      requestModel: requestedModel,
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1200,10 +1204,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     };
   }
 
-  private extractSpanResult(
-    response: ProviderResponse,
-    requestedModel: string | undefined,
-  ): GenAISpanResult {
+  private extractSpanResult(response: ProviderResponse): GenAISpanResult {
     const result: GenAISpanResult = {};
     if (response.tokenUsage) {
       result.tokenUsage = response.tokenUsage;
@@ -1211,9 +1212,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (response.sessionId) {
       result.responseId = response.sessionId;
       result.conversationId = response.sessionId;
-    }
-    if (requestedModel) {
-      result.responseModel = requestedModel;
     }
     if (response.cached !== undefined) {
       result.cacheHit = response.cached;

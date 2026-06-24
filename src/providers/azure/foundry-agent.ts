@@ -533,6 +533,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       providerName: 'azure.ai.inference',
       operationName: 'invoke_agent',
       model: this.deploymentName,
+      requestModel:
+        typeof context?.prompt?.config?.modelName === 'string'
+          ? context.prompt.config.modelName
+          : this.assistantConfig.modelName,
       agentName: this.deploymentName,
       providerId: this.id(),
       prompt,
