@@ -375,24 +375,28 @@ function normalizeHeaderValue(value: string | undefined): string | undefined {
 export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey: string): string {
   const trimmedSessionKey = sessionKey.trim();
   const trimmedAgentId = agentId?.trim();
-  if (!trimmedSessionKey || !trimmedAgentId) {
+  if (!trimmedSessionKey) {
     return trimmedSessionKey;
   }
 
   if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
     const sessionKeyParts = trimmedSessionKey.split(':');
     const scopedAgentId = sessionKeyParts[1]?.trim();
-    const scopedSessionId = sessionKeyParts.slice(2).join(':').trim();
-    if (!scopedAgentId || !scopedSessionId) {
+    const hasScopedSessionId = sessionKeyParts.slice(2).some((part) => part.trim().length > 0);
+    if (!scopedAgentId || !hasScopedSessionId) {
       throw new Error(
         `OpenClaw session key "${trimmedSessionKey}" must use the form "agent:<agent-id>:<session-id>"`,
       );
     }
-    if (scopedAgentId?.toLowerCase() !== trimmedAgentId.toLowerCase()) {
+    if (trimmedAgentId && scopedAgentId.toLowerCase() !== trimmedAgentId.toLowerCase()) {
       throw new Error(
         `OpenClaw session key targets agent "${scopedAgentId || '(missing)'}" but the provider targets "${trimmedAgentId}"`,
       );
     }
+    return trimmedSessionKey;
+  }
+
+  if (!trimmedAgentId) {
     return trimmedSessionKey;
   }
 

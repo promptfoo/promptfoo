@@ -801,9 +801,15 @@ describe('OpenClaw Provider', () => {
       const explicitProvider = new OpenClawChatProvider('main', {
         config: { session_key: 'agent:main:my-session' },
       });
+      const defaultScopedProvider = new OpenClawChatProvider(undefined, {
+        config: { session_key: 'agent:main:my-session' },
+      });
 
       expect(defaultProvider.config.headers?.['x-openclaw-session-key']).toBe('my-session');
       expect(explicitProvider.config.headers?.['x-openclaw-session-key']).toBe(
+        'agent:main:my-session',
+      );
+      expect(defaultScopedProvider.config.headers?.['x-openclaw-session-key']).toBe(
         'agent:main:my-session',
       );
     });
@@ -820,14 +826,18 @@ describe('OpenClaw Provider', () => {
     it.each([
       'agent:main',
       'agent:main:',
+      'agent:main::',
+      'agent:main:::',
       'agent::shared-session',
     ])('should reject malformed scoped session key %s', (sessionKey) => {
-      expect(
-        () =>
-          new OpenClawChatProvider('main', {
-            config: { session_key: sessionKey },
-          }),
-      ).toThrow('must use the form "agent:<agent-id>:<session-id>"');
+      for (const agentId of [undefined, 'main']) {
+        expect(
+          () =>
+            new OpenClawChatProvider(agentId, {
+              config: { session_key: sessionKey },
+            }),
+        ).toThrow('must use the form "agent:<agent-id>:<session-id>"');
+      }
     });
 
     it('should not set session key header when not provided', () => {
@@ -2438,6 +2448,20 @@ describe('OpenClaw Provider', () => {
 
       await expect(provider.callApi('Hello')).rejects.toThrow(
         'session key targets agent "other" but the provider targets "dev"',
+      );
+      expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject malformed scoped sessions for the default WS agent', async () => {
+      const provider = new OpenClawAgentProvider(undefined, {
+        config: {
+          gateway_url: 'http://test:18789',
+          session_key: 'agent:main::',
+        },
+      });
+
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        'must use the form "agent:<agent-id>:<session-id>"',
       );
       expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
     });
