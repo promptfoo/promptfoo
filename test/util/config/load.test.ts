@@ -494,7 +494,7 @@ describe('combineConfigs', () => {
     expect(readTests).not.toHaveBeenCalled();
     expect(result.tests).toEqual(config.tests);
     expect(JSON.parse(JSON.stringify(result.tests))).toEqual(config.tests);
-    expect(getConfigDependencyPaths(result)).toContain('/suite/fixtures/vars.yaml');
+    expect(getConfigDependencyPaths(result)).toContain(path.resolve('/suite/fixtures/vars.yaml'));
   });
 
   it('preserves whether scenarios were omitted', async () => {

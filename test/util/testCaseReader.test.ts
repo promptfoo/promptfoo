@@ -1766,7 +1766,7 @@ describe('readVarsFiles', () => {
         - plain
         - file://data/item.txt
     `);
-    vi.mocked(globSync).mockReturnValue(['/suite/fixtures/vars.yaml']);
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
 
     const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
 
