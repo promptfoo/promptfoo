@@ -1,4 +1,3 @@
-import { renderVarsInObject } from '../../util/index';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
@@ -87,10 +86,7 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
       result.config.reasoning_effort !== undefined &&
       result.body.reasoning_effort === undefined
     ) {
-      result.body.reasoning_effort = renderVarsInObject(
-        result.config.reasoning_effort,
-        context?.vars,
-      );
+      result.body.reasoning_effort = result.config.reasoning_effort;
     }
     if (isBedrockGrokModel(this.modelName)) {
       delete result.body.presence_penalty;
