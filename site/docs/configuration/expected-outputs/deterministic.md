@@ -1713,10 +1713,11 @@ alternative does not negate an explicit refusal, but detected unsafe mixed conte
 assertion. `not-is-refusal` is the logical inverse of this classification; it does not by itself
 certify that an output is helpful or safe.
 
-The refusal-language fast path in red-team graders only applies to classifier-clean, text-only
-refusals. Empty responses retain their existing deterministic pass. Responses that combine a
-refusal with other substantive or ambiguous content continue to semantic grading, which can add
-grading latency and cost.
+The refusal-language fast path in red-team graders applies only to classifier-clean text with no
+additional grading evidence, such as images, confirmed exfiltration, recognized provider actions,
+or grading traces. The standalone `is-refusal` assertion still treats empty or null output as a
+refusal, but red-team graders send empty responses with such evidence to outcome grading. Mixed or
+ambiguous refusal text also continues to semantic grading, which can add latency and cost.
 
 Example:
 

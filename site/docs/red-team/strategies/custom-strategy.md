@@ -254,13 +254,17 @@ When you run a custom strategy:
 
 ### Backtracking (Stateless Mode Only)
 
-If the target refuses to answer:
+If the target returns a complete refusal or an explicitly recognized safe refusal continuation
+with no additional grading evidence:
 
 1. The conversation "rewinds" to before the refused question
 2. The AI tries a different approach based on your instructions
 3. This continues up to `maxBacktracks` times
 
 This helps find alternative paths to the objective.
+
+Unknown or mixed responses and responses with image, provider-action, exfiltration, or indirect-web
+evidence continue to outcome grading instead of being discarded.
 
 ## Best Practices
 
