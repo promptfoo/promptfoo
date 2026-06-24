@@ -88,6 +88,31 @@ describe('runtime compatibility CLI notice', () => {
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
   });
 
+  it('merges notice state into a fresh global config snapshot', () => {
+    const now = new Date('2026-06-22T12:00:00.000Z');
+    vi.mocked(readGlobalConfig)
+      .mockReturnValueOnce({ id: 'initial-installation' })
+      .mockReturnValueOnce({
+        id: 'current-installation',
+        account: { email: 'current@example.com' },
+        notices: {
+          'another-notice': { lastShownAt: '2026-06-20T12:00:00.000Z' },
+        },
+      });
+
+    expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2', now })).toBe(true);
+
+    expect(readGlobalConfig).toHaveBeenCalledTimes(2);
+    expect(writeGlobalConfig).toHaveBeenCalledWith({
+      id: 'current-installation',
+      account: { email: 'current@example.com' },
+      notices: {
+        'another-notice': { lastShownAt: '2026-06-20T12:00:00.000Z' },
+        'node20-removal-2026-07-30': { lastShownAt: now.toISOString() },
+      },
+    });
+  });
+
   it('does not repeat the notice before the reminder interval', () => {
     vi.mocked(readGlobalConfig).mockReturnValue({
       id: 'test-installation',

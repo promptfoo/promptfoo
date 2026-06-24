@@ -226,8 +226,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should not show an npm update from stale pre-cutoff data after runtime support ends', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
-    mockUseVersionCheck.mockReturnValue({
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
         updateBlockedByRuntime: false,
@@ -257,9 +256,19 @@ describe('UpdateBanner', () => {
       dismiss: vi.fn(),
       runtimeNoticeDismissed: true,
       updateDismissed: false,
-    });
+      runtimePolicyUpdatedAt: Date.parse('2026-07-29T23:59:00.000Z'),
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
 
-    renderWithProviders(<UpdateBanner />);
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
+
+    mockUseVersionCheck.mockReturnValue({
+      ...versionCheckResult,
+      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
+    });
+    rerender(<UpdateBanner />);
 
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });

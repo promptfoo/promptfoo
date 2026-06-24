@@ -11,8 +11,6 @@ import {
 } from './runtimeCompatibility';
 import telemetry from './telemetry';
 
-import type { GlobalConfig } from './configTypes';
-
 interface RuntimeNoticeOptions {
   currentVersion?: string;
   now?: Date;
@@ -58,9 +56,8 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
     return false;
   }
 
-  let config: GlobalConfig | undefined;
   try {
-    config = readGlobalConfig();
+    const config = readGlobalConfig();
     if (!shouldShowRuntimeNotice(config.notices?.[notice.id]?.lastShownAt, now)) {
       return false;
     }
@@ -82,7 +79,9 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   });
 
   try {
-    const latestConfig = config ?? readGlobalConfig();
+    // Re-read immediately before writing so startup output and telemetry do not widen the
+    // lost-update window for unrelated account, cloud, or consent settings.
+    const latestConfig = readGlobalConfig();
     writeGlobalConfig({
       ...latestConfig,
       notices: {

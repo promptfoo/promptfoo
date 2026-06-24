@@ -20,9 +20,9 @@ function getReminderLabel(reminderIntervalDays: 1 | 7): string {
   return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
 }
 
-function hasRuntimeSupportEnded(removalDate: string): boolean {
+function hasRuntimeSupportEnded(removalDate: string, now = Date.now()): boolean {
   const removalTimestamp = Date.parse(`${removalDate}T00:00:00.000Z`);
-  return !Number.isNaN(removalTimestamp) && Date.now() >= removalTimestamp;
+  return !Number.isNaN(removalTimestamp) && now >= removalTimestamp;
 }
 
 export default function UpdateBanner() {
@@ -36,6 +36,7 @@ export default function UpdateBanner() {
     updateDismissed,
     dismissRuntimeNotice,
     dismissUpdate,
+    runtimePolicyUpdatedAt,
   } = useVersionCheck();
   const { isInitialized, recordEvent } = useTelemetry();
   const [copied, setCopied] = useState(false);
@@ -46,7 +47,7 @@ export default function UpdateBanner() {
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
   const runtimeSupportEnded = runtimeNotice
-    ? hasRuntimeSupportEnded(runtimeNotice.removalDate)
+    ? hasRuntimeSupportEnded(runtimeNotice.removalDate, runtimePolicyUpdatedAt)
     : false;
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||

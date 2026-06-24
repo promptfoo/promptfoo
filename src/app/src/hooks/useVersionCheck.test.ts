@@ -2,6 +2,7 @@ import {
   mockCallApiResponse,
   mockCallApiResponseOnce,
   rejectCallApi,
+  rejectCallApiOnce,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
@@ -270,6 +271,49 @@ describe('useVersionCheck', () => {
 
     expect(callApi).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
+  });
+
+  it('should advance runtime policy time when the cutoff refresh fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 1 as const,
+    };
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-07-29T12:00:00.000Z',
+    );
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice,
+    });
+    rejectCallApiOnce(new Error('Policy refresh failed'));
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    const initialPolicyTime = result.current.runtimePolicyUpdatedAt;
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
+    expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-30T00:00:00.000Z'));
+    expect(result.current.runtimePolicyUpdatedAt).not.toBe(initialPolicyTime);
   });
 
   it('should only call the API once on mount and not refresh', async () => {

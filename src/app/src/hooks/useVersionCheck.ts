@@ -40,6 +40,7 @@ interface UseVersionCheckResult {
   updateDismissed?: boolean;
   dismissRuntimeNotice?: () => void;
   dismissUpdate?: () => void;
+  runtimePolicyUpdatedAt?: number;
 }
 
 const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
@@ -104,6 +105,7 @@ export function useVersionCheck(): UseVersionCheckResult {
   const [error, setError] = useState<Error | null>(null);
   const [runtimeNoticeDismissed, setRuntimeNoticeDismissed] = useState(false);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [runtimePolicyUpdatedAt, setRuntimePolicyUpdatedAt] = useState(() => Date.now());
   const isMountedRef = useRef(true);
 
   const checkVersion = useCallback(async (background: boolean = false): Promise<boolean> => {
@@ -158,6 +160,9 @@ export function useVersionCheck(): UseVersionCheckResult {
 
     let retryTimer: number | undefined;
     const refresh = async () => {
+      // The refresh may fail without changing any request state. Advance this clock first so
+      // consumers still re-evaluate time-based cutoff policy when the boundary is crossed.
+      setRuntimePolicyUpdatedAt(Date.now());
       setRuntimeNoticeDismissed(isRuntimeNoticeSnoozed(notice));
       const succeeded = await checkVersion(true);
       if (!succeeded && isMountedRef.current) {
@@ -211,5 +216,6 @@ export function useVersionCheck(): UseVersionCheckResult {
     updateDismissed,
     dismissRuntimeNotice,
     dismissUpdate,
+    runtimePolicyUpdatedAt,
   };
 }
