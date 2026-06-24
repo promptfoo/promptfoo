@@ -337,7 +337,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           githubPr: options.githubPr,
         });
       } else if (outputFormat === CodeScanOutputFormat.SARIF) {
-        logger.error(
+        console.error(
           `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
         );
         cliState.postActionCallback = async () => {

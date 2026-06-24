@@ -11,6 +11,7 @@ import {
 import {
   type AtomicTestCase,
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvaluateSummaryV2,
   type GradingResult,
   type Prompt,
@@ -65,9 +66,7 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
-    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<
-      Partial<import('../types').EvaluateOptions>
-    >(),
+    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<EvalRuntimeOptions>(),
     isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({
