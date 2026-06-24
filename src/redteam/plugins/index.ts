@@ -441,7 +441,8 @@ async function fetchRemoteTestCases(
         headers: getRemoteGenerationHeaders(),
         body,
         signal: abortSignal,
-        // The cloud task API treats these as retryable task or gateway failures.
+        // Retry this endpoint's bounded task/gateway failure set. This is at-least-once:
+        // an ambiguous failure can duplicate remote generation work.
         retryOnStatusCodes: [500, 502, 503, 504, 524],
       },
       getRequestTimeoutMs(),
