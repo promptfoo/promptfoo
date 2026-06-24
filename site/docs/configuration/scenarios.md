@@ -123,7 +123,7 @@ tests:
       count: 10
 ```
 
-Inline `provider` overrides in `config` or `tests` rows follow the same rule. Provider IDs and nested provider option refs resolve relative to the external scenario file. A scenario provider override runs once per eligible prompt without multiplying across suite-provider slots; rows without an override continue to run across every eligible suite provider.
+Inline `provider` overrides in `config` or `tests` rows follow the same rule. Provider IDs and nested provider option refs resolve relative to the external scenario file; refs inside a separate scenario test file resolve relative to that test file. Both forms use the declaring config's environment. A scenario provider override runs once per eligible prompt without multiplying across suite-provider slots; rows without an override continue to run across every eligible suite provider.
 
 You can also keep large `config` matrices in separate files with `$values`:
 
@@ -147,7 +147,7 @@ scenarios:
 
 The referenced YAML or JSON file should contain one `Partial<TestCase>` object or an array of them; loaded entries are flattened into the `config` array alongside any inline entries. Glob patterns such as `$values: file://matrices/*.yaml` load all matching files. Every non-empty row must contain a test case field such as `vars` or `assert` — flat key-value rows (such as raw CSV columns) are rejected with a pointer to nest them under `vars`.
 
-A `$values` entry must have `$values` as its only key, and the referenced rows cannot themselves contain `$values`. Relative paths resolve against the file that declares them: the config file for inline scenarios, or the scenario file when the scenario itself is loaded via `file://`. When loading scenarios with a glob, keep matrix files out of the glob's reach (a different directory or extension) so they are not also loaded as scenarios.
+A `$values` entry must have `$values` as its only key, and the referenced rows cannot themselves contain `$values`. The `$values` ref resolves against the file that declares the scenario: the config file for inline scenarios, or the scenario file when the scenario itself is loaded via `file://`. Relative target and grader provider refs inside loaded rows resolve against each matrix file, using the declaring scenario's environment in multi-config runs. When loading scenarios with a glob, keep matrix files out of the glob's reach (a different directory or extension) so they are not also loaded as scenarios.
 
 ### Using Glob Patterns
 

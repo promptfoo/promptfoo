@@ -210,7 +210,11 @@ export function maybeLoadFromExternalFile(
     contents = fs.readFileSync(finalPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`File does not exist: ${finalPath}`);
+      const missingFileError = new Error(
+        `File does not exist: ${finalPath}`,
+      ) as NodeJS.ErrnoException;
+      missingFileError.code = 'ENOENT';
+      throw missingFileError;
     }
     throw new Error(`Failed to read file ${finalPath}: ${error}`);
   }
@@ -267,45 +271,83 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * @param context - Optional context to control file loading behavior
  * @returns The configuration with external file references resolved
  */
-export function maybeLoadConfigFromExternalFile(
-  config: any,
-  context?: 'assertion' | 'general' | 'vars',
-): any {
+type ConfigFileContext =
+  | 'assertion'
+  | 'general'
+  | 'vars'
+  | 'scenario-test'
+  | 'scenario-test-options'
+  | 'scenario-test-assertions'
+  | 'provider';
+
+const SCENARIO_CONFIG_CHILD_CONTEXTS: Partial<
+  Record<ConfigFileContext, Record<string, ConfigFileContext>>
+> = {
+  'scenario-test': {
+    vars: 'vars',
+    provider: 'provider',
+    options: 'scenario-test-options',
+    assert: 'scenario-test-assertions',
+  },
+  'scenario-test-options': { provider: 'provider' },
+  'scenario-test-assertions': {
+    provider: 'provider',
+    assert: 'scenario-test-assertions',
+  },
+};
+
+function isScriptAssertionValue(config: Record<string, unknown>, key: string): boolean {
+  return (
+    key === 'value' &&
+    Object.hasOwn(config, 'type') &&
+    typeof config.type === 'string' &&
+    (config.type === 'python' || config.type === 'javascript')
+  );
+}
+
+function getConfigFileChildContext(
+  config: Record<string, unknown>,
+  key: string,
+  context?: ConfigFileContext,
+): ConfigFileContext | undefined {
+  if (context === 'provider') {
+    return 'provider';
+  }
+  if (context === 'scenario-test-assertions' && isScriptAssertionValue(config, key)) {
+    return 'assertion';
+  }
+  const structuralContext = context ? SCENARIO_CONFIG_CHILD_CONTEXTS[context] : undefined;
+  if (structuralContext) {
+    return Object.hasOwn(structuralContext, key) ? structuralContext[key] : undefined;
+  }
+  return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
+}
+
+export function maybeLoadConfigFromExternalFile(config: any, context?: ConfigFileContext): any {
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
-
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
-
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = getConfigFileChildContext(config, key, context);
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
-      if (key === '__proto__') {
-        Object.defineProperty(result, key, {
-          value,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } else {
-        result[key] = value;
-      }
+      Object.defineProperty(result, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  if (context === 'provider') {
+    return config;
+  }
+  const externalContext =
+    context === 'assertion' || context === 'general' || context === 'vars' ? context : undefined;
+  return maybeLoadFromExternalFile(config, externalContext);
 }
 
 /**

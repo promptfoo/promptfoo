@@ -619,6 +619,42 @@ describe('file utilities', () => {
       expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
 
+    it('should ignore inherited scenario-test context keys', () => {
+      let result: unknown;
+      Object.defineProperty(Object.prototype, 'metadata', {
+        configurable: true,
+        get: () => {
+          throw new Error('inherited metadata getter ran');
+        },
+      });
+
+      try {
+        result = maybeLoadConfigFromExternalFile({ metadata: { source: 'safe' } }, 'scenario-test');
+      } finally {
+        delete (Object.prototype as Record<string, unknown>).metadata;
+      }
+
+      expect(result).toEqual({ metadata: { source: 'safe' } });
+    });
+
+    it('should ignore inherited assertion types in scenario tests', () => {
+      let result: unknown;
+      Object.defineProperty(Object.prototype, 'type', {
+        configurable: true,
+        get: () => {
+          throw new Error('inherited type getter ran');
+        },
+      });
+
+      try {
+        result = maybeLoadConfigFromExternalFile({ assert: [{ value: 'safe' }] }, 'scenario-test');
+      } finally {
+        delete (Object.prototype as Record<string, unknown>).type;
+      }
+
+      expect(result).toEqual({ assert: [{ value: 'safe' }] });
+    });
+
     it('should handle very large nested structures efficiently', () => {
       vi.mocked(fs.readFileSync).mockReturnValue('file content');
 

@@ -32,6 +32,28 @@ interface DiagnosticKeySummary {
 
 type ScenarioInput = Exclude<NonNullable<TestSuiteConfig['scenarios']>[number], string>;
 
+interface ScenarioConfigSourceContext {
+  basePath: string;
+  envOverrides?: EnvOverrides;
+}
+
+const scenarioConfigSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
+const scenarioSourceContexts = new WeakMap<object, ScenarioConfigSourceContext>();
+
+export function getScenarioSourceContext(
+  scenario: object,
+): ScenarioConfigSourceContext | undefined {
+  return scenarioSourceContexts.get(scenario);
+}
+
+export function transferScenarioSourceContext<T extends object>(source: object, target: T): T {
+  const sourceContext = scenarioSourceContexts.get(source);
+  if (sourceContext) {
+    scenarioSourceContexts.set(target, sourceContext);
+  }
+  return target;
+}
+
 function createDiagnosticKeySummary(): DiagnosticKeySummary {
   return { keys: [], omitted: 0 };
 }
@@ -115,7 +137,9 @@ export function resolveFileRefFromBase(
     return fileRef;
   }
 
-  const renderedFileRef = getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {});
+  const renderedFileRef = fileRef.includes('{')
+    ? getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {})
+    : fileRef;
   const filePath = fileRefToPath(renderedFileRef);
   const resolvedPath = resolvePathFromBase(basePath, filePath);
   return `${FILE_REF_PREFIX}${resolvedPath}`;
@@ -136,11 +160,20 @@ export function resolveScenarioConfigValuesRefs(
 
   return {
     ...scenario,
-    config: scenario.config.map((entry) =>
-      isScenarioConfigValuesRef(entry)
-        ? { ...entry, $values: resolveFileRefFromBase(basePath, entry.$values, envOverrides) }
-        : resolveScenarioConfigRowProvider(basePath, entry, envOverrides),
-    ),
+    config: scenario.config.map((entry) => {
+      if (!isScenarioConfigValuesRef(entry)) {
+        return resolveScenarioConfigRowProviders(basePath, entry, envOverrides);
+      }
+      const resolved = {
+        ...entry,
+        $values: resolveFileRefFromBase(basePath, entry.$values, envOverrides),
+      };
+      scenarioConfigSourceContexts.set(
+        resolved,
+        scenarioConfigSourceContexts.get(entry) ?? { basePath, envOverrides },
+      );
+      return resolved;
+    }),
   };
 }
 
@@ -172,15 +205,12 @@ function resolveScenarioTestsRefs(
         resolved.config = resolveNestedFileRefs(basePath, record.config, envOverrides);
       }
     }
-    if (Object.prototype.hasOwnProperty.call(record, 'provider')) {
-      resolved.provider = resolveScenarioProviderRef(basePath, record.provider, envOverrides);
-    }
     if (typeof record.vars === 'string' || Array.isArray(record.vars)) {
       resolved.vars = Array.isArray(record.vars)
         ? record.vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
         : resolveScenarioVarsRef(basePath, record.vars, envOverrides);
     }
-    return resolved;
+    return resolveScenarioConfigRowProviders(basePath, resolved, envOverrides);
   };
 
   if (tests === undefined || tests === null) {
@@ -240,6 +270,18 @@ function resolveNestedFileRefs(
     return value;
   }
 
+  const record = value as Record<string, unknown>;
+  const hasId = Object.prototype.hasOwnProperty.call(record, 'id');
+  const hasCallApi = Object.prototype.hasOwnProperty.call(record, 'callApi');
+  if (
+    hasId &&
+    hasCallApi &&
+    typeof record.id === 'function' &&
+    typeof record.callApi === 'function'
+  ) {
+    return value;
+  }
+
   const resolved: Record<string, unknown> = {};
   seen.set(value, resolved);
   for (const [key, nested] of Object.entries(value)) {
@@ -250,16 +292,20 @@ function resolveNestedFileRefs(
 }
 
 function defineRecordProperty(record: Record<string, unknown>, key: string, value: unknown): void {
-  if (key === '__proto__') {
-    Object.defineProperty(record, key, {
-      value,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-    return;
+  Object.defineProperty(record, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
   }
-  record[key] = value;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function resolveScenarioProviderRef(
@@ -270,20 +316,18 @@ function resolveScenarioProviderRef(
   if (typeof provider === 'string') {
     return resolveFileRefFromBase(basePath, provider, envOverrides);
   }
-  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+  if (!isPlainRecord(provider)) {
     return provider;
   }
 
-  const prototype = Object.getPrototypeOf(provider);
-  if (prototype !== Object.prototype && prototype !== null) {
+  const record = provider;
+  const hasId = Object.prototype.hasOwnProperty.call(record, 'id');
+  const hasCallApi = Object.prototype.hasOwnProperty.call(record, 'callApi');
+  const providerId = hasId ? record.id : undefined;
+  if (hasCallApi && typeof providerId === 'function' && typeof record.callApi === 'function') {
     return provider;
   }
-
-  const record = provider as Record<string, unknown>;
-  if (typeof record.id === 'function' && typeof record.callApi === 'function') {
-    return provider;
-  }
-  if (typeof record.id === 'string') {
+  if (typeof providerId === 'string') {
     return resolveNestedFileRefs(basePath, record, envOverrides);
   }
 
@@ -300,24 +344,124 @@ function resolveScenarioProviderRef(
   return resolved ?? provider;
 }
 
-function resolveScenarioConfigRowProvider(
+function resolveScenarioAssertionProviderRefs(
+  basePath: string,
+  value: unknown,
+  envOverrides?: EnvOverrides,
+  seen = new WeakMap<object, unknown>(),
+): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  const cached = seen.get(value);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const resolved: unknown[] = [];
+  seen.set(value, resolved);
+  let changed = false;
+  for (const assertion of value) {
+    if (!isPlainRecord(assertion)) {
+      resolved.push(assertion);
+      continue;
+    }
+    const cachedAssertion = seen.get(assertion);
+    if (cachedAssertion !== undefined) {
+      changed ||= cachedAssertion !== assertion;
+      resolved.push(cachedAssertion);
+      continue;
+    }
+    const provisional = { ...assertion };
+    seen.set(assertion, provisional);
+    const hasProvider = Object.prototype.hasOwnProperty.call(assertion, 'provider');
+    const originalProvider = hasProvider ? assertion.provider : undefined;
+    const provider = hasProvider
+      ? resolveScenarioProviderRef(basePath, originalProvider, envOverrides)
+      : undefined;
+    const hasNestedAssertions = Object.prototype.hasOwnProperty.call(assertion, 'assert');
+    const originalNestedAssertions = hasNestedAssertions ? assertion.assert : undefined;
+    const nestedAssertions = hasNestedAssertions
+      ? resolveScenarioAssertionProviderRefs(basePath, originalNestedAssertions, envOverrides, seen)
+      : undefined;
+    let resolvedAssertion = assertion;
+    if (provider !== originalProvider || nestedAssertions !== originalNestedAssertions) {
+      resolvedAssertion = provisional;
+      if (provider !== originalProvider) {
+        resolvedAssertion.provider = provider;
+      }
+      if (nestedAssertions !== originalNestedAssertions) {
+        resolvedAssertion.assert = nestedAssertions;
+      }
+    } else {
+      seen.set(assertion, assertion);
+    }
+    changed ||= resolvedAssertion !== assertion;
+    resolved.push(resolvedAssertion);
+  }
+  return changed ? resolved : value;
+}
+
+function resolveScenarioConfigRowProviders(
   basePath: string,
   row: unknown,
   envOverrides?: EnvOverrides,
 ): Scenario['config'][number] {
-  if (
-    !row ||
-    typeof row !== 'object' ||
-    Array.isArray(row) ||
-    !Object.prototype.hasOwnProperty.call(row, 'provider')
-  ) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
     return row as Scenario['config'][number];
   }
   const record = row as Record<string, unknown>;
-  const provider = resolveScenarioProviderRef(basePath, record.provider, envOverrides);
-  return (
-    provider === record.provider ? row : { ...record, provider }
-  ) as Scenario['config'][number];
+  const hasProvider = Object.prototype.hasOwnProperty.call(record, 'provider');
+  const originalProvider = hasProvider ? record.provider : undefined;
+  const provider = hasProvider
+    ? resolveScenarioProviderRef(basePath, originalProvider, envOverrides)
+    : undefined;
+
+  const hasOptions = Object.prototype.hasOwnProperty.call(record, 'options');
+  const options = hasOptions ? record.options : undefined;
+  let resolvedOptions = options;
+  if (isPlainRecord(options)) {
+    const hasOptionsProvider = Object.prototype.hasOwnProperty.call(options, 'provider');
+    const originalOptionsProvider = hasOptionsProvider ? options.provider : undefined;
+    const optionsProvider = hasOptionsProvider
+      ? resolveScenarioProviderRef(basePath, originalOptionsProvider, envOverrides)
+      : undefined;
+    if (optionsProvider !== originalOptionsProvider) {
+      resolvedOptions = { ...options, provider: optionsProvider };
+    }
+  }
+
+  const hasAssertions = Object.prototype.hasOwnProperty.call(record, 'assert');
+  const originalAssertions = hasAssertions ? record.assert : undefined;
+  const assertions = hasAssertions
+    ? resolveScenarioAssertionProviderRefs(basePath, originalAssertions, envOverrides)
+    : undefined;
+
+  if (
+    provider === originalProvider &&
+    resolvedOptions === options &&
+    assertions === originalAssertions
+  ) {
+    return row as Scenario['config'][number];
+  }
+  const resolved = { ...record };
+  if (provider !== originalProvider) {
+    resolved.provider = provider;
+  }
+  if (resolvedOptions !== options) {
+    resolved.options = resolvedOptions;
+  }
+  if (assertions !== originalAssertions) {
+    resolved.assert = assertions;
+  }
+  return resolved as Scenario['config'][number];
+}
+
+export function resolveScenarioTestCaseProviderRefs<T>(
+  basePath: string,
+  testCase: T,
+  envOverrides?: EnvOverrides,
+): T {
+  return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
 }
 
 export function resolveScenarioFileRefs(
@@ -325,11 +469,39 @@ export function resolveScenarioFileRefs(
   scenario: ScenarioInput,
   envOverrides?: EnvOverrides,
 ): ScenarioInput {
-  return resolveScenarioTestsRefs(
-    basePath,
-    resolveScenarioConfigValuesRefs(basePath, scenario, envOverrides),
-    envOverrides,
+  const sourceContext = scenarioSourceContexts.get(scenario) ?? { basePath, envOverrides };
+  const resolved = resolveScenarioTestsRefs(
+    sourceContext.basePath,
+    resolveScenarioConfigValuesRefs(sourceContext.basePath, scenario, sourceContext.envOverrides),
+    sourceContext.envOverrides,
   );
+  scenarioSourceContexts.set(resolved, sourceContext);
+  return resolved;
+}
+
+function getFilePaths(
+  basePath: string,
+  fileRef: string,
+  envOverrides?: EnvOverrides,
+): { paths: string[]; fromGlob: boolean } {
+  const renderedFileRef = getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {});
+  const rawPath = fileRefToPath(renderedFileRef);
+  const resolvedPath = resolvePathFromBase(basePath, rawPath);
+  if (fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile()) {
+    return { paths: [resolvedPath], fromGlob: false };
+  }
+
+  // Detect glob magic on the raw ref, not the resolved path, so directories whose
+  // names contain glob metacharacters do not turn plain refs into patterns.
+  if (!hasMagic(rawPath, GLOB_OPTIONS)) {
+    return { paths: [resolvedPath], fromGlob: false };
+  }
+
+  const matchedFiles = globSync(resolvedPath, GLOB_OPTIONS);
+  if (matchedFiles.length === 0) {
+    throw new ConfigResolutionError(`No files found matching pattern: ${resolvedPath}`);
+  }
+  return { paths: matchedFiles, fromGlob: true };
 }
 
 function getScenarioFilePaths(
@@ -342,25 +514,7 @@ function getScenarioFilePaths(
       `Scenario "${fileRef}" is not valid: scenarios must be objects or file:// references`,
     );
   }
-
-  const renderedFileRef = getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {});
-  const rawPath = fileRefToPath(renderedFileRef);
-  const resolvedPath = resolvePathFromBase(basePath, rawPath);
-  if (fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile()) {
-    return [resolvedPath];
-  }
-
-  // Detect glob magic on the raw ref, not the resolved path, so directories whose
-  // names contain glob metacharacters do not turn plain refs into patterns.
-  if (!hasMagic(rawPath, GLOB_OPTIONS)) {
-    return [resolvedPath];
-  }
-
-  const matchedFiles = globSync(resolvedPath, GLOB_OPTIONS);
-  if (matchedFiles.length === 0) {
-    throw new ConfigResolutionError(`No files found matching pattern: ${resolvedPath}`);
-  }
-  return matchedFiles;
+  return getFilePaths(basePath, fileRef, envOverrides).paths;
 }
 
 /**
@@ -504,6 +658,23 @@ function validateMatrixRows(rows: unknown[], sourceRef: string): void {
   }
 }
 
+async function loadScenarioMatrixFile(
+  concreteRef: string,
+  valuesFilePath: string,
+  fromGlob: boolean,
+  envOverrides?: EnvOverrides,
+): Promise<unknown> {
+  try {
+    return await maybeLoadFromExternalFile(concreteRef, undefined, envOverrides);
+  } catch (error) {
+    if (fromGlob && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      logger.debug(`File disappeared during scenario matrix glob expansion: ${valuesFilePath}`);
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 /**
  * Expand `$values` matrix-file refs in a scenario's config rows into the rows
  * those files contain. Inline rows pass through unchanged. Every loaded row is
@@ -537,28 +708,58 @@ export async function expandScenarioConfigValues(
       !Array.isArray(entry) &&
       ('$values' in entry || '$expand' in entry);
     if (!isRefLike) {
-      expandedConfig.push(resolveScenarioConfigRowProvider(basePath, entry, envOverrides));
+      expandedConfig.push(resolveScenarioConfigRowProviders(basePath, entry, envOverrides));
       continue;
     }
 
     const ref = assertValidValuesRef(entry, `scenario config entry ${entryIndex + 1}`);
-    const valuesRef = resolveFileRefFromBase(basePath, ref.$values, envOverrides);
-    const loadedValues = await maybeLoadFromExternalFile(valuesRef, undefined, envOverrides);
-    if (loadedValues === null || loadedValues === undefined) {
-      throw new ConfigResolutionError(`Scenario config $values file is empty: ${valuesRef}`);
-    }
-
-    const rows: unknown[] = Array.isArray(loadedValues) ? loadedValues.flat() : [loadedValues];
-    if (rows.length === 0) {
-      // Zero rows means the scenario silently runs zero tests; treat it like an
-      // empty file rather than letting a truncated matrix pass green.
-      throw new ConfigResolutionError(
-        `Scenario config $values file contributed no rows: ${valuesRef}`,
+    const sourceContext = scenarioConfigSourceContexts.get(ref) ?? { basePath, envOverrides };
+    const valuesRef = resolveFileRefFromBase(
+      sourceContext.basePath,
+      ref.$values,
+      sourceContext.envOverrides,
+    );
+    const expansionStart = expandedConfig.length;
+    let sawLoadedValue = false;
+    const { paths: valuesFilePaths, fromGlob } = getFilePaths(
+      sourceContext.basePath,
+      valuesRef,
+      sourceContext.envOverrides,
+    );
+    for (const valuesFilePath of valuesFilePaths) {
+      const concreteRef = `${FILE_REF_PREFIX}${valuesFilePath}`;
+      const loadedValues = await loadScenarioMatrixFile(
+        concreteRef,
+        valuesFilePath,
+        fromGlob,
+        sourceContext.envOverrides,
       );
+      if (loadedValues === null || loadedValues === undefined) {
+        continue;
+      }
+      sawLoadedValue = true;
+
+      const rows: unknown[] = Array.isArray(loadedValues) ? loadedValues.flat() : [loadedValues];
+      if (rows.length === 0) {
+        continue;
+      }
+      validateMatrixRows(rows, concreteRef);
+      for (const row of rows) {
+        expandedConfig.push(
+          resolveScenarioConfigRowProviders(
+            path.dirname(valuesFilePath),
+            row,
+            sourceContext.envOverrides,
+          ),
+        );
+      }
     }
-    validateMatrixRows(rows, valuesRef);
-    for (const row of rows) {
-      expandedConfig.push(resolveScenarioConfigRowProvider(basePath, row, envOverrides));
+    if (expandedConfig.length === expansionStart) {
+      throw new ConfigResolutionError(
+        sawLoadedValue
+          ? `Scenario config $values file contributed no rows: ${valuesRef}`
+          : `Scenario config $values file is empty: ${valuesRef}`,
+      );
     }
   }
 

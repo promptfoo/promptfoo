@@ -1607,9 +1607,6 @@
     "__schema49": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema7"
-        },
-        {
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -1627,6 +1624,9 @@
               }
             ]
           }
+        },
+        {
+          "$ref": "#/definitions/__schema7"
         }
       ]
     },

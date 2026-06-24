@@ -22,7 +22,7 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readScenarioTests, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
@@ -1722,6 +1722,7 @@ describe('resolveConfigs', () => {
   it('should load scenarios and tests from external files', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
+    const scenarioEnv = { PROVIDER: 'provider-a.cjs' };
     const scenarios = [{ description: 'Scenario', tests: 'file://tests.yaml' }];
     const externalTests = [
       { vars: { testPrompt: 'What services do you offer?' } },
@@ -1736,6 +1737,7 @@ describe('resolveConfigs', () => {
       JSON.stringify({
         prompts: [prompt],
         providers: ['openai:gpt-4'],
+        env: scenarioEnv,
         scenarios: 'file://scenarios.yaml',
       }),
     );
@@ -1767,11 +1769,16 @@ describe('resolveConfigs', () => {
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'scenarios.yaml')}`,
       undefined,
-      {},
+      scenarioEnv,
+    );
+    expect(readScenarioTests).toHaveBeenCalledWith(
+      `file://${path.resolve('/mock/cwd', 'tests.yaml')}`,
+      path.resolve('/mock/cwd'),
+      scenarioEnv,
     );
     expect(readTests).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'tests.yaml')}`,
-      path.dirname('config.json'),
+      path.resolve('/mock/cwd'),
     );
 
     expect(testSuite).toMatchObject({

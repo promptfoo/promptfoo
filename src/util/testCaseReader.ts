@@ -19,12 +19,14 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { ConfigResolutionError } from './config/errors';
+import { resolveScenarioTestCaseProviderRefs } from './config/scenarioMatrix';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
+  EnvOverrides,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -454,6 +456,7 @@ export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
   allowPartialTests = false,
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -517,7 +520,7 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
@@ -526,21 +529,28 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = loadTestCaseConfig(rawCases, allowPartialTests);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
 
-    await appendLoadedTestCases(ret, testCases, testFile, allowPartialTests);
+    await appendLoadedTestCases(ret, testCases, testFile, allowPartialTests, envOverrides);
   }
   return ret;
+}
+
+function loadTestCaseConfig(config: unknown, allowPartialTests: boolean): TestCase[] {
+  return maybeLoadConfigFromExternalFile(
+    config,
+    allowPartialTests ? 'scenario-test' : undefined,
+  ) as TestCase[];
 }
 
 async function appendLoadedTestCases(
@@ -548,6 +558,7 @@ async function appendLoadedTestCases(
   loaded: TestCase[] | undefined,
   testFile: string,
   allowPartialTests: boolean,
+  envOverrides?: EnvOverrides,
 ): Promise<void> {
   if (!loaded) {
     return;
@@ -557,7 +568,11 @@ async function appendLoadedTestCases(
     if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
       throw new Error(`Test case ${index + 1} in ${testFile} must be an object`);
     }
-    destination.push(await readTest(testCase, path.dirname(testFile), allowPartialTests));
+    const testBasePath = path.dirname(testFile);
+    const normalizedTest = allowPartialTests
+      ? resolveScenarioTestCaseProviderRefs(testBasePath, testCase, envOverrides)
+      : testCase;
+    destination.push(await readTest(normalizedTest, testBasePath, allowPartialTests));
   }
 }
 
@@ -577,6 +592,7 @@ export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
   allowPartialTests = false,
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
@@ -586,7 +602,7 @@ export async function readTests(
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath, allowPartialTests);
+      return loadTestsFromGlob(tests, basePath, allowPartialTests, envOverrides);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
@@ -618,7 +634,9 @@ export async function readTests(
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
           // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, allowPartialTests)));
+          ret.push(
+            ...(await loadTestsFromGlob(globOrTest, basePath, allowPartialTests, envOverrides)),
+          );
         }
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
@@ -667,6 +685,7 @@ export async function readTests(
 export async function readScenarioTests(
   tests: unknown,
   basePath = '',
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[] | undefined> {
   if (tests === undefined || tests === null) {
     return undefined;
@@ -675,10 +694,16 @@ export async function readScenarioTests(
   const normalizedTests: TestCase[] = [];
   for (const test of Array.isArray(tests) ? tests : [tests]) {
     if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
-      normalizedTests.push(await readTest(test as TestCaseWithVarsFile, basePath, true));
+      normalizedTests.push(
+        await readTest(
+          resolveScenarioTestCaseProviderRefs(basePath, test, envOverrides) as TestCaseWithVarsFile,
+          basePath,
+          true,
+        ),
+      );
       continue;
     }
-    for (const loadedTest of await loadScenarioTestSource(test, basePath)) {
+    for (const loadedTest of await loadScenarioTestSource(test, basePath, envOverrides)) {
       normalizedTests.push(loadedTest);
     }
   }
@@ -701,7 +726,11 @@ function isGeneratorLikeScenarioTest(value: Record<string, unknown>): boolean {
   );
 }
 
-async function loadScenarioTestSource(test: unknown, basePath: string): Promise<TestCase[]> {
+async function loadScenarioTestSource(
+  test: unknown,
+  basePath: string,
+  envOverrides?: EnvOverrides,
+): Promise<TestCase[]> {
   const isGenerator = isScenarioTestRecord(test) && isGeneratorLikeScenarioTest(test);
   if (isGenerator && typeof test.path !== 'string') {
     throw new ConfigResolutionError('Scenario test generator must have a string path');
@@ -719,11 +748,21 @@ async function loadScenarioTestSource(test: unknown, basePath: string): Promise<
     : sourcePath;
   let normalizedTests: TestCase[];
   try {
-    const loaded = (await readTests(test as TestSuiteConfig['tests'], basePath, true)) as unknown;
+    const loaded = (await readTests(
+      test as TestSuiteConfig['tests'],
+      basePath,
+      true,
+      envOverrides,
+    )) as unknown;
     if (!Array.isArray(loaded)) {
       throw new Error(`expected an array of test cases, got ${typeof loaded}`);
     }
-    normalizedTests = await normalizeLoadedScenarioTests(loaded, sourcePath, basePath);
+    normalizedTests = await normalizeLoadedScenarioTests(
+      loaded,
+      sourcePath,
+      basePath,
+      envOverrides,
+    );
   } catch (error) {
     throw new ConfigResolutionError(
       `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -741,6 +780,7 @@ async function normalizeLoadedScenarioTests(
   loadedTests: unknown[],
   sourcePath: string,
   fallbackBasePath: string,
+  envOverrides?: EnvOverrides,
 ): Promise<TestCase[]> {
   const normalizedTests: TestCase[] = [];
   const sourceBasePath = getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
@@ -751,7 +791,15 @@ async function normalizeLoadedScenarioTests(
     }
     normalizedTests.push(
       shouldNormalize
-        ? await readTest(loadedTest as TestCaseWithVarsFile, sourceBasePath, true)
+        ? await readTest(
+            resolveScenarioTestCaseProviderRefs(
+              sourceBasePath,
+              loadedTest,
+              envOverrides,
+            ) as TestCaseWithVarsFile,
+            sourceBasePath,
+            true,
+          )
         : (loadedTest as TestCase),
     );
   }

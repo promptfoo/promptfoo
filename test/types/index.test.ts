@@ -887,6 +887,12 @@ describe('TestSuiteConfigSchema', () => {
       const result = TestSuiteConfigSchema.safeParse(config);
 
       expect(result.success).toBe(true);
+      expect(result.success ? result.data.env : undefined).toEqual({
+        CUSTOM_STRING_VALUE: 'string-value',
+        CUSTOM_NUMBER_VALUE: '42',
+        CUSTOM_BOOLEAN_TRUE: 'true',
+        CUSTOM_BOOLEAN_FALSE: 'false',
+      });
 
       const testProvider = result.success
         ? {

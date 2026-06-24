@@ -1,4 +1,5 @@
-import * as fs from 'fs';
+import fs from 'fs';
+import { syncBuiltinESMExports } from 'module';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -245,7 +246,7 @@ describe('scenarioMatrix (real filesystem)', () => {
       ]);
     });
 
-    it('canonicalizes matrix provider file refs against the config base', async () => {
+    it('canonicalizes matrix provider file refs against the matrix file', async () => {
       const matrixPath = write(
         'matrices/providers.yaml',
         '- vars:\n    case: matrix\n  provider: file://providers/matrix.cjs\n',
@@ -259,7 +260,7 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(expanded).toEqual([
         {
           vars: { case: 'matrix' },
-          provider: `file://${path.join(tmpDir, 'providers/matrix.cjs')}`,
+          provider: `file://${path.join(tmpDir, 'matrices/providers/matrix.cjs')}`,
         },
       ]);
     });
@@ -276,6 +277,41 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(expanded[0].provider).toBe(liveProvider);
     });
 
+    it('preserves live grader provider identity inside typed provider maps', async () => {
+      const liveProvider = {
+        id: () => 'live-grader',
+        callApi: vi.fn().mockResolvedValue({ output: 'same instance' }),
+      };
+
+      const [expanded] = await expandScenarioConfigValues([
+        { options: { provider: { text: liveProvider } } },
+      ]);
+      const providerMap = expanded.options?.provider as { text: typeof liveProvider };
+
+      expect(providerMap.text).toBe(liveProvider);
+    });
+
+    it('preserves cyclic assertion sets while canonicalizing grader providers', async () => {
+      const assertion: Record<string, unknown> = {
+        type: 'assert-set',
+        provider: 'file://grader.cjs',
+        assert: [],
+      };
+      (assertion.assert as unknown[]).push(assertion);
+
+      const [expanded] = await expandScenarioConfigValues(
+        [{ vars: { case: 'cyclic' }, assert: [assertion] }],
+        tmpDir,
+      );
+      const resolved = expanded.assert?.[0] as unknown as {
+        provider: string;
+        assert: unknown[];
+      };
+
+      expect(resolved.provider).toBe(`file://${path.join(tmpDir, 'grader.cjs')}`);
+      expect(resolved.assert[0]).toBe(resolved);
+    });
+
     it('preserves __proto__ as provider-map data without changing the prototype', async () => {
       const provider = JSON.parse('{"__proto__":{"id":"echo","polluted":"yes"}}');
 
@@ -287,6 +323,45 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(Object.prototype.hasOwnProperty.call(resolvedProvider, 'id')).toBe(false);
       expect(resolvedProvider.id).toBeUndefined();
       expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+    });
+
+    it('ignores inherited provider fields from a polluted prototype', async () => {
+      const inheritedKeys = ['provider', 'options', 'assert', 'id', 'callApi', 'payload'] as const;
+      for (const key of inheritedKeys) {
+        Object.defineProperty(Object.prototype, key, {
+          get: () => {
+            throw new Error(`inherited ${key} getter ran`);
+          },
+          configurable: true,
+        });
+      }
+      try {
+        const [expanded] = await expandScenarioConfigValues(
+          [
+            {
+              vars: { safe: true },
+              options: {
+                provider: {
+                  id: 'file://grader.cjs',
+                  config: { payload: 'file://payload.txt' },
+                },
+              },
+              assert: [{ type: 'equals', value: 'safe' }],
+            },
+          ],
+          tmpDir,
+        );
+
+        expect(expanded.vars).toEqual({ safe: true });
+        expect(expanded.options?.provider).toEqual({
+          id: `file://${path.join(tmpDir, 'grader.cjs')}`,
+          config: { payload: `file://${path.join(tmpDir, 'payload.txt')}` },
+        });
+      } finally {
+        for (const key of inheritedKeys) {
+          delete (Object.prototype as Record<string, unknown>)[key];
+        }
+      }
     });
 
     it('expands glob $values refs across files', async () => {
@@ -302,6 +377,39 @@ describe('scenarioMatrix (real filesystem)', () => {
         expect.arrayContaining([
           { vars: { language: 'French' } },
           { vars: { language: 'Spanish' } },
+        ]),
+      );
+    });
+
+    it('allows empty files when another globbed matrix contributes rows', async () => {
+      write('matrices/a.yaml', '# intentionally empty\n');
+      write('matrices/b.yaml', '- vars:\n    language: French\n');
+
+      await expect(
+        expandScenarioConfigValues([
+          { $values: `file://${path.join(tmpDir, 'matrices', '*.yaml')}` },
+        ]),
+      ).resolves.toEqual([{ vars: { language: 'French' } }]);
+    });
+
+    it('resolves provider refs against each concrete globbed matrix file', async () => {
+      write('matrices/a/rows.yaml', '- vars:\n    source: a\n  provider: file://provider.cjs\n');
+      write('matrices/b/rows.yaml', '- vars:\n    source: b\n  provider: file://provider.cjs\n');
+
+      const expanded = await expandScenarioConfigValues([
+        { $values: `file://${path.join(tmpDir, 'matrices', '**', 'rows.yaml')}` },
+      ]);
+
+      expect(expanded).toEqual(
+        expect.arrayContaining([
+          {
+            vars: { source: 'a' },
+            provider: `file://${path.join(tmpDir, 'matrices/a/provider.cjs')}`,
+          },
+          {
+            vars: { source: 'b' },
+            provider: `file://${path.join(tmpDir, 'matrices/b/provider.cjs')}`,
+          },
         ]),
       );
     });
@@ -498,6 +606,28 @@ describe('scenarioMatrix (real filesystem)', () => {
       ).resolves.toEqual([{ vars: { source: 'bracket-base' } }]);
     });
 
+    it('skips glob matches that disappear after enumeration', async () => {
+      write('matrices/a.yaml', '- vars:\n    source: kept\n');
+      const disappearingPath = write('matrices/b.yaml', '- vars:\n    source: disappearing\n');
+      const readFileSync = fs.readFileSync.bind(fs);
+      fs.readFileSync = ((filePath, ...args) => {
+        if (path.resolve(String(filePath)) === disappearingPath) {
+          throw Object.assign(new Error('simulated disappearance'), { code: 'ENOENT' });
+        }
+        return Reflect.apply(readFileSync, fs, [filePath, ...args]);
+      }) as typeof fs.readFileSync;
+      syncBuiltinESMExports();
+
+      try {
+        await expect(
+          expandScenarioConfigValues([{ $values: 'file://matrices/*.yaml' }], tmpDir, {}),
+        ).resolves.toEqual([{ vars: { source: 'kept' } }]);
+      } finally {
+        fs.readFileSync = readFileSync;
+        syncBuiltinESMExports();
+      }
+    });
+
     it('expands absolute globs with existing literal magic in parent directories', async () => {
       const weirdDir = path.join(tmpDir, 'configs [prod]');
       write('configs [prod]/matrices/a.yaml', '- vars:\n    source: absolute-bracket-base\n');
@@ -546,6 +676,80 @@ describe('scenarioMatrix (real filesystem)', () => {
         { type: 'equals', value: 'first' },
         { type: 'equals', value: 'second' },
       ]);
+    });
+
+    it('resolves grader refs in file-backed scenario tests against the test file', async () => {
+      const testsPath = write(
+        'tests/cases.yaml',
+        `- vars:
+    case: grader
+  options:
+    provider:
+      id: file://grader.cjs
+      config:
+        payload: file://payload.txt
+  assert:
+    - type: llm-rubric
+      value: pass
+      provider: file://assert-grader.yaml
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+      const testDir = path.dirname(testsPath);
+
+      expect(tests).toEqual([
+        expect.objectContaining({
+          options: {
+            provider: {
+              id: `file://${path.join(testDir, 'grader.cjs')}`,
+              config: { payload: `file://${path.join(testDir, 'payload.txt')}` },
+            },
+          },
+          assert: [
+            expect.objectContaining({
+              provider: `file://${path.join(testDir, 'assert-grader.yaml')}`,
+            }),
+          ],
+        }),
+      ]);
+    });
+
+    it('still loads nested data fields named provider in scenario test assertions', async () => {
+      const expectedPath = write('tests/expected.txt', 'EXPECTED_DATA');
+      const testsPath = write(
+        'tests/provider-data.yaml',
+        `- vars:
+    case: provider-data
+  assert:
+    - type: equals
+      value:
+        provider: file://${expectedPath}
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests?.[0].assert?.[0]).toMatchObject({
+        value: { provider: 'EXPECTED_DATA' },
+      });
+    });
+
+    it('preserves script assertion file refs in file-backed scenario tests', async () => {
+      const assertionPath = write('tests/assert.js', 'module.exports = () => true;\n');
+      const testsPath = write(
+        'tests/script-assertion.yaml',
+        `- vars:
+    case: script
+  assert:
+    - type: javascript
+      value: file://${assertionPath}
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests?.[0].assert?.[0]).toMatchObject({ value: `file://${assertionPath}` });
     });
 
     it('executes generator objects with their config', async () => {
@@ -666,6 +870,7 @@ describe('scenarioMatrix (real filesystem)', () => {
     });
 
     it('resolves inline scenario $values refs against the base path', async () => {
+      write('matrix.yaml', '- vars:\n    source: inline\n');
       const scenarios: ScenarioInput[] = [
         { config: [{ $values: 'file://matrix.yaml' }], tests: [{}] },
       ];
@@ -675,6 +880,9 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded?.[0].config[0]).toEqual({
         $values: `file://${path.join(tmpDir, 'matrix.yaml')}`,
       });
+      await expect(
+        expandScenarioConfigValues(loaded?.[0].config, path.join(tmpDir, 'wrong-base')),
+      ).resolves.toEqual([{ vars: { source: 'inline' } }]);
     });
 
     it('resolves $values refs in file scenarios against the scenario file directory', async () => {
@@ -682,6 +890,7 @@ describe('scenarioMatrix (real filesystem)', () => {
         'scenarios/scenario.yaml',
         '- config:\n    - $values: file://matrix.yaml\n  tests:\n    - {}\n',
       );
+      write('scenarios/matrix.yaml', '- vars:\n    source: external\n');
 
       const loaded = await loadScenarioConfigs(
         [`file://${path.join(tmpDir, 'scenarios', 'scenario.yaml')}`],
@@ -691,6 +900,101 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded?.[0].config[0]).toEqual({
         $values: `file://${path.join(tmpDir, 'scenarios', 'matrix.yaml')}`,
       });
+      await expect(
+        expandScenarioConfigValues(loaded?.[0].config, path.join(tmpDir, 'wrong-base')),
+      ).resolves.toEqual([{ vars: { source: 'external' } }]);
+    });
+
+    it('canonicalizes target and grader providers against the matrix file', async () => {
+      write(
+        'scenarios/scenario.yaml',
+        '- config:\n    - $values: file://matrices/matrix.json\n  tests:\n    - {}\n',
+      );
+      write(
+        'scenarios/matrices/matrix.json',
+        JSON.stringify([
+          {
+            vars: { source: 'matrix' },
+            provider: {
+              id: 'file://target.cjs',
+              config: { payload: 'file://target.txt' },
+            },
+            options: {
+              provider: {
+                id: 'file://options-grader.cjs',
+                config: { rubric: 'file://options-rubric.txt' },
+              },
+            },
+            assert: [
+              {
+                type: 'llm-rubric',
+                value: 'direct',
+                provider: 'file://direct-grader.cjs',
+              },
+              {
+                type: 'assert-set',
+                assert: [
+                  {
+                    type: 'llm-rubric',
+                    value: 'nested',
+                    provider: {
+                      id: 'file://nested-grader.cjs',
+                      config: { rubric: 'file://nested-rubric.txt' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      );
+
+      const loaded = await loadScenarioConfigs(
+        [`file://${path.join(tmpDir, 'scenarios', 'scenario.yaml')}`],
+        tmpDir,
+      );
+      const scenarioDir = path.join(tmpDir, 'scenarios');
+      const matrixDir = path.join(scenarioDir, 'matrices');
+      const expanded = await expandScenarioConfigValues(
+        loaded?.[0].config,
+        path.join(tmpDir, 'wrong-base'),
+      );
+
+      expect(expanded).toEqual([
+        {
+          vars: { source: 'matrix' },
+          provider: {
+            id: `file://${path.join(matrixDir, 'target.cjs')}`,
+            config: { payload: `file://${path.join(matrixDir, 'target.txt')}` },
+          },
+          options: {
+            provider: {
+              id: `file://${path.join(matrixDir, 'options-grader.cjs')}`,
+              config: { rubric: `file://${path.join(matrixDir, 'options-rubric.txt')}` },
+            },
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'direct',
+              provider: `file://${path.join(matrixDir, 'direct-grader.cjs')}`,
+            },
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'llm-rubric',
+                  value: 'nested',
+                  provider: {
+                    id: `file://${path.join(matrixDir, 'nested-grader.cjs')}`,
+                    config: { rubric: `file://${path.join(matrixDir, 'nested-rubric.txt')}` },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ]);
     });
 
     it('resolves generator paths and nested config refs against the declaring scenario file', async () => {
@@ -791,20 +1095,27 @@ describe('scenarioMatrix (real filesystem)', () => {
         'scenarios/integration/scenario.yaml',
         '- config:\n    - $values: file://matrix.yaml\n  tests:\n    - {}\n',
       );
+      write('scenarios/unit/matrix.yaml', '- vars:\n    source: unit\n');
+      write('scenarios/integration/matrix.yaml', '- vars:\n    source: integration\n');
 
       const loaded = await loadScenarioConfigs(
         [`file://${path.join(tmpDir, 'scenarios', '**', 'scenario.yaml')}`],
         tmpDir,
       );
 
-      const refs = loaded?.map((scenario) =>
-        'config' in scenario ? scenario.config[0] : undefined,
-      );
-      expect(refs).toEqual(
+      expect(loaded?.map((scenario) => scenario.config[0])).toEqual(
         expect.arrayContaining([
           { $values: `file://${path.join(tmpDir, 'scenarios', 'unit', 'matrix.yaml')}` },
           { $values: `file://${path.join(tmpDir, 'scenarios', 'integration', 'matrix.yaml')}` },
         ]),
+      );
+      const expanded = await Promise.all(
+        (loaded ?? []).map((scenario) =>
+          expandScenarioConfigValues(scenario.config, path.join(tmpDir, 'wrong-base')),
+        ),
+      );
+      expect(expanded.flat()).toEqual(
+        expect.arrayContaining([{ vars: { source: 'unit' } }, { vars: { source: 'integration' } }]),
       );
     });
 

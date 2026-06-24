@@ -446,6 +446,42 @@ describe('programmatic scenario config expansion', () => {
     );
   });
 
+  it('sanitizes live providers inside scenario grading type maps before persistence', async () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const gradingProvider: ApiProvider = {
+      id: () => 'scenario-live-grader',
+      config: { apiKey: 'TYPED_MAP_SECRET_SENTINEL', cyclic },
+      callApi: vi.fn().mockResolvedValue({
+        output: 'unused',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const gradingProviderMap: Record<string, unknown> = { text: gradingProvider };
+    gradingProviderMap.embedding = gradingProviderMap;
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [
+        {
+          config: [{ options: { provider: gradingProviderMap as never } }],
+          tests: [{ assert: [{ type: 'equals', value: 'mock answer' }] }],
+        },
+      ],
+      writeLatestResults: true,
+    });
+
+    expect(gradingProvider.callApi).not.toHaveBeenCalled();
+    expect(() => JSON.stringify(record.config)).not.toThrow();
+    expect(JSON.stringify(record.config)).not.toContain('TYPED_MAP_SECRET_SENTINEL');
+    const scenario = record.config.scenarios?.[0];
+    const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
+    expect(row && !('$values' in row) ? row.options?.provider : undefined).toMatchObject({
+      text: { id: 'scenario-live-grader' },
+    });
+  });
+
   it('preserves raw provider option fields in serialized scenario rows', async () => {
     const providerOptions: ProviderOptions = {
       id: 'echo',

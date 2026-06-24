@@ -11,7 +11,11 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
-import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
+import {
+  expandScenarioConfigValues,
+  getScenarioSourceContext,
+  loadScenarioConfigs,
+} from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -58,12 +62,36 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
   return cloned;
 }
 
-function toSerializableProviderRef(provider: unknown): unknown {
+function toSerializableProviderRef(provider: unknown, ancestors = new Set<object>()): unknown {
   if (isApiProvider(provider)) {
     return sanitizeProvider(provider);
   }
   if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
+    if (ancestors.has(provider)) {
+      return undefined;
+    }
+    ancestors.add(provider);
+    const sanitized = provider.map((nestedProvider) =>
+      toSerializableProviderRef(nestedProvider, ancestors),
+    );
+    ancestors.delete(provider);
+    return sanitized;
+  }
+  if (isProviderTypeMap(provider)) {
+    if (ancestors.has(provider)) {
+      return undefined;
+    }
+    ancestors.add(provider);
+    const sanitized = Object.fromEntries(
+      Object.entries(provider)
+        .map(([providerType, nestedProvider]) => [
+          providerType,
+          toSerializableProviderRef(nestedProvider, ancestors),
+        ])
+        .filter((entry) => entry[1] !== undefined),
+    );
+    ancestors.delete(provider);
+    return sanitized;
   }
   return provider;
 }
@@ -239,11 +267,23 @@ async function createRuntimeTestSuite(
   const scenarios = loadedScenarios
     ? await Promise.all(
         loadedScenarios.map(async (scenario) => {
-          const scenarioTests = await readScenarioTests((scenario as { tests?: unknown }).tests);
+          const sourceContext = getScenarioSourceContext(scenario) ?? {
+            basePath: process.cwd(),
+            envOverrides: scenarioEnv,
+          };
+          const scenarioTests = await readScenarioTests(
+            (scenario as { tests?: unknown }).tests,
+            sourceContext.basePath,
+            sourceContext.envOverrides,
+          );
           return {
             ...scenario,
             ...(scenarioTests === undefined ? {} : { tests: scenarioTests }),
-            config: await expandScenarioConfigValues(scenario.config, process.cwd(), scenarioEnv),
+            config: await expandScenarioConfigValues(
+              scenario.config,
+              sourceContext.basePath,
+              sourceContext.envOverrides,
+            ),
           };
         }),
       )

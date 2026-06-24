@@ -20,6 +20,7 @@ import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
   CommandLineOptionsSchema,
+  type EnvOverrides,
   EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
@@ -51,9 +52,11 @@ import { failConfigResolution } from './errors';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import {
   expandScenarioConfigValues,
+  getScenarioSourceContext,
   loadScenarioConfigs,
   resolveFileRefFromBase,
   resolveScenarioFileRefs,
+  transferScenarioSourceContext,
 } from './scenarioMatrix';
 
 export { ConfigResolutionError, logConfigResolutionError } from './errors';
@@ -86,6 +89,22 @@ function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
   }
 
   return state >>> 0;
+}
+
+async function materializeScenarioSources(
+  scenario: Scenario,
+  fallbackBasePath: string,
+  fallbackEnv: EnvOverrides,
+): Promise<void> {
+  const sourceContext = getScenarioSourceContext(scenario);
+  const basePath = sourceContext?.basePath ?? fallbackBasePath;
+  const envOverrides = sourceContext?.envOverrides ?? fallbackEnv;
+  if (scenario.tests !== undefined) {
+    scenario.tests = (await readScenarioTests(scenario.tests, basePath, envOverrides)) ?? [];
+  }
+  if (scenario.config !== undefined) {
+    scenario.config = await expandScenarioConfigValues(scenario.config, basePath, envOverrides);
+  }
 }
 
 /**
@@ -948,31 +967,23 @@ export async function resolveConfigs(
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
     config.scenarios = (
       await loadScenarioConfigs(config.scenarios, basePath, config.env ?? {})
-    )?.map((scenario) =>
-      typeof scenario === 'object'
-        ? {
-            ...scenario,
-            tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
-          }
-        : scenario,
-    );
+    )?.map((scenario) => {
+      if (typeof scenario !== 'object') {
+        return scenario;
+      }
+      return transferScenarioSourceContext(scenario, {
+        ...scenario,
+        tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+      });
+    });
   }
   if (Array.isArray(config.scenarios)) {
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
-      if (typeof scenario === 'object' && scenario.tests !== undefined) {
-        scenario.tests = (await readScenarioTests(scenario.tests, basePath)) ?? [];
-      }
-      if (typeof scenario === 'object' && scenario.config !== undefined) {
-        scenario.config = await expandScenarioConfigValues(
-          scenario.config,
-          basePath,
-          config.env ?? {},
-        );
-      }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const resolvedScenario = scenario as Scenario;
+      await materializeScenarioSources(resolvedScenario, basePath, config.env ?? {});
       const filteredTests = await filterTests(
         {
           ...resolvedScenario,
