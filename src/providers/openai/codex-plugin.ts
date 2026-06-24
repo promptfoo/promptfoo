@@ -273,6 +273,9 @@ async function copyTree(source: string, destination: string, signal: AbortSignal
       throw new Error(`Codex plugin trees may not contain symlinks: ${sourcePath}`);
     }
     if (stat.isDirectory()) {
+      if (VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
+        continue;
+      }
       await copyTree(sourcePath, destinationPath, signal);
     } else if (stat.isFile()) {
       await withAbort(

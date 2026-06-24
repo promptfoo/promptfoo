@@ -1,3 +1,9 @@
+---
+sidebar_position: 42
+title: OpenAI Codex Plugin
+description: 'Evaluate trusted OpenAI Codex plugins in isolated Promptfoo runtimes with execution metadata and artifact export controls'
+---
+
 # OpenAI Codex Plugin
 
 The `openai:codex-plugin` provider evaluates one trusted Codex plugin in an
