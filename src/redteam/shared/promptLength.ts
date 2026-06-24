@@ -170,7 +170,13 @@ function getStringRecordValues(value: unknown): string[] | undefined {
 
 function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar: string): string[] {
   if (injectVar !== MULTI_INPUT_VAR) {
-    return [String(vars?.[injectVar] ?? '')];
+    const prompt = vars?.[injectVar];
+    if (Array.isArray(prompt) && prompt.every((value) => typeof value === 'string')) {
+      return prompt;
+    }
+    return [
+      typeof prompt === 'object' && prompt !== null ? JSON.stringify(prompt) : String(prompt ?? ''),
+    ];
   }
 
   try {
