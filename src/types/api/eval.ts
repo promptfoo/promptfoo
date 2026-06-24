@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema } from './common';
-import { EvalResponseSchemas } from './responses.js';
+import { EVAL_TABLE_MAX_PAGE_SIZE, EvalResponseSchemas } from './responses.js';
 
 /** Eval ID parameter schema. */
 export const EvalIdParamSchema = z.object({
@@ -77,7 +77,7 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 // GET /api/evals/:id/table
 
 /** Upper bound on `limit` for non-export page requests; must stay >= the UI's largest page-size option. */
-export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
+export { EVAL_TABLE_MAX_PAGE_SIZE };
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z
