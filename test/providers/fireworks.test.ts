@@ -8,6 +8,7 @@ import {
 } from '../../src/providers/fireworks/chat';
 import { FireworksEmbeddingProvider } from '../../src/providers/fireworks/embedding';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OPENAI_ORGANIZATION_HEADER } from '../../src/providers/openai/index';
 import { mockProcessEnv } from '../util/utils';
 
 const FIREWORKS_API_BASE = 'https://api.fireworks.ai/inference/v1';
@@ -144,6 +145,7 @@ describe('Fireworks AI', () => {
           config: { organization: 'org-from-config' },
         });
         expect(provider.getOrganization()).toBeUndefined();
+        expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORGANIZATION_HEADER);
       } finally {
         restoreEnv();
       }
@@ -269,6 +271,7 @@ describe('Fireworks AI', () => {
           config: { organization: 'org-from-config' } as any,
         });
         expect(provider.getOrganization()).toBeUndefined();
+        expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORGANIZATION_HEADER);
       } finally {
         restoreEnv();
       }
