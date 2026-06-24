@@ -120,6 +120,23 @@ describe('Media Routes', () => {
     expect(mockedGetMediaStorage).not.toHaveBeenCalled();
   });
 
+  it.each([
+    '/api/media/%FF',
+    '/api/media/audio/%FF/extra',
+    '/api/media/foo/bar/%FF',
+    '/api/media/%',
+  ])('should contain malformed paths that do not match a media route for %s', async (path) => {
+    const response = await api.get(path).set('Origin', 'https://attacker.example');
+
+    expect(response.status).toBe(404);
+    expect(response.type).toBe('application/json');
+    expect(response.body).toEqual({ error: 'Media route not found' });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.text).not.toContain('/home/');
+    expect(mockedMediaExists).not.toHaveBeenCalled();
+    expect(mockedGetMediaStorage).not.toHaveBeenCalled();
+  });
+
   describe('GET /api/media/info/:type/:filename', () => {
     beforeEach(() => {
       vi.resetAllMocks();
