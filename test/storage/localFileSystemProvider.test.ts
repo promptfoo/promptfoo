@@ -173,6 +173,60 @@ describe('LocalFileSystemProvider', () => {
     expect(hashIndex[overwrittenHash]).toBe(legacyKey);
   });
 
+  it('recovers from a hash-index entry with a malformed media key', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const payload = Buffer.from('wanted media');
+    const contentHash = createHash('sha256').update(payload).digest('hex');
+    const malformedKey = 'audio/not-a-hash.wav';
+    const malformedPath = path.join(tempDir, malformedKey);
+
+    fs.mkdirSync(path.dirname(malformedPath), { recursive: true });
+    fs.writeFileSync(malformedPath, 'unrelated media');
+    fs.writeFileSync(
+      path.join(tempDir, 'hash-index.json'),
+      JSON.stringify({ [contentHash]: malformedKey }),
+    );
+
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const result = await provider.store(payload, {
+      contentType: 'audio/wav',
+      mediaType: 'audio',
+    });
+
+    expect(result.deduplicated).toBe(false);
+    expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
+    expect(await provider.retrieve(result.ref.key)).toEqual(payload);
+    expect(fs.readFileSync(malformedPath, 'utf8')).toBe('unrelated media');
+  });
+
+  it('recovers when an indexed legacy path cannot be read safely', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const payload = Buffer.from('wanted media');
+    const contentHash = createHash('sha256').update(payload).digest('hex');
+    const traversalKey = `../audio/${contentHash.slice(0, 12)}.wav`;
+
+    fs.writeFileSync(
+      path.join(tempDir, 'hash-index.json'),
+      JSON.stringify({ [contentHash]: traversalKey }),
+    );
+
+    class IndexedPathProbeProvider extends LocalFileSystemProvider {
+      override async exists(): Promise<boolean> {
+        return true;
+      }
+    }
+
+    const provider = new IndexedPathProbeProvider({ basePath: tempDir });
+    const result = await provider.store(payload, {
+      contentType: 'audio/wav',
+      mediaType: 'audio',
+    });
+
+    expect(result.deduplicated).toBe(false);
+    expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
+    expect(await provider.retrieve(result.ref.key)).toEqual(payload);
+  });
+
   it('rejects a full-hash index entry that points at a different digest', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const payload = Buffer.from('wanted media');
