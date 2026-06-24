@@ -3,6 +3,7 @@ import cliState from '../../../src/cliState';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
+  REDTEAM_PROVIDER_MAX_TOKENS,
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
@@ -143,7 +144,23 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: undefined,
+        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
       });
+    });
+
+    it('bounds the default provider output so a runaway generation cannot reach the model ceiling', async () => {
+      // Regression: without an explicit cap the default redteam provider falls through to
+      // OPENAI_MAX_TOKENS (or the model's output ceiling), so a degenerate generation can
+      // run to tens of thousands of tokens. The cap must be set and modest, and applied in
+      // both `max_tokens` (e.g. gpt-4.1) and `max_completion_tokens` (reasoning/gpt-5) forms.
+      await redteamProviderManager.getProvider({});
+
+      const { config } = mockOpenAiInstances[0];
+      expect(config.max_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(config.max_completion_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(REDTEAM_PROVIDER_MAX_TOKENS).toBeLessThanOrEqual(8192);
+      expect(REDTEAM_PROVIDER_MAX_TOKENS).toBeGreaterThan(0);
     });
 
     it('clears cached providers', async () => {
@@ -260,6 +277,8 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: undefined,
+        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
       });
     });
 
@@ -272,6 +291,8 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: { type: 'json_object' },
+        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
       });
     });
 
@@ -501,6 +522,8 @@ describe('shared redteam provider utilities', () => {
         expect(mockOpenAiInstances[0].config).toEqual({
           temperature: TEMPERATURE,
           response_format: { type: 'json_object' },
+          max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+          max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
         });
       });
     });

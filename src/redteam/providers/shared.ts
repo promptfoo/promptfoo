@@ -30,7 +30,12 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import {
+  ATTACKER_MODEL,
+  ATTACKER_MODEL_SMALL,
+  REDTEAM_PROVIDER_MAX_TOKENS,
+  TEMPERATURE,
+} from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -108,6 +113,12 @@ async function loadRedteamProvider({
       config: {
         temperature: TEMPERATURE,
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        // Bound the output so a degenerate/runaway generation can't run to the model's
+        // token ceiling (minutes of latency + an unparseable response). Set both forms
+        // so the cap applies whether the model takes `max_tokens` (e.g. gpt-4.1) or
+        // `max_completion_tokens` (reasoning / gpt-5 models). See REDTEAM_PROVIDER_MAX_TOKENS.
+        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
       },
     });
   }
