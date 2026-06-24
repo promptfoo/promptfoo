@@ -1428,6 +1428,43 @@ describe('trajectory assertions', () => {
         'trajectory:tool-set assertion mode must be "subset" or "exact"',
       );
     });
+
+    it('rejects blank and malformed tool matchers before applying inversion', () => {
+      for (const tools of [['   '], [{ name: 123 }]]) {
+        const params: AssertionParams = {
+          ...baseSetParams,
+          inverse: true,
+          assertion: {
+            type: 'not-trajectory:tool-set',
+            value: tools as unknown as string[],
+          },
+          renderedValue: tools as unknown as string[],
+        };
+
+        expect(() => handleTrajectoryToolSet(params)).toThrow(
+          'Each trajectory tool set entry needs a name or pattern.',
+        );
+      }
+    });
+
+    it('does not reinterpret script-returned tool configuration as a template', () => {
+      const scriptValue = { tools: ['{{ expectedTool }}'] };
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertionValueContext: {
+          ...baseSetParams.assertionValueContext,
+          vars: { expectedTool: 'search_corpus' },
+        },
+        assertion: { type: 'trajectory:tool-set', value: 'file://tools.js' },
+        renderedValue: scriptValue,
+        valueFromScript: scriptValue,
+      };
+
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('{{ expectedTool }}');
+      expect(result.reason).not.toContain('Missing expected tools: search_corpus');
+    });
   });
 
   describe('trajectory:tool-args-match', () => {
@@ -1521,6 +1558,43 @@ describe('trajectory assertions', () => {
           'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: [redacted]',
         assertion: params.assertion,
       });
+    });
+
+    it.each([
+      'partial',
+      'exact',
+    ] as const)('preserves expected __proto__ arguments in %s mode', (mode) => {
+      const expectedArgs = JSON.parse('{"__proto__":{"polluted":true}}');
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          vars: {},
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'reserved-expected-key',
+                name: 'tool.call',
+                startTime: 0,
+                endTime: 1,
+                attributes: { 'tool.name': 'search', 'tool.arguments': '{}' },
+              },
+            ],
+          },
+        },
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: { name: 'search', args: expectedArgs, mode },
+        },
+        renderedValue: { name: 'search', args: expectedArgs, mode },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      expect(Object.hasOwn(expectedArgs, '__proto__')).toBe(true);
+      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
     });
 
     it('supports exact mode for argument matching', () => {

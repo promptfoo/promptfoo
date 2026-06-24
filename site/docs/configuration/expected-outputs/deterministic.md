@@ -1090,7 +1090,7 @@ Provide at least one of `min` or `max`. Count bounds must be finite non-negative
 
 ### Tokens-Used {#tokens-used}
 
-The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, it uses traced token attributes when an unfiltered trace reports token usage, and otherwise falls back to provider response usage. Use `source: trace` when a trace without token attributes should intentionally count as zero.
+The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, an unfiltered assertion uses the larger available total from traced token attributes and provider response usage. If only one source reports usage, it uses that source. Use `source: trace` when a trace without token attributes should intentionally count as zero.
 
 ```yaml
 assert:
@@ -1112,6 +1112,11 @@ Configuration options:
 - `pattern`: Non-empty span-name filter when reading from traces. Defaults to `*`
 - `source`: `auto` (default), `trace`, or `response`
 
+An explicit `pattern` with `source: auto` is trace-scoped because provider response usage cannot
+honor a span-name filter. It throws when no matching span reports recognized token usage instead of
+silently passing a budget at zero. Set `source: trace` when a missing match should intentionally count
+as zero.
+
 Row variables render inside the structured value. Numeric `min` and `max` template results
 are coerced after rendering, so a budget such as `max: '{{ token_budget }}'` can vary by test.
 The resolved value must still be a finite non-negative number. Quoted literal numbers such as
@@ -1120,12 +1125,11 @@ The resolved value must still be a finite non-negative number. Quoted literal nu
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
-For traced usage, matching token-bearing spans are deduplicated by hierarchy. When a
-matched parent and matched descendants both report token totals, Promptfoo uses the
-larger covered total for that span subtree so nested aggregate spans do not double-count
-usage or discard a parent aggregate that covers more work than its children.
-Within each span, Promptfoo also uses the largest available aggregate or component total
-so incomplete or inconsistent token attributes do not undercount the budget.
+For traced usage, Promptfoo sums every matching token-bearing operation span. Span parentage does
+not establish that one operation aggregates another, so nested operations are counted separately.
+Use `pattern` to select the instrumentation spans that belong in a budget. Within each span,
+Promptfoo uses the largest available aggregate or component total so incomplete or inconsistent
+token attributes do not undercount the budget.
 
 ### Trace-Span-Duration
 

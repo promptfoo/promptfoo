@@ -70,6 +70,9 @@ function formatStepList(stepLabels: string[]): string {
 
 function getRenderedTrajectoryValue(params: AssertionParams): unknown {
   const value = params.renderedValue ?? params.assertion.value;
+  if (params.valueFromScript !== undefined) {
+    return value;
+  }
   if (Array.isArray(value)) {
     return value.map((item) =>
       item && typeof item === 'object' && !Array.isArray(item)

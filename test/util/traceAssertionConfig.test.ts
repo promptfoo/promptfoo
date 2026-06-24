@@ -215,5 +215,13 @@ describe('traceAssertionConfig shared validators', () => {
       );
       expect(trajectoryToolSetConfigError({ tools: ['search'], mode: 'exact' })).toBeUndefined();
     });
+
+    it('requires every tool matcher to have a non-blank string name or pattern', () => {
+      const error = 'Each trajectory tool set entry needs a name or pattern.';
+      expect(trajectoryToolSetConfigError(['   '])).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 123 }] })).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ pattern: '' }] })).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ pattern: 'search_*' }] })).toBeUndefined();
+    });
   });
 });

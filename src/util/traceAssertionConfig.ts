@@ -304,6 +304,15 @@ export function trajectoryToolSetConfigError(value: unknown): string | undefined
   if (tools.length === 0) {
     return 'trajectory:tool-set assertion requires at least one expected tool';
   }
+  const hasUsableMatcher = (tool: unknown): boolean =>
+    typeof tool === 'string'
+      ? tool.trim().length > 0
+      : isPlainObject(tool) &&
+        ((typeof tool.name === 'string' && tool.name.trim().length > 0) ||
+          (typeof tool.pattern === 'string' && tool.pattern.trim().length > 0));
+  if (!tools.every(hasUsableMatcher)) {
+    return 'Each trajectory tool set entry needs a name or pattern.';
+  }
   return undefined;
 }
 

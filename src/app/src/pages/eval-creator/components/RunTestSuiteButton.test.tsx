@@ -147,11 +147,14 @@ describe('RunTestSuiteButton', () => {
   it('should include the source eval id when rerunning a loaded evaluation', async () => {
     sourceEvalId = 'source-eval-id';
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['echo'],
-      tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
-    });
+    useStore.getState().setConfig(
+      {
+        prompts: ['prompt 1'],
+        providers: ['echo'],
+        tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+      },
+      'source-eval-id',
+    );
 
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
@@ -172,11 +175,14 @@ describe('RunTestSuiteButton', () => {
     sourceEvalId = 'stale-router-state';
     sourceEvalIdParam = 'persisted-source-eval-id';
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['echo'],
-      tests: [{ vars: { input: 'test' } }],
-    });
+    useStore.getState().setConfig(
+      {
+        prompts: ['prompt 1'],
+        providers: ['echo'],
+        tests: [{ vars: { input: 'test' } }],
+      },
+      'persisted-source-eval-id',
+    );
 
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
@@ -190,6 +196,30 @@ describe('RunTestSuiteButton', () => {
     expect(JSON.parse(requestInit.body as string)).toMatchObject({
       sourceEvalId: 'persisted-source-eval-id',
     });
+  });
+
+  it('should ignore a URL source eval id that does not match the loaded config lineage', async () => {
+    sourceEvalIdParam = 'stale-source-eval-id';
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().setConfig(
+      {
+        prompts: ['prompt 1'],
+        providers: ['echo'],
+        tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+      },
+      'current-source-eval-id',
+    );
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).not.toHaveProperty('sourceEvalId');
   });
 
   it('should be disabled for provider option objects without ids', () => {

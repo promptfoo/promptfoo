@@ -90,6 +90,19 @@ describe('renderVarsInObject', () => {
     });
   });
 
+  it('preserves own reserved object keys without changing the output prototype', () => {
+    const obj = JSON.parse(
+      '{"__proto__":{"value":"{{ rendered }}"},"constructor":"literal"}',
+    ) as Record<string, unknown>;
+
+    const rendered = renderVarsInObject(obj, { rendered: 'safe' });
+
+    expect(Object.getPrototypeOf(rendered)).toBe(Object.prototype);
+    expect(Object.hasOwn(rendered, '__proto__')).toBe(true);
+    expect(Object.entries(rendered)).toContainEqual(['__proto__', { value: 'safe' }]);
+    expect(Object.hasOwn(rendered, 'constructor')).toBe(true);
+  });
+
   it('should handle function objects by calling them with vars', async () => {
     const mockFunction = vi.fn().mockReturnValue({ result: '{{ value }}' });
     const vars = { value: 'function_result' };

@@ -96,8 +96,8 @@ describe('handleTokensUsed', () => {
   it('prefers aggregate totals instead of double counting component token attributes', () => {
     const params: AssertionParams = {
       ...baseParams,
-      assertion: { type: 'tokens-used', value: { max: 400 } },
-      renderedValue: { max: 400 },
+      assertion: { type: 'tokens-used', value: { max: 400, source: 'trace' } },
+      renderedValue: { max: 400, source: 'trace' },
       assertionValueContext: {
         ...baseParams.assertionValueContext,
         trace: {
@@ -155,11 +155,11 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 200');
   });
 
-  it('avoids double counting nested trace spans that repeat token totals', () => {
+  it('sums nested token-bearing spans because each span represents an operation', () => {
     const params: AssertionParams = {
       ...baseParams,
-      assertion: { type: 'tokens-used', value: { max: 250, source: 'trace' } },
-      renderedValue: { max: 250, source: 'trace' },
+      assertion: { type: 'tokens-used', value: { max: 499, source: 'trace' } },
+      renderedValue: { max: 499, source: 'trace' },
       assertionValueContext: {
         ...baseParams.assertionValueContext,
         trace: {
@@ -186,11 +186,11 @@ describe('handleTokensUsed', () => {
     };
 
     const result = handleTokensUsed(params);
-    expect(result.pass).toBe(true);
-    expect(result.reason).toContain('Tokens used: 250');
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 500');
   });
 
-  it('keeps a matched aggregate parent when its token total exceeds descendants', () => {
+  it('does not infer aggregate coverage from span parentage', () => {
     const params: AssertionParams = {
       ...baseParams,
       assertion: { type: 'tokens-used', value: { max: 299, source: 'trace' } },
@@ -222,7 +222,67 @@ describe('handleTokensUsed', () => {
 
     const result = handleTokensUsed(params);
     expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 400');
+  });
+
+  it('counts cyclic malformed span hierarchies without failing open', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 299, source: 'trace' } },
+      renderedValue: { max: 299, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'a',
+              parentSpanId: 'b',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 1,
+              attributes: { 'gen_ai.usage.total_tokens': 100 },
+            },
+            {
+              spanId: 'b',
+              parentSpanId: 'a',
+              name: 'llm.completion',
+              startTime: 1,
+              endTime: 2,
+              attributes: { 'gen_ai.usage.total_tokens': 200 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
     expect(result.reason).toContain('Tokens used: 300');
+  });
+
+  it('handles deeply nested traces without recursive traversal', () => {
+    const spans = Array.from({ length: 10_000 }, (_, index) => ({
+      spanId: String(index),
+      parentSpanId: index === 0 ? undefined : String(index - 1),
+      name: 'llm.completion',
+      startTime: index,
+      endTime: index + 1,
+      attributes: { 'gen_ai.usage.total_tokens': 1 },
+    }));
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 9_999, source: 'trace' } },
+      renderedValue: { max: 9_999, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: { ...traceWithTokens, spans },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 10000');
   });
 
   it('falls back to providerResponse.tokenUsage when no trace is present', () => {
@@ -360,7 +420,7 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=response');
   });
 
-  it('honors explicit zero token attributes in an automatic trace', () => {
+  it('uses the larger provider total when an automatic trace reports zero', () => {
     const params: AssertionParams = {
       ...baseParams,
       assertion: { type: 'tokens-used', value: { max: 0 } },
@@ -383,9 +443,37 @@ describe('handleTokensUsed', () => {
     };
 
     const result = handleTokensUsed(params);
-    expect(result.pass).toBe(true);
-    expect(result.reason).toContain('Tokens used: 0');
-    expect(result.reason).toContain('source=trace');
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('source=response');
+  });
+
+  it('uses the larger provider total when an automatic trace is partial', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 100 } },
+      renderedValue: { max: 100 },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'partial',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 1,
+              attributes: { 'gen_ai.usage.total_tokens': 50 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('source=response');
   });
 
   it('throws when source: trace and no trace is available', () => {
@@ -630,7 +718,7 @@ describe('handleTokensUsed', () => {
     );
   });
 
-  it('keeps source:auto on trace when a filtered trace contributes zero tokens', () => {
+  it('fails closed when a filtered automatic trace has no matching token usage', () => {
     const params: AssertionParams = {
       ...baseParams,
       assertion: {
@@ -641,9 +729,26 @@ describe('handleTokensUsed', () => {
       assertionValueContext: { ...baseParams.assertionValueContext, trace: traceWithTokens },
     };
 
-    const result = handleTokensUsed(params);
-    expect(result.pass).toBe(true);
-    expect(result.reason).toContain('Tokens used: 0');
-    expect(result.reason).toContain('source=trace');
+    expect(() => handleTokensUsed(params)).toThrow(
+      'No trace token usage available for tokens-used assertion matching pattern "embeddings"',
+    );
+  });
+
+  it('does not reinterpret script-returned token config as a template', () => {
+    const scriptValue = { max: '{{ tokenBudget }}', source: 'response' };
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: 'file://budget.js' },
+      renderedValue: scriptValue as unknown as { max: number; source: 'response' },
+      valueFromScript: scriptValue,
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        vars: { tokenBudget: 400 },
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      'tokens-used max must be a finite non-negative number',
+    );
   });
 });

@@ -281,6 +281,14 @@ describe('structured value assertions', () => {
       ),
     ).toBeUndefined();
     expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'tokens-used',
+          value: { max: 100, source: '{{ usage_source }}' } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
       getRunnableAssertionValueError(make({ type: 'tokens-used', value: { max: '100' } as any })),
     ).toMatch(/finite non-negative number/);
     expect(
@@ -309,6 +317,14 @@ describe('structured value assertions', () => {
         make({
           type: 'trajectory:tool-set',
           value: { tools: ['find', { pattern: 'fetch.*' }], mode: 'exact' } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-set',
+          value: { tools: ['find'], mode: '{{ match_mode }}' } as any,
         }),
       ),
     ).toBeUndefined();

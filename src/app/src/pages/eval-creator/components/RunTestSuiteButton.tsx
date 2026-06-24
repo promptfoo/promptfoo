@@ -21,7 +21,7 @@ const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { config } = useStore();
+  const { config, sourceEvalId: configSourceEvalId } = useStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const { showToast } = useToast();
   const {
@@ -74,7 +74,7 @@ const RunTestSuiteButton = () => {
     setRunError(null);
     setProgressPercent(0);
 
-    const sourceEvalId =
+    const requestedSourceEvalId =
       searchParams.get('sourceEvalId') ||
       (location.state &&
       typeof location.state === 'object' &&
@@ -82,6 +82,8 @@ const RunTestSuiteButton = () => {
       typeof location.state.sourceEvalId === 'string'
         ? location.state.sourceEvalId
         : undefined);
+    const sourceEvalId =
+      requestedSourceEvalId === configSourceEvalId ? requestedSourceEvalId : undefined;
     const testSuite = {
       defaultTest,
       derivedMetrics,

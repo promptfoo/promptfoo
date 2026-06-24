@@ -505,17 +505,22 @@ function getTokensUsedValueError(value: unknown): string | undefined {
     ...value,
     min: isNunjucksOutputExpression(value.min) ? 0 : value.min,
     max: isNunjucksOutputExpression(value.max) ? Number.MAX_VALUE : value.max,
+    source: isNunjucksOutputExpression(value.source) ? 'auto' : value.source,
   });
 }
 
 function getTrajectoryToolSetValueError(value: unknown): string | undefined {
-  const configError = trajectoryToolSetConfigError(value);
+  const normalizedValue =
+    isRecord(value) && isNunjucksOutputExpression(value.mode)
+      ? { ...value, mode: 'subset' }
+      : value;
+  const configError = trajectoryToolSetConfigError(normalizedValue);
   if (configError) {
     return configError;
   }
-  const tools = Array.isArray(value)
-    ? value
-    : ((value as Record<string, unknown>).tools as unknown[]);
+  const tools = Array.isArray(normalizedValue)
+    ? normalizedValue
+    : ((normalizedValue as Record<string, unknown>).tools as unknown[]);
   if (!tools.every(isUsableTrajectorySequenceStep)) {
     return 'Each trajectory tool set entry needs a name or pattern.';
   }

@@ -231,7 +231,7 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('restores reordered duplicate Azure Blob SAS URIs using stable object identity', () => {
+    it('leaves reordered duplicate Azure Blob SAS URIs redacted without immutable identity', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -259,17 +259,39 @@ describe('sanitizeObject', () => {
         tests: [
           {
             suite: 'b',
-            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            file: redactedUri,
           },
           {
             suite: 'a',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
         ],
       });
     });
 
-    it('restores same-index duplicate Azure Blob SAS URIs after unrelated edits', () => {
+    it('does not treat mutable labels as duplicate credential identity', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [{ suite: 'b', file: redactedUri }] },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({ tests: [{ suite: 'b', file: redactedUri }] });
+    });
+
+    it('leaves edited duplicate Azure Blob SAS URIs redacted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -298,7 +320,7 @@ describe('sanitizeObject', () => {
           {
             suite: 'a',
             description: 'edited',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
           {
             suite: 'b',
@@ -308,7 +330,7 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('restores same-index edited duplicates when other array items move', () => {
+    it('leaves edited duplicates redacted when other array items move', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -341,22 +363,22 @@ describe('sanitizeObject', () => {
         tests: [
           {
             suite: 'b',
-            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            file: redactedUri,
           },
           {
             suite: 'a',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
           {
             suite: 'c',
             description: 'edited',
-            file: 'az://account/container/tests.yaml?sp=r&sig=third-secret',
+            file: redactedUri,
           },
         ],
       });
     });
 
-    it('restores same-index edited duplicates when a later array item is deleted', () => {
+    it('leaves edited duplicates redacted when a later array item is deleted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -383,13 +405,13 @@ describe('sanitizeObject', () => {
           {
             suite: 'a',
             description: 'edited',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
         ],
       });
     });
 
-    it('restores shifted edited duplicates after an earlier deletion when identity is unique', () => {
+    it('leaves shifted edited duplicates redacted after an earlier deletion', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -415,7 +437,7 @@ describe('sanitizeObject', () => {
           {
             suite: 'b',
             description: 'edited',
-            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            file: redactedUri,
           },
         ],
       });
@@ -450,7 +472,7 @@ describe('sanitizeObject', () => {
           { suite: 'edited-b', file: redactedUri },
           {
             suite: 'a',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
         ],
       });
@@ -508,7 +530,7 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('restores moved and edited duplicate Azure Blob SAS URIs using unique stable identity', () => {
+    it('leaves moved and edited duplicate Azure Blob SAS URIs redacted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
       expect(
@@ -539,12 +561,12 @@ describe('sanitizeObject', () => {
           {
             suite: 'b',
             description: 'edited b',
-            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            file: redactedUri,
           },
           {
             suite: 'a',
             description: 'edited a',
-            file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+            file: redactedUri,
           },
         ],
       });
