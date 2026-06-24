@@ -2,10 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { z } from 'zod';
-import {
-  getNonstandardScoringBaseline,
-  setNonstandardScoringBaseline,
-} from '../assertions/assertionsResult';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable, evalsTable } from '../database/tables';
@@ -18,12 +14,14 @@ import {
   type AtomicTestCase,
   type EvaluateResult,
   type GradingResult,
+  getNonstandardScoringBaseline,
   isResultFailureReason,
   type Prompt,
   type PromptMetrics,
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  setNonstandardScoringBaseline,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { sha256 } from '../util/createHash';

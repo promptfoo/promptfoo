@@ -9,7 +9,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -4488,8 +4487,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   it('persists a rating queued while a filtered refresh removes the result', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
-    let resolveRefresh!: (value: { table: EvaluateTable }) => void;
-    const refreshResponse = new Promise<{ table: EvaluateTable }>((resolve) => {
+    let resolveRefresh!: (value: { table: typeof mockTable }) => void;
+    const refreshResponse = new Promise<{ table: typeof mockTable }>((resolve) => {
       resolveRefresh = resolve;
     });
     const mockFetchEvalData = vi.fn().mockReturnValue(refreshResponse);
@@ -4523,9 +4522,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(clearButton);
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
     await user.click(clearButton);
-    resolveRefresh({
-      table: { head: mockTable.head, body: [] } as unknown as EvaluateTable,
-    });
+    resolveRefresh({ table: { head: mockTable.head, body: [] } });
 
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
   });

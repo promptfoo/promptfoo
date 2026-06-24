@@ -6,7 +6,6 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
-import { setNonstandardScoringBaseline } from './assertions/assertionsResult';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -66,6 +65,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
+  setNonstandardScoringBaseline,
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';

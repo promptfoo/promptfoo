@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { setNonstandardScoringBaseline } from '../../src/assertions/assertionsResult';
 import { getDb } from '../../src/database';
 import { evalResultsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
@@ -14,6 +13,7 @@ import {
   type Prompt,
   type ProviderOptions,
   ResultFailureReason,
+  setNonstandardScoringBaseline,
 } from '../../src/types/index';
 import {
   getCachedStandaloneEvals,

@@ -3,9 +3,9 @@ import {
   AssertionsResult,
   DEFAULT_TOKENS_USED,
   GUARDRAIL_BLOCKED_REASON,
-  getNonstandardScoringBaseline,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { getNonstandardScoringBaseline } from '../../src/types/index';
 
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
