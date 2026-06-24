@@ -29,7 +29,10 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { getTargetPromptCharLimits, throwIfTargetPromptViolatesCharLimits } from '../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -304,7 +307,6 @@ export function isConversationEndedResponse(
 ): boolean {
   return Boolean(response?.conversationEnded);
 }
-
 
 /**
  * Gets the response from the target provider for a given prompt.

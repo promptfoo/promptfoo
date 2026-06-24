@@ -236,12 +236,12 @@ export abstract class RedteamPluginBase {
         const rejectedPromptLengthDescriptions = [
           ...(minViolations.length > 0
             ? [
-                `${minViolations.length} prompt${minViolations.length === 1 ? '' : 's'} were below the ${minViolations[0].limit}-character minimum; the shortest was ${Math.min(...minViolations.map((violation) => violation.length))} characters.`,
+                `${minViolations.length} prompt${minViolations.length === 1 ? '' : 's'} ${minViolations.length === 1 ? 'was' : 'were'} below the ${minViolations[0].limit}-character minimum; the shortest was ${Math.min(...minViolations.map((violation) => violation.length))} characters.`,
               ]
             : []),
           ...(maxViolations.length > 0
             ? [
-                `${maxViolations.length} prompt${maxViolations.length === 1 ? '' : 's'} were above the ${maxViolations[0].limit}-character maximum; the longest was ${Math.max(...maxViolations.map((violation) => violation.length))} characters.`,
+                `${maxViolations.length} prompt${maxViolations.length === 1 ? '' : 's'} ${maxViolations.length === 1 ? 'was' : 'were'} above the ${maxViolations[0].limit}-character maximum; the longest was ${Math.max(...maxViolations.map((violation) => violation.length))} characters.`,
               ]
             : []),
         ];

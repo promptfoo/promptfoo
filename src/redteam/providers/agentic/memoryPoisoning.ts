@@ -7,7 +7,10 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../ut
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
-import { getTargetPromptCharLimits, throwIfTargetPromptViolatesCharLimits } from '../../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
 import type {
