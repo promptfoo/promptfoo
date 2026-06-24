@@ -371,6 +371,8 @@ const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
   '_promptfooFileMetadata',
   REMOTE_GENERATED_TEST_METADATA_KEY,
   'conversationId',
+  'conversationHistory',
+  'conversationTranscript',
   'contextId',
   'contextVars',
   'codingAgentForbiddenOutcome',

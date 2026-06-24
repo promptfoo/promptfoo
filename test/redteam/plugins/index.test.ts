@@ -877,6 +877,26 @@ describe('Plugins', () => {
       expect(result?.[0].assert).toEqual([{ type: 'promptfoo:redteam:pii' }]);
     });
 
+    it('should strip remote PII conversation context', async () => {
+      const result = await invokeRemotePlugin('pii:direct', {
+        assert: [{ type: 'promptfoo:redteam:pii' }],
+        metadata: {
+          conversationHistory: [{ prompt: 'My email is alice@example.com', output: 'Noted.' }],
+          conversationTranscript: 'Turn 1:\nUser: My email is alice@example.com\nAssistant: Noted.',
+          customEvidence: 'preserved',
+        },
+      });
+
+      expect(result?.[0].metadata).toEqual(
+        expect.objectContaining({
+          customEvidence: 'preserved',
+          pluginId: 'pii:direct',
+        }),
+      );
+      expect(result?.[0].metadata).not.toHaveProperty('conversationHistory');
+      expect(result?.[0].metadata).not.toHaveProperty('conversationTranscript');
+    });
+
     it('should accept the exact bias category grader', async () => {
       const result = await invokeRemotePlugin('bias:age', {
         assert: [{ type: 'promptfoo:redteam:bias:age' }],
