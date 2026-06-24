@@ -160,6 +160,27 @@ describe('LiteLLM Provider', () => {
       expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
     });
 
+    it.each([
+      [{ OPENAI_API_KEY: 'context-openai-key' }, 'OPENAI_API_KEY', 'context-openai-key'],
+      [{ LITELLM_API_KEY: 'context-litellm-key' }, 'LITELLM_API_KEY', 'context-litellm-key'],
+    ])('should use %s from the factory context env', (env, apiKeyEnvar, expectedKey) => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', { env });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe(apiKeyEnvar);
+      expect(wrappedProvider.getApiKey()).toBe(expectedKey);
+    });
+
+    it('should prefer provider env over factory context env', () => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        env: { LITELLM_API_KEY: 'context-litellm-key' },
+        config: { env: { LITELLM_API_KEY: 'provider-litellm-key' } },
+      });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(wrappedProvider.getApiKey()).toBe('provider-litellm-key');
+    });
+
     it('should handle model names with colons', () => {
       const provider = createLiteLLMProvider('litellm:chat:custom:model:v1', {});
       expect(provider).toBeInstanceOf(LiteLLMProvider);

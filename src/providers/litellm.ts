@@ -205,7 +205,8 @@ export function createLiteLLMProvider(
     prompts: options.config?.prompts,
     transform: options.config?.transform,
     delay: options.config?.delay,
-    env: options.config?.env,
+    env:
+      options.env || options.config?.env ? { ...options.env, ...options.config?.env } : undefined,
     config: mergedConfig,
   };
 

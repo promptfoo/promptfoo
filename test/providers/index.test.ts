@@ -29,6 +29,7 @@ import {
   loadApiProviders,
   resolveProviderConfigs,
 } from '../../src/providers/index';
+import { LiteLLMProvider } from '../../src/providers/litellm';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -779,7 +780,7 @@ describe('loadApiProvider', () => {
     expect(provider.toString()).toBe('[LiteLLM Provider gpt-5.1-mini]');
     expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
     expect(provider.config.apiKeyEnvar).toBe('OPENAI_API_KEY');
-    expect(provider.getApiKey?.()).toBe('test-openai-api-key');
+    expect((provider as LiteLLMProvider).getApiKey?.()).toBe('test-openai-api-key');
   });
 
   it('loadApiProvider with litellm:chat', async () => {
