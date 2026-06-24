@@ -53,7 +53,7 @@ describe('FrameworkCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should display the compliant state, including the compliant icon and green summary chip, when the isCompliant prop is true and nonCompliantPlugins is empty', () => {
+  it('should display the compliant state, including the compliant icon and green summary chip, when the isCompliant prop is true and pluginCategories.nonCompliant is empty', () => {
     renderFrameworkCard({
       isCompliant: true,
       pluginCategories: categories(['excessive-agency', 'pii:direct']),
@@ -77,7 +77,7 @@ describe('FrameworkCard', () => {
     expect(summaryChip).toBeInTheDocument();
   });
 
-  it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {
+  it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and pluginCategories.nonCompliant contains plugin names', () => {
     const nonCompliantPlugins = ['pii:direct', 'pii:session'];
     renderFrameworkCard({
       isCompliant: false,
@@ -121,6 +121,8 @@ describe('FrameworkCard', () => {
     expect(cardElement).not.toHaveClass('compliant');
     expect(cardElement).not.toHaveClass('non-compliant');
     expect(screen.getAllByText('Not Tested').length).toBeGreaterThan(0);
+    expect(screen.getByText('excessive-agency')).toBeInTheDocument();
+    expect(screen.getByText('pii:direct')).toBeInTheDocument();
     expect(screen.queryByText('coding-agent:network-egress-bypass')).not.toBeInTheDocument();
   });
 
@@ -352,7 +354,9 @@ describe('FrameworkCard', () => {
     });
 
     expect(screen.queryByText('Not Tested:')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Untested$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('rbac')).not.toBeInTheDocument();
+    expect(screen.queryByText('No Plugins')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Untested$/).length).toBeGreaterThan(0);
   });
 
   it('should hide untested plugin rows in standard framework view when showUntestedPlugins is false', () => {
@@ -364,10 +368,11 @@ describe('FrameworkCard', () => {
         'pii:direct': { pass: 0, total: 10, failCount: 10 },
       },
       pluginPassRateThreshold: 0.8,
-      pluginCategories: categories([], ['pii:direct']),
+      pluginCategories: categories([], ['pii:direct'], ['excessive-agency']),
       showUntestedPlugins: false,
     });
 
     expect(screen.queryByText('Not Tested')).not.toBeInTheDocument();
+    expect(screen.queryByText('excessive-agency')).not.toBeInTheDocument();
   });
 });

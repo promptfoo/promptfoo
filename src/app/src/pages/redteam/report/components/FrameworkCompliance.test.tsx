@@ -1,4 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
+import { Severity } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
@@ -259,6 +260,83 @@ describe('FrameworkCompliance', () => {
     expect(
       mockFrameworkCard.mock.calls.find(([props]) => props.framework === 'owasp:api')?.[0],
     ).toEqual(expect.objectContaining({ isTested: false, isCompliant: false }));
+  });
+
+  it('should match fully qualified plugin IDs to framework mappings', () => {
+    const categoryStats = {
+      'promptfoo:redteam:intent': { pass: 0, total: 1, passWithFilter: 0, failCount: 1 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:agentic'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (0/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'owasp:agentic',
+        isTested: true,
+        isCompliant: false,
+        frameworkSeverity: Severity.High,
+        pluginCategories: expect.objectContaining({
+          nonCompliant: ['promptfoo:redteam:intent'],
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('should expand mapped plugin collections before determining framework compliance', () => {
+    const categoryStats = {
+      'harmful:violent-crime': { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['owasp:llm'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'owasp:llm',
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({
+          compliant: ['harmful:violent-crime'],
+        }),
+      }),
+      undefined,
+    );
+  });
+
+  it('should retain aggregate harmful results as framework evidence', () => {
+    const categoryStats = {
+      harmful: { pass: 1, total: 1, passWithFilter: 1, failCount: 0 },
+    };
+    const config = {
+      redteam: {
+        frameworks: ['mitre:atlas'],
+      },
+    };
+
+    renderFrameworkCompliance(categoryStats, 0.9, config);
+
+    expect(screen.getByText('Framework Compliance (1/1 tested)')).toBeInTheDocument();
+    expect(mockFrameworkCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        framework: 'mitre:atlas',
+        isTested: true,
+        isCompliant: true,
+        pluginCategories: expect.objectContaining({ compliant: ['harmful'] }),
+      }),
+      undefined,
+    );
   });
 
   it('should show all frameworks when no config.redteam.frameworks is provided', () => {

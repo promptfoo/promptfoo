@@ -20,6 +20,9 @@ export type PluginCategories = {
   untested: string[];
 };
 
+export const getFrameworkPluginId = (pluginId: string): string =>
+  pluginId.replace(/^promptfoo:redteam:/, '');
+
 /**
  * Expands plugin collections like 'harmful' into their individual plugins
  */
@@ -32,10 +35,16 @@ export const expandPluginCollections = (
     if (plugin === 'harmful') {
       // Add all harmful:* plugins that have stats
       Object.keys(categoryStats)
-        .filter((key) => key.startsWith('harmful:'))
+        .filter((key) => {
+          const frameworkPluginId = getFrameworkPluginId(key);
+          return frameworkPluginId === 'harmful' || frameworkPluginId.startsWith('harmful:');
+        })
         .forEach((key) => expandedPlugins.add(key));
     } else {
-      expandedPlugins.add(plugin);
+      const categoryStatsKey = categoryStats[plugin]
+        ? plugin
+        : Object.keys(categoryStats).find((key) => getFrameworkPluginId(key) === plugin);
+      expandedPlugins.add(categoryStatsKey ?? plugin);
     }
   });
   return expandedPlugins;
@@ -81,10 +90,11 @@ export const categorizePlugins = (
  * Gets a display name for a plugin
  */
 export const getPluginDisplayName = (plugin: string): string => {
+  const shortPluginId = getFrameworkPluginId(plugin);
   return (
-    displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-    categoryAliases[plugin as keyof typeof categoryAliases] ||
-    plugin
+    displayNameOverrides[shortPluginId as keyof typeof displayNameOverrides] ||
+    categoryAliases[shortPluginId as keyof typeof categoryAliases] ||
+    shortPluginId
   );
 };
 

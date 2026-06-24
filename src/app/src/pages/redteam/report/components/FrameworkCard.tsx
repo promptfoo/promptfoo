@@ -22,6 +22,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  getFrameworkPluginId,
   type PluginCategories,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
@@ -70,7 +71,10 @@ const categoryNamesByFramework: Partial<Record<string, string[]>> = {
 };
 
 const getPluginSeverity = (plugin: string): Severity => {
-  return riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+  return (
+    riskCategorySeverityMap[getFrameworkPluginId(plugin) as keyof typeof riskCategorySeverityMap] ||
+    Severity.Low
+  );
 };
 
 const sortPluginsBySeverity = (plugins: string[]): string[] => {
@@ -95,9 +99,9 @@ type CategoryBadgeVariant = 'success' | 'secondary' | 'destructive';
 const getCategoryBadgeData = (
   testedCount: number,
   nonCompliantCount: number,
-  visibleUntestedCount: number,
+  untestedCount: number,
 ): { variant: CategoryBadgeVariant; label: string } => {
-  if (testedCount === 0 && visibleUntestedCount === 0) {
+  if (testedCount === 0 && untestedCount === 0) {
     return {
       variant: nonCompliantCount === 0 ? 'success' : 'secondary',
       label: 'No Plugins',
@@ -113,7 +117,7 @@ const getCategoryBadgeData = (
 
   return {
     variant: 'secondary',
-    label: `${visibleUntestedCount} Untested`,
+    label: `${untestedCount} Untested`,
   };
 };
 
@@ -320,7 +324,7 @@ const FrameworkCard = ({
                   const categoryBadge = getCategoryBadgeData(
                     testedCount,
                     nonCompliantCategoryPlugins.length,
-                    visibleUntestedItems.length,
+                    untestedPlugins.length,
                   );
 
                   return (

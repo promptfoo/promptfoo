@@ -15,6 +15,7 @@ import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
+  getFrameworkPluginId,
   type PluginCategories,
   type TestResultStats,
 } from './FrameworkComplianceUtils';
@@ -43,7 +44,9 @@ function getFrameworkSeverity(nonCompliantPlugins: string[]): Severity {
   let highestSeverity: Severity = Severity.Low;
   for (const plugin of nonCompliantPlugins) {
     const pluginSeverity =
-      riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+      riskCategorySeverityMap[
+        getFrameworkPluginId(plugin) as keyof typeof riskCategorySeverityMap
+      ] || Severity.Low;
 
     if (pluginSeverity === Severity.Critical) {
       return Severity.Critical;
@@ -115,46 +118,27 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   ).length;
 
   const pluginComplianceStats = React.useMemo(() => {
-    // Collect all unique plugins across all frameworks to show
-    const allFrameworkPlugins = new Set<string>();
-
-    frameworksToShow.forEach((framework) => {
-      const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
-      if (!mappings) {
-        return;
-      }
-
-      Object.values(mappings).forEach(({ plugins }) => {
-        const expanded = expandPluginCollections(plugins, categoryStats);
-        expanded.forEach((plugin) => allFrameworkPlugins.add(plugin));
-      });
+    const pluginsWithData = new Set<string>();
+    frameworkSummaries.forEach(({ pluginCategories }) => {
+      pluginCategories.compliant.forEach((plugin) => pluginsWithData.add(plugin));
+      pluginCategories.nonCompliant.forEach((plugin) => pluginsWithData.add(plugin));
     });
 
-    // Filter for plugins that have test data
-    const pluginsWithData = Array.from(allFrameworkPlugins).filter(
-      (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
-    );
-
-    // Count compliant plugins and calculate actual attack success rate
     let totalTests = 0;
     let totalFailedTests = 0;
-    const compliantPlugins = pluginsWithData.filter((plugin) => {
+    pluginsWithData.forEach((plugin) => {
       const stats = categoryStats[plugin];
       totalTests += stats.total;
       totalFailedTests += stats.failCount;
-      return stats.pass / stats.total >= pluginPassRateThreshold;
-    }).length;
+    });
 
     return {
-      total: pluginsWithData.length,
-      compliant: compliantPlugins,
-      percentage:
-        pluginsWithData.length > 0 ? (compliantPlugins / pluginsWithData.length) * 100 : 0,
+      total: pluginsWithData.size,
       attackSuccessRate: calculateAttackSuccessRate(totalTests, totalFailedTests),
       failedTests: totalFailedTests,
       totalTests,
     };
-  }, [frameworksToShow, categoryStats, pluginPassRateThreshold]);
+  }, [categoryStats, frameworkSummaries]);
 
   // Get progress bar color based on attack success rate (high is bad)
   // All colors are red-toned since attacks succeeding is always bad.
