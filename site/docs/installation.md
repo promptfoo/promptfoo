@@ -45,7 +45,7 @@ require Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
 :::
 
 Upgrade Node.js before updating promptfoo. Moving to a supported runtime also lets future
-promptfoo releases use Node's built-in SQLite, removing a platform-specific database binding.
+Promptfoo releases use Node's built-in SQLite, removing a platform-specific database binding.
 
 <Tabs groupId="node-version-manager">
   <TabItem value="nvm" label="nvm" default>
@@ -73,6 +73,10 @@ promptfoo releases use Node's built-in SQLite, removing a platform-specific data
 For CI, update the configured Node.js version to `24`. For a custom Docker image, use a current
 Node.js base image such as `node:24`. After switching runtimes, verify the active version with
 `node --version`, then update promptfoo.
+
+To suppress runtime compatibility reminders in both the CLI and Web UI, set
+`PROMPTFOO_DISABLE_RUNTIME_WARNINGS=true`. This does not disable update checks; use
+`PROMPTFOO_DISABLE_UPDATE=true` separately when needed.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
