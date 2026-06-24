@@ -140,22 +140,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     }
 
     try {
-      const metadata = JSON.parse(
-        await fsPromises.readFile(`${this.getFilePath(key)}.meta.json`, 'utf8'),
-      ) as unknown;
-      if (
-        typeof metadata === 'object' &&
-        metadata !== null &&
-        'contentHash' in metadata &&
-        metadata.contentHash === contentHash
-      ) {
-        const fileHash = crypto.createHash('sha256');
-        for await (const chunk of fs.createReadStream(this.getFilePath(key))) {
-          fileHash.update(chunk);
-        }
-        return fileHash.digest('hex') === contentHash;
+      const fileHash = crypto.createHash('sha256');
+      for await (const chunk of fs.createReadStream(this.getFilePath(key))) {
+        fileHash.update(chunk);
       }
-      return false;
+      return fileHash.digest('hex') === contentHash;
     } catch {
       return false;
     }
@@ -171,7 +160,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   async store(data: Buffer, metadata: MediaMetadata): Promise<StoreResult> {
-    const contentHash = computeHash(data);
+    const dataSnapshot = Buffer.from(data);
+    const contentHash = computeHash(dataSnapshot);
 
     // Check for existing file with same hash (deduplication)
     const existingKey = await this.findByHash(contentHash);
@@ -197,7 +187,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     await fsPromises.mkdir(dir, { recursive: true });
 
     // Write file
-    await fsPromises.writeFile(filePath, data);
+    await fsPromises.writeFile(filePath, dataSnapshot);
 
     // Update hash index
     this.hashIndex.set(contentHash, key);
@@ -211,7 +201,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         {
           ...metadata,
           contentHash,
-          sizeBytes: data.length,
+          sizeBytes: dataSnapshot.length,
           createdAt: new Date().toISOString(),
         },
         null,
@@ -219,7 +209,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       ),
     );
 
-    logger.debug(`[LocalStorage] Stored media: ${key} (${data.length} bytes)`);
+    logger.debug(`[LocalStorage] Stored media: ${key} (${dataSnapshot.length} bytes)`);
 
     const ref: MediaStorageRef = {
       provider: this.providerId,
@@ -227,7 +217,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       contentHash,
       metadata: {
         ...metadata,
-        sizeBytes: data.length,
+        sizeBytes: dataSnapshot.length,
         contentHash,
       },
     };
