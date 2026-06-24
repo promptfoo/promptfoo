@@ -30,7 +30,7 @@ redteam:
       config:
         # Optional: maximum turns before hydra stops (default: 10)
         maxTurns: 12
-        # Optional: how many times to backtrack after refusals in stateless mode (default: 10)
+        # Optional: how many times to backtrack after safe refusals in stateless mode (default: 10)
         maxBacktracks: 5
         # Optional: set true if your target expects session state on each request
         stateful: false
@@ -42,11 +42,11 @@ Hydra relies on Promptfoo Cloud to coordinate the attacker agent, maintain scan-
 
 ## Configuration Options
 
-| Option          | Default | Description                                                                                                                                                                                                 |
-| --------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                                                               |
-| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`.                                                                                |
-| `stateful`      | `false` | When `true`, use target-managed session mode: Hydra sends only the newest turn, and the target provider must preserve earlier turns for that session. Keep `false` to replay the full transcript each time. |
+| Option          | Default | Description                                                                                                                                                                                                                                                     |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                                                                                                                   |
+| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a complete refusal or an explicitly recognized safe explanation or alternative. Unknown or risky mixed responses continue to outcome grading. Set to `0` automatically when `stateful: true`. |
+| `stateful`      | `false` | When `true`, use target-managed session mode: Hydra sends only the newest turn, and the target provider must preserve earlier turns for that session. Keep `false` to replay the full transcript each time.                                                     |
 
 ::::tip
 Hydra manages attacker-side history and backtracking. Your target provider manages target-side persistence in `stateful: true` mode. In Promptfoo Cloud, Hydra can derive the mode from the target configuration. In the open-source CLI/UI, set `stateful: true` only after you configure sessions in the provider. See [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions).
@@ -58,7 +58,7 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
-5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
+5. **Adaptive branching** – On complete refusals and explicitly recognized safe explanations or alternatives, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`. Unknown or risky mixed responses continue to outcome grading.
 
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 
