@@ -80,7 +80,6 @@ function resolveNextVariableReference(
   skippedVars: Set<string>,
   derivedFromSkipped: Set<string>,
 ): { changed: boolean; value: string } {
-  let changed = false;
   for (const match of value.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
     const [placeholder, varName] = match;
     if (
@@ -90,10 +89,6 @@ function resolveNextVariableReference(
       break;
     }
     if (skippedVars.has(varName)) {
-      if (!derivedFromSkipped.has(key)) {
-        derivedFromSkipped.add(key);
-        changed = true;
-      }
       continue;
     }
     if (derivedFromSkipped.has(varName)) {
@@ -106,7 +101,7 @@ function resolveNextVariableReference(
       )}`,
     };
   }
-  return { changed, value };
+  return { changed: false, value };
 }
 
 export function resolveVariables(
