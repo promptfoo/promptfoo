@@ -79,18 +79,22 @@ export function getDbPath() {
   // identify Jest because the generic jest-worker package sets it for ordinary tasks.
   const isTestProcess =
     process.env.VITEST === 'true' ||
-    Object.hasOwn(globalThis, '__vitest_worker__') ||
-    Object.hasOwn(globalThis, Symbol.for('jest-native-promise'));
-  if (
-    isTestProcess &&
-    databasePathsReferToSameFile(dbPath, path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db'))
-  ) {
-    throw new Error(
-      'Refusing to open the default Promptfoo database while running tests. ' +
-        'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
-    );
-  }
+    Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__') ||
+    Object.prototype.hasOwnProperty.call(globalThis, Symbol.for('jest-native-promise'));
+  const assertSafeTestPath = () => {
+    if (
+      isTestProcess &&
+      databasePathsReferToSameFile(dbPath, path.resolve(os.homedir(), '.promptfoo', 'promptfoo.db'))
+    ) {
+      throw new Error(
+        'Refusing to open the default Promptfoo database while running tests. ' +
+          'Set IS_TESTING=true for an in-memory database or set PROMPTFOO_CONFIG_DIR to a test-only directory.',
+      );
+    }
+  };
+  assertSafeTestPath();
   getConfigDirectoryPath(true /* createIfNotExists */);
+  assertSafeTestPath();
   return dbPath;
 }
 

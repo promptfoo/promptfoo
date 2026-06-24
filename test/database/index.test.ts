@@ -105,11 +105,25 @@ describe('database', () => {
       expect(getDbPath()).toBe(path.resolve(configPath, 'promptfoo.db'));
     });
 
+    it('should allow a missing isolated database directory', () => {
+      const configPath = path.join(tempConfigDir, 'missing-config');
+      vi.mocked(getConfigDirectoryPath).mockImplementation((createIfNotExists = false) => {
+        if (createIfNotExists) {
+          fs.mkdirSync(configPath, { recursive: true });
+        }
+        return configPath;
+      });
+      vi.stubEnv('VITEST', 'true');
+
+      expect(getDbPath()).toBe(path.join(configPath, 'promptfoo.db'));
+      expect(fs.existsSync(configPath)).toBe(true);
+    });
+
     it('should refuse to use the default user database when the process is running tests', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
       vi.stubEnv('VITEST', 'true');
 
-      expect(() => getDbPath()).toThrow(
+      expect(() => withTestRunnerMarkers({}, () => getDbPath())).toThrow(
         'Refusing to open the default Promptfoo database while running tests',
       );
     });
@@ -216,6 +230,31 @@ describe('database', () => {
       expect(() => getDbPath()).toThrow(
         'Refusing to open the default Promptfoo database while running tests',
       );
+    });
+
+    it('should refuse an alias that resolves to a missing default database directory', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'missing-home');
+      const aliasedHomeDir = path.join(tempConfigDir, 'aliased-home');
+      const aliasedConfigDir = path.join(aliasedHomeDir, '.promptfoo');
+      fs.mkdirSync(fakeHomeDir);
+      fs.symlinkSync(
+        fakeHomeDir,
+        aliasedHomeDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockImplementation((createIfNotExists = false) => {
+        if (createIfNotExists) {
+          fs.mkdirSync(aliasedConfigDir, { recursive: true });
+        }
+        return aliasedConfigDir;
+      });
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(path.join(fakeHomeDir, '.promptfoo', 'promptfoo.db'))).toBe(false);
     });
 
     it('should refuse a hard link to the default user database', () => {
