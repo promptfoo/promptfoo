@@ -450,10 +450,15 @@ describe('writeOutput', () => {
             spanId: 'span-strip-bodies',
             name: 'provider',
             startTime: 1,
+            statusMessage: 'trace-status-secret',
             attributes: {
               'promptfoo.prompt.label': 'trace-prompt-label-secret',
               'promptfoo.request.body': 'trace-prompt-secret',
               'promptfoo.response.body': 'trace-response-secret',
+              'tool.arguments': 'trace-tool-arguments-secret',
+              'tool.input': 'trace-tool-input-secret',
+              'tool.output': 'trace-tool-output-secret',
+              'codex.reasoning.summary': 'trace-reasoning-secret',
               operation: 'provider-call',
             },
           },
@@ -467,9 +472,15 @@ describe('writeOutput', () => {
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = JSON.parse(written);
       expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(parsed.traces[0].spans[0].statusMessage).toBe('[error details stripped]');
       expect(written).not.toContain('trace-prompt-label-secret');
       expect(written).not.toContain('trace-prompt-secret');
       expect(written).not.toContain('trace-response-secret');
+      expect(written).not.toContain('trace-tool-arguments-secret');
+      expect(written).not.toContain('trace-tool-input-secret');
+      expect(written).not.toContain('trace-tool-output-secret');
+      expect(written).not.toContain('trace-reasoning-secret');
+      expect(written).not.toContain('trace-status-secret');
     } finally {
       traceSpy.mockRestore();
       restoreEnv();

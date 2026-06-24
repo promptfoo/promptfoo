@@ -1457,7 +1457,7 @@ describe('evaluator', () => {
           metadata: { debug: 'V4_RESULT_METADATA' },
         }),
       );
-      const trace: TraceData = {
+      const trace = {
         traceId: 'trace-id',
         evaluationId: eval1.id,
         testCaseId: 'test-case-id',
@@ -1470,15 +1470,27 @@ describe('evaluator', () => {
             spanId: 'span-id',
             name: 'provider call',
             startTime: 0,
+            statusMessage: 'V4_TRACE_STATUS_MESSAGE',
+            status: { code: 'error', message: 'V4_TRACE_RUNTIME_STATUS' },
             attributes: {
               [PromptfooAttributes.PROMPT_LABEL]: 'V4_TRACE_PROMPT_LABEL',
               [PromptfooAttributes.REQUEST_BODY]: 'V4_TRACE_REQUEST',
               [PromptfooAttributes.RESPONSE_BODY]: 'V4_TRACE_RESPONSE',
+              'tool.arguments': 'V4_TRACE_TOOL_ARGUMENTS',
+              'tool.input': 'V4_TRACE_TOOL_INPUT',
+              'tool.output': 'V4_TRACE_TOOL_OUTPUT',
+              'codex.reasoning.summary': 'V4_TRACE_REASONING_SUMMARY',
               safe: 'retained',
             },
           },
+          {
+            spanId: 'span-without-attributes',
+            name: 'failed provider call',
+            startTime: 1,
+            statusMessage: 'V4_TRACE_STATUS_WITHOUT_ATTRIBUTES',
+          },
         ],
-      };
+      } as unknown as TraceData;
       vi.spyOn(eval1, 'getTraces').mockResolvedValue([trace]);
 
       const unstripped = await eval1.toResultsFile();
@@ -1516,6 +1528,12 @@ describe('evaluator', () => {
         });
         expect(projected.traces?.[0]).not.toHaveProperty('metadata');
         expect(projected.traces?.[0].spans[0].attributes).toEqual({ safe: 'retained' });
+        expect(projected.traces?.[0].spans[0].statusMessage).toBe('[error details stripped]');
+        expect(
+          (projected.traces?.[0].spans[0] as unknown as { status: { message: string } }).status
+            .message,
+        ).toBe('[error details stripped]');
+        expect(projected.traces?.[0].spans[1].statusMessage).toBe('[error details stripped]');
       } finally {
         restoreEnv();
       }
@@ -1529,12 +1547,18 @@ describe('evaluator', () => {
         'V2_PROVIDER_PROMPT',
         'V2_GRADING_REASON',
         'V2_RESULT_METADATA',
+        'V2_RESULT_PROVIDER_OUTPUT',
+        'V2_RESULT_PROMPT_PREFIX',
+        'V2_RESULT_PROMPT_SUFFIX',
         'V2_TABLE_PROMPT',
         'V2_TABLE_PROMPT_TEMPLATE',
         'V2_TABLE_PROMPT_CONFIG',
         'V2_ROW_VAR',
         'V2_ROW_TEST_VAR',
         'V2_ROW_TEST_METADATA',
+        'V2_ROW_PROVIDER_OUTPUT',
+        'V2_ROW_PROMPT_PREFIX',
+        'V2_ROW_PROMPT_SUFFIX',
         'V2_TABLE_OUTPUT_PROMPT',
         'V2_TABLE_OUTPUT_TEXT',
         'V2_TABLE_RESPONSE_OUTPUT',
@@ -1549,6 +1573,9 @@ describe('evaluator', () => {
         'V2_TABLE_GRADING_REASON',
         'V2_TABLE_TEST_CASE_VAR',
         'V2_TABLE_TEST_CASE_METADATA',
+        'V2_TABLE_PROVIDER_OUTPUT',
+        'V2_TABLE_PROMPT_PREFIX',
+        'V2_TABLE_PROMPT_SUFFIX',
         'V2_TABLE_METADATA',
         'V2_TABLE_ERROR',
       ];
@@ -1563,6 +1590,14 @@ describe('evaluator', () => {
               prompt: 'V2_PROVIDER_PROMPT',
             },
             gradingResult: { pass: false, score: 0, reason: 'V2_GRADING_REASON' },
+            testCase: {
+              providerOutput: 'V2_RESULT_PROVIDER_OUTPUT',
+              options: {
+                prefix: 'V2_RESULT_PROMPT_PREFIX',
+                suffix: 'V2_RESULT_PROMPT_SUFFIX',
+                repeat: 2,
+              },
+            },
             metadata: { debug: 'V2_RESULT_METADATA' },
           }),
         ],
@@ -1582,6 +1617,12 @@ describe('evaluator', () => {
               test: {
                 vars: { prompt: 'V2_ROW_TEST_VAR' },
                 metadata: { purpose: 'V2_ROW_TEST_METADATA' },
+                providerOutput: 'V2_ROW_PROVIDER_OUTPUT',
+                options: {
+                  prefix: 'V2_ROW_PROMPT_PREFIX',
+                  suffix: 'V2_ROW_PROMPT_SUFFIX',
+                  repeat: 2,
+                },
               },
               outputs: [
                 createEvaluateTableOutput({
@@ -1606,6 +1647,12 @@ describe('evaluator', () => {
                   testCase: {
                     vars: { prompt: 'V2_TABLE_TEST_CASE_VAR' },
                     metadata: { purpose: 'V2_TABLE_TEST_CASE_METADATA' },
+                    providerOutput: 'V2_TABLE_PROVIDER_OUTPUT',
+                    options: {
+                      prefix: 'V2_TABLE_PROMPT_PREFIX',
+                      suffix: 'V2_TABLE_PROMPT_SUFFIX',
+                      repeat: 2,
+                    },
                   },
                   metadata: { debug: 'V2_TABLE_METADATA' },
                   error: 'V2_TABLE_ERROR',
@@ -1657,6 +1704,9 @@ describe('evaluator', () => {
           error: '[error details stripped]',
         });
         expect(tableOutput).not.toHaveProperty('metadata');
+        expect(projected.results.results[0].testCase.options).toEqual({ repeat: 2 });
+        expect(projected.results.table.body[0].test.options).toEqual({ repeat: 2 });
+        expect(tableOutput.testCase.options).toEqual({ repeat: 2 });
       } finally {
         restoreEnv();
       }
@@ -1725,12 +1775,19 @@ describe('evaluator', () => {
             createEvaluateResult({
               prompt: 'MALFORMED_PROMPT_SECRET',
               response: 'MALFORMED_RESPONSE_SECRET',
+              testCase: 'MALFORMED_RESULT_TEST_CASE_SECRET',
             } as unknown as Partial<EvaluateResult>),
           ],
           table: createEvaluateTable({
             body: [
               createEvaluateTableRow({
                 vars: malformedVars,
+                test: 'MALFORMED_ROW_TEST_CASE_SECRET',
+                outputs: [
+                  createEvaluateTableOutput({
+                    testCase: 'MALFORMED_OUTPUT_TEST_CASE_SECRET',
+                  } as unknown as Parameters<typeof createEvaluateTableOutput>[0]),
+                ],
               } as unknown as Parameters<typeof createEvaluateTableRow>[0]),
             ],
           }),
@@ -1739,6 +1796,9 @@ describe('evaluator', () => {
         const unstripped = await eval1.toResultsFile({ includeTraces: false });
         expect(JSON.stringify(unstripped)).toContain('MALFORMED_PROMPT_SECRET');
         expect(JSON.stringify(unstripped)).toContain('MALFORMED_RESPONSE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_RESULT_TEST_CASE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_ROW_TEST_CASE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_OUTPUT_TEST_CASE_SECRET');
         expect(unstripped.results.version).toBe(2);
         if (unstripped.results.version !== 2) {
           throw new Error('Expected a legacy V2 result');
@@ -1764,7 +1824,10 @@ describe('evaluator', () => {
             response: { output: '[output stripped]' },
           });
           expect(projected.results.results[0].promptId).toEqual(expect.any(String));
+          expect(projected.results.results[0].testCase).toBeUndefined();
           expect(projected.results.table.body[0].vars).toEqual([]);
+          expect(projected.results.table.body[0].test).toBeUndefined();
+          expect(projected.results.table.body[0].outputs[0].testCase).toBeUndefined();
         } finally {
           restoreEnv();
         }

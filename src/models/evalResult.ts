@@ -173,6 +173,10 @@ function projectProviderResponse(
   }
 
   const projectedResponse: ProviderResponse = { ...response };
+  if (projectedResponse.error !== undefined) {
+    projectedResponse.error =
+      projectErrorForOutput(projectedResponse.error, stripFlags) ?? undefined;
+  }
   const metadata = projectMetadataForOutput(
     response.metadata as Record<string, unknown> | undefined,
     stripFlags,
@@ -238,8 +242,11 @@ function projectTestCase<T extends AtomicTestCase | undefined>(
   testCase: T,
   stripFlags: OutputStripFlags,
 ): T {
-  if (!testCase || !hasAnyStripFlag(stripFlags)) {
+  if (!hasAnyStripFlag(stripFlags)) {
     return testCase;
+  }
+  if (!isRecord(testCase)) {
+    return undefined as T;
   }
 
   const projectedTestCase = { ...testCase };
@@ -255,6 +262,19 @@ function projectTestCase<T extends AtomicTestCase | undefined>(
 
   if (stripFlags.shouldStripTestVars) {
     projectedTestCase.vars = undefined;
+  }
+  if (stripFlags.shouldStripResponseOutput) {
+    delete projectedTestCase.providerOutput;
+  }
+  if (stripFlags.shouldStripPromptText && isRecord(projectedTestCase.options)) {
+    const options = { ...projectedTestCase.options };
+    delete options.prefix;
+    delete options.suffix;
+    if (Object.keys(options).length > 0) {
+      projectedTestCase.options = options;
+    } else {
+      delete projectedTestCase.options;
+    }
   }
 
   return projectedTestCase as T;
@@ -298,19 +318,23 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
 
   const prompt = projectPromptForOutput(result.prompt, shouldStripPromptText);
   const testCase = projectTestCase(result.testCase, stripFlags);
-  return {
+  const projectedResult = {
     ...result,
     prompt,
     promptId: shouldStripPromptText
       ? hashPrompt(isHashablePrompt(result.prompt) ? result.prompt : prompt)
       : result.promptId,
     response: projectProviderResponse(result.response, stripFlags),
-    ...(testCase === undefined ? {} : { testCase }),
+    testCase,
     gradingResult: shouldStripGradingResult ? null : result.gradingResult,
     vars: shouldStripTestVars ? {} : result.vars,
     metadata: projectResultMetadata(result.metadata, stripFlags),
     error: projectErrorForOutput(result.error, stripFlags),
   };
+  if (testCase === undefined) {
+    delete (projectedResult as Partial<EvaluateResult>).testCase;
+  }
+  return projectedResult;
 }
 
 export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTable {
@@ -343,12 +367,15 @@ export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTab
           : output.text,
       response: projectProviderResponse(output.response, stripFlags),
       gradingResult: stripFlags.shouldStripGradingResult ? null : output.gradingResult,
-      ...(testCase === undefined ? {} : { testCase }),
+      testCase,
       error,
       metadata,
     };
     if (metadata === undefined) {
       delete projected.metadata;
+    }
+    if (testCase === undefined) {
+      delete (projected as Partial<EvaluateTableOutput>).testCase;
     }
     return projected;
   };
@@ -828,12 +855,7 @@ export function getOutputStripFlags(): OutputStripFlags {
 
 export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
   const stripFlags = getOutputStripFlags();
-  if (
-    !stripFlags.shouldStripMetadata &&
-    !stripFlags.shouldStripPromptText &&
-    !stripFlags.shouldStripResponseOutput &&
-    !stripFlags.shouldStripTestVars
-  ) {
+  if (!hasAnyStripFlag(stripFlags)) {
     return traces;
   }
 
@@ -858,22 +880,42 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
+        const runtimeSpan = span as typeof span & {
+          status?: Record<string, unknown>;
+        };
+        const projectedSpan = {
+          ...runtimeSpan,
+          ...(typeof runtimeSpan.statusMessage === 'string' && {
+            statusMessage: '[error details stripped]',
+          }),
+          ...(isRecord(runtimeSpan.status) &&
+            typeof runtimeSpan.status.message === 'string' && {
+              status: {
+                ...runtimeSpan.status,
+                message: '[error details stripped]',
+              },
+            }),
+        };
         if (!span.attributes) {
-          return span;
+          return projectedSpan;
         }
 
         const projectedAttributes = { ...span.attributes };
         if (stripFlags.shouldStripPromptText) {
           delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
           delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+          delete projectedAttributes['tool.output'];
         }
         if (stripFlags.shouldStripResponseOutput) {
           delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+          delete projectedAttributes['tool.arguments'];
+          delete projectedAttributes['tool.input'];
+          delete projectedAttributes['codex.reasoning.summary'];
         }
 
-        const { attributes: _attributes, ...projectedSpan } = span;
+        const { attributes: _attributes, ...spanWithoutAttributes } = projectedSpan;
         return {
-          ...projectedSpan,
+          ...spanWithoutAttributes,
           ...(Object.keys(projectedAttributes).length > 0 && {
             attributes: projectedAttributes,
           }),

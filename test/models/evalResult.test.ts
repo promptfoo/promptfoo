@@ -3,6 +3,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
   projectEvaluateResultForOutput,
+  projectTracesForOutput,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
@@ -14,6 +15,7 @@ import {
   type Prompt,
   type ProviderOptions,
   ResultFailureReason,
+  type TraceData,
 } from '../../src/types/index';
 import {
   getCachedStandaloneEvals,
@@ -1301,6 +1303,104 @@ describe('EvalResult', () => {
       }
     });
 
+    it.each([
+      ['prompt text', { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' }],
+      ['response output', { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }],
+      ['test variables', { PROMPTFOO_STRIP_TEST_VARS: 'true' }],
+      ['grading results', { PROMPTFOO_STRIP_GRADING_RESULT: 'true' }],
+      ['metadata', { PROMPTFOO_STRIP_METADATA: 'true' }],
+    ])('masks duplicate provider errors when stripping %s', (_name, env) => {
+      const createResult = () =>
+        createEvaluateResult({
+          error: 'SENSITIVE_DUPLICATE_ERROR',
+          response: {
+            error: 'SENSITIVE_DUPLICATE_ERROR',
+            output: 'provider output',
+          },
+        });
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(createResult()),
+          sanitizeResultForJsonlArtifact(createResult()),
+        ]) {
+          expect(result.error).toBe('[error details stripped]');
+          expect(result.response?.error).toBe('[error details stripped]');
+          expect(JSON.stringify(result)).not.toContain('SENSITIVE_DUPLICATE_ERROR');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      {
+        name: 'metadata only',
+        env: { PROMPTFOO_STRIP_METADATA: 'true' },
+        providerOutput: 'sensitive provider output',
+        options: {
+          prefix: 'sensitive prompt prefix',
+          suffix: 'sensitive prompt suffix',
+          repeat: 2,
+        },
+      },
+      {
+        name: 'response output',
+        env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' },
+        providerOutput: undefined,
+        options: {
+          prefix: 'sensitive prompt prefix',
+          suffix: 'sensitive prompt suffix',
+          repeat: 2,
+        },
+      },
+      {
+        name: 'prompt text',
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        providerOutput: 'sensitive provider output',
+        options: { repeat: 2 },
+      },
+      {
+        name: 'prompt text and response output',
+        env: {
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        },
+        providerOutput: undefined,
+        options: { repeat: 2 },
+      },
+    ])('projects test-case prompt and output copies for $name', ({
+      env,
+      providerOutput,
+      options,
+    }) => {
+      const createResult = () =>
+        createEvaluateResult({
+          testCase: {
+            providerOutput: 'sensitive provider output',
+            options: {
+              prefix: 'sensitive prompt prefix',
+              suffix: 'sensitive prompt suffix',
+              repeat: 2,
+            },
+          },
+        });
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(createResult()),
+          sanitizeResultForJsonlArtifact(createResult()),
+        ]) {
+          expect(result.testCase.providerOutput).toBe(providerOutput);
+          expect(result.testCase.options).toEqual(options);
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('fails closed on malformed scalar prompts and responses under strip flags', () => {
       const malformed = createEvaluateResult({
         prompt: 'MALFORMED_PROMPT_SECRET',
@@ -1559,6 +1659,82 @@ describe('EvalResult', () => {
         expect(evaluateResult.testCase).not.toHaveProperty('metadata');
         expect(evaluateResult.testCase.vars).toBeUndefined();
         expect(JSON.stringify(evaluateResult)).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
+  describe('projectTracesForOutput', () => {
+    const createTraces = () =>
+      [
+        {
+          traceId: 'trace-id',
+          evaluationId: 'eval-id',
+          testCaseId: 'test-case-id',
+          spans: [
+            {
+              spanId: 'span-id',
+              name: 'tool call',
+              startTime: 0,
+              statusMessage: 'sensitive persisted status',
+              status: { code: 'error', message: 'sensitive runtime status' },
+              attributes: {
+                'tool.arguments': 'sensitive tool arguments',
+                'tool.input': 'sensitive tool input',
+                'tool.output': 'sensitive tool output',
+                'codex.reasoning.summary': 'sensitive reasoning',
+                safe: 'retained',
+              },
+            },
+            {
+              spanId: 'span-without-attributes',
+              name: 'failed provider call',
+              startTime: 1,
+              statusMessage: 'sensitive status without attributes',
+            },
+          ],
+        },
+      ] as unknown as TraceData[];
+
+    it('preserves the original traces when no strip flags are enabled', () => {
+      const traces = createTraces();
+
+      expect(projectTracesForOutput(traces)).toBe(traces);
+    });
+
+    it.each([
+      {
+        name: 'prompt text',
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        removed: ['tool.output'],
+        retained: ['tool.arguments', 'tool.input', 'codex.reasoning.summary'],
+      },
+      {
+        name: 'response output',
+        env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' },
+        removed: ['tool.arguments', 'tool.input', 'codex.reasoning.summary'],
+        retained: ['tool.output'],
+      },
+    ])('projects $name trace payload aliases', ({ env, removed, retained }) => {
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        const projected = projectTracesForOutput(createTraces());
+        const span = projected[0].spans[0] as (typeof projected)[0]['spans'][0] & {
+          status: { message: string };
+        };
+
+        for (const key of removed) {
+          expect(span.attributes).not.toHaveProperty(key);
+        }
+        for (const key of retained) {
+          expect(span.attributes).toHaveProperty(key);
+        }
+        expect(span.attributes).toHaveProperty('safe', 'retained');
+        expect(span.statusMessage).toBe('[error details stripped]');
+        expect(span.status.message).toBe('[error details stripped]');
+        expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
       } finally {
         restoreEnv();
       }

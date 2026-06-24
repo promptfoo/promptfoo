@@ -540,6 +540,7 @@ describe('programmatic JSONL output', () => {
     const provider: ApiProvider = {
       id: () => 'stripped-recovery-provider',
       callApi: vi.fn().mockResolvedValue({
+        error: 'response-error-secret',
         output: 'response-output-secret',
         raw: { secret: 'response-raw-secret' },
         providerTransformedOutput: 'response-transformed-secret',
@@ -571,14 +572,17 @@ describe('programmatic JSONL output', () => {
 
       const [result] = readJsonl(outputPath);
       expect(result.response).toEqual({
+        error: '[error details stripped]',
         output: '[output stripped]',
         tokenUsage: createEmptyTokenUsage(),
       });
+      expect(result.error).toBe('[error details stripped]');
       expect(result.vars).toEqual({});
       expect(result.testCase.vars).toBeUndefined();
       expect(result.testCase.metadata).toBeUndefined();
       expect(result.metadata).toEqual({});
       expect(JSON.stringify(result)).not.toContain('response-output-secret');
+      expect(JSON.stringify(result)).not.toContain('response-error-secret');
       expect(JSON.stringify(result)).not.toContain('response-raw-secret');
       expect(JSON.stringify(result)).not.toContain('response-transformed-secret');
       expect(JSON.stringify(result)).not.toContain('response-audio-secret');
@@ -623,6 +627,10 @@ describe('programmatic JSONL output', () => {
         tests: [
           {
             vars: { topic: 'alpha' },
+            options: {
+              prefix: 'sensitive prompt prefix',
+              suffix: 'sensitive prompt suffix',
+            },
             assert: [{ type: 'contains', value: 'hello' }],
             metadata: {
               redteamFinalPrompt: 'sensitive top-level final prompt',
@@ -642,6 +650,7 @@ describe('programmatic JSONL output', () => {
       expect(result.metadata).toMatchObject({ keep: 'visible response metadata' });
       expect(result.metadata).not.toHaveProperty('redteamFinalPrompt');
       expect(result.testCase.metadata).toEqual({ keep: 'visible result metadata' });
+      expect(result.testCase).not.toHaveProperty('options');
       expect(result.gradingResult).toBeNull();
       expect(JSON.stringify(result)).not.toContain('sensitive');
     } finally {
