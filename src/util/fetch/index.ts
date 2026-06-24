@@ -81,15 +81,74 @@ function shouldRetryHttpResponse(
   disableTransientRetries: boolean | undefined,
   retryOnStatusCodes: readonly number[],
   isIdempotent: boolean,
+  hasReplayableBody: boolean,
 ): boolean {
   return (
     disableTransientRetries !== true &&
+    hasReplayableBody &&
     (retryOnStatusCodes.includes(response.status) || (isIdempotent && isTransientError(response)))
   );
 }
 
+function isReplayableRequestBody(body: RequestInit['body'] | null | undefined): boolean {
+  if (body == null) {
+    return true;
+  }
+  if (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream) {
+    return false;
+  }
+  return !(typeof body === 'object' && Symbol.asyncIterator in body);
+}
+
+function getRequestRetryProperties(url: RequestInfo, options: RequestInit) {
+  const request = url instanceof Request ? url : undefined;
+  const method = (options.method ?? request?.method ?? 'GET').toUpperCase();
+  return {
+    isIdempotent: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method),
+    hasReplayableBody: isReplayableRequestBody(options.body ?? request?.body),
+  };
+}
+
 function wasFetchAborted(signal: AbortSignal | null | undefined, error: unknown): boolean {
   return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
+}
+
+function throwIfFetchAborted(signal: AbortSignal | null | undefined, error: unknown): void {
+  if (wasFetchAborted(signal, error)) {
+    throw signal?.aborted ? getAbortError(signal, error) : error;
+  }
+}
+
+async function waitForTransientResponseRetry({
+  attempt,
+  backoff,
+  maxRetries,
+  response,
+  signal,
+  url,
+}: {
+  attempt: number;
+  backoff: number;
+  maxRetries: number;
+  response: Response;
+  signal?: AbortSignal | null;
+  url: RequestInfo;
+}): Promise<void> {
+  await discardResponseBody(response);
+  if (response.headers.has('Retry-After')) {
+    await handleRateLimit(response, signal ?? undefined);
+    return;
+  }
+  const waitTime = getRetryDelayMs(attempt, backoff);
+  logger.debug('[fetch] Transient HTTP response, retrying', {
+    url: urlForLog(url),
+    status: response.status,
+    statusText: response.statusText,
+    attempt: attempt + 1,
+    maxAttempts: maxRetries + 1,
+    waitTime,
+  });
+  await sleepForRetry(waitTime, signal);
 }
 
 // Cached agents to avoid recreating on every request.
@@ -699,10 +758,7 @@ export async function fetchWithRetries(
   const { retryOnStatusCodes = [], ...requestOptions } = options;
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
-  const method = (
-    requestOptions.method ?? (url instanceof Request ? url.method : 'GET')
-  ).toUpperCase();
-  const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+  const { hasReplayableBody, isIdempotent } = getRequestRetryProperties(url, requestOptions);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
@@ -733,19 +789,17 @@ export async function fetchWithRetries(
         options.disableTransientRetries,
         retryOnStatusCodes,
         isIdempotent,
+        hasReplayableBody,
       );
       if (isRetryableStatus && i < maxRetries) {
-        const waitTime = getRetryDelayMs(i, backoff);
-        await discardResponseBody(response);
-        logger.debug('[fetch] Transient HTTP response, retrying', {
-          url: urlForLog(url),
-          status: response.status,
-          statusText: response.statusText,
-          attempt: i + 1,
-          maxAttempts: maxRetries + 1,
-          waitTime,
+        await waitForTransientResponseRetry({
+          attempt: i,
+          backoff,
+          maxRetries,
+          response,
+          signal: requestOptions.signal,
+          url,
         });
-        await sleepForRetry(waitTime, requestOptions.signal);
         continue;
       }
 
@@ -756,9 +810,7 @@ export async function fetchWithRetries(
       return response;
     } catch (error) {
       // Don't retry on abort - propagate immediately
-      if (wasFetchAborted(requestOptions.signal, error)) {
-        throw requestOptions.signal?.aborted ? getAbortError(requestOptions.signal, error) : error;
-      }
+      throwIfFetchAborted(requestOptions.signal, error);
 
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't

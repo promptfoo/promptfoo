@@ -48,9 +48,10 @@ If this request fails or times out, it likely means your network is blocking acc
 
 Remote plugin test-case requests use Promptfoo's shared HTTP retry budget. Network errors,
 rate limits, HTTP 500 task failures, and gateway 502, 503, 504, and 524 responses retry with
-exponential backoff and jitter. Other 4xx and 5xx responses and malformed successful responses
-fail immediately. See [Rate Limits and Concurrency](/docs/configuration/rate-limits/) for retry
-defaults and backoff configuration.
+exponential backoff and jitter. By default, other 4xx and 5xx responses and malformed successful
+responses fail immediately; `PROMPTFOO_RETRY_5XX=true` opts into retries for every 5xx response.
+See [Rate Limits and Concurrency](/docs/configuration/rate-limits/) for retry defaults and backoff
+configuration.
 
 ## Alternative Options
 

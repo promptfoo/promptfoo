@@ -1486,6 +1486,21 @@ describe('fetchWithRetries', () => {
     expect(result).toBe(transientResponse);
   });
 
+  it('should not retry recognized transient responses with one-shot request bodies', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+    const body = new ReadableStream();
+
+    const result = await fetchWithRetries('https://example.com', { method: 'PUT', body }, 1000, 2);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
+  });
+
   it('should honor rate-limit headers before transient status retry policy', async () => {
     const rateLimitedResponse = createMockResponse({
       status: 503,
@@ -1498,6 +1513,30 @@ describe('fetchWithRetries', () => {
     const successResponse = createMockResponse({ ok: true });
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(2000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
+  it('should honor Retry-After on a retryable 503 without other rate-limit headers', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'Retry-After': '2' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
       .mockResolvedValueOnce(successResponse);
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
