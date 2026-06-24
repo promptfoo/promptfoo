@@ -47,7 +47,7 @@ import {
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
 import {
-  getGeneratedPromptLengthViolation,
+  getGeneratedTestCaseLengthViolation,
   getMaxCharsPerMessageModifierValue,
   getMinCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -515,15 +515,7 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
         strategyConfig?.minCharsPerMessage ??
         pluginConfig?.minCharsPerMessage,
     };
-    const generatedPrompts =
-      injectVar === MULTI_INPUT_VAR
-        ? Object.entries(testCase.vars ?? {})
-            .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
-            .map(([, value]) => String(value))
-        : [String(testCase.vars?.[injectVar] ?? '')];
-    const violation = generatedPrompts
-      .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
-      .find((candidate) => candidate !== undefined);
+    const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, charLimits);
     if (!violation) {
       return true;
     }

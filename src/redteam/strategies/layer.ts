@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
-import { getGeneratedPromptLengthViolation } from '../shared/promptLength';
+import { getGeneratedTestCaseLengthViolation } from '../shared/promptLength';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -169,13 +169,10 @@ export async function addLayerTestCases(
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = (next as TestCaseWithPlugin[]).filter((testCase) => {
-      const violation = getGeneratedPromptLengthViolation(
-        String(testCase.vars?.[injectVar] ?? ''),
-        {
-          maxCharsPerMessage,
-          minCharsPerMessage,
-        },
-      );
+      const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
+        maxCharsPerMessage,
+        minCharsPerMessage,
+      });
       if (!violation) {
         return true;
       }

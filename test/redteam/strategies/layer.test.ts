@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
@@ -189,6 +190,27 @@ describe('addLayerTestCases', () => {
     const result = await addLayerTestCases(
       [{ vars: { input: 'a' }, metadata: { pluginId: 'test-plugin' } }],
       'input',
+      { steps: [{ id: 'base64', config: { minCharsPerMessage: 10 } }] },
+      mockStrategies,
+      mockLoadStrategy,
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it('should validate layer step limits against multi-input values', async () => {
+    const result = await addLayerTestCases(
+      [
+        {
+          vars: {
+            [MULTI_INPUT_VAR]: '{"user_message":"a","retrieved_context":"long enough"}',
+            user_message: 'a',
+            retrieved_context: 'long enough',
+          },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ],
+      MULTI_INPUT_VAR,
       { steps: [{ id: 'base64', config: { minCharsPerMessage: 10 } }] },
       mockStrategies,
       mockLoadStrategy,

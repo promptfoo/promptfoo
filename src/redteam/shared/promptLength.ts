@@ -1,5 +1,7 @@
 import cliState from '../../cliState';
+import { MULTI_INPUT_VAR } from '../constants';
 
+import type { TestCase } from '../../types/index';
 import type { CallApiContextParams } from '../../types/providers';
 
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
@@ -155,6 +157,22 @@ export function getGeneratedPromptLengthViolation(
   }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
 ): PromptLengthViolation | undefined {
   return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
+}
+
+export function getGeneratedTestCaseLengthViolation(
+  vars: TestCase['vars'] | undefined,
+  injectVar: string,
+  charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): PromptLengthViolation | undefined {
+  const generatedPrompts =
+    injectVar === MULTI_INPUT_VAR
+      ? Object.entries(vars ?? {})
+          .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
+          .map(([, value]) => String(value))
+      : [String(vars?.[injectVar] ?? '')];
+  return generatedPrompts
+    .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
+    .find((candidate) => candidate !== undefined);
 }
 
 export function getGeneratedPromptOverLimit(
