@@ -311,8 +311,8 @@ export function trajectoryToolSetConfigError(value: unknown): string | undefined
     if (!isPlainObject(tool)) {
       return false;
     }
-    const hasName = Object.hasOwn(tool, 'name');
-    const hasPattern = Object.hasOwn(tool, 'pattern');
+    const hasName = Object.prototype.hasOwnProperty.call(tool, 'name');
+    const hasPattern = Object.prototype.hasOwnProperty.call(tool, 'pattern');
     const validName = !hasName || (typeof tool.name === 'string' && tool.name.trim().length > 0);
     const validPattern =
       !hasPattern || (typeof tool.pattern === 'string' && tool.pattern.trim().length > 0);
