@@ -569,8 +569,9 @@ function valuesFromAssertionAndTest(
 ): string[] {
   const values = new Set<string>();
   collectValuesByKey(renderedValue, keyNames, undefined, values);
-  collectValuesByKey(test.vars, keyNames, undefined, values);
-  collectValuesByKey(test.metadata, keyNames, undefined, values);
+  for (const source of verifierControlSourcesFromTest(test)) {
+    collectValuesByKey(source, keyNames, undefined, values);
+  }
   return [...values];
 }
 
@@ -581,9 +582,18 @@ function stringsFromAssertionAndTest(
 ): string[] {
   const values = new Set<string>();
   collectStringsByKey(renderedValue, keyNames, undefined, values);
-  collectStringsByKey(test.vars, keyNames, undefined, values);
-  collectStringsByKey(test.metadata, keyNames, undefined, values);
+  for (const source of verifierControlSourcesFromTest(test)) {
+    collectStringsByKey(source, keyNames, undefined, values);
+  }
   return [...values];
+}
+
+function verifierControlSourcesFromTest(test: AtomicTestCase): unknown[] {
+  const metadata = getObject(test.metadata);
+  if (metadata?.__promptfooRemoteGenerated === true) {
+    return [metadata.pluginConfig];
+  }
+  return [test.vars, test.metadata];
 }
 
 function collectStringsByKey(
@@ -2549,8 +2559,9 @@ function automationHashExpectationsFromAssertionAndTest(
 ): { expectedSha256: string; path: string }[] {
   const expectations = new Map<string, string>();
   addAutomationHashExpectationsFromValue(renderedValue, expectations);
-  addAutomationHashExpectationsFromValue(test.vars, expectations);
-  addAutomationHashExpectationsFromValue(test.metadata, expectations);
+  for (const source of verifierControlSourcesFromTest(test)) {
+    addAutomationHashExpectationsFromValue(source, expectations);
+  }
 
   const genericSha256 = automationExpectedSha256FromAssertionAndTest(renderedValue, test);
   if (genericSha256) {

@@ -5,12 +5,6 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import {
-  AssertionSchema,
-  AssertionSetSchema,
-  PluginConfigSchema,
-  VarsSchema,
-} from '../../types/index';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -49,6 +43,7 @@ import {
 } from '../shared/promptLength';
 import {
   InvalidRemoteRedteamAssertionPayloadError,
+  PluginConfigSchema,
   UnsupportedRemoteRedteamAssertionsError,
 } from '../types';
 import { getShortPluginId } from '../util';
@@ -92,14 +87,9 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type {
-  ApiProvider,
-  Assertion,
-  PluginActionParams,
-  PluginConfig,
-  TestCase,
-} from '../../types/index';
+import type { ApiProvider, Assertion, PluginActionParams, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
+import type { PluginConfig } from '../types';
 
 export interface PluginFactory {
   key: string;
@@ -371,11 +361,12 @@ function validateRagPoisoningAssertionValue(key: string, assertion: object): voi
   }
 }
 
-const RemoteAssertionSetMetadataSchema = AssertionSetSchema.omit({ assert: true });
 const REMOTE_TEST_CASE_FIELDS = new Set(['assert', 'metadata', 'vars']);
+const REMOTE_GENERATED_METADATA_KEY = '__promptfooRemoteGenerated';
 const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
   ...Object.keys(PluginConfigSchema.shape),
   '_promptfooFileMetadata',
+  REMOTE_GENERATED_METADATA_KEY,
   'conversationId',
   'contextId',
   'contextVars',
@@ -497,6 +488,13 @@ function validateRemoteAssertionSafety(
       'expected `value` to be a string when present',
     );
   }
+  if (assertion.metric !== undefined && typeof assertion.metric !== 'string') {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      assertionType,
+      'expected `metric` to be a string when present',
+    );
+  }
 }
 
 function getAllowedRemoteRedteamAssertionTypes(key: string): ReadonlySet<string> {
@@ -529,13 +527,6 @@ function getRemoteAssertionSetAssertions(
       key,
       'assert-set',
       'expected `assert` to be a non-empty array',
-    );
-  }
-  if (!RemoteAssertionSetMetadataSchema.safeParse(assertion).success) {
-    throw new InvalidRemoteRedteamAssertionPayloadError(
-      key,
-      'assert-set',
-      'expected fields to match the local assertion-set schema',
     );
   }
   return assertion.assert;
@@ -589,14 +580,6 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
       continue;
     }
 
-    const parsedAssertion = AssertionSchema.safeParse(assertion);
-    if (!parsedAssertion.success) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        assertionType,
-        'expected fields to match the local assertion schema',
-      );
-    }
     const graderType = getRemoteRedteamGraderType(assertionType);
     if (!graderType.startsWith('promptfoo:redteam:')) {
       if (!locallyDefinedAssertionTypes.has(assertionType)) {
@@ -799,15 +782,22 @@ function normalizeRemoteTestVars(
   injectVar: string,
   allowedVariableNames: ReadonlySet<string>,
 ): TestCase['vars'] {
-  const parsedVars = VarsSchema.safeParse(testCase.vars);
-  if (!parsedVars.success || !(injectVar in parsedVars.data)) {
+  const vars = testCase.vars;
+  if (
+    !vars ||
+    typeof vars !== 'object' ||
+    Array.isArray(vars) ||
+    (Object.getPrototypeOf(vars) !== Object.prototype && Object.getPrototypeOf(vars) !== null) ||
+    !(injectVar in vars)
+  ) {
     throw new InvalidRemoteRedteamAssertionPayloadError(
       key,
       'test case',
       `expected \`vars\` to contain the injection variable \`${injectVar}\``,
     );
   }
-  for (const [variableName, value] of Object.entries(parsedVars.data)) {
+  const normalizedVars: Record<string, string> = {};
+  for (const [variableName, value] of Object.entries(vars)) {
     const unsafeVariableReference = getUnsafeRemoteReference(
       value,
       variableName === injectVar ? { allowNunjucks: true, allowPackage: true } : {},
@@ -833,8 +823,9 @@ function normalizeRemoteTestVars(
         `expected remote test variable \`${variableName}\` to be a string`,
       );
     }
+    normalizedVars[variableName] = value;
   }
-  return parsedVars.data;
+  return normalizedVars;
 }
 
 function normalizeRemoteTestMetadata(
@@ -868,6 +859,7 @@ function normalizeRemoteTestMetadata(
   return {
     ...sanitizedMetadata,
     ...getLocalRemoteTestMetadata(key, config),
+    ...(key.startsWith('coding-agent:') ? { [REMOTE_GENERATED_METADATA_KEY]: true } : {}),
   };
 }
 
@@ -920,7 +912,13 @@ function normalizeRemoteTestCases(
 ): TestCase[] {
   validateRemoteTestCaseObjects(key, testCases);
   validateRemoteCrossSessionLeakPairs(key, testCases);
-  const allowedVariableNames = new Set([injectVar, ...Object.keys(config.inputs ?? {})]);
+  const allowedVariableNames = new Set([
+    injectVar,
+    ...Object.keys(config.inputs ?? {}),
+    ...(key === 'indirect-prompt-injection' && typeof config.indirectInjectionVar === 'string'
+      ? [config.indirectInjectionVar]
+      : []),
+  ]);
   return testCases.map((testCase) =>
     normalizeRemoteTestCase(key, testCase, injectVar, allowedVariableNames, config),
   );
