@@ -10,6 +10,7 @@ import {
   normalizeOperationName,
   PromptfooAttributes,
   sanitizeBody,
+  setGenAIRequestAttributes,
   setGenAIResponseAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
@@ -22,6 +23,8 @@ const mockSpan = {
   setStatus: vi.fn(),
   end: vi.fn(),
   recordException: vi.fn(),
+  setAttributes: vi.fn(),
+  updateName: vi.fn(),
   spanContext: vi.fn(() => ({
     traceId: 'mock-trace-id-1234567890abcdef',
     spanId: 'mock-span-id-12345678',
@@ -44,10 +47,10 @@ vi.mock('@opentelemetry/api', async () => {
     ...actual,
     context: {
       ...(actual as any).context,
-      active: vi.fn(() => ({})),
-      with: vi.fn((ctx: { __span?: unknown }, fn: (...args: any[]) => unknown, ...args: any[]) => {
+      active: vi.fn(() => (actual as any).ROOT_CONTEXT),
+      with: vi.fn((ctx: unknown, fn: (...args: any[]) => unknown, ...args: any[]) => {
         const previous = mockActiveSpan;
-        mockActiveSpan = ctx.__span ?? previous;
+        mockActiveSpan = (actual as any).trace.getSpan(ctx) ?? previous;
         try {
           return fn(...args);
         } finally {
@@ -59,7 +62,7 @@ vi.mock('@opentelemetry/api', async () => {
       ...(actual as any).trace,
       getTracer: vi.fn(() => mockTracer),
       getActiveSpan: vi.fn(() => mockActiveSpan),
-      setSpan: vi.fn((_ctx: unknown, span: unknown) => ({ __span: span })),
+      setSpan: vi.fn((ctx: unknown, span: unknown) => (actual as any).trace.setSpan(ctx, span)),
     },
     SpanKind: {
       CLIENT: 2,
@@ -102,6 +105,47 @@ describe('genaiTracer', () => {
       expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
         'gen_ai.usage.reasoning.output_tokens',
       );
+    });
+  });
+
+  describe('setGenAIRequestAttributes', () => {
+    it('updates model metadata and span name from the finalized request', () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      setGenAIRequestAttributes(mockSpan as any, {
+        model: 'wire-model',
+        operationName: 'generate_content',
+        maxTokens: 99,
+        temperature: 0.8,
+        stream: true,
+      });
+
+      expect(mockSpan.updateName).toHaveBeenCalledWith('generate_content wire-model');
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'gen_ai.request.model': 'wire-model',
+        'gen_ai.request.max_tokens': 99,
+        'gen_ai.request.temperature': 0.8,
+        'gen_ai.request.stream': true,
+      });
+      restoreEnv();
+    });
+
+    it('uses the legacy operation name and omits stream without the opt-in', () => {
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+
+      setGenAIRequestAttributes(mockSpan as any, {
+        model: 'wire-model',
+        operationName: 'generate_content',
+        stream: true,
+      });
+
+      expect(mockSpan.updateName).toHaveBeenCalledWith('chat wire-model');
+      expect(mockSpan.setAttributes).toHaveBeenCalledWith({
+        'gen_ai.request.model': 'wire-model',
+      });
+      restoreEnv();
     });
   });
 
@@ -333,7 +377,61 @@ describe('genaiTracer', () => {
         code: SpanStatusCode.ERROR,
         message: 'API call failed',
       });
-      expect(mockSpan.recordException).toHaveBeenCalledWith(error);
+      expect(mockSpan.recordException).toHaveBeenCalledWith({
+        name: 'Error',
+        message: 'API call failed',
+      });
+    });
+
+    it('should mark returned HTTP failures as errors even when they include output', async () => {
+      await withGenAISpan(baseContext, async () => ({
+        output: 'API error: 400 Bad Request',
+        isRefusal: true,
+        metadata: { http: { status: 400, statusText: ['must-not-export-status'] } },
+      }));
+
+      expect(mockSpan.setStatus.mock.calls).toEqual([
+        [{ code: SpanStatusCode.ERROR, message: 'HTTP 400' }],
+      ]);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', '400');
+    });
+
+    it('should not serialize structured error metadata into status or error.type', async () => {
+      await withGenAISpan(baseContext, async () => ({
+        error: {
+          message: ['must-not-export-message'],
+          code: ['must-not-export-code'],
+        },
+      }));
+
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Provider error',
+      });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', '_OTHER');
+      expect(
+        JSON.stringify([mockSpan.setStatus.mock.calls, mockSpan.setAttribute.mock.calls]),
+      ).not.toContain('must-not-export');
+    });
+
+    it('should sanitize credentials from error status and exception telemetry', async () => {
+      const error = new Error(
+        'request failed https://alice:collector-password@example.test/path?token=secret',
+      );
+
+      await expect(
+        withGenAISpan(baseContext, async () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      const telemetry = JSON.stringify([
+        mockSpan.setStatus.mock.calls,
+        mockSpan.recordException.mock.calls,
+      ]);
+      expect(telemetry).not.toContain('collector-password');
+      expect(telemetry).not.toContain('token=secret');
+      expect(telemetry).toContain('<REDACTED>');
     });
 
     it('should end span even on failure', async () => {
@@ -877,6 +975,14 @@ describe('genaiTracer', () => {
         'https://example.test/run?code=opaque-function-code&key=AIzaSySyntheticKeyMaterial';
       const encodedUrl =
         'https://example.test/run?%6B%65%79=opaque-synthetic-provider-secret&co%64e=opaque-function-code&api%5Fkey=encoded-api-secret&access%5Ftoken=encoded-access-secret&subscription%2Dkey=encoded-subscription-secret';
+      const signature = '0123456789abcdef'.repeat(4);
+      const signedUrl =
+        `https://storage.test/object?X-Amz-Signature=${signature}` +
+        `&X-Goog-Signature=${signature}`;
+      const userinfoUrl = 'https://alice:supersecret@example.test/path';
+      const databaseDsn = 'postgres://dbuser:p%40ssw0rd@db.example.test/app';
+      const rawAtDatabaseDsn = 'postgres://dbuser:p@ss@db.example.test/app';
+      const usernameOnlyUrl = 'https://opaque-access-credential@example.test/path';
 
       expect(sanitizeBody(body)).not.toContain('dXNlcjpwYXNz');
       expect(sanitizeBody(body)).not.toContain('opaque-subscription-value');
@@ -890,6 +996,11 @@ describe('genaiTracer', () => {
       expect(sanitizeBody(encodedUrl)).not.toContain('encoded-api-secret');
       expect(sanitizeBody(encodedUrl)).not.toContain('encoded-access-secret');
       expect(sanitizeBody(encodedUrl)).not.toContain('encoded-subscription-secret');
+      expect(sanitizeBody(signedUrl)).not.toContain(signature);
+      expect(sanitizeBody(userinfoUrl)).toBe('https://<REDACTED>@example.test/path');
+      expect(sanitizeBody(databaseDsn)).toBe('postgres://<REDACTED>@db.example.test/app');
+      expect(sanitizeBody(rawAtDatabaseDsn)).toBe('postgres://<REDACTED>@db.example.test/app');
+      expect(sanitizeBody(usernameOnlyUrl)).toBe('https://<REDACTED>@example.test/path');
     });
 
     it('should sanitize assignments embedded in JSON string values', () => {
@@ -899,6 +1010,15 @@ describe('genaiTracer', () => {
       });
 
       expect(sanitizeBody(body)).not.toContain(secret);
+    });
+
+    it('should sanitize assignments after JSON-like properties in malformed bodies', () => {
+      const secret = 'opaque-synthetic-provider-secret';
+      const body = `{"password":"first-secret"} trailing OPENAI_API_KEY=${secret}`;
+
+      const sanitized = sanitizeBody(body);
+      expect(sanitized).not.toContain('first-secret');
+      expect(sanitized).not.toContain(secret);
     });
 
     it('should scan large non-sensitive assignment text without quadratic work', () => {

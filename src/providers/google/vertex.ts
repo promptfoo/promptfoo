@@ -7,6 +7,7 @@ import logger from '../../logger';
 import {
   type GenAISpanContext,
   type GenAISpanResult,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -207,6 +208,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const isGemini = this.modelName.includes('gemini');
     // Determine the system based on model name
     const system = this.modelName.includes('claude')
       ? 'vertex:anthropic'
@@ -219,16 +221,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system,
-      operationName: this.modelName.includes('gemini') ? 'generate_content' : 'chat',
+      operationName: isGemini ? 'generate_content' : 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
-      stream:
-        this.modelName.includes('gemini') &&
-        ((context?.prompt?.config as { streaming?: boolean } | undefined)?.streaming ??
-          this.config.streaming) === true,
+      // Gemini request parameters are set from the finalized wire body below.
+      // Other Vertex protocols retain their existing config-derived metadata.
+      temperature: isGemini ? undefined : this.config.temperature,
+      topP: isGemini ? undefined : this.config.topP,
+      maxTokens: isGemini ? undefined : this.config.maxOutputTokens || this.config.max_tokens,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -248,17 +248,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      (span) => this.callApiInternal(prompt, context, span),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
   ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt, context, span);
     } else if (this.modelName.includes('llama')) {
       return this.callLlamaApi(prompt, context);
     }
@@ -483,7 +488,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
+  ): Promise<ProviderResponse> {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
@@ -567,6 +576,26 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';
+    }
+
+    if (span) {
+      const asNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const stopSequences = Array.isArray(body.generationConfig.stopSequences)
+        ? body.generationConfig.stopSequences.filter(
+            (value): value is string => typeof value === 'string',
+          )
+        : undefined;
+      setGenAIRequestAttributes(span, {
+        model: this.modelName,
+        operationName: 'generate_content',
+        maxTokens: asNumber(body.generationConfig.maxOutputTokens),
+        temperature: asNumber(body.generationConfig.temperature),
+        topP: asNumber(body.generationConfig.topP),
+        topK: asNumber(body.generationConfig.topK),
+        stopSequences,
+        stream: config.streaming === true,
+      });
     }
 
     const cache = await getCache();

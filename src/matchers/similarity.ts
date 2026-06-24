@@ -14,6 +14,7 @@ import {
 import type {
   ApiEmbeddingProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   TokenUsage,
@@ -102,6 +103,7 @@ async function calculateProviderSimilarity(
   output: string,
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
+  providerCallContext?: CallApiContextParams,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
@@ -130,9 +132,13 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
+  const callEmbedding = (text: string) =>
+    providerCallContext === undefined
+      ? callEmbeddingApi.call(finalProvider, text)
+      : callEmbeddingApi.call(finalProvider, text, providerCallContext);
   const [expectedEmbedding, outputEmbedding] = await Promise.all([
-    callEmbeddingApi.call(finalProvider, expected),
-    callEmbeddingApi.call(finalProvider, output),
+    callEmbedding(expected),
+    callEmbedding(output),
   ]);
 
   const mergedUsage = normalizeMatcherTokenUsage(undefined);
@@ -166,6 +172,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
   metric: SimilarityMetric = 'cosine',
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (
     metric === 'cosine' &&
@@ -201,6 +208,7 @@ export async function matchesSimilarity(
     output,
     metric,
     tokensUsed,
+    providerCallContext,
   );
 
   if (typeof similarity !== 'number') {

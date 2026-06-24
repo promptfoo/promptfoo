@@ -6,8 +6,9 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
   extractProviderResponseAttributes,
-  type GenAISpanContext,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -359,32 +360,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
       providerName: this.getGenAIProviderName(),
-      operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
-      // Promptfoo context from test case if available
-      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
+      prompt,
+      context,
+    });
 
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      (span) => this.callApiInternal(prompt, context, callApiOptions, span),
       extractProviderResponseAttributes,
     );
   }
@@ -397,8 +385,30 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+
+    if (span) {
+      const asNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const stopSequences = Array.isArray(body.stop)
+        ? body.stop.filter((value: unknown): value is string => typeof value === 'string')
+        : typeof body.stop === 'string'
+          ? [body.stop]
+          : undefined;
+      setGenAIRequestAttributes(span, {
+        model: typeof body.model === 'string' ? body.model : undefined,
+        operationName: 'chat',
+        maxTokens: asNumber(body.max_completion_tokens ?? body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        presencePenalty: asNumber(body.presence_penalty),
+        stream: body.stream === true,
+      });
+    }
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<

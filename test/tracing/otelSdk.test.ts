@@ -226,6 +226,25 @@ describe('otelSdk', () => {
       expect(mockRegister.mock.calls.length).toBe(firstCallCount);
     });
 
+    it('should reject conflicting process-wide configuration without exposing values', () => {
+      initializeOtel({
+        ...defaultConfig,
+        endpoint: 'https://first-user:first-password@first.example/v1/traces',
+      });
+      const conflictingEndpoint =
+        'https://second-user:second-password@second.example/v1/traces?token=secret';
+
+      expect(() =>
+        initializeOtel({
+          ...defaultConfig,
+          serviceName: 'other-service',
+          endpoint: conflictingEndpoint,
+        }),
+      ).toThrow('different process-wide configuration fields: serviceName, endpoint');
+      expect(mockRegister).toHaveBeenCalledOnce();
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(conflictingEndpoint);
+    });
+
     it('should create resource with service name and version', () => {
       initializeOtel(defaultConfig);
 

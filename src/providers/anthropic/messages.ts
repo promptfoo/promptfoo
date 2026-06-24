@@ -3,8 +3,9 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
   extractProviderResponseAttributes,
-  type GenAISpanContext,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
@@ -500,31 +501,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
+    const spanContext = buildChatSpanContext({
       system: 'anthropic',
-      operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      stream:
-        ((context?.prompt?.config as Partial<AnthropicMessageOptions> | undefined)?.stream ??
-          this.config.stream) === true,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
-    };
+      prompt,
+      context,
+    });
 
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      (span) => this.callApiInternal(prompt, context, span),
       extractProviderResponseAttributes,
     );
   }
@@ -535,6 +523,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    span?: Parameters<typeof setGenAIRequestAttributes>[0],
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
@@ -741,6 +730,24 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
+
+    if (span) {
+      const asNumber = (value: unknown): number | undefined =>
+        typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+      const stopSequences = Array.isArray(params.stop_sequences)
+        ? params.stop_sequences.filter((value): value is string => typeof value === 'string')
+        : undefined;
+      setGenAIRequestAttributes(span, {
+        model: typeof params.model === 'string' ? params.model : undefined,
+        operationName: 'chat',
+        maxTokens: asNumber(params.max_tokens),
+        temperature: asNumber(params.temperature),
+        topP: asNumber(params.top_p),
+        topK: asNumber(params.top_k),
+        stopSequences,
+        stream: params.stream === true,
+      });
+    }
 
     logger.debug('Calling Anthropic Messages API', {
       params: getMessagesRequestMetadata(params),

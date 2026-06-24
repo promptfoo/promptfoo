@@ -1015,6 +1015,27 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('tracing-url-secret');
     });
 
+    it('redacts credentials from the active tracing exporter endpoint', () => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          endpoint:
+            'https://collector-user:collector-password@otel.example.com/v1/traces?token=tracing-url-secret',
+          serviceName: 'visible-service',
+        },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing).toMatchObject({
+        enabled: true,
+        serviceName: 'visible-service',
+      });
+      expect(persisted.tracing.endpoint).toContain('otel.example.com/v1/traces');
+      const serialized = JSON.stringify(persisted);
+      expect(serialized).not.toContain('collector-password');
+      expect(serialized).not.toContain('tracing-url-secret');
+    });
+
     it('redacts raw HTTP request strings and multipart form-field values', () => {
       useStore.getState().setConfig({
         providers: [

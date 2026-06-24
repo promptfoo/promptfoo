@@ -1,3 +1,6 @@
+import { context as otelContext } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { isTracingSuppressed } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
@@ -92,11 +95,15 @@ describe('evaluator trace integration', () => {
       testCaseId: 'test-case-id',
     });
 
+    let observedTracingSuppression = true;
     const testSuite: TestSuite = {
       providers: [
         createMockProvider({
           id: 'mock-provider',
-          response: { output: 'Test response', tokenUsage: {} },
+          callApi: async () => {
+            observedTracingSuppression = isTracingSuppressed(otelContext.active());
+            return { output: 'Test response', tokenUsage: {} };
+          },
         }),
       ],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
@@ -156,7 +163,7 @@ describe('evaluator trace integration', () => {
       sanitizeAttributes: false,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
     expect(mockInitializeOtel).toHaveBeenCalledWith({
       enabled: true,
       serviceName: 'trace-integration-test',
@@ -164,6 +171,7 @@ describe('evaluator trace integration', () => {
       localExport: false,
       debug: true,
     });
+    expect(observedTracingSuppression).toBe(false);
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -206,7 +214,7 @@ describe('evaluator trace integration', () => {
     expect(mockShutdownOtel).not.toHaveBeenCalled();
   });
 
-  it('flushes and shuts down OTEL after successful tracing initialization', async () => {
+  it('flushes but keeps the process-wide OTEL provider active after an evaluation', async () => {
     await evaluate(
       {
         providers: [
@@ -225,7 +233,37 @@ describe('evaluator trace integration', () => {
 
     expect(mockInitializeOtel).toHaveBeenCalledOnce();
     expect(mockFlushOtel).toHaveBeenCalledOnce();
-    expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
+  });
+
+  it('suppresses provider instrumentation when an evaluation has tracing disabled', async () => {
+    const contextManager = new AsyncLocalStorageContextManager().enable();
+    otelContext.setGlobalContextManager(contextManager);
+    let observedSuppression = false;
+    const provider = createMockProvider({
+      callApi: async () => {
+        observedSuppression = isTracingSuppressed(otelContext.active());
+        return { output: 'ok', tokenUsage: {} };
+      },
+    });
+
+    try {
+      await evaluate(
+        {
+          providers: [provider],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{}],
+        },
+        mockEval,
+        {},
+      );
+
+      expect(observedSuppression).toBe(true);
+      expect(mockInitializeOtel).not.toHaveBeenCalled();
+    } finally {
+      contextManager.disable();
+      otelContext.disable();
+    }
   });
 
   it('should handle assertions gracefully when tracing is disabled', async () => {

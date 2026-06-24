@@ -2,6 +2,7 @@ import {
   type Attributes,
   context,
   type Exception,
+  INVALID_SPAN_CONTEXT,
   type Link,
   propagation,
   ROOT_CONTEXT,
@@ -14,6 +15,7 @@ import {
   type Tracer,
   trace,
 } from '@opentelemetry/api';
+import { isTracingSuppressed } from '@opentelemetry/core';
 import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -303,6 +305,7 @@ const SENSITIVE_BODY_FIELD_SUFFIXES = [
   'certkey',
   'encryptionkey',
   'signingkey',
+  'signature',
   'passphrase',
   'subscriptionkey',
   'functionskey',
@@ -342,6 +345,7 @@ const JSON_STRING_PROPERTY_PATTERN =
 const JSON_STRING_TOKEN_PATTERN = /"(?:\\.|[^"\\])*"/g;
 const JSON_NUMBER_TOKEN_PATTERN = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
 const URL_QUERY_PAIR_PATTERN = /([?&])([^=&#\s]+)=([^&#\s]*)/g;
+const URL_USERINFO_PATTERN = /(\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/\s?#]+@(?=[^/\s?#])/g;
 const PRIVATE_KEY_BEGIN_PATTERN = /-----BEGIN [^-\r\n]*PRIVATE KEY-----/g;
 const PRIVATE_KEY_END_PATTERN = /-----END [^-\r\n]*PRIVATE KEY-----/g;
 
@@ -437,6 +441,10 @@ function sanitizeUrlQueryCredentials(body: string): string {
   });
 }
 
+function sanitizeUrlUserinfoCredentials(body: string): string {
+  return body.replace(URL_USERINFO_PATTERN, (_match, prefix) => `${prefix}${REDACTED_BODY_VALUE}@`);
+}
+
 function redactPrivateKeys(body: string): string {
   const replacements: string[] = [];
   let cursor = 0;
@@ -469,7 +477,9 @@ function applySensitiveValuePatterns(body: string): string {
 function sanitizeUnstructuredBodyText(body: string): string {
   const formBody = sanitizeFormBody(body);
   const sanitized = formBody ?? sanitizeBodyAssignments(body);
-  return applySensitiveValuePatterns(sanitizeUrlQueryCredentials(sanitized));
+  return applySensitiveValuePatterns(
+    sanitizeUrlQueryCredentials(sanitizeUrlUserinfoCredentials(sanitized)),
+  );
 }
 
 function sanitizeParsedJson(value: unknown): { value: unknown; changed: boolean } {
@@ -732,16 +742,29 @@ export function getGenAITracer(): Tracer {
 function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>): string {
   const errObj =
     typeof rawError === 'object' && rawError ? (rawError as Record<string, unknown>) : null;
-  const providerCode =
-    errObj && (errObj.code ?? errObj.type ?? errObj.status) != null
-      ? String(errObj.code ?? errObj.type ?? errObj.status)
-      : null;
+  const providerCode = errObj
+    ? [errObj.code, errObj.type, errObj.status]
+        .map(normalizeErrorType)
+        .find((value): value is string => value !== null)
+    : null;
   const httpStatus = (metadata as { http?: { status?: number } } | undefined)?.http?.status;
   return (
     providerCode ??
-    (typeof httpStatus === 'number' && httpStatus >= 400 ? String(httpStatus) : null) ??
+    (isHttpErrorStatus(httpStatus) ? String(httpStatus) : null) ??
     ERROR_TYPE_VALUE_OTHER
   );
+}
+
+function normalizeErrorType(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized.length > 0 && normalized.length <= 128 ? normalized : null;
+  }
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : null;
+}
+
+function isHttpErrorStatus(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 400 && (value as number) <= 599;
 }
 
 /**
@@ -749,9 +772,10 @@ function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>)
  */
 function extractErrorMessage(rawError: unknown): string {
   if (typeof rawError === 'string') {
-    return rawError;
+    return truncateBody(rawError);
   }
-  return String((rawError as { message?: string }).message ?? 'Provider error');
+  const message = (rawError as { message?: unknown })?.message;
+  return typeof message === 'string' ? truncateBody(message) : 'Provider error';
 }
 
 /**
@@ -843,6 +867,8 @@ function finalizeGenAISpanSuccess<T>(args: {
   const rawError = valueAsRecord?.error;
   const hasError =
     (typeof rawError === 'string' && rawError) || (rawError && typeof rawError === 'object');
+  const http = (valueAsRecord?.metadata as { http?: { status?: number } })?.http;
+  const httpErrorStatus = isHttpErrorStatus(http?.status) ? http.status : undefined;
 
   if (hasError) {
     span.setStatus({
@@ -853,6 +879,12 @@ function finalizeGenAISpanSuccess<T>(args: {
       ATTR_ERROR_TYPE,
       extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
     );
+  } else if (httpErrorStatus !== undefined) {
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: `HTTP ${httpErrorStatus}`,
+    });
+    span.setAttribute(ATTR_ERROR_TYPE, String(httpErrorStatus));
   } else if (
     !useLatest &&
     !statusTracker?.hasErrorStatus() &&
@@ -906,6 +938,12 @@ export async function withGenAISpan<T>(
   fn: (span: Span) => Promise<T>,
   resultExtractor?: (value: T) => GenAISpanResult,
 ): Promise<T> {
+  const activeContext = context.active();
+  if (isTracingSuppressed(activeContext)) {
+    const nonRecordingSpan = trace.wrapSpanContext(INVALID_SPAN_CONTEXT);
+    return context.with(trace.setSpan(activeContext, nonRecordingSpan), () => fn(nonRecordingSpan));
+  }
+
   const tracer = getGenAITracer();
 
   // Normalize legacy operation names (completion -> text_completion, embedding -> embeddings)
@@ -955,19 +993,23 @@ export async function withGenAISpan<T>(
       });
       return value;
     } catch (error) {
+      const rawErrorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = truncateBody(rawErrorMessage);
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage,
       });
 
       const errorType =
         error instanceof Error
-          ? (error as { code?: string }).code || error.name || ERROR_TYPE_VALUE_OTHER
+          ? (normalizeErrorType((error as { code?: unknown }).code) ??
+            normalizeErrorType(error.name) ??
+            ERROR_TYPE_VALUE_OTHER)
           : ERROR_TYPE_VALUE_OTHER;
-      span.setAttribute(ATTR_ERROR_TYPE, String(errorType));
+      span.setAttribute(ATTR_ERROR_TYPE, errorType);
 
       if (error instanceof Error) {
-        span.recordException(error);
+        span.recordException({ name: error.name, message: errorMessage });
       }
 
       throw error;
@@ -1017,31 +1059,7 @@ function buildRequestAttributes(
     attrs['gen_ai.agent.id'] = ctx.agentId;
   }
 
-  // Optional request parameters
-  if (ctx.maxTokens !== undefined) {
-    attrs[GenAIAttributes.REQUEST_MAX_TOKENS] = ctx.maxTokens;
-  }
-  if (ctx.temperature !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TEMPERATURE] = ctx.temperature;
-  }
-  if (ctx.topP !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TOP_P] = ctx.topP;
-  }
-  if (ctx.topK !== undefined) {
-    attrs[GenAIAttributes.REQUEST_TOP_K] = ctx.topK;
-  }
-  if (ctx.stopSequences && ctx.stopSequences.length > 0) {
-    attrs[GenAIAttributes.REQUEST_STOP_SEQUENCES] = ctx.stopSequences;
-  }
-  if (ctx.frequencyPenalty !== undefined) {
-    attrs[GenAIAttributes.REQUEST_FREQUENCY_PENALTY] = ctx.frequencyPenalty;
-  }
-  if (ctx.presencePenalty !== undefined) {
-    attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = ctx.presencePenalty;
-  }
-  if (useLatest && ctx.stream === true) {
-    attrs[GenAIAttributes.REQUEST_STREAM] = true;
-  }
+  Object.assign(attrs, getGenAIRequestParameterAttributes(ctx, useLatest));
 
   // Promptfoo context
   if (ctx.evalId) {
@@ -1062,6 +1080,77 @@ function buildRequestAttributes(
   return attrs;
 }
 
+type GenAIRequestParameters = Pick<
+  GenAISpanContext,
+  | 'maxTokens'
+  | 'temperature'
+  | 'topP'
+  | 'topK'
+  | 'stopSequences'
+  | 'frequencyPenalty'
+  | 'presencePenalty'
+  | 'stream'
+>;
+
+type GenAIEffectiveRequest = GenAIRequestParameters & {
+  model?: string;
+  operationName?: GenAIOperationName | LegacyOperationName;
+};
+
+function getGenAIRequestParameterAttributes(
+  request: GenAIRequestParameters,
+  useLatest: boolean,
+): Attributes {
+  const attrs: Attributes = {};
+  if (request.maxTokens !== undefined) {
+    attrs[GenAIAttributes.REQUEST_MAX_TOKENS] = request.maxTokens;
+  }
+  if (request.temperature !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TEMPERATURE] = request.temperature;
+  }
+  if (request.topP !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TOP_P] = request.topP;
+  }
+  if (request.topK !== undefined) {
+    attrs[GenAIAttributes.REQUEST_TOP_K] = request.topK;
+  }
+  if (request.stopSequences && request.stopSequences.length > 0) {
+    attrs[GenAIAttributes.REQUEST_STOP_SEQUENCES] = request.stopSequences;
+  }
+  if (request.frequencyPenalty !== undefined) {
+    attrs[GenAIAttributes.REQUEST_FREQUENCY_PENALTY] = request.frequencyPenalty;
+  }
+  if (request.presencePenalty !== undefined) {
+    attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = request.presencePenalty;
+  }
+  if (useLatest && request.stream === true) {
+    attrs[GenAIAttributes.REQUEST_STREAM] = true;
+  }
+  return attrs;
+}
+
+/**
+ * Add effective request parameters after a provider has finished constructing
+ * its wire request. This avoids exporting raw config values that were later
+ * overridden, defaulted, normalized, or omitted by provider-specific logic.
+ */
+export function setGenAIRequestAttributes(span: Span, request: GenAIEffectiveRequest): void {
+  const useLatest = useGenAILatestExperimental();
+  const attributes = getGenAIRequestParameterAttributes(request, useLatest);
+  const requestModel = request.model?.trim();
+  if (requestModel) {
+    attributes[GenAIAttributes.REQUEST_MODEL] = requestModel;
+    if (request.operationName) {
+      const operation = getEmittedOperationName(
+        normalizeOperationName(request.operationName),
+        useLatest,
+      );
+      span.updateName(`${operation} ${requestModel}`);
+    }
+  }
+  span.setAttributes(attributes);
+}
+
 /**
  * Sanitize sensitive data from a body string.
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
@@ -1073,11 +1162,14 @@ export function sanitizeBody(body: string): string {
   let sanitized = sanitizeJsonBody(body);
   if (sanitized === undefined) {
     sanitized = sanitizeJsonStringProperties(body);
-    if (sanitized === body) {
-      sanitized = sanitizeUnstructuredBodyText(body);
-    }
+    // Malformed or mixed-format bodies can contain both JSON-like fields and
+    // assignment-form credentials. Scan the partially sanitized result so a
+    // JSON property match cannot short-circuit later credential redaction.
+    sanitized = sanitizeUnstructuredBodyText(sanitized);
   }
-  return applySensitiveValuePatterns(sanitizeUrlQueryCredentials(sanitized));
+  return applySensitiveValuePatterns(
+    sanitizeUrlQueryCredentials(sanitizeUrlUserinfoCredentials(sanitized)),
+  );
 }
 
 /**

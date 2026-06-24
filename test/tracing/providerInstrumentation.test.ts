@@ -11,7 +11,8 @@
  * - Provider inheritance
  */
 
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { suppressTracing } from '@opentelemetry/core';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -90,6 +91,27 @@ describe('Provider Instrumentation Validation', () => {
   });
 
   describe('GenAI Semantic Conventions Compliance', () => {
+    it('does not create manual provider spans in a suppressed context', async () => {
+      const result = await context.with(suppressTracing(context.active()), () =>
+        withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'chat',
+            model: 'gpt-4',
+            providerId: 'openai:gpt-4',
+          },
+          async (span) => {
+            expect(span.isRecording()).toBe(false);
+            expect(trace.getActiveSpan()?.isRecording()).toBe(false);
+            return 'suppressed';
+          },
+        ),
+      );
+
+      expect(result).toBe('suppressed');
+      expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
+    });
+
     it('should set all required GenAI attributes on spans', async () => {
       const spanContext: GenAISpanContext = {
         system: 'openai',

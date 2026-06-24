@@ -144,6 +144,24 @@ describe('OpenAiResponsesProvider tracing', () => {
     expect(chatSpan?.attributes['gen_ai.request.max_tokens']).toBe(256);
   });
 
+  it('uses the effective passthrough model in the span name and request attribute', async () => {
+    const spans = installTracerSpy();
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: successResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', passthrough: { model: 'gpt-4o-mini' } },
+    });
+    await provider.callApi('Test prompt');
+
+    const chatSpan = spans.find((span) => span.name === 'chat gpt-4o-mini');
+    expect(chatSpan?.attributes['gen_ai.request.model']).toBe('gpt-4o-mini');
+  });
+
   it('marks the chat span ERROR when the API returns an error', async () => {
     const spans = installTracerSpy();
     vi.mocked(cache.fetchWithCache).mockResolvedValue({

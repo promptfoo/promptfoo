@@ -264,16 +264,35 @@ describe('matchesSimilarity', () => {
       const grading: GradingConfig = {
         provider: DefaultEmbeddingProvider,
       };
+      const providerCallContext = {
+        prompt: { raw: expected, label: 'similar' },
+        vars: {},
+        traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+      };
 
       vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
         embedding: [1, 2, 3],
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
 
-      await matchesSimilarity(expected, output, threshold, false, grading);
+      await matchesSimilarity(
+        expected,
+        output,
+        threshold,
+        false,
+        grading,
+        'cosine',
+        providerCallContext,
+      );
 
-      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Expected {{ var }}');
-      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Output {{ var }}');
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith(
+        'Expected {{ var }}',
+        providerCallContext,
+      );
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith(
+        'Output {{ var }}',
+        providerCallContext,
+      );
     } finally {
       restoreEnv();
     }

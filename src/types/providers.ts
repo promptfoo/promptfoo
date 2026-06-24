@@ -122,8 +122,14 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi?: (
+    prompt: string,
+    context?: CallApiContextParams,
+  ) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (
+    input: string,
+    context?: CallApiContextParams,
+  ) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   getSessionId?: () => string;
@@ -140,7 +146,10 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
@@ -148,7 +157,10 @@ export interface ApiSimilarityProvider extends ApiProvider {
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {

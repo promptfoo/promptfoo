@@ -4808,6 +4808,16 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('propagates response.model from modelUsage and finish_reasons from terminal_reason', async () => {
+        let extractedResponseModel: string | undefined;
+        const withSpanSpy = vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation((async (
+          _context: unknown,
+          fn: (span: unknown) => Promise<any>,
+          extractor?: (value: any) => any,
+        ) => {
+          const response = await fn({});
+          extractedResponseModel = extractor?.(response)?.responseModel;
+          return response;
+        }) as any);
         mockQuery.mockReturnValue(
           createMockQuery([
             {
@@ -4850,6 +4860,8 @@ describe('ClaudeCodeSDKProvider', () => {
         // surfaced metadata the extractor depends on.
         expect(result.metadata?.modelUsage).toHaveProperty('claude-haiku-4-5-20251001');
         expect(result.metadata?.terminalReason).toBe('max_turns');
+        expect(withSpanSpy).toHaveBeenCalledOnce();
+        expect(extractedResponseModel).toBe('claude-haiku-4-5-20251001');
       });
 
       it('marks the active provider span as ERROR when the SDK stops via hook_stopped', async () => {
@@ -5086,7 +5098,17 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.attrs['tool.input']).toBe('<unserializable>');
       });
 
-      it('picks gen_ai.response.model by largest usage, not iteration order', async () => {
+      it('omits gen_ai.response.model when aggregate usage contains multiple models', async () => {
+        let extractedResponseModel: string | undefined;
+        const withSpanSpy = vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation((async (
+          _context: unknown,
+          fn: (span: unknown) => Promise<any>,
+          extractor?: (value: any) => any,
+        ) => {
+          const response = await fn({});
+          extractedResponseModel = extractor?.(response)?.responseModel;
+          return response;
+        }) as any);
         mockQuery.mockReturnValue(
           createMockQuery([
             {
@@ -5134,9 +5156,8 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         const result = await provider.callApi('prompt');
         expect(result.metadata?.modelUsage).toHaveProperty('claude-sonnet-4-5');
-        // The extractor (not directly returned) uses modelUsage; this test proves
-        // our modelUsage payload reached metadata so the new tie-break logic can
-        // operate on it.
+        expect(withSpanSpy).toHaveBeenCalledOnce();
+        expect(extractedResponseModel).toBeUndefined();
       });
 
       describe('gen_ai.turn marker spans', () => {

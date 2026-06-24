@@ -653,7 +653,11 @@ export function sanitizeUrlEncodedString(value: string): string {
 function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
+    const isEndpointUrl =
+      key === 'endpoint' &&
+      typeof value === 'string' &&
+      /^(?:[a-z][a-z0-9+.-]*:\/\/|\/)/i.test(value);
+    if ((key === 'url' || isEndpointUrl) && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretField(key)) {
       sanitized[key] = REDACTED;

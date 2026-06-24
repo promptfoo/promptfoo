@@ -376,6 +376,12 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
+Promptfoo's built-in provider exporter is also process-wide. Its `endpoint`, `serviceName`,
+`localExport`, and `debug` settings are fixed by the first traced evaluation in a process. Later
+evaluations may share the same settings; a conflicting configuration fails explicitly instead of
+sending spans to the wrong collector. Use separate Promptfoo processes when evaluations need
+different exporter settings.
+
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
 another's results — each trace is redacted with its own policy, not the active receiver's.

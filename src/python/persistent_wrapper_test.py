@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from types import ModuleType
 from typing import Any, Dict
-from urllib.parse import quote_plus
 from unittest.mock import MagicMock, call, patch
+from urllib.parse import quote_plus
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from python import persistent_wrapper
@@ -599,6 +599,33 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["data"]["emoji"], "🎉")
         self.assertEqual(response["data"]["chinese"], "中文")
 
+    def test_cached_trace_command_returns_result_without_user_function(self) -> None:
+        cached_result = {"embedding": [0.1, 0.2]}
+        with open(self.request_file, "w") as f:
+            json.dump(
+                [
+                    "prompt",
+                    {"config": {}},
+                    {
+                        "__promptfooApiType": "call_embedding_api",
+                        "__promptfooCached": True,
+                    },
+                    cached_result,
+                ],
+                f,
+            )
+
+        with patch("sys.stdout", io.StringIO()):
+            persistent_wrapper.handle_call(
+                f"CALL|__promptfoo_trace_cached_result|{self.request_file}|{self.response_file}",
+                self.mock_module,
+                "default_func",
+            )
+
+        with open(self.response_file) as f:
+            response = json.load(f)
+        self.assertEqual(response, {"type": "result", "data": cached_result})
+
     def test_file_verification_retry(self) -> None:
         """Tests that file verification retries on failure."""
         with open(self.request_file, "w") as f:
@@ -710,7 +737,8 @@ class TestTracedCall(unittest.TestCase):
         fake_trace = MagicMock()
         fake_trace.SpanKind = MagicMock()
         fake_trace.SpanKind.CLIENT = 3
-        fake_trace.Status = MagicMock(side_effect=lambda code, msg="": MagicMock())
+        self.mock_status = MagicMock(side_effect=lambda code, msg="": MagicMock())
+        fake_trace.Status = self.mock_status
         fake_trace.StatusCode = MagicMock()
         fake_trace.StatusCode.OK = 0
         fake_trace.StatusCode.ERROR = 1
@@ -796,11 +824,68 @@ class TestTracedCall(unittest.TestCase):
         """Default mode should retain legacy embedding function naming."""
         func = MagicMock(return_value={"output": [0.1, 0.2]})
         ctx = self._make_context()
+        ctx["__promptfooApiType"] = "call_embedding_api"
         persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
 
+        func.assert_called_once_with("prompt", {})
         self.mock_span.set_attribute.assert_any_call(
             "gen_ai.operation.name", "call_embedding_api"
         )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_classification_uses_custom_operation_name(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(return_value={"classification": {"safe": 1.0}})
+        ctx = self._make_context()
+        ctx["__promptfooApiType"] = "call_classification_api"
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "custom_classifier")
+
+        func.assert_called_once_with("prompt", {})
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "classification"
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "classification"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_cached_result_marks_span_without_calling_user_code(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        cached_result = {"embedding": [0.1, 0.2]}
+        func = MagicMock(return_value=cached_result)
+        ctx = self._make_context()
+        ctx.update(
+            {
+                "__promptfooApiType": "call_embedding_api",
+                "__promptfooCached": True,
+            }
+        )
+
+        result = persistent_wrapper._traced_call(
+            func, ["prompt", {}, ctx, cached_result], "call_embedding_api"
+        )
+
+        self.assertEqual(result, cached_result)
+        self.mock_span.set_attribute.assert_any_call("promptfoo.cache_hit", True)
+
+    def test_embedding_context_is_not_forwarded_without_tracing(self) -> None:
+        persistent_wrapper._tracing_enabled = False
+        func = MagicMock(return_value={"embedding": [0.1, 0.2]})
+        ctx = {
+            "traceparent": "00-abcd1234-5678-01",
+            "__promptfooApiType": "call_embedding_api",
+        }
+
+        persistent_wrapper._traced_call(func, ["prompt", {"config": {}}, ctx], "custom")
+
+        func.assert_called_once_with("prompt", {"config": {}})
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
@@ -822,6 +907,38 @@ class TestTracedCall(unittest.TestCase):
             call("gen_ai.system", "python"), self.mock_span.set_attribute.mock_calls
         )
         self.mock_span.set_status.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_latest_response_metadata_matches_typescript(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "hi",
+                "finishReason": "stop",
+                "metadata": {
+                    "model": "gpt-4.1-2026-06-01",
+                    "responseId": "resp-123",
+                    "conversationId": "conversation-456",
+                },
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.response.model", "gpt-4.1-2026-06-01"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.response.id", "resp-123")
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.conversation.id", "conversation-456"
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.response.finish_reasons", ["stop"]
+        )
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
@@ -871,6 +988,107 @@ class TestTracedCall(unittest.TestCase):
         self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
 
     @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_empty_structured_error_is_not_treated_as_success(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(return_value={"error": {}})
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_status.assert_called_once()
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_string_error_uses_http_status_type(self, _mock_latest: MagicMock) -> None:
+        func = MagicMock(
+            return_value={
+                "error": "rate limited",
+                "metadata": {"http": {"status": 429}},
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("error.type", "429")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_structured_error_status_uses_only_message(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "error": {
+                    "code": 429,
+                    "message": "rate limited",
+                    "secret": "must-not-export",
+                }
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        self.assertEqual(status_message, "rate limited")
+        self.assertNotIn("must-not-export", status_message)
+        self.mock_span.set_attribute.assert_any_call("error.type", "429")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_nested_error_metadata_is_not_serialized(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "error": {
+                    "code": {"secret": "must-not-export-code"},
+                    "message": {"secret": "must-not-export-message"},
+                }
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        self.assertEqual(status_message, "Provider error")
+        self.assertNotIn("must-not-export", status_message)
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_http_failure_with_output_sets_error_status(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "API error: 400 Bad Request",
+                "metadata": {
+                    "http": {
+                        "status": 400,
+                        "statusText": ["must-not-export-status"],
+                    }
+                },
+            }
+        )
+        ctx = self._make_context()
+
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.assertEqual(self.mock_status.call_args.args[1], "HTTP 400")
+        self.mock_span.set_attribute.assert_any_call("error.type", "400")
+
+    @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
     def test_exception_sets_error_type(self, _mock_latest: MagicMock) -> None:
@@ -882,6 +1100,37 @@ class TestTracedCall(unittest.TestCase):
 
         func.assert_called_once()
         self.mock_span.set_attribute.assert_any_call("error.type", "ValueError")
+        self.mock_span.add_event.assert_called_once_with(
+            "exception",
+            {
+                "exception.type": "ValueError",
+                "exception.message": "boom",
+            },
+        )
+        self.mock_span.record_exception.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_error_telemetry_sanitizes_url_credentials(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        secret_message = (
+            "request failed "
+            "https://alice:collector-password@example.test/path?token=secret"
+        )
+        func = MagicMock(side_effect=ValueError(secret_message))
+        ctx = self._make_context()
+
+        with self.assertRaises(ValueError):
+            persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        status_message = self.mock_status.call_args.args[1]
+        exception_attributes = self.mock_span.add_event.call_args.args[1]
+        telemetry = f"{status_message} {exception_attributes}"
+        self.assertNotIn("collector-password", telemetry)
+        self.assertNotIn("token=secret", telemetry)
+        self.assertIn("<REDACTED>", telemetry)
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
@@ -1092,6 +1341,15 @@ class TestTracedCall(unittest.TestCase):
             "&access%5Ftoken=encoded-access-secret"
             "&subscription%2Dkey=encoded-subscription-secret"
         )
+        signature = "0123456789abcdef" * 4
+        signed_url = (
+            f"https://storage.test/object?X-Amz-Signature={signature}"
+            f"&X-Goog-Signature={signature}"
+        )
+        userinfo_url = "https://alice:supersecret@example.test/path"
+        database_dsn = "postgres://dbuser:p%40ssw0rd@db.example.test/app"
+        raw_at_database_dsn = "postgres://dbuser:p@ss@db.example.test/app"
+        username_only_url = "https://opaque-access-credential@example.test/path"
 
         self.assertNotIn("dXNlcjpwYXNz", persistent_wrapper._sanitize_body(body))
         self.assertNotIn(
@@ -1127,6 +1385,23 @@ class TestTracedCall(unittest.TestCase):
             "encoded-subscription-secret",
             persistent_wrapper._sanitize_body(encoded_url),
         )
+        self.assertNotIn(signature, persistent_wrapper._sanitize_body(signed_url))
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(userinfo_url),
+            "https://<REDACTED>@example.test/path",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(database_dsn),
+            "postgres://<REDACTED>@db.example.test/app",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(raw_at_database_dsn),
+            "postgres://<REDACTED>@db.example.test/app",
+        )
+        self.assertEqual(
+            persistent_wrapper._sanitize_body(username_only_url),
+            "https://<REDACTED>@example.test/path",
+        )
 
     def test_body_sanitizer_redacts_assignments_in_json_strings(self) -> None:
         secret = "opaque-synthetic-provider-secret"
@@ -1142,6 +1417,16 @@ class TestTracedCall(unittest.TestCase):
         )
 
         self.assertNotIn(secret, persistent_wrapper._sanitize_body(body))
+
+    def test_body_sanitizer_redacts_assignments_after_json_like_properties(
+        self,
+    ) -> None:
+        secret = "opaque-synthetic-provider-secret"
+        body = f'{{"password":"first-secret"}} trailing OPENAI_API_KEY={secret}'
+
+        sanitized = persistent_wrapper._sanitize_body(body)
+        self.assertNotIn("first-secret", sanitized)
+        self.assertNotIn(secret, sanitized)
 
     def test_body_sanitizer_scans_large_non_sensitive_assignment_text(self) -> None:
         secret = "opaque-synthetic-provider-secret"

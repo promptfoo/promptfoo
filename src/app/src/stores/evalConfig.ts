@@ -964,32 +964,38 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
   };
 };
 
-// OTLP trace forwarding can carry an `Authorization` header. The rest of the
-// tracing block is non-secret runtime config.
+// OTLP exporter URLs and legacy forwarding config can carry credentials.
 const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
-  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+  if (!isRecord(tracing)) {
     return tracing;
   }
-  const forwarding = tracing.forwarding;
+  const forwarding = isRecord(tracing.forwarding) ? tracing.forwarding : undefined;
   return {
     ...tracing,
-    forwarding: {
-      ...forwarding,
-      ...(typeof forwarding.endpoint === 'string'
-        ? { endpoint: scrubProviderUrl(forwarding.endpoint, templatePaths) }
-        : {}),
-      ...(isRecord(forwarding.headers)
-        ? {
-            headers: Object.fromEntries(
-              Object.entries(forwarding.headers).filter(
-                ([key, value]) =>
-                  !looksLikeHeaderCredential(key, value, templatePaths) ||
-                  preserveCredentialTemplate(value, templatePaths),
-              ),
-            ),
-          }
-        : {}),
-    },
+    ...(typeof tracing.endpoint === 'string'
+      ? { endpoint: scrubProviderUrl(tracing.endpoint, templatePaths) }
+      : {}),
+    ...(forwarding
+      ? {
+          forwarding: {
+            ...forwarding,
+            ...(typeof forwarding.endpoint === 'string'
+              ? { endpoint: scrubProviderUrl(forwarding.endpoint, templatePaths) }
+              : {}),
+            ...(isRecord(forwarding.headers)
+              ? {
+                  headers: Object.fromEntries(
+                    Object.entries(forwarding.headers).filter(
+                      ([key, value]) =>
+                        !looksLikeHeaderCredential(key, value, templatePaths) ||
+                        preserveCredentialTemplate(value, templatePaths),
+                    ),
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
 };
 

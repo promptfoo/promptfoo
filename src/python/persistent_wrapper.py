@@ -198,7 +198,9 @@ def _gen_ai_operation_name(function_name: str, use_latest: bool) -> str:
     latest_names = {
         "call_api": "chat",
         "call_embedding_api": "embeddings",
-        "call_classification_api": "chat",
+        # OTel defines `chat` specifically for chat completion. Classification
+        # has no predefined operation, so use the allowed custom operation name.
+        "call_classification_api": "classification",
         "completion": "text_completion",
         "embedding": "embeddings",
     }
@@ -301,6 +303,7 @@ _SENSITIVE_BODY_FIELD_SUFFIXES = (
     "certkey",
     "encryptionkey",
     "signingkey",
+    "signature",
     "passphrase",
     "subscriptionkey",
     "functionskey",
@@ -340,6 +343,9 @@ _JSON_STRING_PROPERTY_PATTERN = re.compile(
 _JSON_STRING_TOKEN_PATTERN = re.compile(r'"(?:\\.|[^"\\])*"')
 _JSON_NUMBER_TOKEN_PATTERN = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?")
 _URL_QUERY_PAIR_PATTERN = re.compile(r"([?&])([^=&#\s]+)=([^&#\s]*)")
+_URL_USERINFO_PATTERN = re.compile(
+    r"(\b[a-zA-Z][a-zA-Z0-9+.-]*://)[^/\s?#]+@(?=[^/\s?#])"
+)
 _PRIVATE_KEY_BEGIN_PATTERN = re.compile(r"-----BEGIN [^-\r\n]*PRIVATE KEY-----")
 _PRIVATE_KEY_END_PATTERN = re.compile(r"-----END [^-\r\n]*PRIVATE KEY-----")
 
@@ -450,6 +456,10 @@ def _sanitize_url_query_credentials(text: str) -> str:
     return _URL_QUERY_PAIR_PATTERN.sub(replace_query_credential, text)
 
 
+def _sanitize_url_userinfo_credentials(text: str) -> str:
+    return _URL_USERINFO_PATTERN.sub(rf"\1{_REDACTED_BODY_VALUE}@", text)
+
+
 def _redact_private_keys(text: str) -> str:
     replacements = []
     cursor = 0
@@ -478,7 +488,9 @@ def _apply_sensitive_value_patterns(text: str) -> str:
 def _sanitize_unstructured_body_text(text: str) -> str:
     form_body = _sanitize_form_body(text)
     sanitized = form_body if form_body is not None else _sanitize_body_assignments(text)
-    return _apply_sensitive_value_patterns(_sanitize_url_query_credentials(sanitized))
+    return _apply_sensitive_value_patterns(
+        _sanitize_url_query_credentials(_sanitize_url_userinfo_credentials(sanitized))
+    )
 
 
 def _sanitize_parsed_json(value: Any) -> Tuple[Any, bool]:
@@ -662,9 +674,13 @@ def _sanitize_body(text: str) -> str:
     sanitized = _sanitize_json_body(text)
     if sanitized is None:
         sanitized = _sanitize_json_string_properties(text)
-        if sanitized == text:
-            sanitized = _sanitize_unstructured_body_text(text)
-    return _apply_sensitive_value_patterns(_sanitize_url_query_credentials(sanitized))
+        # Malformed or mixed-format bodies can contain both JSON-like fields and
+        # assignment-form credentials. Scan the partially sanitized result so a
+        # JSON property match cannot short-circuit later credential redaction.
+        sanitized = _sanitize_unstructured_body_text(sanitized)
+    return _apply_sensitive_value_patterns(
+        _sanitize_url_query_credentials(_sanitize_url_userinfo_credentials(sanitized))
+    )
 
 
 def _truncate_body(text: Any, max_length: int = 4096) -> str:
@@ -677,6 +693,16 @@ def _truncate_body(text: Any, max_length: int = 4096) -> str:
     return sanitized[: max_length - 13] + "... [truncated]"
 
 
+def _normalize_error_type(value: Any) -> Optional[str]:
+    """Return a bounded low-cardinality error type, or None for unsafe values."""
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized if 0 < len(normalized) <= 128 else None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value) if math.isfinite(value) else None
+    return None
+
+
 def _traced_call(method_callable, args, function_name):
     """
     Call method with OpenTelemetry tracing if enabled.
@@ -686,21 +712,34 @@ def _traced_call(method_callable, args, function_name):
     """
     global _tracer, _tracing_enabled
 
+    context_arg = args[2] if len(args) >= 3 and isinstance(args[2], dict) else None
+    api_type = (
+        context_arg.get("__promptfooApiType") if isinstance(context_arg, dict) else None
+    )
+    is_two_argument_api = api_type in {
+        "call_embedding_api",
+        "call_classification_api",
+    }
+    is_cached_result = (
+        isinstance(context_arg, dict) and context_arg.get("__promptfooCached") is True
+    )
+    method_args = args[:2] if is_two_argument_api else args
+
     # Fast path: if tracing not enabled, just call the method
     if not _tracing_enabled or _tracer is None:
-        return call_method(method_callable, args)
+        return call_method(method_callable, method_args)
 
-    # Extract traceparent from context (3rd argument for call_api)
+    # Extract traceparent from Promptfoo's internal third argument. Embedding
+    # and classification callbacks keep their public two-argument signature.
     traceparent = None
-    context_arg = None
-    if len(args) >= 3:
-        context_arg = args[2]
-        if isinstance(context_arg, dict):
-            traceparent = context_arg.get("traceparent")
+    tracestate = None
+    if context_arg:
+        traceparent = context_arg.get("traceparent")
+        tracestate = context_arg.get("tracestate")
 
     # If no traceparent, fall back to untraced call
     if not traceparent:
-        return call_method(method_callable, args)
+        return call_method(method_callable, method_args)
 
     user_error = None
     method_called = False
@@ -711,10 +750,18 @@ def _traced_call(method_callable, args, function_name):
         from opentelemetry.trace import SpanKind, Status, StatusCode
 
         # Extract parent context from W3C traceparent header
-        parent_ctx = extract({"traceparent": traceparent})
+        carrier = {"traceparent": traceparent}
+        if isinstance(tracestate, str) and tracestate:
+            carrier["tracestate"] = tracestate
+        parent_ctx = extract(carrier)
 
         use_latest = _use_gen_ai_latest_experimental()
-        op_name = _gen_ai_operation_name(function_name, use_latest)
+        semantic_function_name = (
+            api_type
+            if api_type in {"call_api", "call_embedding_api", "call_classification_api"}
+            else function_name
+        )
+        op_name = _gen_ai_operation_name(semantic_function_name, use_latest)
         options = args[1] if len(args) >= 2 and isinstance(args[1], dict) else {}
         config = options.get("config", {})
         model = config.get("model") if isinstance(config, dict) else None
@@ -753,7 +800,7 @@ def _traced_call(method_callable, args, function_name):
 
             try:
                 # Execute the user's function
-                result = call_method(method_callable, args)
+                result = call_method(method_callable, method_args)
                 method_called = True
 
                 # Set response attributes
@@ -770,6 +817,33 @@ def _traced_call(method_callable, args, function_name):
                                 "promptfoo.response.body",
                                 _truncate_body(json.dumps(output)),
                             )
+
+                    response_metadata = result.get("metadata")
+                    if isinstance(response_metadata, dict):
+                        response_model = response_metadata.get("model")
+                        response_id = response_metadata.get("responseId")
+                        conversation_id = response_metadata.get("conversationId")
+                        if isinstance(response_model, str) and response_model:
+                            span.set_attribute("gen_ai.response.model", response_model)
+                        if (
+                            isinstance(response_id, str)
+                            and response_id
+                            and (not use_latest or response_id != conversation_id)
+                        ):
+                            span.set_attribute("gen_ai.response.id", response_id)
+                        if (
+                            use_latest
+                            and isinstance(conversation_id, str)
+                            and conversation_id
+                        ):
+                            span.set_attribute(
+                                "gen_ai.conversation.id", conversation_id
+                            )
+                    finish_reason = result.get("finishReason")
+                    if isinstance(finish_reason, str) and finish_reason:
+                        span.set_attribute(
+                            "gen_ai.response.finish_reasons", [finish_reason]
+                        )
 
                     # Token usage following GenAI conventions
                     if "tokenUsage" in result and isinstance(
@@ -832,30 +906,54 @@ def _traced_call(method_callable, args, function_name):
                                 )
 
                     # Cache hit
-                    if "cached" in result:
+                    if is_cached_result:
+                        span.set_attribute("promptfoo.cache_hit", True)
+                    elif "cached" in result:
                         span.set_attribute(
                             "promptfoo.cache_hit", bool(result["cached"])
                         )
 
                     # Handle error in result
-                    if result.get("error"):
-                        span.set_status(Status(StatusCode.ERROR, str(result["error"])))
-                        err = result["error"]
-                        if isinstance(err, dict):
-                            if "code" in err:
-                                error_type = err.get("code")
-                            elif "type" in err:
-                                error_type = err.get("type")
-                            elif "status" in err:
-                                error_type = err.get("status")
-                            else:
-                                error_type = None
-                            error_type_str = (
-                                str(error_type) if error_type is not None else "_OTHER"
-                            )
-                            span.set_attribute("error.type", error_type_str)
+                    err = result.get("error")
+                    has_error = (isinstance(err, str) and bool(err)) or isinstance(
+                        err, (dict, list)
+                    )
+                    metadata = result.get("metadata")
+                    http = metadata.get("http") if isinstance(metadata, dict) else None
+                    http_status = http.get("status") if isinstance(http, dict) else None
+                    http_error_type = (
+                        _normalize_error_type(http_status)
+                        if isinstance(http_status, int)
+                        and not isinstance(http_status, bool)
+                        and 400 <= http_status <= 599
+                        else None
+                    )
+                    if has_error:
+                        if isinstance(err, str):
+                            error_message = _truncate_body(err)
+                        elif isinstance(err, dict) and isinstance(
+                            err.get("message"), str
+                        ):
+                            error_message = _truncate_body(err["message"])
                         else:
-                            span.set_attribute("error.type", "_OTHER")
+                            error_message = "Provider error"
+                        span.set_status(Status(StatusCode.ERROR, error_message))
+
+                        error_type = None
+                        if isinstance(err, dict):
+                            for field in ("code", "type", "status"):
+                                error_type = _normalize_error_type(err.get(field))
+                                if error_type is not None:
+                                    break
+                        if error_type is None:
+                            error_type = http_error_type
+                        span.set_attribute(
+                            "error.type",
+                            error_type if error_type is not None else "_OTHER",
+                        )
+                    elif http_error_type is not None:
+                        span.set_status(Status(StatusCode.ERROR, f"HTTP {http_status}"))
+                        span.set_attribute("error.type", http_error_type)
                     elif not use_latest:
                         span.set_status(Status(StatusCode.OK))
                 elif not use_latest:
@@ -868,9 +966,17 @@ def _traced_call(method_callable, args, function_name):
                     raise
                 user_error = e
                 # Record exception and set error status
-                span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.set_attribute("error.type", type(e).__name__ or "_OTHER")
+                error_message = _truncate_body(str(e))
+                error_type = _normalize_error_type(type(e).__name__) or "_OTHER"
+                span.add_event(
+                    "exception",
+                    {
+                        "exception.type": error_type,
+                        "exception.message": error_message,
+                    },
+                )
+                span.set_status(Status(StatusCode.ERROR, error_message))
+                span.set_attribute("error.type", error_type)
                 raise
 
     except Exception as tracing_error:
@@ -889,7 +995,7 @@ def _traced_call(method_callable, args, function_name):
             file=sys.stderr,
             flush=True,
         )
-        return call_method(method_callable, args)
+        return call_method(method_callable, method_args)
 
 
 def main():
@@ -967,12 +1073,31 @@ def handle_call(command_line, user_module, default_function_name):
         else:
             raise ValueError(f"Invalid CALL command format: {command_line}")
 
-        # Resolve the callable for this call
-        method_callable = get_callable(user_module, function_name)
-
         # Read request
         with open(request_file, "r", encoding="utf-8") as f:
             args = json.load(f)
+
+        if function_name == "__promptfoo_trace_cached_result":
+            context_arg = args[2] if len(args) >= 3 else None
+            if not isinstance(context_arg, dict):
+                raise ValueError("Cached trace request is missing its context")
+            cached_result = args[3] if len(args) >= 4 else None
+            api_type = context_arg.get("__promptfooApiType")
+            if api_type not in {
+                "call_api",
+                "call_embedding_api",
+                "call_classification_api",
+            }:
+                raise ValueError("Cached trace request has an invalid API type")
+
+            def return_cached_result(*_args):
+                return cached_result
+
+            method_callable = return_cached_result
+            function_name = api_type
+        else:
+            # Resolve the user's callable for this call.
+            method_callable = get_callable(user_module, function_name)
 
         # Execute user function (with automatic tracing if enabled)
         try:

@@ -415,6 +415,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // The Responses API uses `max_output_tokens` rather than `max_tokens`.
     const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
     const effectiveBody = resolved.body as Record<string, any>;
+    const effectiveModel =
+      typeof effectiveBody.model === 'string' && effectiveBody.model.trim()
+        ? effectiveBody.model
+        : this.modelName;
     // Read request params from the resolved body (what we actually send) rather
     // than the raw config, so defaults/env-derived values (e.g. a default
     // temperature, OPENAI_TOP_P) are reflected on the span. The Responses API
@@ -424,7 +428,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const spanContext = buildChatSpanContext({
       system: 'openai',
       providerName: this.getGenAIProviderName(),
-      model: this.modelName,
+      model: effectiveModel,
       providerId: this.id(),
       prompt,
       context,
