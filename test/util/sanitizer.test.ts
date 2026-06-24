@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -9,16 +9,15 @@ import {
   sanitizeUrlEncodedString,
 } from '../../src/util/sanitizer';
 
-// Mock console methods to prevent test noise
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
-afterEach(() => {
-  consoleErrorSpy.mockClear();
-  consoleWarnSpy.mockClear();
+beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
-afterAll(() => {
+afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
 });
@@ -635,7 +634,9 @@ describe('sanitizeObject', () => {
     });
 
     it('should handle sparse arrays', () => {
-      const input = [1, , 3]; // eslint-disable-line no-sparse-arrays
+      const input = new Array(3);
+      input[0] = 1;
+      input[2] = 3;
       const result = sanitizeObject(input);
       expect(result[0]).toBe(1);
       // Sparse arrays become null during JSON.parse/stringify cycle
@@ -953,6 +954,7 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(input);
       // BigInt is not JSON serializable; sanitizer should not expose original data.
       expect(typeof result).toBe('string');
+      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
       expect(result).not.toContain('9007199254740991');
       expect(result).not.toContain('secret');
     });
@@ -961,7 +963,7 @@ describe('sanitizeObject', () => {
   describe('error handling', () => {
     it('should handle errors gracefully with throwOnError false', () => {
       const input = { key: 'value' };
-      // Mock safeStringify to throw
+      // Mock JSON.parse to throw after safeStringify returns.
       vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
         throw new Error('Parse error');
       });
@@ -1097,8 +1099,9 @@ describe('sanitizeObject', () => {
       };
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
-      // These don't match the predefined patterns, so they won't be redacted
-      // unless we add specific patterns for them
+      expect(result.accessKeyId).toBe('[REDACTED]');
+      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+      expect(result.sessionToken).toBe('session-token-value');
     });
 
     it('should sanitize provider response with metadata', () => {
@@ -1435,6 +1438,9 @@ describe('sanitizeUrl', () => {
       // Secret-named key (`api_key`) carrying any value: the `key=value` form scan
       // fails closed even though the value itself is not secret-looking.
       expect(sanitizeUrl('not-a-valid-url?api_key=secret123')).toBe('[REDACTED]');
+      // Compound param names with an exact sensitive segment are also redacted.
+      expect(sanitizeUrl('ht!tp://x?private_token=abc123')).toBe('[REDACTED]');
+      expect(sanitizeUrl('http://[bad]/?github%5Ftoken=abc123')).toBe('[REDACTED]');
       // `ht!tp://...` fails new URL(); the `token=sk-...` form segment forces
       // fail-closed (a secret-named key with a secret-looking value).
       expect(sanitizeUrl('ht!tp://x?token=sk-1234567890abcdefghij')).toBe('[REDACTED]');
@@ -1452,6 +1458,13 @@ describe('sanitizeUrl', () => {
         'design-system',
         'authentication-guide',
         'signature-pad-component',
+      ]) {
+        expect(sanitizeUrl(benign)).toBe(benign);
+      }
+      for (const benign of [
+        'ht!tp://x?design-system=ok',
+        'ht!tp://x?access-tokenizer=ok',
+        'ht!tp://x?authentication-guide=ok',
       ]) {
         expect(sanitizeUrl(benign)).toBe(benign);
       }
