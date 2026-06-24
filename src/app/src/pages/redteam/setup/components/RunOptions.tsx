@@ -461,6 +461,7 @@ export const RunOptionsContent = ({
         setValue={setMinCharsPerMessageInput}
         updateConfig={updateConfig}
         maxCharsPerMessage={maxCharsPerMessage}
+        minCharsPerMessage={minCharsPerMessage}
       />
 
       <MaxNumberOfConcurrentRequestsInput
