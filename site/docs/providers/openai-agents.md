@@ -186,7 +186,7 @@ providers:
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-These are OpenAI Agents SDK input and output guardrails. Tool guardrails are a separate SDK feature. A tripped guardrail currently surfaces from the Promptfoo provider as an error, and successful runs do not populate the top-level response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Use the SDK guardrail for runtime enforcement, then test the resulting application behavior with ordinary assertions or a wrapper that normalizes tripwires.
+These OpenAI Agents SDK guardrails enforce the initial input and final output; tool guardrails are a separate SDK feature. In Promptfoo, a tripped SDK guardrail currently surfaces as a provider error, while a successful run does not populate the response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Test the application behavior with ordinary assertions, or wrap the provider and normalize tripwires when you need the guardrail assertion.
 
 See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 

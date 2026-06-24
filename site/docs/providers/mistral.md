@@ -172,7 +172,7 @@ providers:
 
 :::note
 
-Mistral's `config.guardrails` field configures upstream inline input guardrails. Promptfoo currently sends that configuration but does not normalize Mistral's successful or HTTP 403 guardrail result into the top-level response consumed by the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Use a custom target/transform if you need to assert on the native result, and call a moderation endpoint separately for output filtering.
+Mistral's `config.guardrails` field enables upstream inline input guardrails, but it does not enable Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Promptfoo sends the configuration without normalizing successful or HTTP 403 guardrail results into the required top-level response. Use a custom target or transform to assert on the native result. If `block_on_error` is enabled, distinguish a moderation-service failure from a policy violation instead of counting both as a match. Call a moderation endpoint separately for output filtering.
 
 :::
 

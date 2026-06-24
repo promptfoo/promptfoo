@@ -625,7 +625,7 @@ providers:
         }
 ```
 
-Return an expected safety block as `output` plus `guardrails`, even when the upstream API uses a structured 4xx response. Throw from `transformResponse` for a guardrail timeout, partial execution, filter error, or unknown schema so it cannot become `flagged: false`. A provider error skips assertions.
+Return an expected safety block as `output` plus `guardrails`, even when the upstream API uses a structured 4xx response. Throw from `transformResponse` on a timeout, partial execution, filter error, or unknown schema. Otherwise, an indeterminate result can become `flagged: false`. Provider errors skip assertions.
 
 See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for response patterns and [the assertion reference](/docs/configuration/expected-outputs/guardrails) for exact pass/fail behavior.
 

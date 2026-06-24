@@ -128,7 +128,7 @@ if (result.action === 'block' || result.action === 'error') {
 }
 ```
 
-The path parameter is the target ID, and the endpoint evaluates all active guardrails attached to that target. The aggregate `action` is one of `allow`, `log`, `warn`, `block`, or `error`. The response also includes `severity`, `guardrailResults`, and `latencyMs`; it can include `sanitizedContent` when a policy transforms the content. Preserve the per-guardrail results for audit and debugging rather than reducing every outcome to a boolean. See the [API reference](/docs/api-reference) for the complete request and response schema.
+Gate the model call on the aggregate `action`: `allow`, `log`, `warn`, `block`, or `error`. Choose an explicit policy for `warn` and `error`; do not let either fall through by accident. The endpoint evaluates every active guardrail attached to the target ID and also returns `severity`, `guardrailResults`, and `latencyMs`. A transforming policy can return `sanitizedContent`. Keep the per-guardrail results for audit and debugging instead of reducing the response to a boolean. See the [API reference](/docs/api-reference) for the complete schema.
 
 ### Parallel Execution
 

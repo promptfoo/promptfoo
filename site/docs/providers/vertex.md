@@ -1152,9 +1152,9 @@ For a prompt-side block, Promptfoo normalizes:
 - `flaggedInput: true` - The input prompt was blocked (Model Armor `blockReason: MODEL_ARMOR`)
 - `reason` - The Model Armor block reason message
 
-Google signals a response-template block with candidate `finishReason: MODEL_ARMOR`, not the generic Gemini `SAFETY` reason. Promptfoo currently sends the response-template configuration but handles this finish reason as a generic provider error, so it does not reach a regular `guardrails` assertion. Model Armor's Vertex integration is non-streaming. To grade response-side blocks today, call the sanitization API through a custom target and normalize its result.
+Google signals a response-template block with candidate `finishReason: MODEL_ARMOR`, not the generic Gemini `SAFETY` reason. Promptfoo sends the response-template configuration but currently handles this finish reason as a provider error, so it does not reach a regular `guardrails` assertion. Model Armor's Vertex integration is non-streaming. To grade response-side blocks, call the sanitization API through a custom target and normalize its result.
 
-Inline Vertex responses do not include detailed per-filter results. Use Cloud Logging or the standalone sanitization API when you need filter matches, confidence, and findings. See the [`guardrails` assertion reference](/docs/configuration/expected-outputs/guardrails) for exact polarity and missing-signal behavior.
+Inline Vertex responses do not include detailed per-filter results. Google also documents cases where an unavailable or failed Model Armor service is skipped and the request continues unscreened. Use Cloud Logging or the standalone sanitization API when you need execution evidence, filter matches, confidence, and findings. See the [`guardrails` assertion reference](/docs/configuration/expected-outputs/guardrails) for exact polarity and missing-signal behavior.
 
 #### Floor Settings
 

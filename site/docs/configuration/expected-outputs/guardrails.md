@@ -7,7 +7,7 @@ description: Test provider-reported guardrail decisions, normalize custom target
 
 # Guardrails
 
-Use the `guardrails` assertion to evaluate a safety decision that the target provider or application already reported. The assertion does not run a guardrail or inspect the text itself. It reads the normalized `guardrails` field on the [provider response](/docs/configuration/reference#providerresponse).
+The `guardrails` assertion grades a safety decision returned by the target. It does not run a guardrail or inspect the text. It reads the normalized `guardrails` field on the [provider response](/docs/configuration/reference#providerresponse).
 
 Choose the assertion based on the traffic you are testing:
 
@@ -31,11 +31,11 @@ interface GuardrailResponse {
 }
 ```
 
-The programmatic [`guardrails.guard()`, `pii()`, and `harm()` helpers](/docs/usage/node-api-reference#guardrails-api) return a different classifier shape with `model` and `results[]`. If you call those helpers inside a custom target, map `results[0].flagged` into the flat response above.
+The programmatic [`guardrails.guard()`, `pii()`, and `harm()` helpers](/docs/usage/node-api-reference#guardrails-api) return classifier results under `results[]`, not this flat provider-response shape. To use one inside a custom target, map `results[0].flagged` into `guardrails.flagged`.
 
 Promptfoo normalizes some structured safety signals in built-in providers. Support is endpoint- and mode-specific, so a vendor name alone is not enough to determine support.
 
-| Promptfoo integration                                                         | Signals currently normalized                                                        | Important limits                                                                                                 |
+| Promptfoo integration                                                         | Signals currently normalized                                                        | What it does not cover                                                                                           |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Azure OpenAI Chat, Completions, Assistants, and selected Foundry Agent errors | Input content-filter errors and output content-filter results                       | Azure Responses uses a different response contract and is not normalized in the same way.                        |
 | AWS Bedrock InvokeModel and non-streaming Converse                            | `amazon-bedrock-guardrailAction` and `stopReason: guardrail_intervened`             | Direction is usually unknown. Streaming, cached, and Bedrock Agents responses do not all expose the same fields. |
@@ -48,7 +48,7 @@ For provider-specific configuration, see [AWS Bedrock](/docs/providers/aws-bedro
 
 :::warning Verify the signal
 
-A passing `guardrails` assertion does not prove that a guardrail ran. If the response omits `guardrails`, Promptfoo currently treats it as `flagged: false`, so `guardrails` passes with score 1. Inspect an exported eval result before relying on this assertion as a release gate.
+A pass means Promptfoo did not receive `flagged: true`; it does not prove that a guardrail ran. When the response omits `guardrails`, Promptfoo currently treats it as `flagged: false`, so `guardrails` passes with score 1. Inspect an exported eval result before using this assertion as a release gate.
 
 :::
 
@@ -74,7 +74,7 @@ tests:
       - type: not-guardrails
 ```
 
-For an all-benign suite, you can apply the allowed-content expectation to every test. Do not use this default in a mixed suite that also contains `not-guardrails` attack cases, because defaults are added to each test:
+For an all-benign suite, apply the allowed-content expectation to every test. Do not use this default in a mixed suite: Promptfoo adds default assertions to the `not-guardrails` attack cases too.
 
 ```yaml
 defaultTest:
@@ -95,7 +95,7 @@ The assertion uses `flagged` as the verdict:
 
 ## Inverse Assertion (not-guardrails)
 
-Use `not-guardrails` to verify that a known attack or unsafe response produces a guardrail signal:
+Use `not-guardrails` when a known attack or unsafe response must produce a guardrail signal:
 
 ```yaml
 assert:
@@ -116,9 +116,9 @@ defaultTest:
         purpose: redteam
 ```
 
-This mode is not an alias for `not-guardrails`. When the target reports `flagged: true`, the `guardrails` component still fails with score 0, but Promptfoo marks the overall red-team test as passed with the reason `Content failed guardrail safety checks`. Other graders may still run; this final aggregation override prevents a correct block from being reported as a vulnerability.
+`purpose: redteam` does not invert the assertion. When the target reports `flagged: true`, the `guardrails` component still fails with score 0. After the graders run, Promptfoo changes the overall test to pass with the reason `Content failed guardrail safety checks`. This keeps a correct block from being reported as a vulnerability.
 
-When the target is not flagged, the guardrail component passes normally and the generated vulnerability grader determines the result. For a standalone regression test that must prove a specific attack was flagged, use `not-guardrails` instead.
+When the target is not flagged, the generated vulnerability grader determines the result. For a standalone regression test that must prove a specific attack was flagged, use `not-guardrails`.
 
 See [Testing and Validating Guardrails](/docs/guides/testing-guardrails#comparing-guardrail-performance) for a complete red-team pattern.
 
@@ -138,7 +138,7 @@ If `flagged` is true, the reason defaults to:
 
 If both directional fields are true, the input reason takes precedence. Set `reason` when the upstream service provides a more useful explanation.
 
-Provider guardrail decisions are not always transport errors. For example, AWS `ApplyGuardrail` returns HTTP 200 with an action, Azure can return an output filter as a successful completion with `finish_reason: content_filter`, and Anthropic can return a successful message with `stop_reason: refusal`. Promptfoo needs those outcomes as a scorable `output` plus `guardrails`; a provider `error` skips assertions.
+An intervention is not always a transport error. AWS `ApplyGuardrail` returns HTTP 200 with an action, Azure can return a successful completion with `finish_reason: content_filter`, and Anthropic can return a successful message with `stop_reason: refusal`. Return expected interventions as a scorable `output` plus `guardrails`; a provider `error` skips assertions.
 
 ## Mapping provider responses to `guardrails`
 
@@ -149,7 +149,7 @@ Custom HTTP, Python, Ruby, and JavaScript targets should normalize their native 
 - `flaggedOutput` (optional output attribution)
 - `reason` (optional human-readable explanation)
 
-Keep category scores, assessments, policy IDs, and the original vendor response under `metadata` or `raw`. Do not treat a guardrail timeout, partial evaluation, or filter error as `flagged: false`; surface a provider error and track it as indeterminate in your metrics.
+Keep category scores, assessments, policy IDs, and the original vendor response under `metadata` or `raw`. Fail closed on an unknown decision: return a provider error for a guardrail timeout, partial evaluation, or filter error, and track it as indeterminate. Mapping any of those states to `flagged: false` creates a false pass.
 
 <a id="example-http-provider-transform-azure-content-filters"></a>
 
@@ -220,7 +220,7 @@ export default (json, text, context) => {
 };
 ```
 
-The HTTP provider accepts all status codes by default, which lets the transform normalize a structured 4xx safety block. If you configure `validateStatus`, include every status that carries a valid guardrail decision. Return a non-empty `output` for expected blocks so Promptfoo can grade the assertion.
+The HTTP provider accepts all status codes by default, so the transform can normalize a structured 4xx safety block. If you configure `validateStatus`, include every status that carries a valid guardrail decision. Expected blocks need a non-empty `output` so Promptfoo can grade the assertion.
 
 Verify the normalized data with a fresh exported eval:
 

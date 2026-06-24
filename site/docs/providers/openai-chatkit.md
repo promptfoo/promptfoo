@@ -389,7 +389,7 @@ tests:
         value: Response refuses to reveal internal instructions
 ```
 
-ChatKit exposes the visible assistant response, not guardrail-node result metadata. Use behavioral assertions as above. Promptfoo's `guardrails` and `not-guardrails` assertions cannot directly inspect ChatKit guardrail nodes unless the workflow is exposed through a target that returns the [normalized guardrail response](/docs/configuration/expected-outputs/guardrails#mapping-provider-responses-to-guardrails).
+ChatKit exposes the visible assistant response, not guardrail-node result metadata. Use the behavioral assertions above. To use `guardrails` or `not-guardrails`, expose the workflow through a target that returns the [normalized guardrail response](/docs/configuration/expected-outputs/guardrails#mapping-provider-responses-to-guardrails).
 
 ## See Also
 

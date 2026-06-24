@@ -16,16 +16,16 @@ keywords:
 sidebar_label: Testing Guardrails
 ---
 
-Guardrails can reject, replace, mask, or annotate model inputs and outputs. A useful guardrail eval tests both sides of that policy: attacks that should be flagged and legitimate requests that should remain usable.
+A useful guardrail eval measures both sides of the policy: attacks that should be flagged and legitimate requests that should remain usable. Guardrails may reject, replace, mask, or only annotate model inputs and outputs, so a reported match does not always mean the request was blocked.
 
 ## Overview of Guardrails Testing
 
-There are two primary approaches:
+Test at two levels:
 
 1. **Test your application with guardrails enabled.** This covers the complete production path, including prompt construction, model calls, streaming, and application-level filters.
 2. **Test a guardrail service directly.** This isolates policy thresholds and makes it easier to compare guardrails without paying for model inference.
 
-Use a mixed dataset for either approach:
+Use the same mixed dataset at either level:
 
 - Adversarial cases use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) and pass only when the target reports `flagged: true`.
 - Benign cases use [`guardrails`](/docs/configuration/expected-outputs/guardrails) and pass when the target does not report a flag.
@@ -47,24 +47,24 @@ Adding a `guardrails` assertion does not enable a provider guardrail. Configure 
 
 ### How guardrail responses arrive
 
-Guardrail vendors do not share one response contract. An intervention may be a normal HTTP response, a structured error, a final streaming event, or an annotation that does not block anything.
+HTTP status alone does not tell you whether a guardrail fired. Vendors return interventions as normal responses, structured errors, final streaming events, or annotations that do not block anything.
 
-| API surface                                                                                                       | Native intervention signal                                                                     | Important distinction                                                                                      |
-| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [AWS ApplyGuardrail](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ApplyGuardrail.html)     | HTTP 200 with `action: GUARDRAIL_INTERVENED`                                                   | `outputs` can contain block text or masked content. Detect-only findings can appear without intervention.  |
-| [AWS Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)                 | `stopReason: guardrail_intervened`                                                             | A streamed stop reason arrives near the end of the stream.                                                 |
-| [Azure OpenAI content filters](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter) | Input block: HTTP 400 `content_filter`; output block: HTTP 200 `finish_reason: content_filter` | `filtered: false` can still include a detection. `content_filter_error` means filtering was indeterminate. |
-| [Model Armor sanitization](https://docs.cloud.google.com/model-armor/sanitize-prompts-responses)                  | HTTP 200 with `filterMatchState` and `invocationResult`                                        | `NO_MATCH_FOUND` is not reliable if execution was partial, failed, or skipped.                             |
-| [Vertex AI with Model Armor](https://docs.cloud.google.com/model-armor/model-armor-vertex-integration)            | Input `blockReason: MODEL_ARMOR`; output `finishReason: MODEL_ARMOR`                           | Promptfoo currently normalizes the input signal; the output signal follows its provider-error path.        |
-| [Anthropic classifier refusals](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback)      | HTTP 200 with `stop_reason: refusal`                                                           | Ordinary refusal text and HTTP 400 validation failures are different paths.                                |
-| [OpenAI safety surfaces](https://developers.openai.com/api/docs/guides/moderation)                                | Moderation results, structured refusals, or platform `content_filter` status                   | Moderation, refusal, and platform filtering are separate signals.                                          |
-| [Mistral Custom Guardrails](https://docs.mistral.ai/studio-api/safety-moderation)                                 | Pass: HTTP 200; block: HTTP 403 with guardrail results                                         | Promptfoo sends guardrail configuration but does not currently normalize the result for this assertion.    |
+| API surface                                                                                                       | Native intervention signal                                                                     | Important distinction                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [AWS ApplyGuardrail](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ApplyGuardrail.html)     | HTTP 200 with `action: GUARDRAIL_INTERVENED`                                                   | `outputs` can contain block text or masked content. Detect-only findings can appear without intervention.                       |
+| [AWS Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)                 | `stopReason: guardrail_intervened`                                                             | A streamed stop reason arrives near the end of the stream.                                                                      |
+| [Azure OpenAI content filters](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter) | Input block: HTTP 400 `content_filter`; output block: HTTP 200 `finish_reason: content_filter` | `filtered: false` can still include a detection. `content_filter_error` means filtering was indeterminate.                      |
+| [Model Armor sanitization](https://docs.cloud.google.com/model-armor/sanitize-prompts-responses)                  | HTTP 200 with `filterMatchState` and `invocationResult`                                        | `NO_MATCH_FOUND` is not reliable if execution was partial, failed, or skipped.                                                  |
+| [Vertex AI with Model Armor](https://docs.cloud.google.com/model-armor/model-armor-vertex-integration)            | Input `blockReason: MODEL_ARMOR`; output `finishReason: MODEL_ARMOR`                           | Promptfoo normalizes the input signal. Output blocks become provider errors, and some service failures can continue unscreened. |
+| [Anthropic classifier refusals](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback)      | HTTP 200 with `stop_reason: refusal`                                                           | Ordinary refusal text and HTTP 400 validation failures are different paths.                                                     |
+| [OpenAI safety surfaces](https://developers.openai.com/api/docs/guides/moderation)                                | Moderation results, structured refusals, or platform `content_filter` status                   | Moderation, refusal, and platform filtering are separate signals.                                                               |
+| [Mistral Custom Guardrails](https://docs.mistral.ai/studio-api/safety-moderation)                                 | Pass: HTTP 200; block: HTTP 403 with guardrail results                                         | Promptfoo sends guardrail configuration but does not currently normalize the result for this assertion.                         |
 
 Normalize the outcome into Promptfoo's [four-field GuardrailResponse](/docs/configuration/expected-outputs/guardrails#mapping-provider-responses-to-guardrails). Treat `flagged` as “the target reported a policy trigger,” not necessarily “the HTTP request failed.”
 
 ## Testing Application with Integrated Guardrails
 
-Testing the deployed application catches integration gaps that a standalone classifier test misses. For example, a guardrail may be configured correctly but its streaming intervention may be discarded by the application.
+Test the deployed application at least once. A standalone classifier can pass while the application drops its streaming intervention, skips a fallback path, or fails to forward the final decision.
 
 ### HTTP Provider Configuration
 
@@ -126,7 +126,7 @@ tests:
       - type: guardrails
 ```
 
-Expected blocks must return a non-empty `output` plus `guardrails`. A provider `error` skips assertions. The HTTP provider accepts non-2xx responses by default, so a transform can convert a structured 4xx policy block into a scorable result.
+Return expected blocks as a non-empty `output` plus `guardrails`. A provider `error` skips assertions. Because the HTTP provider accepts non-2xx responses by default, a transform can convert a structured 4xx policy block into a scorable result.
 
 ### Guardrails Assertion
 
@@ -144,11 +144,11 @@ Check more than the final pass count:
 - `flaggedInput` and `flaggedOutput` should match the stage that fired when the provider exposes it.
 - Guardrail timeouts and filter failures should not appear as clean passes.
 
-Missing guardrail metadata currently behaves like `flagged: false`. This is why inspecting one real result is essential before using the assertion as a CI gate.
+Missing guardrail metadata currently behaves like `flagged: false`. Inspect at least one real result before using the assertion as a CI gate; a green test with no `guardrails` object proves nothing about enforcement.
 
 ## Testing Guardrails Services Directly
 
-Call a standalone guardrail endpoint when you want to tune thresholds, compare services, or test input and output policies independently. Return a diagnostic string as `output`, the normalized decision under `guardrails`, and native detail under `metadata`.
+Call the guardrail directly to tune thresholds, compare services, or test input and output policies independently. Return a diagnostic string as `output`, the normalized decision under `guardrails`, and native detail under `metadata`.
 
 Direct guardrail testing does not exercise the LLM or your production application. Keep at least one integrated eval to catch wiring, streaming, and fallback failures.
 
@@ -159,7 +159,7 @@ Azure OpenAI content filtering and Azure AI Content Safety are separate products
 - The built-in `azure:chat`, `azure:completion`, and supported agent providers normalize selected Azure OpenAI content-filter signals automatically.
 - The standalone [Azure AI Content Safety](/docs/configuration/expected-outputs/moderation#azure-content-safety-moderation) service can be used as a `moderation` provider or wrapped as a custom target.
 
-Azure can return `content_filter_error` when the filtering result is indeterminate. The built-in Chat and Completion paths do not consistently preserve that as a provider error, so export and inspect native filter details if this state matters to your release gate.
+Azure uses `content_filter_error` for an indeterminate filter result. The built-in Chat and Completion paths do not consistently preserve that state as a provider error, so inspect the exported native details if it matters to your release gate.
 
 Azure AI Content Safety's Analyze Text API returns ordinal severity levels, not 0–1 probabilities. The default four-level scale is `0`, `2`, `4`, and `6`; choose and document an integer threshold such as `severity >= 4`. Preserve blocklist matches as separate evidence.
 
@@ -229,7 +229,7 @@ This example tests input only. To test document attacks, populate `documents` an
 
 ## Testing AWS Bedrock Guardrails
 
-The built-in Bedrock provider can apply a guardrail during model inference:
+Use the built-in Bedrock provider to apply a guardrail during model inference:
 
 ```yaml
 providers:
@@ -260,7 +260,7 @@ For direct testing without a model call, invoke `ApplyGuardrail` and map `action
 
 `ApplyGuardrail` returns HTTP 200 for both clean and intervened content. A detection-only assessment is not the same as an intervention, so choose whether your benchmark measures policy matches, enforced blocks, or both.
 
-The built-in Bedrock provider usually adds top-level guardrail metadata only on intervention. Its benign test above therefore passes through Promptfoo's missing-metadata fallback and does not independently prove that the guardrail ran. Use a direct `ApplyGuardrail` adapter when you need an explicit clean decision for every case.
+The built-in Bedrock provider usually adds top-level guardrail metadata only on intervention. The benign test above therefore uses Promptfoo's missing-metadata fallback; it does not prove that the guardrail ran. Use a direct `ApplyGuardrail` adapter when every case needs an explicit clean decision.
 
 ### Testing AWS Bedrock Guardrails with Images
 
@@ -270,7 +270,7 @@ Keep image and text configurations separate so Promptfoo injects the correct var
 
 ## Testing NVIDIA NeMo Guardrails
 
-NeMo Guardrails can be tested through its server API or a [custom Python provider](/docs/providers/python#implementing-guardrails). NeMo versions and deployment modes expose different result objects, so normalize the verdict in your adapter rather than assuming that `generate()` always returns `blocked` and `explanation` fields.
+Test NeMo Guardrails through its server API or a [custom Python provider](/docs/providers/python#implementing-guardrails). NeMo versions and deployment modes return different result objects, so normalize the explicit rail status in your adapter instead of assuming that `generate()` always includes `blocked` and `explanation`.
 
 Your adapter should return the same canonical shape:
 
@@ -291,7 +291,7 @@ Use the NeMo API's explicit rail status or events as `blocked`. Do not infer a b
 
 ## Comparing Guardrail Performance
 
-For fixed regression cases, compare targets with paired `guardrails` and `not-guardrails` assertions. For broader adversarial coverage, combine a normalized guardrail signal with the `guardrails-eval` red-team collection:
+Use fixed cases for regression and generated attacks for discovery. Compare targets with paired `guardrails` and `not-guardrails` assertions, then add the `guardrails-eval` red-team collection for broader adversarial coverage:
 
 The fragment below reuses the [fail-closed response transform](/docs/configuration/expected-outputs/guardrails#example-http-provider-transform) from the assertion reference.
 
@@ -323,7 +323,7 @@ redteam:
   numTests: 10
 ```
 
-`guardrails-eval` is a collection of vulnerability plugins, not a provider integration or assertion. The `purpose: redteam` assertion is a companion aggregation override: a reported guardrail block makes the overall test safe after graders run, while an unblocked response is decided by the generated vulnerability grader.
+`guardrails-eval` is a collection of vulnerability plugins, not a provider integration or assertion. The companion `purpose: redteam` assertion changes final aggregation: after graders run, a reported guardrail block makes the overall test pass. When the target is not flagged, the generated vulnerability grader decides the result.
 
 Run the red team with:
 
@@ -340,7 +340,7 @@ Track at least four outcomes:
 3. **Indeterminate rate**: guardrail timeouts, partial executions, skipped filters, and filter errors.
 4. **Latency and cost**: compare integrated and standalone guardrail overhead.
 
-Also test multilingual prompts, encodings, misspellings, multi-turn attacks, streaming output, and policy boundary cases. Use the same labeled dataset and policy version when comparing providers. A high block rate is not useful if legitimate requests are routinely rejected.
+Also test multilingual prompts, encodings, misspellings, multi-turn attacks, streaming output, and policy boundaries. Compare providers with the same labeled dataset and policy version. Optimize for both safety and usability: a high block rate is not useful if legitimate requests are routinely rejected.
 
 ## What's next
 

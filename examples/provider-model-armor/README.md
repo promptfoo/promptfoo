@@ -74,7 +74,7 @@ Test Model Armor's sanitization API directly using the HTTP provider:
 promptfoo eval -c promptfooconfig.yaml
 ```
 
-This example:
+The direct API configuration:
 
 - Calls the `sanitizeUserPrompt` API directly
 - Maps filter results to Promptfoo's guardrails format
@@ -89,7 +89,7 @@ Test Gemini models with Model Armor templates:
 promptfoo eval -c promptfooconfig.vertex.yaml
 ```
 
-This example:
+The Vertex configuration:
 
 - Uses Vertex AI's native Model Armor integration
 - Compares models with and without Model Armor enabled
@@ -104,13 +104,13 @@ This example:
 
 ### Using the Dataset
 
-The included CSV dataset contains test prompts for each Model Armor filter type. Its `__expected` column applies `guardrails` to benign rows and `not-guardrails` to expected findings. Load it in your config:
+The included CSV covers benign prompts and each Model Armor filter type. Its `__expected` column applies `guardrails` to benign rows and `not-guardrails` to expected findings:
 
 ```yaml
 tests: file://datasets/model-armor-test.csv
 ```
 
-Each row includes a prompt and expected behavior (benign vs. adversarial).
+Each row includes the prompt, expected filter, description, and assertion.
 
 The example uses Model Armor's basic SDP configuration, whose built-in coverage is limited to
 credit cards, US SSNs, financial account numbers, US ITINs, Google Cloud credentials, and Google
@@ -129,7 +129,7 @@ The included configurations test prompt-side protection. Promptfoo currently han
 
 For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, which contains the full `sanitizationResult` including individual filter states and confidence levels.
 
-Use `not-guardrails` to verify dangerous prompts produce a policy match. A match does not by itself prove that the deployment blocked the request; check the configured enforcement mode when hard blocking is required.
+Use `not-guardrails` when a dangerous prompt must produce a policy match. A match does not prove that an inspect-only deployment blocked the request, so verify the enforcement mode when hard blocking is required.
 
 ## Cleanup
 

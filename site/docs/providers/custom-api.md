@@ -105,7 +105,7 @@ module.exports = class OpenAIProvider {
 
 To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
 
-Expected policy blocks should still return a scorable `output`. Return `error` when the guardrail itself failed to execute so the failure is not mistaken for a clean decision. See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for the full response mapping pattern.
+Return expected policy blocks as a scorable `output`. If the guardrail itself failed, return `error` so Promptfoo cannot mistake the failure for a clean decision. See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for the full mapping pattern.
 
 ### Context Parameter
 
