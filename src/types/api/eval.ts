@@ -261,12 +261,39 @@ export const SubmitRatingParamsSchema = z.object({
 });
 
 /** Permissive grading result schema. */
+const MAX_RATING_REQUEST_DEPTH = 100;
+
+function exceedsRatingRequestDepth(value: unknown): boolean {
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  const visited = new WeakSet<object>();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || current.value === null || typeof current.value !== 'object') {
+      continue;
+    }
+    if (current.depth > MAX_RATING_REQUEST_DEPTH) {
+      return true;
+    }
+    if (visited.has(current.value)) {
+      continue;
+    }
+    visited.add(current.value);
+    for (const nestedValue of Object.values(current.value)) {
+      stack.push({ value: nestedValue, depth: current.depth + 1 });
+    }
+  }
+  return false;
+}
+
 export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
   })
-  .passthrough();
+  .passthrough()
+  .refine((value) => !exceedsRatingRequestDepth(value), {
+    message: `Rating payload must not exceed ${MAX_RATING_REQUEST_DEPTH} nested levels`,
+  });
 
 /**
  * Response is the persisted EvalResult row. The route returns the updated

@@ -464,7 +464,7 @@ describe('eval routes', () => {
       const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
       expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score - 0.5);
       expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount);
-      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount + 1);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
       expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
       expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
     });
@@ -698,6 +698,32 @@ describe('eval routes', () => {
       });
     });
 
+    it('canonicalizes an exact minimal same-outcome rating as one manual component', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: result.success, score: result.score });
+
+      expect(res.status).toBe(200);
+      const persistedResult = await EvalResult.findById(result.id);
+      expect(
+        persistedResult?.gradingResult?.componentResults?.filter(
+          (component) => component.assertion?.type === 'human',
+        ),
+      ).toHaveLength(1);
+      expect((await Eval.findById(eval_.id))?.prompts[0].metrics).toMatchObject({
+        score: 1,
+        assertPassCount: 2,
+        assertFailCount: 1,
+        testPassCount: 1,
+        testFailCount: 1,
+      });
+    });
+
     it('canonicalizes a top-level human assertion without double counting it', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -769,7 +795,7 @@ describe('eval routes', () => {
         .send(clearPayload);
       const repeatedClear = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(clearPayload);
+        .send({ ...clearPayload, ignoredPassthroughField: { order: ['does', 'not', 'matter'] } });
 
       expect(firstClear.status).toBe(200);
       expect(repeatedClear.status).toBe(200);
@@ -785,6 +811,268 @@ describe('eval routes', () => {
       });
       const restoredEval = await Eval.findById(eval_.id);
       expect(restoredEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
+    });
+
+    it('preserves a recoverable ERROR category when clearing a legacy rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      await markResultAsError(eval_, result);
+      const errorMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+
+      // Emulate a rating written before provenance existed. The legacy route retained the
+      // ERROR failure reason even while the manual pass overrode the visible outcome.
+      result.gradingResult = createManualRatingPayload(result, true);
+      result.success = true;
+      result.score = 1;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.score += 1;
+      prompt.metrics.testErrorCount -= 1;
+      prompt.metrics.testPassCount += 1;
+      prompt.metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const legacyRating = await EvalResult.findById(result.id);
+      invariant(legacyRating, 'Legacy rating is required');
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(legacyRating));
+
+      expect(res.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult?.success).toBe(false);
+      expect(restoredResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        errorMetrics,
+      );
+    });
+
+    it('restores server-owned automated components when a clear payload mutates them', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const originalGradingResult = structuredClone(result.gradingResult);
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(rateResponse.status).toBe(200);
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
+      const clearPayload = createClearManualRatingPayload(manualResult);
+      invariant(clearPayload.componentResults[0], 'Automated component is required');
+      clearPayload.componentResults[0].pass = true;
+      clearPayload.componentResults[0].score = 1;
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(clearPayload);
+
+      expect(clearResponse.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult?.gradingResult).toEqual(originalGradingResult);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
+    });
+
+    it('restores a grading result that originally omitted reason', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.gradingResult = null;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.assertPassCount -= 1;
+      await eval_.save();
+
+      const scoreResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 0.4 });
+      expect(scoreResponse.status).toBe(200);
+      const scoredResult = await EvalResult.findById(result.id);
+      invariant(scoredResult, 'Scored result is required');
+      expect(scoredResult.gradingResult).toEqual({ pass: true, score: 0.4 });
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(scoredResult, false));
+      expect(rateResponse.status).toBe(200);
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(manualResult));
+
+      expect(clearResponse.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult?.success).toBe(true);
+      expect(restoredResult?.score).toBe(0.4);
+      expect(restoredResult?.failureReason).toBe(ResultFailureReason.NONE);
+      expect(restoredResult?.gradingResult).toEqual({ pass: true, score: 0.4 });
+    });
+
+    it('restores an originally missing grading result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.gradingResult = null;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.assertPassCount -= 1;
+      await eval_.save();
+      const originalMetrics = structuredClone(prompt.metrics);
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: false, score: 0 });
+      expect(rateResponse.status).toBe(200);
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(manualResult));
+
+      expect(clearResponse.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult?.success).toBe(true);
+      expect(restoredResult?.score).toBe(1);
+      expect(restoredResult?.failureReason).toBe(ResultFailureReason.NONE);
+      expect(restoredResult?.gradingResult).toBeNull();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
+    });
+
+    it('keeps edited comments when clearing a manual rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+
+      await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false));
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult?.gradingResult, 'Manual grading result is required');
+      await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...manualResult.gradingResult, comment: 'Keep this reviewer note' });
+      const commentedResult = await EvalResult.findById(result.id);
+      invariant(commentedResult, 'Commented result is required');
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(commentedResult));
+
+      expect(clearResponse.status).toBe(200);
+      expect((await EvalResult.findById(result.id))?.gradingResult?.comment).toBe(
+        'Keep this reviewer note',
+      );
+    });
+
+    it('keeps manual-rating provenance private and preserves it across model saves', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const originalResult = {
+        success: result.success,
+        score: result.score,
+        failureReason: result.failureReason,
+        gradingResult: structuredClone(result.gradingResult),
+      };
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(rateResponse.status).toBe(200);
+      expect(rateResponse.body.metadata?.__promptfoo?.manualRating).toBeUndefined();
+
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
+      expect(manualResult.metadata?.__promptfoo?.manualRating).toBeUndefined();
+      expect(manualResult.toEvaluateResult().metadata?.__promptfoo?.manualRating).toBeUndefined();
+      manualResult.metadata = { ...manualResult.metadata, reviewer: 'retained' };
+      await manualResult.save();
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(manualResult));
+      expect(clearResponse.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult).toMatchObject(originalResult);
+      expect(restoredResult?.metadata).toEqual({ reviewer: 'retained' });
+    });
+
+    it('strips externally supplied manual-rating provenance before persistence', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.metadata = {
+        source: 'provider',
+        __promptfoo: {
+          manualRating: {
+            version: 1,
+            status: 'cleared',
+            original: {
+              success: true,
+              score: 0.777,
+              failureReason: ResultFailureReason.NONE,
+              gradingResult: null,
+            },
+            clearRequestHash: JSON.stringify([false, 0.123]),
+          },
+        },
+      };
+      await result.save();
+
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: false, score: 0.123, componentResults: [] });
+
+      expect(response.status).toBe(200);
+      const persistedResult = await EvalResult.findById(result.id);
+      expect(persistedResult?.success).toBe(false);
+      expect(persistedResult?.score).toBe(0.123);
+      expect(persistedResult?.metadata).toEqual({ source: 'provider' });
+    });
+
+    it('rejects deeply nested passthrough data without recursively hashing it', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const depth = 10_000;
+      const rawPayload = `{"pass":true,"score":0.5,"ignored":${'{"nested":'.repeat(depth)}null${'}'.repeat(depth)}}`;
+
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .set('Content-Type', 'application/json')
+        .send(rawPayload);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('must not exceed 100 nested levels');
+      expect((await EvalResult.findById(result.id))?.score).toBe(result.score);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {

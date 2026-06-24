@@ -4199,6 +4199,93 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
 
+  it('reconciles a cleared rating from the persisted server outcome', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        success: false,
+        score: 0.35,
+        failureReason: 2,
+        gradingResult: {
+          pass: false,
+          score: 0.35,
+          reason: 'Original execution error',
+          componentResults: [],
+        },
+      }),
+    } as any);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => expect(mockSetTable).toHaveBeenCalledTimes(2));
+    const persistedTable = mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0];
+    expect(persistedTable.body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.35,
+      failureReason: 2,
+      gradingResult: {
+        pass: false,
+        score: 0.35,
+        reason: 'Original execution error',
+        componentResults: [],
+      },
+    });
+  });
+
+  it('rolls back the optimistic rating when persistence fails', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    mockCallApi.mockResolvedValueOnce({ ok: false } as any);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => expect(mockSetTable).toHaveBeenCalledTimes(2));
+    expect(mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1]?.[0]).toEqual({
+      head: mockTable.head,
+      body: mockTable.body,
+    });
+  });
+
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {
       body: [

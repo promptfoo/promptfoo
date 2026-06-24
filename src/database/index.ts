@@ -145,6 +145,8 @@ async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T
 
 function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const transaction = db.transaction.bind(db);
+  const execute = client.execute.bind(client);
+  const beginTransaction = client.transaction.bind(client);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
@@ -184,10 +186,31 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   // libSQL opens a new logical connection for top-level statements and interactive
   // transactions, so an ordinary write started while a transaction owns the write lock
   // fails with SQLITE_BUSY unless root-handle operations are serialized.
-  client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
+  client.execute = serializeClientMethod(execute) as typeof client.execute;
   client.batch = serializeClientMethod(client.batch.bind(client));
   client.migrate = serializeClientMethod(client.migrate.bind(client));
   client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client));
+  // A transaction acquires its write lock before Drizzle invokes the callback. Retrying
+  // only that acquisition is safe: a failed BEGIN applied no statements, while retrying an
+  // arbitrary callback could duplicate external side effects. Reconnect after a failed
+  // BEGIN because libSQL otherwise retains the busy statement on its current connection.
+  client.transaction = (async (mode) => {
+    return withTransientLockRetry(async () => {
+      try {
+        // A completed libSQL transaction detaches its connection. Reapply the
+        // connection-local integrity setting before BEGIN on the replacement connection.
+        // Contention is handled by the asynchronous retry below so it does not block the
+        // event loop like SQLite's synchronous busy timeout can.
+        await execute('PRAGMA foreign_keys = ON');
+        return await beginTransaction(mode);
+      } catch (error) {
+        if (isTransientDatabaseLockError(error)) {
+          await client.reconnect();
+        }
+        throw error;
+      }
+    });
+  }) as typeof client.transaction;
 
   db.transaction = ((callback, config) => {
     const currentTransaction = activeTransaction.getStore();

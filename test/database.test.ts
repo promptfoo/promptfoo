@@ -191,4 +191,48 @@ describe('database WAL mode', () => {
     // Keep brief lock contention from failing immediately with SQLITE_BUSY.
     expect(busyTimeout.timeout).toBe(5000);
   });
+
+  it('retries transaction acquisition while another connection holds the write lock', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+    await db.run('CREATE TABLE transaction_lock_probe (id TEXT PRIMARY KEY)');
+
+    // Complete one transaction first so libSQL releases its configured connection. A later
+    // transaction may then acquire a fresh logical connection without the PRAGMA timeout.
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO transaction_lock_probe VALUES ('warm')");
+    });
+
+    const lockHolder = createClient({ url: pathToFileURL(database.getDbPath()).href });
+    const lockTransaction = await lockHolder.transaction('write');
+    let lockReleased = false;
+    try {
+      await lockTransaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
+
+      const transactionOutcome = db
+        .transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_lock_probe VALUES ('retried')");
+        })
+        .then(
+          () => ({ ok: true as const }),
+          (error) => ({ ok: false as const, error }),
+        );
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await lockTransaction.commit();
+      lockReleased = true;
+
+      expect(await transactionOutcome).toEqual({ ok: true });
+      await expect(db.all('SELECT id FROM transaction_lock_probe ORDER BY id')).resolves.toEqual([
+        { id: 'holder' },
+        { id: 'retried' },
+        { id: 'warm' },
+      ]);
+    } finally {
+      if (!lockReleased) {
+        await lockTransaction.rollback();
+      }
+      lockHolder.close();
+    }
+  });
 });

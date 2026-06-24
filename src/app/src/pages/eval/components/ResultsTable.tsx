@@ -22,6 +22,7 @@ import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
+  type EvaluateResult,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
@@ -561,6 +562,11 @@ type ManualRatingUpdate = {
   modifiedComponentResults: boolean;
 };
 
+type PersistedRatingResult = Pick<
+  EvaluateResult,
+  'failureReason' | 'gradingResult' | 'score' | 'success'
+>;
+
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
   if (typeof prompt.provider === 'string') {
     return prompt.provider;
@@ -962,6 +968,34 @@ function buildRatingTableUpdate({
   };
 }
 
+function applyPersistedRatingResult({
+  table,
+  rowIndex,
+  promptIndex,
+  result,
+}: {
+  table: EvaluateTable;
+  rowIndex: number;
+  promptIndex: number;
+  result: PersistedRatingResult;
+}): EvaluateTable {
+  const body = [...table.body];
+  const row = { ...body[rowIndex] };
+  const outputs = [...row.outputs];
+  const output = outputs[promptIndex];
+  invariant(output, 'Cannot apply a rating response to a missing output');
+  outputs[promptIndex] = {
+    ...output,
+    pass: result.success,
+    score: result.score,
+    gradingResult: result.gradingResult,
+    failureReason: result.failureReason,
+  };
+  row.outputs = outputs;
+  body[rowIndex] = row;
+  return { ...table, body };
+}
+
 async function saveManualRating({
   evalId,
   resultId,
@@ -974,29 +1008,33 @@ async function saveManualRating({
   version: number | null | undefined;
   gradingResult: GradingResult;
   table: EvaluateTable;
-}): Promise<void> {
+}): Promise<PersistedRatingResult | undefined> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
 
-  const response =
-    version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ ...gradingResult }),
-        })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table }),
-        });
+  const isVersion4 = Boolean(version && version >= 4);
+  const response = isVersion4
+    ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...gradingResult }),
+      })
+    : await callApi(EVAL_ROUTES.DETAIL(evalId), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ table }),
+      });
 
   if (!response.ok) {
     throw new Error('Network response was not ok');
   }
+
+  return isVersion4 && typeof response.json === 'function'
+    ? ((await response.json()) as PersistedRatingResult)
+    : undefined;
 }
 
 function renderPromptMetricDetails({
@@ -1693,15 +1731,26 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          await saveManualRating({
+          const persistedResult = await saveManualRating({
             evalId,
             resultId,
             version,
             gradingResult,
             table: newTable,
           });
+          if (persistedResult) {
+            setTable(
+              applyPersistedRatingResult({
+                table: newTable,
+                rowIndex,
+                promptIndex,
+                result: persistedResult,
+              }),
+            );
+          }
         } catch (error) {
           console.error('Failed to update table:', error);
+          setTable({ head, body });
         }
       }
     },

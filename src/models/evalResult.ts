@@ -22,7 +22,6 @@ import {
   ResultFailureReason,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
@@ -408,12 +407,13 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
-// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
-// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
-// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
-// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data.
+// User-supplied non-object values under this key are overwritten — log so the rare collision
+// is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` / `getMetadataValuesFromEval`,
+// which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
+const MANUAL_RATING_METADATA_KEY = 'manualRating';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -426,11 +426,12 @@ export function persistTraceMetadata(
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],
 ): EvaluateResult['metadata'] {
+  const publicMetadata = stripManualRatingStateFromMetadata(metadata);
   if (!traceId && !evaluationId) {
-    return stripTraceLinkageFromMetadata(metadata);
+    return stripTraceLinkageFromMetadata(publicMetadata);
   }
 
-  const metadataRecord = metadata ?? {};
+  const metadataRecord = publicMetadata ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
     logger.warn(
@@ -473,39 +474,48 @@ export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> 
   return strippedMetadata as T;
 }
 
-function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
+function surfaceTraceMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  includeManualRatingState = false,
+): {
   traceId?: string;
   evaluationId?: string;
   metadata: Record<string, unknown>;
+  manualRatingState?: ManualRatingState;
 } {
   const metadataRecord = metadata ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
+  const manualRatingState = includeManualRatingState
+    ? getManualRatingState(metadataRecord)
+    : undefined;
 
   const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
   const evaluationId =
     typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
 
-  // Strip the reserved namespace whenever a `traceLinkage` entry exists — even if the
-  // stored ids are malformed (non-string), the internal namespace must never surface to
-  // users. Gate on presence of the key, not on whether the ids read back as valid strings.
-  const hasTraceLinkage = promptfooMetadata != null && TRACE_LINKAGE_KEY in promptfooMetadata;
-  if (!hasTraceLinkage) {
-    return { traceId, evaluationId, metadata: metadataRecord };
-  }
+  // Internal linkage and rating provenance must never surface in public result metadata,
+  // including when their stored values are malformed.
+  const publicMetadata = stripManualRatingStateFromMetadata(
+    stripTraceLinkageFromMetadata(metadataRecord),
+  );
 
   return {
     traceId,
     evaluationId,
-    metadata: stripTraceLinkageFromMetadata(metadataRecord),
+    metadata: publicMetadata ?? {},
+    manualRatingState,
   };
 }
 
-const HUMAN_ASSERTION_TYPE = 'human';
 type ResultMetricCategory = 'pass' | 'fail' | 'error';
 type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
+type RatingEvalResult = Pick<
+  PersistedEvalResult,
+  'failureReason' | 'gradingResult' | 'metadata' | 'promptIdx' | 'score' | 'success'
+>;
 
-const MANUAL_RATING_METADATA_KEY = 'manualRating';
+const HUMAN_ASSERTION_TYPE = 'human';
 const MANUAL_RATING_REASON = 'Manual result (overrides all other grading results)';
 
 const ManualRatingStateSchema = z.object({
@@ -519,10 +529,10 @@ const ManualRatingStateSchema = z.object({
       .object({
         pass: z.boolean(),
         score: z.number(),
-        reason: z.string(),
-        comment: z.string().optional(),
+        reason: z.unknown().optional(),
         assertion: z.unknown().optional(),
-        hadComment: z.boolean(),
+        componentResults: z.array(z.unknown()).optional(),
+        hadReason: z.boolean(),
         hadAssertion: z.boolean(),
         hadComponentResults: z.boolean(),
       })
@@ -545,18 +555,24 @@ function isHumanGradingResult(value: unknown): value is GradingResult {
   return Boolean(asRecord(value) && isHumanAssertion(asRecord(value)?.assertion));
 }
 
-function stableJsonStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJsonStringify).join(',')}]`;
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function getClearRequestHash(gradingResult: GradingResult): string | undefined {
+  if (
+    !Array.isArray(gradingResult.componentResults) ||
+    gradingResult.componentResults.some(isHumanGradingResult) ||
+    isHumanAssertion(gradingResult.assertion)
+  ) {
+    return undefined;
   }
-  const record = asRecord(value);
-  if (record) {
-    return `{${Object.keys(record)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
+
+  // A repeated clear may contain reordered automated components or unrelated passthrough
+  // fields. Neither is authoritative for this endpoint, so bind idempotency only to the
+  // requested top-level outcome. This flat serialization is bounded even when passthrough
+  // data contains deeply nested objects.
+  return JSON.stringify([gradingResult.pass, gradingResult.score]);
 }
 
 function getManualRatingState(metadata: unknown): ManualRatingState | undefined {
@@ -588,7 +604,26 @@ function setManualRatingState(
   return Object.keys(metadataRecord).length > 0 ? metadataRecord : null;
 }
 
-function captureManualRatingState(result: PersistedEvalResult): ManualRatingState {
+function stripManualRatingStateFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(MANUAL_RATING_METADATA_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [MANUAL_RATING_METADATA_KEY]: _manualRating, ...remainingPromptfooMetadata } =
+    promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+  return strippedMetadata as T;
+}
+
+function captureManualRatingState(result: RatingEvalResult): ManualRatingState {
   const gradingResult = result.gradingResult;
   return {
     version: 1,
@@ -602,11 +637,11 @@ function captureManualRatingState(result: PersistedEvalResult): ManualRatingStat
             pass: gradingResult.pass,
             score: gradingResult.score,
             reason: gradingResult.reason,
-            comment: gradingResult.comment,
             assertion: gradingResult.assertion,
-            hadComment: Object.hasOwn(gradingResult, 'comment'),
-            hadAssertion: Object.hasOwn(gradingResult, 'assertion'),
-            hadComponentResults: Object.hasOwn(gradingResult, 'componentResults'),
+            componentResults: gradingResult.componentResults,
+            hadReason: hasOwn(gradingResult, 'reason'),
+            hadAssertion: hasOwn(gradingResult, 'assertion'),
+            hadComponentResults: hasOwn(gradingResult, 'componentResults'),
           }
         : null,
     },
@@ -616,8 +651,11 @@ function captureManualRatingState(result: PersistedEvalResult): ManualRatingStat
 function restoreOriginalGradingResult(
   gradingResult: GradingResult,
   state: ManualRatingState,
-): GradingResult {
+): GradingResult | null {
   const original = state.original.gradingResult;
+  if (!original) {
+    return null;
+  }
   const restored = { ...gradingResult } as GradingResult;
   const restoredRecord = restored as unknown as Record<string, unknown>;
   if (Array.isArray(restored.componentResults)) {
@@ -626,26 +664,22 @@ function restoreOriginalGradingResult(
     );
   }
 
-  if (original) {
-    restored.pass = original.pass;
-    restored.score = original.score;
-    restored.reason = original.reason;
-    if (original.hadComment) {
-      restored.comment = original.comment;
-    } else {
-      delete restored.comment;
-    }
-    if (original.hadAssertion) {
-      restoredRecord.assertion = original.assertion;
-    } else {
-      delete restored.assertion;
-    }
-    if (!original.hadComponentResults) {
-      delete restored.componentResults;
-    }
+  restored.pass = original.pass;
+  restored.score = original.score;
+  if (original.hadReason) {
+    restoredRecord.reason = original.reason;
   } else {
-    restored.pass = state.original.success;
-    restored.score = state.original.score;
+    delete restoredRecord.reason;
+  }
+  if (original.hadAssertion) {
+    restoredRecord.assertion = original.assertion;
+  } else {
+    delete restored.assertion;
+  }
+  if (original.hadComponentResults) {
+    restored.componentResults = (original.componentResults ?? []) as GradingResult[];
+  } else {
+    delete restored.componentResults;
   }
 
   return restored;
@@ -663,6 +697,7 @@ function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
   previousSuccess: boolean,
+  previousScore: number,
 ): {
   gradingResult: GradingResult;
   clearingManualRating: boolean;
@@ -671,6 +706,9 @@ function normalizeRatingSubmission(
   const previousComponents = Array.isArray(previous?.componentResults)
     ? previous.componentResults
     : [];
+  const previousAutomatedComponents = previousComponents.filter(
+    (componentResult) => !isHumanGradingResult(componentResult),
+  );
   const submittedHasComponents = Array.isArray(submitted.componentResults);
   const submittedComponents = Array.isArray(submitted.componentResults)
     ? submitted.componentResults
@@ -684,19 +722,27 @@ function normalizeRatingSubmission(
     !explicitHumanComponent &&
     !explicitTopLevelHuman;
   const outcomeChanged = previousSuccess !== submitted.pass;
+  const submittedKeys = Object.keys(submitted);
+  const exactMinimalNoopRating =
+    submittedKeys.length === 2 &&
+    submittedKeys.includes('pass') &&
+    submittedKeys.includes('score') &&
+    submitted.pass === previousSuccess &&
+    submitted.score === previousScore;
   const shouldHaveManualRating =
     !clearingManualRating &&
     (Boolean(explicitHumanComponent) ||
       explicitTopLevelHuman ||
       previousHasManualRating ||
-      outcomeChanged);
+      outcomeChanged ||
+      exactMinimalNoopRating);
   const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
 
   if (!shouldHaveManualRating) {
+    if (previous && submittedHasComponents) {
+      gradingResult.componentResults = previousAutomatedComponents;
+    }
     if (clearingManualRating) {
-      gradingResult.componentResults = submittedComponents.filter(
-        (componentResult) => !isHumanGradingResult(componentResult),
-      );
       if (isHumanAssertion(gradingResult.assertion)) {
         delete gradingResult.assertion;
       }
@@ -707,7 +753,7 @@ function normalizeRatingSubmission(
   const previousHumanComponent = previousComponents.find(isHumanGradingResult);
   const humanSource =
     explicitHumanComponent ?? (explicitTopLevelHuman ? submitted : previousHumanComponent);
-  const manualReason = Object.hasOwn(submitted, 'reason')
+  const manualReason = hasOwn(submitted, 'reason')
     ? submitted.reason
     : (humanSource?.reason ?? MANUAL_RATING_REASON);
   const humanRating = {
@@ -721,14 +767,16 @@ function normalizeRatingSubmission(
     },
   } as GradingResult;
 
-  if (Object.hasOwn(submitted, 'comment')) {
+  if (hasOwn(submitted, 'comment')) {
     humanRating.comment = submitted.comment;
   }
   gradingResult.pass = submitted.pass;
   gradingResult.score = submitted.score;
   gradingResult.reason = manualReason;
   gradingResult.componentResults = [
-    ...submittedComponents.filter((componentResult) => !isHumanGradingResult(componentResult)),
+    ...(previous
+      ? previousAutomatedComponents
+      : submittedComponents.filter((componentResult) => !isHumanGradingResult(componentResult))),
     humanRating,
   ];
   if (isHumanAssertion(gradingResult.assertion)) {
@@ -739,11 +787,11 @@ function normalizeRatingSubmission(
 }
 
 function resolveRatingTransition(
-  result: PersistedEvalResult,
+  result: RatingEvalResult,
   submittedGradingResult: GradingResult,
-  clearRequestHash: string,
+  clearRequestHash: string | undefined,
 ): {
-  gradingResult: GradingResult;
+  gradingResult: GradingResult | null;
   success: boolean;
   score: number;
   failureReason: ResultFailureReason;
@@ -754,10 +802,11 @@ function resolveRatingTransition(
     result.gradingResult,
     submittedGradingResult,
     result.success,
+    result.score,
   );
   const existingState = getManualRatingState(result.metadata);
   let nextState: ManualRatingState | undefined;
-  let gradingResult = normalized.gradingResult;
+  let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
   let score = gradingResult.score;
   let failureReason: ResultFailureReason = normalized.hasManualRating
@@ -769,9 +818,10 @@ function resolveRatingTransition(
   if (
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
+    clearRequestHash !== undefined &&
     existingState.clearRequestHash === clearRequestHash
   ) {
-    gradingResult = restoreOriginalGradingResult(gradingResult, existingState);
+    gradingResult = restoreOriginalGradingResult(normalized.gradingResult, existingState);
     success = existingState.original.success;
     score = existingState.original.score;
     failureReason = existingState.original.failureReason;
@@ -782,19 +832,21 @@ function resolveRatingTransition(
     nextState = existingState?.status === 'active' ? existingState : undefined;
   } else if (normalized.clearingManualRating) {
     if (existingState?.status === 'active') {
-      gradingResult = restoreOriginalGradingResult(gradingResult, existingState);
+      gradingResult = restoreOriginalGradingResult(normalized.gradingResult, existingState);
       success = existingState.original.success;
       score = existingState.original.score;
       failureReason = existingState.original.failureReason;
       nextState = { ...existingState, status: 'cleared', clearRequestHash };
     } else {
       // Ratings created before provenance was recorded cannot be restored exactly.
-      failureReason = success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
+      failureReason = normalizeFailureReason(result.failureReason);
     }
   }
 
-  gradingResult.pass = success;
-  gradingResult.score = score;
+  if (gradingResult) {
+    gradingResult.pass = success;
+    gradingResult.score = score;
+  }
   const shouldUpdateManualRatingState = existingState !== undefined || nextState !== undefined;
   const metadata = shouldUpdateManualRatingState
     ? setManualRatingState(result.metadata, nextState)
@@ -871,11 +923,18 @@ async function submitEvalResultRating(
   id: string,
   submittedGradingResult: GradingResult,
 ) {
-  const clearRequestHash = sha256(stableJsonStringify(submittedGradingResult));
+  const clearRequestHash = getClearRequestHash(submittedGradingResult);
   const db = await getDb();
   const transactionResult = await db.transaction(async (tx) => {
     const result = await tx
-      .select()
+      .select({
+        failureReason: evalResultsTable.failureReason,
+        gradingResult: evalResultsTable.gradingResult,
+        metadata: evalResultsTable.metadata,
+        promptIdx: evalResultsTable.promptIdx,
+        score: evalResultsTable.score,
+        success: evalResultsTable.success,
+      })
       .from(evalResultsTable)
       .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
       .get();
@@ -892,7 +951,7 @@ async function submitEvalResultRating(
       return { status: 'eval-not-found' as const };
     }
 
-    const prompts = structuredClone(evalRow.prompts ?? []);
+    const prompts = evalRow.prompts ?? [];
     const prompt = prompts[result.promptIdx];
     if (!prompt) {
       throw new Error('Prompt not found');
@@ -1344,6 +1403,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
+  #manualRatingState?: ManualRatingState;
 
   constructor(opts: {
     id: string;
@@ -1388,7 +1448,8 @@ export default class EvalResult {
       metadata: this.metadata,
       traceId: this.traceId,
       evaluationId: this.evaluationId,
-    } = surfaceTraceMetadata(opts.metadata));
+      manualRatingState: this.#manualRatingState,
+    } = surfaceTraceMetadata(opts.metadata, opts.persisted === true));
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -1405,7 +1466,10 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
-      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      metadata: setManualRatingState(
+        persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+        this.#manualRatingState,
+      ),
     };
     //check if this exists in the db
     if (this.persisted) {
