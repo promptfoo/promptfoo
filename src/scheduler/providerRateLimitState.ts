@@ -164,6 +164,7 @@ export class ProviderRateLimitState extends EventEmitter {
       const startTime = Date.now();
 
       try {
+        options.abortSignal?.throwIfAborted();
         const result = await callFn();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
@@ -226,7 +227,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Release slot
         this.slotQueue.release();
-        options.abortSignal?.throwIfAborted();
+        this.throwIfCallAborted(options.abortSignal);
 
         // Check if rate limited (from error, not result)
         const isRateLimited =
@@ -372,6 +373,13 @@ export class ProviderRateLimitState extends EventEmitter {
       requestId,
       error: String(error),
     });
+  }
+
+  private throwIfCallAborted(abortSignal?: AbortSignal): void {
+    if (abortSignal?.aborted) {
+      this.failedRequests++;
+      abortSignal.throwIfAborted();
+    }
   }
 
   private sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {

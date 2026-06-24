@@ -104,6 +104,47 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.completedRequests).toBe(0);
     });
+
+    it('should count an in-flight cancellation as a failed request', async () => {
+      const abortController = new AbortController();
+
+      await expect(
+        state.executeWithRetry(
+          'cancelled-in-flight',
+          async () => {
+            abortController.abort();
+            throw new Error('provider aborted');
+          },
+          { abortSignal: abortController.signal },
+        ),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        completedRequests: 0,
+        failedRequests: 1,
+        totalRequests: 1,
+      });
+    });
+
+    it('should not start a call aborted immediately after slot acquisition', async () => {
+      const abortController = new AbortController();
+      const callFn = vi.fn(async () => 'should not run');
+
+      const promise = state.executeWithRetry('cancelled-before-call', callFn, {
+        abortSignal: abortController.signal,
+      });
+      abortController.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callFn).not.toHaveBeenCalled();
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        completedRequests: 0,
+        failedRequests: 1,
+        totalRequests: 1,
+      });
+    });
   });
 
   describe('executeWithRetry - rate limit detection', () => {

@@ -679,6 +679,28 @@ describe('SlotQueue', () => {
       expect(queue.getQueueDepth()).toBe(0);
       expect(vi.getTimerCount()).toBe(0);
     });
+
+    it('should preserve quota reset cleanup after an ordinary queue timeout', async () => {
+      queue = new SlotQueue({
+        maxConcurrency: 1,
+        minConcurrency: 1,
+        queueTimeoutMs: 10,
+      });
+      queue.updateRateLimitState({
+        remainingRequests: 0,
+        resetAt: Date.now() + 40,
+      });
+      const rejection = expect(queue.acquire('timed-out')).rejects.toThrow(
+        'timed out after 10ms in queue',
+      );
+
+      await vi.advanceTimersByTimeAsync(10);
+      await rejection;
+      expect(queue.getResetAt()).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(30);
+      expect(queue.getResetAt()).toBeNull();
+    });
   });
 
   describe('Queue timeout - rejects after timeout', () => {
