@@ -620,7 +620,7 @@ if (result.results[0].flagged) {
   console.log('PII detected:');
   if (result.results[0].payload?.pii) {
     result.results[0].payload.pii.forEach((item) => {
-      console.log(`  ${item.entity_type}: ${item.pii} (${item.start}-${item.end})`);
+      console.log(`  ${item.entity_type} at offsets ${item.start}-${item.end}`);
     });
   }
 }
