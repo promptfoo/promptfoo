@@ -984,7 +984,7 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       });
       fs.writeFileSync(
         path.join(codexHome, 'config.toml'),
-        `[features]\nplugins = true\n\n[marketplaces.${tomlString(CODEX_PLUGIN_MARKETPLACE)}]\nsource = ${tomlString(codexHome)}\n\n[plugins.${tomlString(`${manifest.name}@${CODEX_PLUGIN_MARKETPLACE}`)}]\nenabled = true\n\n[projects.${tomlString(workspace)}]\ntrust_level = "trusted"\n`,
+        `[features]\nplugins = true\n\n[marketplaces.${tomlString(CODEX_PLUGIN_MARKETPLACE)}]\nsource = ${tomlString(codexHome)}\nsource_type = "local"\n\n[plugins.${tomlString(`${manifest.name}@${CODEX_PLUGIN_MARKETPLACE}`)}]\nenabled = true\n\n[projects.${tomlString(workspace)}]\ntrust_level = "trusted"\n`,
       );
       throwIfAborted(signal);
       writeJson(path.join(root, 'runtime.json'), {
