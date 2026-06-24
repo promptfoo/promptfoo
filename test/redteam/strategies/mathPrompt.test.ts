@@ -54,12 +54,19 @@ describe('mathPrompt', () => {
       };
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
-      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {});
+      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {
+        targetId: 'cloud-target-123',
+      });
 
       expect(result).toEqual(mockResult);
       expect(mockProgressBar.start).toHaveBeenCalledWith(1, 0);
       expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
       expect(mockProgressBar.stop).toHaveBeenCalledWith();
+      const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+      expect(requestBody).toBeTypeOf('string');
+      expect(JSON.parse(requestBody as string)).toMatchObject({
+        targetId: 'cloud-target-123',
+      });
     });
 
     it('should handle errors gracefully', async () => {

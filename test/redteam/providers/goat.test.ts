@@ -218,6 +218,22 @@ describe('RedteamGoatProvider', () => {
     expect(lastCallBody.messages).toBeDefined();
   });
 
+  it('should include target context in remote agentic task requests', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+
+    const requestBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(requestBody).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'goat',
+    });
+  });
+
   it('should not dereference file:// paths in remote attacker messages', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

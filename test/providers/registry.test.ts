@@ -277,6 +277,51 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle moonshot providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
+      expect(factory).toBeDefined();
+
+      const moonshotOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'moonshot-test-key' },
+      };
+      const provider = await factory!.create(
+        'moonshot:moonshot-v1-8k',
+        moonshotOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('moonshot:moonshot-v1-8k');
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('moonshot-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
+      expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'moonshot:chat:kimi-k2.6',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const defaultProvider = await factory!.create(
+        'moonshot:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+
+      expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      const { body } = await (chatProvider as any).getOpenAiBody('Hello');
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_tokens).toBeUndefined();
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {
@@ -592,6 +637,20 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
+    });
+
+    it('should handle bedrock mantle chat providers correctly', async () => {
+      const path = 'bedrock:mantle:zai.glm-4.6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        { ...mockProviderOptions, config: { apiKey: 'bedrock-key' } },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
     });
 
     it('should handle bedrock-agent providers correctly', async () => {

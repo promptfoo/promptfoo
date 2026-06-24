@@ -46,6 +46,11 @@
       "enabled": false
     },
     {
+      "description": "Hold tsdown on 0.21.x while Node 20 is supported: tsdown 0.22+ sets engines node ^22.18.0 || >=24.0.0 (drops Node 20.19/20.20), but the repo still builds/tests on Node 20.20 with engine-strict, so 0.22+ aborts npm ci. Revisit when the Node 20 floor is dropped.",
+      "matchPackageNames": ["tsdown"],
+      "allowedVersions": "<0.22.0"
+    },
+    {
       "description": "Group Anthropic packages together across all dependency types",
       "matchPackagePatterns": ["^@anthropic-ai/"],
       "matchDepTypes": [
