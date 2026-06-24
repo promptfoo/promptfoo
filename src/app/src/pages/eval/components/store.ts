@@ -710,6 +710,12 @@ export const useTableStore = create<TableState>()(
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
 
+          // A background refresh for the previously active eval must not replace a newly
+          // selected eval while its response was in flight.
+          if (skipSettingEvalId && get().evalId !== id) {
+            return null;
+          }
+
           // Build async options
           const [redteamOptions, policyIdToNameMap] = await Promise.all([
             buildRedteamFilterOptions(data.config, data.table),

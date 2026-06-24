@@ -11,6 +11,45 @@ import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
 
+function createWriteLockWorker(url: string, holdMs: number) {
+  const worker = new Worker(
+    `
+      const { parentPort, workerData } = require('node:worker_threads');
+      const { createClient } = require('@libsql/client/node');
+      (async () => {
+        const client = createClient({ url: workerData.url });
+        const transaction = await client.transaction('write');
+        await transaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
+        parentPort.postMessage('locked');
+        setTimeout(async () => {
+          await transaction.commit();
+          client.close();
+          parentPort.postMessage('released');
+        }, workerData.holdMs);
+      })().catch((error) => {
+        parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) });
+      });
+    `,
+    { eval: true, workerData: { holdMs, url } },
+  );
+  const waitForMessage = (expected: 'locked' | 'released') =>
+    new Promise<void>((resolve, reject) => {
+      worker.once('error', reject);
+      worker.on('message', (message) => {
+        if (message === expected) {
+          resolve();
+        } else if (message && typeof message === 'object' && 'error' in message) {
+          reject(new Error(String(message.error)));
+        }
+      });
+    });
+  return {
+    locked: waitForMessage('locked'),
+    released: waitForMessage('released'),
+    worker,
+  };
+}
+
 describe('database WAL mode', () => {
   let tempDir: string;
 
@@ -193,7 +232,7 @@ describe('database WAL mode', () => {
     expect(busyTimeout.timeout).toBe(5000);
   });
 
-  it('retries transaction acquisition while another connection holds the write lock', async () => {
+  it('waits for brief transaction contention and restores connection settings', async () => {
     const database = await import('../src/database');
     const db = await database.getDb();
     await db.run('CREATE TABLE transaction_lock_probe (id TEXT PRIMARY KEY)');
@@ -204,40 +243,9 @@ describe('database WAL mode', () => {
       await tx.run("INSERT INTO transaction_lock_probe VALUES ('warm')");
     });
 
-    const worker = new Worker(
-      `
-        const { parentPort, workerData } = require('node:worker_threads');
-        const { createClient } = require('@libsql/client/node');
-        (async () => {
-          const client = createClient({ url: workerData.url });
-          const transaction = await client.transaction('write');
-          await transaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
-          parentPort.postMessage('locked');
-          setTimeout(async () => {
-            await transaction.commit();
-            client.close();
-            parentPort.postMessage('released');
-          }, 1500);
-        })().catch((error) => {
-          parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) });
-        });
-      `,
-      {
-        eval: true,
-        workerData: { url: pathToFileURL(database.getDbPath()).href },
-      },
-    );
+    const lock = createWriteLockWorker(pathToFileURL(database.getDbPath()).href, 1500);
     try {
-      await new Promise<void>((resolve, reject) => {
-        worker.once('error', reject);
-        worker.on('message', (message) => {
-          if (message === 'locked') {
-            resolve();
-          } else if (message && typeof message === 'object' && 'error' in message) {
-            reject(new Error(String(message.error)));
-          }
-        });
-      });
+      await lock.locked;
 
       const startedAt = Date.now();
       const transactionOutcome = db
@@ -260,7 +268,38 @@ describe('database WAL mode', () => {
       await expect(db.get(sql`PRAGMA busy_timeout;`)).resolves.toEqual({ timeout: 5000 });
       await expect(db.get(sql`PRAGMA synchronous;`)).resolves.toEqual({ synchronous: 1 });
     } finally {
-      await worker.terminate();
+      await lock.worker.terminate();
     }
   });
+
+  it('does not multiply the busy timeout across transaction retries', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+    await db.run('CREATE TABLE transaction_lock_probe (id TEXT PRIMARY KEY)');
+
+    const lock = createWriteLockWorker(pathToFileURL(database.getDbPath()).href, 5500);
+    try {
+      await lock.locked;
+      const startedAt = Date.now();
+      const outcome = await db
+        .transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_lock_probe VALUES ('blocked')");
+        })
+        .then(
+          () => ({ ok: true as const }),
+          (error) => ({ ok: false as const, error }),
+        );
+      const elapsedMs = Date.now() - startedAt;
+      await lock.released;
+
+      expect(outcome.ok).toBe(false);
+      expect(elapsedMs).toBeGreaterThanOrEqual(4500);
+      expect(elapsedMs).toBeLessThan(9000);
+      await expect(db.all('SELECT id FROM transaction_lock_probe ORDER BY id')).resolves.toEqual([
+        { id: 'holder' },
+      ]);
+    } finally {
+      await lock.worker.terminate();
+    }
+  }, 12_000);
 });

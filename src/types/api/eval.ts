@@ -294,6 +294,7 @@ export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
+    ratingAction: z.enum(['rate', 'clear']).optional(),
   })
   .passthrough()
   .refine((value) => !exceedsRatingRequestDepth(value), {
@@ -321,6 +322,7 @@ export const SubmitRatingResponseSchema = z
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
+export type SubmitRatingAction = NonNullable<SubmitRatingRequest['ratingAction']>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
 // POST /api/eval (save eval to database)

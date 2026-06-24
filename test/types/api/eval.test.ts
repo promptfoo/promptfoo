@@ -75,6 +75,19 @@ describe('Eval API schemas', () => {
     expect(parsed.gradingResult?.pass).toBe(true);
   });
 
+  it('SubmitRating request schema accepts explicit rating intent and rejects unknown actions', () => {
+    expect(
+      EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 1, ratingAction: 'rate' }),
+    ).toMatchObject({ ratingAction: 'rate' });
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 1,
+        ratingAction: 'delete-everything',
+      }).success,
+    ).toBe(false);
+  });
+
   it('SubmitRating response schema rejects payloads missing the row identifier', () => {
     const result = EvalSchemas.SubmitRating.Response.safeParse({
       success: true,

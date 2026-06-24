@@ -31,6 +31,7 @@ import {
 } from '@promptfoo/types';
 import {
   EVAL_TABLE_MAX_PAGE_SIZE,
+  type SubmitRatingAction,
   type SubmitRatingResponse,
   SubmitRatingResponseSchema,
 } from '@promptfoo/types/api/eval';
@@ -1043,12 +1044,14 @@ async function saveManualRating({
   resultId,
   version,
   gradingResult,
+  ratingAction,
   table,
 }: {
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
+  ratingAction: SubmitRatingAction;
   table: EvaluateTable;
 }): Promise<PersistedRatingResult | undefined> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1060,7 +1063,7 @@ async function saveManualRating({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ...gradingResult }),
+        body: JSON.stringify({ ...gradingResult, ratingAction }),
       })
     : await callApi(EVAL_ROUTES.DETAIL(evalId), {
         method: 'PATCH',
@@ -1701,6 +1704,19 @@ function ResultsTable({
   const latestTableRef = useRef(table);
   latestTableRef.current = table;
   const pendingRatingRequestsRef = useRef(new Map<string, Promise<void>>());
+  const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
+
+  React.useEffect(() => {
+    const generation = ratingScopeRef.current.generation + 1;
+    ratingScopeRef.current = { evalId, generation, mounted: true };
+    pendingRatingRequestsRef.current.clear();
+    return () => {
+      if (ratingScopeRef.current.generation === generation) {
+        ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
+        pendingRatingRequestsRef.current.clear();
+      }
+    };
+  }, [evalId]);
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -1740,26 +1756,33 @@ function ResultsTable({
 
   const handleRating = React.useCallback(
     async (
-      rowIndex: number,
-      promptIndex: number,
+      _rowIndex: number,
+      _promptIndex: number,
       resultId: string,
       isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
-      const previousRequest = pendingRatingRequestsRef.current.get(resultId);
-      if (previousRequest) {
-        await previousRequest;
-      }
-
-      const currentRequest = (async () => {
+      const scopeGeneration = ratingScopeRef.current.generation;
+      const isScopeActive = () => {
+        const scope = ratingScopeRef.current;
+        return scope.mounted && scope.generation === scopeGeneration && scope.evalId === evalId;
+      };
+      const queueKey = version && version >= 4 ? resultId : `legacy:${evalId ?? ''}`;
+      const runRating = async () => {
+        if (!isScopeActive()) {
+          return;
+        }
         const currentTable = latestTableRef.current;
         const currentLocation = findRatingOutput(currentTable, resultId);
-        const currentRowIndex = currentLocation?.rowIndex ?? rowIndex;
-        const currentPromptIndex = currentLocation?.promptIndex ?? promptIndex;
-        const existingOutput =
-          currentLocation?.output ?? currentTable.body[currentRowIndex].outputs[currentPromptIndex];
-        invariant(existingOutput, 'Cannot rate a missing output');
+        if (!currentLocation) {
+          return;
+        }
+        const {
+          output: existingOutput,
+          promptIndex: currentPromptIndex,
+          rowIndex: currentRowIndex,
+        } = currentLocation;
         const ratingUpdate = getManualRatingUpdate({
           existingOutput,
           isPass,
@@ -1786,27 +1809,56 @@ function ResultsTable({
         setTable(newTable);
         if (inComparisonMode) {
           showToast('Ratings are not saved in comparison mode', 'warning');
-        } else {
-          try {
-            const persistedResult = await saveManualRating({
-              evalId,
+          return;
+        }
+
+        const appliedFilters = Object.values(filters.values).filter(isAppliedResultFilter);
+        const refreshCurrentPage = async () => {
+          if (!evalId || !isScopeActive()) {
+            return;
+          }
+          const refreshed = await fetchEvalData(evalId, {
+            pageIndex: pagination.pageIndex,
+            pageSize: pagination.pageSize,
+            filterMode,
+            searchText: debouncedSearchText,
+            filters: appliedFilters,
+            skipSettingEvalId: true,
+            skipLoadingState: true,
+          });
+          if (isScopeActive() && refreshed?.table) {
+            latestTableRef.current = refreshed.table;
+          }
+        };
+
+        const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
+          if (!isScopeActive()) {
+            return;
+          }
+          if (persistedResult && findRatingOutput(latestTableRef.current, resultId)) {
+            const reconciledTable = applyPersistedRatingResult({
+              table: latestTableRef.current,
               resultId,
-              version,
-              gradingResult,
-              table: newTable,
+              result: persistedResult,
             });
-            if (persistedResult) {
-              const reconciledTable = applyPersistedRatingResult({
-                table: latestTableRef.current,
-                resultId,
-                result: persistedResult,
-              });
-              latestTableRef.current = reconciledTable;
-              setTable(reconciledTable);
-            }
-          } catch (error) {
-            console.error('Failed to update table:', error);
-            if (error instanceof ConfirmedRatingPersistenceError) {
+            latestTableRef.current = reconciledTable;
+            setTable(reconciledTable);
+          }
+          if (
+            persistedResult &&
+            (filterMode !== 'all' || Boolean(debouncedSearchText) || appliedFilters.length > 0)
+          ) {
+            await refreshCurrentPage();
+          }
+        };
+
+        const handlePersistenceError = async (error: unknown) => {
+          console.error('Failed to update table:', error);
+          if (!isScopeActive()) {
+            return;
+          }
+          if (error instanceof ConfirmedRatingPersistenceError) {
+            if (findRatingOutput(latestTableRef.current, resultId)) {
               const rolledBackTable = replaceRatingOutput(
                 latestTableRef.current,
                 resultId,
@@ -1814,36 +1866,45 @@ function ResultsTable({
               );
               latestTableRef.current = rolledBackTable;
               setTable(rolledBackTable);
-              return;
             }
-
-            // The server may have committed before the connection or response parsing failed.
-            // Refetch the current page instead of asserting that the optimistic state is wrong.
-            if (evalId) {
-              await fetchEvalData(evalId, {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
-                filterMode,
-                searchText: debouncedSearchText,
-                filters: Object.values(filters.values).filter(isAppliedResultFilter),
-                skipSettingEvalId: true,
-                skipLoadingState: true,
-              }).catch((refreshError) => {
-                console.error(
-                  'Failed to refresh table after an ambiguous rating response:',
-                  refreshError,
-                );
-              });
-            }
+            return;
           }
+
+          // The server may have committed before the connection or response parsing failed.
+          // Refetch the current page instead of asserting that the optimistic state is wrong.
+          await refreshCurrentPage().catch((refreshError) => {
+            console.error(
+              'Failed to refresh table after an ambiguous rating response:',
+              refreshError,
+            );
+          });
+        };
+
+        try {
+          const persistedResult = await saveManualRating({
+            evalId,
+            resultId,
+            version,
+            gradingResult,
+            ratingAction: isPass === null ? 'clear' : 'rate',
+            table: newTable,
+          });
+          await handlePersistedResult(persistedResult);
+        } catch (error) {
+          await handlePersistenceError(error);
         }
-      })();
-      pendingRatingRequestsRef.current.set(resultId, currentRequest);
+      };
+
+      const previousRequest = pendingRatingRequestsRef.current.get(queueKey);
+      const currentRequest = previousRequest
+        ? previousRequest.then(runRating, runRating)
+        : runRating();
+      pendingRatingRequestsRef.current.set(queueKey, currentRequest);
       try {
         await currentRequest;
       } finally {
-        if (pendingRatingRequestsRef.current.get(resultId) === currentRequest) {
-          pendingRatingRequestsRef.current.delete(resultId);
+        if (pendingRatingRequestsRef.current.get(queueKey) === currentRequest) {
+          pendingRatingRequestsRef.current.delete(queueKey);
         }
       }
     },

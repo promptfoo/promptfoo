@@ -95,7 +95,7 @@ const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
  * releases its lock. drizzle re-wraps the libsql error (its own message is just
  * `Failed query: ...`), so walk the cause chain and match on code/message.
  */
-function isTransientDatabaseLockError(error: unknown): boolean {
+function hasDatabaseLockError(error: unknown, includeBusy: boolean): boolean {
   for (
     let current = error as {
         code?: unknown;
@@ -109,18 +109,21 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   ) {
     const code = typeof current.code === 'string' ? current.code : '';
     const extendedCode = typeof current.extendedCode === 'string' ? current.extendedCode : '';
-    if (
-      code.startsWith('SQLITE_BUSY') ||
-      code.startsWith('SQLITE_LOCKED') ||
-      extendedCode.startsWith('SQLITE_BUSY') ||
-      extendedCode.startsWith('SQLITE_LOCKED')
-    ) {
+    const lockedCode = code.startsWith('SQLITE_LOCKED') || extendedCode.startsWith('SQLITE_LOCKED');
+    const busyCode = code.startsWith('SQLITE_BUSY') || extendedCode.startsWith('SQLITE_BUSY');
+    if (lockedCode || (includeBusy && busyCode)) {
       return true;
     }
     const message = typeof current.message === 'string' ? current.message : '';
     if (
-      /\bSQLITE_(?:BUSY|LOCKED)\b/.test(message) ||
-      /database (?:is|table is) locked/i.test(message)
+      /\bSQLITE_LOCKED(?:_[A-Z]+)?\b/.test(message) ||
+      /database table is locked/i.test(message)
+    ) {
+      return true;
+    }
+    if (
+      includeBusy &&
+      (/\bSQLITE_BUSY(?:_[A-Z]+)?\b/.test(message) || /database is locked/i.test(message))
     ) {
       return true;
     }
@@ -128,12 +131,22 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
+function isDatabaseLockError(error: unknown): boolean {
+  return hasDatabaseLockError(error, true);
+}
+
+function isRetryableDatabaseLockError(error: unknown): boolean {
+  // busy_timeout already gives SQLITE_BUSY one bounded acquisition window. Retrying BUSY here
+  // would multiply that timeout for every attempt; only shared-cache SQLITE_LOCKED needs JS retry.
+  return hasDatabaseLockError(error, false);
+}
+
 async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isRetryableDatabaseLockError(error)) {
         throw error;
       }
       await sleep(
@@ -211,7 +224,7 @@ function serializeTopLevelOperations(client: Client, db: Drizzle, skipWalMode: b
         await configureReplacementConnection();
         return await beginTransaction(mode);
       } catch (error) {
-        if (isTransientDatabaseLockError(error)) {
+        if (isDatabaseLockError(error)) {
           await client.reconnect();
         }
         throw error;

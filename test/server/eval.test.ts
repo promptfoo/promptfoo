@@ -819,6 +819,41 @@ describe('eval routes', () => {
       expect(restoredEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
     });
 
+    it('applies a score update after a manual rating is cleared', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false));
+      expect(rateResponse.status).toBe(200);
+
+      const manuallyRatedResult = await EvalResult.findById(result.id);
+      invariant(manuallyRatedResult, 'Manually rated result is required');
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: result.success, score: result.score, ratingAction: 'clear' });
+      expect(clearResponse.status).toBe(200);
+
+      const restoredResult = await EvalResult.findById(result.id);
+      invariant(restoredResult, 'Restored result is required');
+      const scoreResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...createScoreOnlyRatingPayload(restoredResult, 0.4), ratingAction: 'rate' });
+
+      expect(scoreResponse.status).toBe(200);
+      expect(scoreResponse.body.score).toBe(0.4);
+      expect(scoreResponse.body.gradingResult?.score).toBe(0.4);
+      expect(scoreResponse.body.gradingResult).not.toHaveProperty('ratingAction');
+      const persistedResult = await EvalResult.findById(result.id);
+      expect(persistedResult?.score).toBe(0.4);
+      const persistedEval = await Eval.findById(eval_.id);
+      expect(persistedEval?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(0.4);
+    });
+
     it('preserves a recoverable ERROR category when clearing a legacy rating', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -828,6 +863,7 @@ describe('eval routes', () => {
       invariant(result.id, 'Result ID is required');
       await markResultAsError(eval_, result);
       const errorMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(errorMetrics, 'Original error metrics are required');
 
       // Emulate a rating written before provenance existed. The legacy route retained the
       // ERROR failure reason even while the manual pass overrode the visible outcome.
@@ -845,17 +881,25 @@ describe('eval routes', () => {
 
       const legacyRating = await EvalResult.findById(result.id);
       invariant(legacyRating, 'Legacy rating is required');
+      const updateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(legacyRating, true, 0.4));
+      expect(updateResponse.status).toBe(200);
+      const updatedLegacyRating = await EvalResult.findById(result.id);
+      invariant(updatedLegacyRating, 'Updated legacy rating is required');
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createClearManualRatingPayload(legacyRating));
+        .send(createClearManualRatingPayload(updatedLegacyRating));
 
       expect(res.status).toBe(200);
       const restoredResult = await EvalResult.findById(result.id);
       expect(restoredResult?.success).toBe(false);
       expect(restoredResult?.failureReason).toBe(ResultFailureReason.ERROR);
-      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
-        errorMetrics,
-      );
+      const restoredMetrics = (await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics;
+      expect(restoredMetrics).toMatchObject({
+        ...errorMetrics,
+        score: expect.closeTo(errorMetrics.score, 10),
+      });
     });
 
     it('restores server-owned automated components when a clear payload mutates them', async () => {
