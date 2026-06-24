@@ -99,7 +99,7 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
     result.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
   for (const metric of metricNames) {
-    if (!metric) {
+    if (typeof metric !== 'string' || !metric) {
       continue;
     }
 

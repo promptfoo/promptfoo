@@ -35,4 +35,17 @@ describe('getPluginIdFromResult', () => {
 
     expect(getPluginIdFromResult(result)).toBe('harmful:violent-crime');
   });
+
+  it('skips malformed metrics and classifies a later valid metric', () => {
+    const result = {
+      gradingResult: {
+        componentResults: [
+          { assertion: { metric: { secret: 'MALFORMED_METRIC_SECRET' } } },
+          { assertion: { metric: 'PolicyViolation:policy-456' } },
+        ],
+      },
+    } as unknown as Parameters<typeof getPluginIdFromResult>[0];
+
+    expect(getPluginIdFromResult(result)).toBe('policy-456');
+  });
 });

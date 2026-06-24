@@ -132,15 +132,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function projectAssertionForRedteamReport(
+  assertion: unknown,
+): GradingResult['assertion'] | undefined {
+  if (!isRecord(assertion) || typeof assertion.type !== 'string') {
+    return undefined;
+  }
+
+  return {
+    type: assertion.type,
+    ...(typeof assertion.metric === 'string' && { metric: assertion.metric }),
+  } as GradingResult['assertion'];
+}
+
 function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
-  const assertion = gradingResult.assertion
-    ? {
-        type: gradingResult.assertion.type,
-        ...(gradingResult.assertion.metric !== undefined && {
-          metric: gradingResult.assertion.metric,
-        }),
-      }
-    : undefined;
+  const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
 
   const componentResults = Array.isArray(gradingResult.componentResults)
     ? gradingResult.componentResults
@@ -249,28 +255,18 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
     return undefined;
   }
 
-  const assertion: GradingResult['assertion'] =
-    row.gradingAssertionType === null
-      ? undefined
-      : {
-          type: row.gradingAssertionType as NonNullable<GradingResult['assertion']>['type'],
-          ...(row.gradingAssertionMetric !== null && { metric: row.gradingAssertionMetric }),
-        };
-  const componentResults = parseJsonFragment<GradingResult[]>(row.gradingComponentResults)?.map(
-    (componentResult) => ({
-      ...componentResult,
-      pass: Boolean(componentResult.pass),
-      ...(componentResult.assertion && {
-        assertion: {
-          type: componentResult.assertion.type,
-          ...(componentResult.assertion.metric !== null &&
-            componentResult.assertion.metric !== undefined && {
-              metric: componentResult.assertion.metric,
-            }),
-        },
-      }),
-    }),
-  );
+  const assertion = projectAssertionForRedteamReport({
+    type: row.gradingAssertionType,
+    metric: row.gradingAssertionMetric,
+  });
+  const componentResults = parseJsonFragment<unknown[]>(row.gradingComponentResults)
+    ?.filter(isRecord)
+    .map((componentResult) =>
+      projectGradingResultForRedteamReport({
+        ...componentResult,
+        pass: Boolean(componentResult.pass),
+      } as unknown as GradingResult),
+    );
 
   return {
     pass: Boolean(row.gradingPass),
@@ -2269,12 +2265,8 @@ export default class Eval {
         gradingPass: sql<number | null>`json_extract(${validGradingResultJson}, '$.pass')`,
         gradingScore: sql<number | null>`json_extract(${validGradingResultJson}, '$.score')`,
         gradingReason: sql<string | null>`json_extract(${validGradingResultJson}, '$.reason')`,
-        gradingAssertionType: sql<
-          string | null
-        >`json_extract(${validGradingResultJson}, '$.assertion.type')`,
-        gradingAssertionMetric: sql<
-          string | null
-        >`json_extract(${validGradingResultJson}, '$.assertion.metric')`,
+        gradingAssertionType: jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
+        gradingAssertionMetric: jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
         gradingSuggestions: sql<string | null>`${validGradingResultJson} -> '$.suggestions'`,
         gradingComponentResults: sql<string | null>`CASE
           WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
@@ -2292,8 +2284,8 @@ export default class Eval {
                     THEN json_object(
                       'assertion',
                       json_object(
-                        'type', json_extract(${validReportComponentJson}, '$.assertion.type'),
-                        'metric', json_extract(${validReportComponentJson}, '$.assertion.metric')
+                        'type', ${jsonTextOrNull(validReportComponentJson, '$.assertion.type')},
+                        'metric', ${jsonTextOrNull(validReportComponentJson, '$.assertion.metric')}
                       )
                     )
                     ELSE json('{}')

@@ -2095,6 +2095,143 @@ describe('evaluator', () => {
       }
     });
 
+    it('rejects non-text grading assertion identifiers across compact storage modes', async () => {
+      const markers = [
+        'TOP_TYPE_SECRET',
+        'TOP_METRIC_SECRET',
+        'COMPONENT_TYPE_SECRET',
+        'COMPONENT_METRIC_SECRET',
+        'TOP_VALID_TYPE_METRIC_SECRET',
+        'COMPONENT_VALID_TYPE_METRIC_SECRET',
+      ];
+      const createMalformedAssertionResults = () => [
+        createEvaluateResult({
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'invalid assertion type',
+            assertion: {
+              type: { secret: 'TOP_TYPE_SECRET' },
+              metric: ['TOP_METRIC_SECRET'],
+            },
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'invalid component assertion type',
+                assertion: {
+                  type: { secret: 'COMPONENT_TYPE_SECRET' },
+                  metric: ['COMPONENT_METRIC_SECRET'],
+                },
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>),
+        createEvaluateResult({
+          testIdx: 1,
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'invalid assertion metric',
+            assertion: {
+              type: 'contains',
+              metric: { secret: 'TOP_VALID_TYPE_METRIC_SECRET' },
+            },
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'invalid component assertion metric',
+                assertion: {
+                  type: 'contains',
+                  metric: { secret: 'COMPONENT_VALID_TYPE_METRIC_SECRET' },
+                },
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>),
+      ];
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      for (const result of createMalformedAssertionResults()) {
+        await persistedEval.addResult(result);
+      }
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: createMalformedAssertionResults(),
+      });
+      const inMemoryEval = new Eval({});
+      for (const result of createMalformedAssertionResults()) {
+        await inMemoryEval.addResult(result);
+      }
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const [invalidTypeResult, invalidMetricResult] = compact.results.results;
+        const full = await eval_.toResultsFile();
+        const compactJson = JSON.stringify(compact);
+        const fullJson = JSON.stringify(full);
+
+        expect(invalidTypeResult.gradingResult?.assertion).toBeUndefined();
+        expect(invalidTypeResult.gradingResult?.componentResults?.[0].assertion).toBeUndefined();
+        expect(invalidMetricResult.gradingResult?.assertion).toEqual({ type: 'contains' });
+        expect(invalidMetricResult.gradingResult?.componentResults?.[0].assertion).toEqual({
+          type: 'contains',
+        });
+        for (const marker of markers) {
+          expect(compactJson).not.toContain(marker);
+          expect(fullJson).toContain(marker);
+        }
+      }
+    });
+
+    it('validates result-level final prompt fallbacks across compact storage modes', async () => {
+      const createFallbackResults = () => [
+        createEvaluateResult({
+          response: { output: 'malformed fallback output' },
+          metadata: {
+            redteamFinalPrompt: { secret: 'RESULT_FINAL_PROMPT_SECRET' },
+          },
+        } as unknown as Partial<EvaluateResult>),
+        createEvaluateResult({
+          testIdx: 1,
+          response: { output: 'valid fallback output' },
+          metadata: { redteamFinalPrompt: 'VALID_RESULT_FINAL_FALLBACK' },
+        }),
+      ];
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      for (const result of createFallbackResults()) {
+        await persistedEval.addResult(result);
+      }
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: createFallbackResults() });
+      const inMemoryEval = new Eval({});
+      for (const result of createFallbackResults()) {
+        await inMemoryEval.addResult(result);
+      }
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const [malformedFallback, validFallback] = compact.results.results;
+        const full = await eval_.toResultsFile();
+        const [fullMalformedFallback, fullValidFallback] = full.results.results;
+
+        expect(malformedFallback.response).toEqual({ output: 'malformed fallback output' });
+        expect(JSON.stringify(malformedFallback)).not.toContain('RESULT_FINAL_PROMPT_SECRET');
+        expect(validFallback.response).toEqual({
+          output: 'valid fallback output',
+          metadata: { redteamFinalPrompt: 'VALID_RESULT_FINAL_FALLBACK' },
+        });
+        expect(fullMalformedFallback.response).toEqual({ output: 'malformed fallback output' });
+        expect(fullMalformedFallback.metadata?.redteamFinalPrompt).toEqual({
+          secret: 'RESULT_FINAL_PROMPT_SECRET',
+        });
+        expect(fullValidFallback.response).toEqual({ output: 'valid fallback output' });
+        expect(fullValidFallback.metadata?.redteamFinalPrompt).toBe('VALID_RESULT_FINAL_FALLBACK');
+      }
+    });
+
     it('honors output strip flags in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addPrompts([
