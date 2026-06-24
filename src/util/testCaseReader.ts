@@ -704,6 +704,28 @@ async function loadTestWithVars(
   return ret;
 }
 
+function loadExternalDefaultTestAssertionValues(assertions: TestCase['assert']): void {
+  if (!Array.isArray(assertions)) {
+    return;
+  }
+  const pending: unknown[] = [...assertions];
+  const visited = new WeakSet<object>();
+  while (pending.length > 0) {
+    const assertion = pending.pop();
+    if (typeof assertion !== 'object' || assertion === null || visited.has(assertion)) {
+      continue;
+    }
+    visited.add(assertion);
+    const record = assertion as Record<string, unknown>;
+    if (record.type === 'assert-set' && Array.isArray(record.assert)) {
+      pending.push(...record.assert);
+    }
+    if (Object.prototype.hasOwnProperty.call(record, 'value')) {
+      record.value = maybeLoadConfigFromExternalFile(record.value, 'assertion');
+    }
+  }
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -719,6 +741,9 @@ export async function readTest(
     const rawTestCase = (
       isDefaultTest ? rawContent : maybeLoadConfigFromExternalFile(rawContent)
     ) as TestCaseWithVarsFile;
+    if (isDefaultTest) {
+      loadExternalDefaultTestAssertionValues(rawTestCase.assert);
+    }
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
     rebaseTestCaseVarFileReferences(testCase, effectiveBasePath, basePath || process.cwd());
   } else {

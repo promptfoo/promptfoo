@@ -785,6 +785,12 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve mixed-case Python files with function names in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.PY:get_assert', 'assertion');
+        expect(result).toBe('file://assert.PY:get_assert');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should preserve JavaScript files in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://assert.js', 'assertion');
         expect(result).toBe('file://assert.js');
@@ -794,6 +800,12 @@ describe('file utilities', () => {
       it('should preserve TypeScript files in assertion context', () => {
         const result = maybeLoadFromExternalFile('file://assert.ts', 'assertion');
         expect(result).toBe('file://assert.ts');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve named Ruby files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.rb:check', 'assertion');
+        expect(result).toBe('file://assert.rb:check');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

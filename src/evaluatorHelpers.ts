@@ -551,10 +551,6 @@ function referencesProtectedAliasPath(
   ) {
     return true;
   }
-  if (analysis.referenced.size === 0) {
-    return hasEvaluatedSyntax;
-  }
-
   // A parenthesized/filter result can be dereferenced after the static prefix
   // (for example `(items | first).polluted`). The prefix alone cannot prove the
   // final value safe, so preserve the template conservatively.
@@ -626,7 +622,18 @@ function getDirectTopLevelReference(value: string): string | undefined {
 }
 
 function getNestedFileReferencePath(value: string): string {
-  const referencedPath = value.slice('file://'.length);
+  let referencedPath = value.slice('file://'.length);
+  const lastColonIndex = referencedPath.lastIndexOf(':');
+  const lastSeparatorIndex = Math.max(
+    referencedPath.lastIndexOf('/'),
+    referencedPath.lastIndexOf('\\'),
+  );
+  if (lastColonIndex > 1 && lastColonIndex > lastSeparatorIndex) {
+    const candidateFilePath = referencedPath.slice(0, lastColonIndex);
+    if (isJavascriptFile(candidateFilePath) || candidateFilePath.toLowerCase().endsWith('.py')) {
+      referencedPath = candidateFilePath;
+    }
+  }
   return process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencedPath)
     ? referencedPath.slice(1)
     : referencedPath;
@@ -788,23 +795,12 @@ function renderTopLevelStringVar(
   vars: Record<string, VarValue>,
   nunjucks: ReturnType<typeof getNunjucksEngine>,
   renderVars: Record<string, VarValue> = vars,
-  rethrowErrors = false,
 ): VarValue {
   const value = vars[key];
   if (typeof value !== 'string' || referencesUndefinedVariables(value, renderVars)) {
     return value;
   }
-
-  try {
-    return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), renderVars);
-  } catch (error) {
-    if (rethrowErrors) {
-      throw error;
-    }
-    // Keep the established top-level behavior: malformed or deferred templates
-    // remain raw until the final prompt render decides whether they are needed.
-    return value;
-  }
+  return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), renderVars);
 }
 
 function parseStaticTemplatePath(
@@ -976,9 +972,6 @@ function renderNestedFileRefTemplates(
   const topLevelStringStates = new Map<string, 'visiting' | 'done'>();
   const states = new Map<NestedRenderTarget, 'visiting' | 'done'>();
   const targetsByContainer = new WeakMap<object, Map<string, NestedRenderTarget>>();
-  const mappedTopLevelFileVarNames = new Set(
-    renderTargets.flatMap((target) => target.topLevelFileVarName ?? []),
-  );
   for (const target of renderTargets) {
     const containerTargets = targetsByContainer.get(target.container) ?? new Map();
     containerTargets.set(target.key, target);
@@ -1148,13 +1141,7 @@ function renderNestedFileRefTemplates(
       }
     }
 
-    templateVars[rootName] = renderTopLevelStringVar(
-      rootName,
-      vars,
-      nunjucks,
-      templateVars,
-      mappedTopLevelFileVarNames.has(rootName),
-    );
+    templateVars[rootName] = renderTopLevelStringVar(rootName, vars, nunjucks, templateVars);
     renderedTopLevelVars.set(rootName, templateVars[rootName]);
     topLevelStringStates.set(rootName, 'done');
   }

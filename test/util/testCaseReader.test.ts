@@ -1030,6 +1030,115 @@ describe('readTest', () => {
     expect(result.options?.provider).toEqual(defaultTestInput.options.provider);
   });
 
+  it('loads only the assertion subtree in an external defaultTest', async () => {
+    const defaultTestInput = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'file://raw.txt',
+          provider: 'file://assert-provider.js',
+          transform: 'file://assert-transform.js:transform',
+        },
+        { type: 'equals', value: { nested: ['file://nested.txt'] } },
+        { type: 'contains-any', value: 'file://fixtures/*.txt' },
+        { type: 'javascript', value: 'file://assert.js:check' },
+        { type: 'contains', value: 'file://dynamic-value.js' },
+        { type: 'ruby', value: 'file://assert.rb:check' },
+        { type: 'assert-set', assert: [{ type: 'equals', value: 'file://set.txt' }] },
+      ],
+      options: {
+        provider: { id: 'file://../providers/grader.cjs' },
+        transform: 'file://transform.js:transform',
+      },
+    };
+    const expectedAssertions = [
+      {
+        type: 'equals',
+        value: 'RAW\n',
+        provider: 'file://assert-provider.js',
+        transform: 'file://assert-transform.js:transform',
+      },
+      { type: 'equals', value: { nested: ['NESTED\n'] } },
+      { type: 'contains-any', value: ['FIRST\n', 'SECOND\n'] },
+      { type: 'javascript', value: 'file://assert.js:check' },
+      { type: 'contains', value: 'file://dynamic-value.js' },
+      { type: 'ruby', value: 'file://assert.rb:check' },
+      { type: 'assert-set', assert: [{ type: 'equals', value: 'SET\n' }] },
+    ];
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(defaultTestInput));
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) => {
+      if (config === 'file://raw.txt') {
+        return 'RAW\n';
+      }
+      if (config === 'file://fixtures/*.txt') {
+        return ['FIRST\n', 'SECOND\n'];
+      }
+      if (config === 'file://set.txt') {
+        return 'SET\n';
+      }
+      if (config?.nested?.[0] === 'file://nested.txt') {
+        return { nested: ['NESTED\n'] };
+      }
+      return config;
+    });
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual(expectedAssertions);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://raw.txt', 'assertion');
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      { nested: ['file://nested.txt'] },
+      'assertion',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://fixtures/*.txt',
+      'assertion',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://assert.js:check',
+      'assertion',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://dynamic-value.js',
+      'assertion',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://assert.rb:check',
+      'assertion',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://set.txt', 'assertion');
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      'file://assert-provider.js',
+      expect.anything(),
+    );
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      'file://assert-transform.js:transform',
+      expect.anything(),
+    );
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      defaultTestInput.options.provider.id,
+      expect.anything(),
+    );
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      defaultTestInput.options.transform,
+      expect.anything(),
+    );
+    expect(result.options).toEqual(defaultTestInput.options);
+  });
+
+  it('leaves malformed external defaultTest assertions for established validation', async () => {
+    const malformedAssert = { type: 'equals', value: 'file://raw.txt' };
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump({ assert: malformedAssert }));
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual(malformedAssert);
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      'file://raw.txt',
+      expect.anything(),
+    );
+  });
+
   it('should skip validation for defaultTest with model-graded eval provider', async () => {
     const defaultTestInput = {
       options: {

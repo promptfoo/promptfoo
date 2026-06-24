@@ -137,11 +137,13 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve executable file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  const isPythonFile = /\.py(?::[^/\\]+)?$/i.test(renderedFilePath);
+  const isRubyFile = /\.rb(?::[^/\\]+)?$/i.test(renderedFilePath);
+  if (context === 'assertion' && (isJavascriptFile(cleanPath) || isPythonFile || isRubyFile)) {
+    logger.debug(`Preserving executable file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 

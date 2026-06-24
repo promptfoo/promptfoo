@@ -1074,6 +1074,20 @@ describe('evaluatorHelpers', () => {
       expect(tick).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      ['plain', '{{ context.message }}'],
+      ['JSON', '{"message":"{{ context.message }}"}'],
+    ])('should surface render errors from nested-file helper dependencies in %s prompts', async (_kind, promptText) => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        helper: '{{ name | uppper }}',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ helper }}');
+
+      await expect(renderPrompt(toPrompt(promptText), vars, {})).rejects.toThrow(/uppper/);
+    });
+
     it('should not retry a filter that intentionally returns template syntax', async () => {
       const tick = vi.fn((value: string) => `{{ ${value} }}-${tick.mock.calls.length}`);
       const vars: Record<string, any> = {
@@ -1135,6 +1149,24 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{{ env.PROMPTFOO_REGISTER_SENTINEL }}');
       expect(renderedPrompt).not.toContain('must-not-render');
       mockProcessEnv({ PROMPTFOO_REGISTER_SENTINEL: undefined });
+    });
+
+    it('should render constant helper templates when an unrelated runtime register exists', async () => {
+      const vars: Record<string, any> = {
+        favoriteFruit: 'apple',
+        system: '{{ "be concise" | upper }}',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ system }} {{ favoriteFruit }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['favoriteFruit'],
+      );
+
+      expect(renderedPrompt).toBe('BE CONCISE apple');
     });
 
     it('should keep aliases of runtime register and conversation objects opaque', async () => {
@@ -1259,6 +1291,20 @@ describe('evaluatorHelpers', () => {
 
       expect(readFile).toHaveBeenCalledWith(expect.stringContaining('report:2026.txt'));
       expect(renderedPrompt).toBe('report body');
+    });
+
+    it('should preserve colons after executable-looking directory names', async () => {
+      const vars: Record<string, any> = {
+        history: { report: 'file://reports.js:archive/report.txt' },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('archive body');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ history.report }}'), vars, {});
+
+      expect(readFile).toHaveBeenCalledWith(
+        expect.stringContaining('reports.js:archive/report.txt'),
+      );
+      expect(renderedPrompt).toBe('archive body');
     });
 
     it('should leave file refs on frozen / non-writable nested objects untouched (issue #1613)', async () => {
@@ -2088,6 +2134,62 @@ describe('evaluatorHelpers', () => {
       expect(vars.nested.pdf).toBe('file:///path/to/document.pdf');
       expect(vars.nested.image).toBe('file:///path/to/image.png');
       expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should leave nested named JavaScript and Python references unresolved', async () => {
+      const vars: Record<string, any> = {
+        nested: {
+          script: 'file:///path/to/source.js:build',
+          python: 'file:///path/to/source.py:build',
+          uppercasePython: 'file:///path/to/source.PY:build',
+        },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ nested.script }}|{{ nested.python }}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        'file:///path/to/source.js:build|file:///path/to/source.py:build',
+      );
+      expect(vars.nested).toEqual({
+        script: 'file:///path/to/source.js:build',
+        python: 'file:///path/to/source.py:build',
+        uppercasePython: 'file:///path/to/source.PY:build',
+      });
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should leave canonical Windows named executable references unresolved', async () => {
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+      const vars: Record<string, any> = {
+        nested: {
+          script: 'file:///C:/suite/source.js:build',
+          python: 'file:///C:/suite/source.PY:build',
+        },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{{ nested.script }}|{{ nested.python }}'),
+          vars,
+          {},
+        );
+
+        expect(renderedPrompt).toBe(
+          'file:///C:/suite/source.js:build|file:///C:/suite/source.PY:build',
+        );
+        expect(readFile).not.toHaveBeenCalled();
+      } finally {
+        if (originalPlatform) {
+          Object.defineProperty(process, 'platform', originalPlatform);
+        }
+      }
     });
 
     it('should resolve nested array file references sequentially (issue #1613)', async () => {

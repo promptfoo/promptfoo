@@ -660,6 +660,27 @@ describe('runEval', () => {
     expect(JSON.parse(callApi.mock.calls[0][0])).toEqual({ message: 'apple is crisp' });
   });
 
+  it('should render constant helper templates alongside runtime registers', async () => {
+    const registers = { favoriteFruit: 'apple' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ system }} {{ favoriteFruit }}', label: 'constant-register-helper' },
+      test: { vars: { system: '{{ "be concise" | upper }}' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith('BE CONCISE apple', expect.anything(), undefined);
+  });
+
   it('should render protected helpers before reporting provider failures', async () => {
     const registers = { favoriteFruit: 'apple', reason: 'crisp' };
     const callApi = vi.fn(async () => {
