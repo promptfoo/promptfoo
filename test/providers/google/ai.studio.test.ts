@@ -2314,6 +2314,68 @@ describe('AIStudioChatProvider', () => {
             cacheReadInputTokens: 4,
           },
         });
+        expect(response.cost).toBeCloseTo(0.00005192, 10);
+      });
+
+      it('should preserve a valid response when cache metadata is malformed', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'valid response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              cachedContentTokenCount: 4,
+              cacheTokensDetails: [{ modality: 7, tokenCount: 4 }],
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('valid response');
+        expect(response.cost).toBeCloseTo(0.000053, 10);
+      });
+
+      it('should price partially cached audio from prompt and cache modality details', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'audio response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10000,
+              candidatesTokenCount: 0,
+              totalTokenCount: 10000,
+              cachedContentTokenCount: 8000,
+              promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 10000 }],
+              cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.output).toBe('audio response');
+        expect(response.cost).toBeCloseTo(0.0028, 10);
+        expect(response.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(8000);
       });
 
       it('should track thinking tokens with zero value', async () => {

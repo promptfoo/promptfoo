@@ -10,12 +10,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import {
-  calculateCost,
-  type ProviderConfig,
-  parseChatPrompt,
-  transformToolChoice,
-} from '../shared';
+import { type ProviderConfig, parseChatPrompt, transformToolChoice } from '../shared';
 import { loadCredentials } from './auth';
 import { GOOGLE_MODELS, type GoogleModelCost } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
@@ -219,17 +214,22 @@ interface GeminiTokenDetails {
 export interface GeminiCacheUsageMetadata {
   cachedContentTokenCount?: number;
   cacheTokensDetails?: GeminiTokenDetails[];
+  promptTokensDetails?: GeminiTokenDetails[];
 }
 
 interface GoogleCacheReadUsage {
-  cost: number;
-  tokenCount: number;
+  costAdjustment: number;
 }
 
-// Modalities Google bills at the text/image/video cache-read rate. An unspecified or
-// omitted modality defaults to this tier, and DOCUMENT (e.g. PDF) tokens are billed at
-// the image rate. Audio has a separate cache-read rate and is handled explicitly below.
-const TEXT_IMAGE_VIDEO_CACHE_MODALITIES = new Set([
+interface GooglePromptInputUsage {
+  audioTokens: number;
+  cost: number;
+  hasCompleteModalityDetails: boolean;
+}
+
+// Modalities Google bills at the text/image/video rate. An unspecified or omitted
+// modality defaults to this tier, and DOCUMENT (e.g. PDF) tokens use the image rate.
+const TEXT_IMAGE_VIDEO_MODALITIES = new Set([
   '',
   'modality_unspecified',
   'text',
@@ -238,13 +238,116 @@ const TEXT_IMAGE_VIDEO_CACHE_MODALITIES = new Set([
   'document',
 ]);
 
+type GoogleTokenModality = 'audio' | 'textImageVideo';
+
+interface ParsedGoogleTokenDetails {
+  details: Array<{ modality: GoogleTokenModality | undefined; tokenCount: number }>;
+  tokenCount: number;
+}
+
+function getGoogleTokenModality(modality: unknown): GoogleTokenModality | undefined {
+  if (modality != null && typeof modality !== 'string') {
+    return undefined;
+  }
+
+  const normalizedModality = modality?.toLowerCase() ?? '';
+  if (TEXT_IMAGE_VIDEO_MODALITIES.has(normalizedModality)) {
+    return 'textImageVideo';
+  }
+  return normalizedModality === 'audio' ? 'audio' : undefined;
+}
+
+function parseGoogleTokenDetails(details: unknown): ParsedGoogleTokenDetails | undefined {
+  if (!Array.isArray(details)) {
+    return undefined;
+  }
+
+  const parsedDetails: ParsedGoogleTokenDetails['details'] = [];
+  let totalTokenCount = 0;
+  for (const rawDetail of details) {
+    if (rawDetail == null || typeof rawDetail !== 'object') {
+      return undefined;
+    }
+
+    const { modality, tokenCount } = rawDetail as GeminiTokenDetails;
+    if (
+      (modality != null && typeof modality !== 'string') ||
+      !Number.isFinite(tokenCount) ||
+      tokenCount == null ||
+      tokenCount < 0
+    ) {
+      return undefined;
+    }
+
+    totalTokenCount += tokenCount;
+    if (!Number.isFinite(totalTokenCount)) {
+      return undefined;
+    }
+    parsedDetails.push({ modality: getGoogleTokenModality(modality), tokenCount });
+  }
+
+  return { details: parsedDetails, tokenCount: totalTokenCount };
+}
+
+function getGooglePromptInputUsage(
+  cost: GoogleModelCost,
+  promptTokens: number,
+  promptTokensDetails: unknown,
+): GooglePromptInputUsage {
+  const fallback = {
+    audioTokens: 0,
+    cost: promptTokens * cost.input,
+    hasCompleteModalityDetails: false,
+  };
+  if (cost.audioInput == null || !Array.isArray(promptTokensDetails)) {
+    return fallback;
+  }
+
+  const parsedDetails = parseGoogleTokenDetails(promptTokensDetails);
+  if (
+    parsedDetails == null ||
+    parsedDetails.tokenCount !== promptTokens ||
+    parsedDetails.details.some(({ modality }) => modality == null)
+  ) {
+    return fallback;
+  }
+
+  const audioTokens = parsedDetails.details.reduce(
+    (total, detail) => total + (detail.modality === 'audio' ? detail.tokenCount : 0),
+    0,
+  );
+  return {
+    audioTokens,
+    cost: fallback.cost + audioTokens * (cost.audioInput - cost.input),
+    hasCompleteModalityDetails: true,
+  };
+}
+
+function getGoogleCacheAdjustmentRate(
+  cost: GoogleModelCost,
+  promptInputUsage: GooglePromptInputUsage,
+  modality: GoogleTokenModality,
+): number | undefined {
+  const cacheReadRate =
+    typeof cost.cacheRead === 'number' ? cost.cacheRead : cost.cacheRead?.[modality];
+  if (cacheReadRate == null) {
+    return undefined;
+  }
+  if (modality === 'audio') {
+    return promptInputUsage.hasCompleteModalityDetails && cost.audioInput != null
+      ? cacheReadRate - cost.audioInput
+      : undefined;
+  }
+  return cacheReadRate - cost.input;
+}
+
 function getGoogleCacheReadUsage(
   cost: GoogleModelCost | undefined,
   promptTokens: number,
+  promptInputUsage: GooglePromptInputUsage,
   cacheUsage: GeminiCacheUsageMetadata | undefined,
 ): GoogleCacheReadUsage | undefined {
   const cachedTokens = cacheUsage?.cachedContentTokenCount;
-  const cacheTokensDetails = cacheUsage?.cacheTokensDetails;
   if (
     !cost?.cacheRead ||
     !Number.isFinite(promptTokens) ||
@@ -257,71 +360,80 @@ function getGoogleCacheReadUsage(
   }
 
   const cachedTokenLimit = Math.min(promptTokens, cachedTokens);
-  if (typeof cost.cacheRead === 'number') {
+  if (typeof cost.cacheRead === 'number' && cost.audioInput == null) {
     return {
-      cost: cachedTokenLimit * cost.cacheRead,
-      tokenCount: cachedTokenLimit,
+      costAdjustment: cachedTokenLimit * (cost.cacheRead - cost.input),
     };
   }
-  if (!cacheTokensDetails?.length) {
+
+  const parsedDetails = parseGoogleTokenDetails(cacheUsage?.cacheTokensDetails);
+  if (parsedDetails == null || parsedDetails.tokenCount === 0) {
     return undefined;
   }
 
-  let cacheReadCost = 0;
-  let detailTokenCount = 0;
-  let pricedTokenCount = 0;
-  let hasUnpricedTokens = false;
-  const pricedRates = new Set<number>();
-
-  for (const detail of cacheTokensDetails) {
-    if (!Number.isFinite(detail.tokenCount) || detail.tokenCount == null || detail.tokenCount < 0) {
+  if (promptInputUsage.hasCompleteModalityDetails) {
+    const cachedAudioTokens = parsedDetails.details.reduce(
+      (total, detail) => total + (detail.modality === 'audio' ? detail.tokenCount : 0),
+      0,
+    );
+    const cachedTextImageVideoTokens = parsedDetails.details.reduce(
+      (total, detail) => total + (detail.modality === 'textImageVideo' ? detail.tokenCount : 0),
+      0,
+    );
+    if (
+      cachedAudioTokens > promptInputUsage.audioTokens ||
+      cachedTextImageVideoTokens > promptTokens - promptInputUsage.audioTokens
+    ) {
       return undefined;
     }
+  }
 
-    const tokenCount = detail.tokenCount;
+  let costAdjustment = 0;
+  let pricedTokenCount = 0;
+  let hasUnpricedTokens = false;
+  const adjustmentRates = new Set<number>();
+
+  for (const { modality, tokenCount } of parsedDetails.details) {
     if (tokenCount === 0) {
       continue;
     }
-    detailTokenCount += tokenCount;
-
-    // An omitted/unspecified modality defaults to the text/image/video rate (see
-    // TEXT_IMAGE_VIDEO_CACHE_MODALITIES); audio is priced separately. Any other modality
-    // is left unpriced so the caller falls back to the undiscounted input estimate.
-    const modality = detail.modality?.toLowerCase() ?? '';
-    let cacheReadRate: number | undefined;
-    if (TEXT_IMAGE_VIDEO_CACHE_MODALITIES.has(modality)) {
-      cacheReadRate = cost.cacheRead.textImageVideo;
-    } else if (modality === 'audio') {
-      cacheReadRate = cost.cacheRead.audio;
-    }
-
-    if (cacheReadRate == null) {
+    if (modality == null) {
       hasUnpricedTokens = true;
       continue;
     }
+
+    const adjustmentRate = getGoogleCacheAdjustmentRate(cost, promptInputUsage, modality);
+    if (adjustmentRate == null) {
+      hasUnpricedTokens = true;
+      continue;
+    }
+
     pricedTokenCount += tokenCount;
-    pricedRates.add(cacheReadRate);
-    cacheReadCost += tokenCount * cacheReadRate;
+    adjustmentRates.add(adjustmentRate);
+    costAdjustment += tokenCount * adjustmentRate;
+    if (!Number.isFinite(pricedTokenCount) || !Number.isFinite(costAdjustment)) {
+      return undefined;
+    }
   }
 
-  if (detailTokenCount === 0 || pricedTokenCount === 0) {
+  if (pricedTokenCount === 0) {
     return undefined;
   }
 
-  if (detailTokenCount > cachedTokenLimit) {
+  if (parsedDetails.tokenCount > cachedTokenLimit) {
     // If the aggregate and mixed-modality detail disagree, there is no safe way
     // to know which modality counts fit within the reported cached-token total.
-    if (hasUnpricedTokens || pricedRates.size > 1) {
+    if (hasUnpricedTokens || adjustmentRates.size > 1) {
       return undefined;
     }
 
-    // Every detailed token has the same known rate, so the priced count can be
-    // safely capped to the aggregate/prompt limit.
-    const scale = cachedTokenLimit / detailTokenCount;
-    return { cost: cacheReadCost * scale, tokenCount: cachedTokenLimit };
+    // Every detailed token has the same known adjustment, so the priced count can be
+    // safely capped without multiplying an overflowed aggregate.
+    const [adjustmentRate] = adjustmentRates;
+    return { costAdjustment: cachedTokenLimit * adjustmentRate };
   }
 
-  return { cost: cacheReadCost, tokenCount: pricedTokenCount };
+  return { costAdjustment };
 }
 
 /**
@@ -336,7 +448,7 @@ function getGoogleCacheReadUsage(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
- * @param cacheUsage - Cached input token count and modality breakdown
+ * @param cacheUsage - Prompt and cached input token modality breakdowns
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -348,56 +460,50 @@ export function calculateGoogleCost(
   cacheUsage?: GeminiCacheUsageMetadata,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
-
-  let baseCost: number | undefined;
-  let inputCost: number | undefined;
-  // The model-pricing object whose `input` rate produced `inputCost`. The cache-read
-  // discount must read its `cacheRead` from this SAME object so we never subtract one
-  // tier's input rate while adding another tier's cache-read rate (e.g. a Vertex base
-  // rate with an AI Studio cache rate). If this source lacks `cacheRead`, repricing
-  // simply no-ops rather than borrowing a rate from a different tier.
-  let costSource: GoogleModelCost | undefined;
-  const hasExplicitInputCostOverride = config.cost != null || config.inputCost != null;
-
-  // Check for tiered pricing (higher rates above token threshold)
-  if (promptTokens != null && completionTokens != null) {
-    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      costSource = model.tieredCost.above;
-      inputCost = config.inputCost ?? config.cost ?? costSource.input;
-      const outputCost = config.outputCost ?? config.cost ?? costSource.output;
-      baseCost = inputCost * promptTokens + outputCost * completionTokens;
-    } else if (isVertexMode && model?.vertexCost) {
-      // Use Vertex-specific pricing when available
-      costSource = model.vertexCost;
-      inputCost = config.inputCost ?? config.cost ?? costSource.input;
-      const outputCost = config.outputCost ?? config.cost ?? costSource.output;
-      baseCost = inputCost * promptTokens + outputCost * completionTokens;
-    }
-  }
-
-  if (baseCost === undefined) {
-    // Standard (non-tiered) pricing.
-    baseCost = calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
-    if (model?.cost) {
-      costSource = model.cost;
-      inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-    }
-  }
-
-  if (baseCost === undefined) {
+  if (promptTokens == null || completionTokens == null) {
     return undefined;
   }
 
-  // Re-price only cached tokens with known modality rates. Keep user input-cost overrides
-  // authoritative; an output-only override does not affect cache-read pricing.
-  if (promptTokens != null && inputCost != null && !hasExplicitInputCostOverride) {
-    const cacheReadUsage = getGoogleCacheReadUsage(costSource, promptTokens, cacheUsage);
-    if (cacheReadUsage !== undefined) {
-      return baseCost - cacheReadUsage.tokenCount * inputCost + cacheReadUsage.cost;
-    }
+  const specialCostSource =
+    model?.tieredCost && promptTokens > model.tieredCost.threshold
+      ? model.tieredCost.above
+      : isVertexMode
+        ? model?.vertexCost
+        : undefined;
+  const costSource = specialCostSource ?? model?.cost;
+  if (
+    costSource == null ||
+    (specialCostSource == null &&
+      (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)))
+  ) {
+    return undefined;
   }
 
-  return baseCost;
+  const explicitInputCost = config.inputCost ?? config.cost;
+  const promptInputUsage =
+    explicitInputCost == null
+      ? getGooglePromptInputUsage(costSource, promptTokens, cacheUsage?.promptTokensDetails)
+      : {
+          audioTokens: 0,
+          cost: promptTokens * explicitInputCost,
+          hasCompleteModalityDetails: false,
+        };
+  const outputCost = config.outputCost ?? config.cost ?? costSource.output;
+  const baseCost = promptInputUsage.cost + outputCost * completionTokens;
+
+  // Explicit input-cost overrides remain authoritative. An output-only override still
+  // permits the built-in prompt-modality and cache-read rates.
+  if (explicitInputCost != null) {
+    return baseCost;
+  }
+
+  const cacheReadUsage = getGoogleCacheReadUsage(
+    costSource,
+    promptTokens,
+    promptInputUsage,
+    cacheUsage,
+  );
+  return baseCost + (cacheReadUsage?.costAdjustment ?? 0);
 }
 
 const ajv = getAjv();

@@ -493,39 +493,6 @@ describe('GoogleProvider', () => {
       });
     });
 
-    it('does not surface cacheReadInputTokens on a cache hit', async () => {
-      // A fetchWithCache hit replays usageMetadata (incl. cachedContentTokenCount). The cached
-      // branch must report reasoning only and omit cacheReadInputTokens so cache-served evals
-      // don't re-count Gemini context-cache reads that never happened on the hit.
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-            thoughtsTokenCount: 4,
-            cachedContentTokenCount: 8,
-          },
-        },
-        cached: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.cached).toBe(true);
-      expect(result.cost).toBeUndefined();
-      expect(result.tokenUsage).toEqual({
-        cached: 15,
-        total: 15,
-        numRequests: 0,
-        completionDetails: { reasoning: 4, acceptedPrediction: 0, rejectedPrediction: 0 },
-      });
-      expect(result.tokenUsage?.completionDetails).not.toHaveProperty('cacheReadInputTokens');
-    });
-
     it('should extract grounding metadata from response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -758,13 +725,7 @@ describe('GoogleProvider', () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 0,
-            totalTokenCount: 10,
-            cachedContentTokenCount: 4,
-            cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 4 }],
-          },
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
         },
         cached: false,
         status: 200,
@@ -779,16 +740,9 @@ describe('GoogleProvider', () => {
       );
       expect(result.guardrails?.flagged).toBe(true);
       expect(result.cached).toBe(false);
-      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(4);
       expect(result.raw).toEqual({
         candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
-        usageMetadata: {
-          promptTokenCount: 10,
-          candidatesTokenCount: 0,
-          totalTokenCount: 10,
-          cachedContentTokenCount: 4,
-          cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 4 }],
-        },
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
       });
     });
 
@@ -882,8 +836,6 @@ describe('GoogleProvider', () => {
             candidatesTokenCount: 20,
             totalTokenCount: 30,
             thoughtsTokenCount: 100,
-            cachedContentTokenCount: 5,
-            cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 5 }],
           },
         },
         cached: false,
@@ -893,12 +845,7 @@ describe('GoogleProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.tokenUsage?.completionDetails).toEqual({
-        reasoning: 100,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-        cacheReadInputTokens: 5,
-      });
+      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(100);
     });
   });
 

@@ -4,6 +4,8 @@
  */
 export interface GoogleModelCost {
   input: number;
+  /** Audio input price per token when it differs from text, image, and video input. */
+  audioInput?: number;
   output: number;
   /** Cache-read price per token. Object form means only listed modalities are safe to reprice. */
   cacheRead?: number | { textImageVideo: number; audio: number };
@@ -28,6 +30,7 @@ const GEMINI_3_PRO_TIERED_COST = {
   above: { input: 4.0 / 1e6, output: 18.0 / 1e6, cacheRead: 0.4 / 1e6 },
 };
 
+const GEMINI_3_5_FLASH_COST = { input: 1.5 / 1e6, output: 9.0 / 1e6, cacheRead: 0.15 / 1e6 };
 const GEMINI_2_5_PRO_COST = { input: 1.25 / 1e6, output: 10.0 / 1e6, cacheRead: 0.125 / 1e6 };
 const GEMINI_2_5_PRO_TIERED_COST = {
   threshold: 200_000,
@@ -35,21 +38,25 @@ const GEMINI_2_5_PRO_TIERED_COST = {
 };
 const GEMINI_3_1_FLASH_LITE_COST = {
   input: 0.25 / 1e6,
+  audioInput: 0.5 / 1e6,
   output: 1.5 / 1e6,
   cacheRead: { textImageVideo: 0.025 / 1e6, audio: 0.05 / 1e6 },
 };
 const GEMINI_3_FLASH_COST = {
   input: 0.5 / 1e6,
+  audioInput: 1.0 / 1e6,
   output: 3.0 / 1e6,
   cacheRead: { textImageVideo: 0.05 / 1e6, audio: 0.1 / 1e6 },
 };
 const GEMINI_2_5_FLASH_COST = {
   input: 0.3 / 1e6,
+  audioInput: 1.0 / 1e6,
   output: 2.5 / 1e6,
   cacheRead: { textImageVideo: 0.03 / 1e6, audio: 0.1 / 1e6 },
 };
 const GEMINI_2_5_FLASH_LITE_COST = {
   input: 0.1 / 1e6,
+  audioInput: 0.3 / 1e6,
   output: 0.4 / 1e6,
   cacheRead: { textImageVideo: 0.01 / 1e6, audio: 0.03 / 1e6 },
 };
@@ -62,10 +69,10 @@ const GEMINI_2_5_FLASH_LITE_COST = {
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.5 models
-  {
-    id: 'gemini-3.5-flash',
-    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6, cacheRead: 0.15 / 1e6 },
-  },
+  ...['gemini-3.5-flash', 'gemini-flash-latest'].map((id) => ({
+    id,
+    cost: GEMINI_3_5_FLASH_COST,
+  })),
 
   // Gemini 3.1 models
   ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
@@ -82,11 +89,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ),
 
   // Gemini 3.0 models (Preview)
-  // Google switched gemini-flash-latest to Gemini 3 Flash on January 21, 2026.
-  ...['gemini-3-flash-preview', 'gemini-flash-latest'].map((id) => ({
-    id,
-    cost: GEMINI_3_FLASH_COST,
-  })),
+  { id: 'gemini-3-flash-preview', cost: GEMINI_3_FLASH_COST },
   {
     id: 'gemini-3-pro-preview',
     cost: GEMINI_3_PRO_COST,
@@ -94,11 +97,19 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
 
   // Gemini 2.5 models
-  ...['gemini-2.5-pro', 'gemini-2.5-computer-use-preview-10-2025'].map((id) => ({
-    id,
+  {
+    id: 'gemini-2.5-pro',
     cost: GEMINI_2_5_PRO_COST,
     tieredCost: GEMINI_2_5_PRO_TIERED_COST,
-  })),
+  },
+  {
+    id: 'gemini-2.5-computer-use-preview-10-2025',
+    cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
+    tieredCost: {
+      threshold: 200_000,
+      above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
+    },
+  },
   ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17'].map((id) => ({
     id,
     cost: GEMINI_2_5_FLASH_COST,
@@ -113,11 +124,13 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     id,
     cost: {
       input: 0.1 / 1e6,
+      audioInput: 0.7 / 1e6,
       output: 0.4 / 1e6,
       cacheRead: { textImageVideo: 0.025 / 1e6, audio: 0.175 / 1e6 },
     },
     vertexCost: {
       input: 0.15 / 1e6,
+      audioInput: 1.0 / 1e6,
       output: 0.6 / 1e6,
       cacheRead: { textImageVideo: 0.0375 / 1e6, audio: 0.25 / 1e6 },
     },

@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -164,6 +165,41 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
 
   return cacheSetKey;
 }
+
+describe('VertexChatProvider.callApi tracing', () => {
+  it('preserves cache-read and reasoning details for the GenAI span', async () => {
+    const provider = new VertexChatProvider('gemini-2.5-flash');
+    const tracedResult = vi.fn();
+    const response = {
+      output: 'traced response',
+      cached: false,
+      tokenUsage: {
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        completionDetails: { reasoning: 2, cacheReadInputTokens: 6 },
+      },
+    };
+    vi.spyOn(provider, 'callGeminiApi').mockResolvedValue(response);
+    vi.spyOn(genaiTracer, 'withGenAISpan').mockImplementation(
+      async (_context, operation, resultExtractor) => {
+        const result = await operation({} as Parameters<typeof operation>[0]);
+        tracedResult(resultExtractor?.(result));
+        return result;
+      },
+    );
+
+    await provider.callApi('test prompt');
+
+    expect(tracedResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenUsage: expect.objectContaining({
+          completionDetails: { reasoning: 2, cacheReadInputTokens: 6 },
+        }),
+      }),
+    );
+  });
+});
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
@@ -1189,6 +1225,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           cacheReadInputTokens: 6,
         },
       });
+      expect(response.cost).toBeCloseTo(0.00017638, 10);
     });
 
     it('should handle response without thinking tokens', async () => {
