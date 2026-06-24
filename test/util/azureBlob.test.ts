@@ -123,9 +123,7 @@ describe('Azure Blob test-set loading', () => {
       'DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=secret',
     );
 
-    await expect(
-      readAzureBlobText('az://account/container/path/tests.json'),
-    ).rejects.toThrow(
+    await expect(readAzureBlobText('az://account/container/path/tests.json')).rejects.toThrow(
       'AZURE_STORAGE_CONNECTION_STRING targets storage account "otheraccount", but the az:// URI targets "account".',
     );
     expect(mocks.fromConnectionString).not.toHaveBeenCalled();
@@ -160,6 +158,20 @@ describe('Azure Blob test-set loading', () => {
       readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=secret'),
     ).rejects.toThrow(
       'Failed to read Azure Blob Storage URI "az://account/container/path/tests.json?<redacted>": boom',
+    );
+  });
+
+  it('redacts SAS query strings repeated in SDK error details', async () => {
+    mocks.downloadToBuffer.mockRejectedValueOnce(
+      new Error(
+        'Request failed for https://account.blob.core.windows.net/container/path/tests.json?sp=r&sig=secret',
+      ),
+    );
+
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=secret'),
+    ).rejects.toThrow(
+      'Request failed for https://account.blob.core.windows.net/container/path/tests.json?<redacted>',
     );
   });
 });

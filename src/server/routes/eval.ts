@@ -7,24 +7,18 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import { ResultFailureReason } from '../../types/index';
 import {
   type EvalTableDTO,
   type EvaluateSummaryV2,
   type EvaluateTable,
   type EvaluateTestSuite,
   type GradingResult,
-  type Job,
   type PromptMetrics,
-  ResultFailureReason,
   type ResultsFile,
   type Vars,
 } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
-import invariant from '../../util/invariant';
-import { sanitizeObject } from '../../util/sanitizer';
-import { shouldShareResults } from '../../util/sharing';
-import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { replyValidationError, sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -32,13 +26,20 @@ import {
   getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
-} from '../utils/evalTableUtils';
+} from '../../util/eval/evalTableUtils';
+import invariant from '../../util/invariant';
+import {
+  redactAzureBlobSasTokens,
+  restoreAzureBlobSasTokens,
+  sanitizeObject,
+} from '../../util/sanitizer';
+import { shouldShareResults } from '../../util/sharing';
+import { evalJobService } from '../services/evalJobService';
+import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const evalRouter = Router();
-
-// Running jobs
-export const evalJobs = new Map<string, Job>();
 
 type ResultMetricCategory = 'pass' | 'fail' | 'error';
 
@@ -121,7 +122,6 @@ function applyResultMetricDelta(
   updateCategory(previousCategory, -1);
   updateCategory(nextCategory, 1);
 }
-
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
   try {
@@ -210,7 +210,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
   }
 }
 
-evalRouter.post('/job', (req: Request, res: Response): void => {
+evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: z.prettifyError(result.error) });
@@ -221,21 +221,32 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
   // Provider configs can have arbitrary keys (e.g., custom headers, API options) that
   // nested provider schemas may strip. This keeps Zod transforms/coercions while
   // preserving provider flexibility.
-  const { evaluateOptions, providers: _validatedProviders, ...restData } = result.data;
-  const testSuite = {
+  const {
+    evaluateOptions,
+    sourceEvalId,
+    providers: _validatedProviders,
+    ...restData
+  } = result.data;
+  let testSuite = {
     ...restData,
     // Preserve raw providers from req.body to keep nested config fields
     providers: (req.body as { providers?: unknown }).providers,
   };
+
+  if (sourceEvalId) {
+    try {
+      const sourceEval = await Eval.findById(sourceEvalId);
+      if (sourceEval) {
+        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+      }
+    } catch (error) {
+      sendError(res, 500, 'Failed to prepare eval job', error);
+      return;
+    }
+  }
+
   const id = crypto.randomUUID();
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+  evalJobService.create(id);
 
   evaluateWithSource(
     {
@@ -247,20 +258,14 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       ...evaluateOptions,
       eventSource: 'web',
       progressCallback: (progress: number, total: number) => {
-        const job = evalJobs.get(id);
-        invariant(job, 'Job not found');
-        job.progress = progress;
-        job.total = total;
+        invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
       },
     },
   )
     .then(async (evalResult) => {
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.result = await evalResult.toEvaluateSummary();
-      job.evalId = evalResult.id;
-      job.status = 'complete';
+      const result = await evalResult.toEvaluateSummary();
+      invariant(evalJobService.complete(id, result, evalResult.id), 'Job not found');
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
@@ -269,12 +274,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
         body: sanitizeObject(testSuite, { context: 'request body' }),
       });
 
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'error';
-      job.result = null;
-      job.evalId = null;
-      job.logs = [String(error)];
+      invariant(evalJobService.fail(id, [String(error)]), 'Job not found');
     });
 
   res.json(EvalSchemas.CreateJob.Response.parse({ id }));
@@ -288,7 +288,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobs.get(id);
+  const job = evalJobService.get(id);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
     return;
@@ -342,7 +342,8 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
     // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
     await updateResult(id, config, table as unknown as EvaluateTable | undefined);
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
-  } catch {
+  } catch (error) {
+    logger.error('[PATCH /api/eval/:id] Failed to update eval', { id, error });
     res.status(500).json({ error: 'Failed to update eval table' });
   }
 });
@@ -550,7 +551,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: redactAzureBlobSasTokens(eval_.config),
     author: eval_.author || null,
     version: eval_.version(),
     id,
@@ -630,7 +631,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
       return;
     }
 
-    const values = EvalQueries.getMetadataValuesFromEval(id, key);
+    const values = await EvalQueries.getMetadataValuesFromEval(id, key);
     const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
@@ -842,8 +843,8 @@ evalRouter.post(
       prompt.metrics.assertPassCount += nextAssertions.pass - previousAssertions.pass;
       prompt.metrics.assertFailCount += nextAssertions.fail - previousAssertions.fail;
 
-      await eval_.save();
       await result.save();
+      await eval_.save();
 
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
@@ -886,7 +887,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         vars: incEval.vars,
       });
       if (incEval.prompts) {
-        eval_.addPrompts(incEval.prompts);
+        await eval_.addPrompts(incEval.prompts);
       }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
@@ -932,7 +933,7 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
 /**
  * Bulk delete evals.
  */
-evalRouter.delete('/', (req: Request, res: Response) => {
+evalRouter.delete('/', async (req: Request, res: Response) => {
   const bodyResult = EvalSchemas.BulkDelete.Request.safeParse(req.body);
   if (!bodyResult.success) {
     res.status(400).json({ error: z.prettifyError(bodyResult.error) });
@@ -942,7 +943,7 @@ evalRouter.delete('/', (req: Request, res: Response) => {
   const { ids } = bodyResult.data;
 
   try {
-    deleteEvals(ids);
+    await deleteEvals(ids);
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });

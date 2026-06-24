@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { sanitizeProviderIdForLog } from './provider';
 import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
@@ -45,7 +46,7 @@ export class TokenUsageTracker {
     accumulateTokenUsage(updated, usage);
     this.providersMap.set(providerId, updated);
     logger.debug(
-      `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+      `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );
   }
 

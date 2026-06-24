@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
+import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
 import { createMockProvider } from '../factories/provider';
@@ -214,6 +215,71 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidFunctionCall', () => {
+    it.each([
+      ['undefined provider', undefined, false],
+      ['null provider', null, false],
+      ['primitive provider', 'provider', false],
+      ['missing capability', {}, false],
+      ['string capability', { validateFunctionToolCall: 'validate' }, false],
+      ['boolean capability', { validateFunctionToolCall: true }, false],
+      ['object capability', { validateFunctionToolCall: {} }, false],
+      ['function capability', { validateFunctionToolCall: vi.fn() }, true],
+    ])('identifies %s', (_label, provider, expected) => {
+      expect(hasFunctionToolCallValidator(provider)).toBe(expected);
+    });
+
+    it('should fail when provider does not expose the validator capability', () => {
+      const output = { arguments: '{"x": 10}', name: 'add' };
+
+      const result = handleIsValidFunctionCall({
+        assertion: functionAssertion,
+        output,
+        provider: createMockProvider(),
+        test: { vars: {} },
+        baseType: functionAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(output),
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Provider does not have functionality for checking function call.',
+        assertion: functionAssertion,
+      });
+    });
+
+    it('should delegate to a structural provider capability', () => {
+      const validateFunctionToolCall = vi.fn();
+      const provider = {
+        ...createMockProvider(),
+        validateFunctionToolCall,
+      };
+      const output = { arguments: '{"x": 10}', name: 'add' };
+
+      const result = handleIsValidFunctionCall({
+        assertion: functionAssertion,
+        output,
+        provider,
+        test: { vars: { value: 10 } },
+        baseType: functionAssertion.type,
+        assertionValueContext: mockContext,
+        inverse: false,
+        outputString: JSON.stringify(output),
+        providerResponse: { output },
+      });
+
+      expect(validateFunctionToolCall).toHaveBeenCalledWith(output, { value: 10 });
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: functionAssertion,
+      });
+    });
+
     it('should pass when function call matches schema', async () => {
       const functionOutput = {
         name: 'getCurrentTemperature',

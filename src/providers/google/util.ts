@@ -675,9 +675,7 @@ export interface CollectedGroundingMetadata {
 // last-wins for scalar/object fields (e.g. searchEntryPoint, retrievalMetadata)
 // since those are typically refined as the stream progresses.
 // https://ai.google.dev/api/generate-content#v1beta.Candidate
-export function collectGroundingMetadata(
-  data: GeminiResponseData[],
-): CollectedGroundingMetadata {
+export function collectGroundingMetadata(data: GeminiResponseData[]): CollectedGroundingMetadata {
   const candidates = data.filter((d) => d.candidates?.length).map((d) => getCandidate(d));
 
   const flatChunks = candidates.flatMap((c) => c.groundingChunks ?? []);

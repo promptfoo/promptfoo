@@ -193,14 +193,14 @@ describe('runEval', () => {
       ...defaultOptions,
       provider: mockProvider,
       prompt: promptWithFunction,
-      test: { options: { temperature: 0.9 } },
+      test: { options: { repeat: 3, temperature: 0.9 } },
       conversations: {},
       registers: {},
     });
     const result = results[0];
     expect(result.success).toBe(true);
 
-    // test.options should override dynamic config
+    // Provider options should override dynamic config, while evaluator-only options stay internal.
     const callApiMock = vi.mocked(mockProvider.callApi);
     const callApiArgs = callApiMock.mock.calls[0];
     expect(callApiArgs).toBeDefined();
@@ -593,6 +593,32 @@ describe('runEval', () => {
     expect(result.error).toContain('API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
     expect(result.vars).toEqual({ topic: 'weather' });
+  });
+
+  it('should keep trace linkage when a traced provider call fails', async () => {
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('traced-error-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('Traced API Error')),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          evaluationId: 'eval-provider-error-trace',
+          tracingEnabled: true,
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(result.evaluationId).toBe('eval-provider-error-trace');
+    expect(result.error).toContain('Traced API Error');
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
   });
 
   it('should handle null output differently for red team tests', async () => {

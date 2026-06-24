@@ -62,6 +62,23 @@ tests:
       difficulty: easy
 ```
 
+### Repeating an Individual Test
+
+Set `options.repeat` to a positive integer to run one test case multiple times:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - description: 'Sample a nondeterministic response'
+    vars:
+      question: 'Write a short greeting'
+    options:
+      repeat: 3
+```
+
+The per-test value overrides `--repeat`, `commandLineOptions.repeat`, or
+`evaluateOptions.repeat` for that test. Other tests continue to use the global repeat count.
+Repeat indexes use separate cache entries; add `--no-cache` when every run must call the provider.
+
 ### Filtering Tests by Provider
 
 Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
@@ -310,7 +327,7 @@ question,__expected1,__expected2,__expected3
 ```
 
 :::note
-**contains-any** and **contains-all** expect comma-delimited values inside the `__expected` column.
+**contains-any**, **icontains-any**, **contains-all**, and **icontains-all** expect comma-delimited values inside the `__expected` column. Surrounding whitespace around each value is trimmed.
 
 ```csv title="test_cases.csv"
 translated_text,__expected
@@ -318,6 +335,17 @@ translated_text,__expected
 ```
 
 If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
+
+To match a value that itself contains a comma, wrap that value in double quotes. Because the assertion is inside a quoted CSV cell, write each of those wrapping quotes twice:
+
+```csv title="test_cases.csv"
+text,__expected
+"1,000 items in stock","contains-all: ""1,000"",in stock"
+```
+
+Here `"1,000"` is a single search term (the comma is preserved), while `in stock` is a second term. These quoting rules apply to `__expected` columns in CSV, XLSX, and Google Sheets. JSON and JSONL test files should use the structured `assert` object form instead.
+
+At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
 
 ### Special CSV Columns

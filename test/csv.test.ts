@@ -1,4 +1,6 @@
+import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseCommaSeparatedValues } from '../src/assertions/contains';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 
@@ -12,6 +14,16 @@ vi.mock('../src/logger', () => ({
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
+  const INVALID_THRESHOLD_VALUES = [
+    'not-a-number',
+    'abc',
+    '0abc',
+    '0,8',
+    'Infinity',
+    '1e309',
+    '0x10',
+  ] as const;
+
   afterEach(() => {
     vi.resetAllMocks();
   });
@@ -142,6 +154,48 @@ describe('testCaseFromCsvRow', () => {
       options: {},
       metadata: {
         tags: ['tag1', 'tag with, comma', 'tag3'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should unescape every escaped comma within an array metadata value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c'],
+      },
+    };
+
+    const result = testCaseFromCsvRow(row);
+    expect(result).toEqual(expectedTestCase);
+  });
+
+  it('should split on unescaped commas while unescaping multiple escaped commas per value', () => {
+    const row: CsvRow = {
+      '__metadata:tags[]': 'a\\,b\\,c,d\\,e',
+      var1: 'value1',
+    };
+
+    const expectedTestCase: TestCase = {
+      vars: {
+        var1: 'value1',
+      },
+      assert: [],
+      options: {},
+      metadata: {
+        tags: ['a,b,c', 'd,e'],
       },
     };
 
@@ -290,6 +344,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
+    it('throws on __expected0 since indices are 1-based', () => {
+      const key = '__config:__expected0:threshold';
+      const row: CsvRow = {
+        __expected1: 'equals:foo',
+        [key]: '0.5',
+      } as any;
+
+      expect(() => testCaseFromCsvRow(row)).toThrow(
+        'Invalid expected key "__expected0" in __config column',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Invalid expected key "__expected0" in __config column "__config:__expected0:threshold". Must be __expected or __expected<N> where N is a positive integer.',
+      );
+    });
+
     it('throws on invalid config key in __config column', () => {
       const key = '__config:__expected1:bogus';
       const row: CsvRow = {
@@ -305,18 +374,80 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it('throws on non-numeric threshold values', () => {
+    it.each(
+      INVALID_THRESHOLD_VALUES.slice(0, 3),
+    )('throws on invalid threshold value %s', (thresholdValue) => {
       const key = '__config:__expected1:threshold';
       const row: CsvRow = {
         __expected1: 'similar:foo',
-        [key]: 'not-a-number',
+        [key]: thresholdValue,
       } as any;
 
       expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
       expect(logger.error).toHaveBeenCalledWith(
-        'Invalid numeric value "not-a-number" for config key "threshold" in column "__config:__expected1:threshold"',
+        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
       );
     });
+  });
+  it('should preserve zero __threshold in the test case', () => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: '0',
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // threshold: 0 is a valid value (e.g. "always pass regardless of score").
+    // A falsy guard like `threshold ? { threshold } : {}` silently drops it.
+    expect(result.threshold).toBe(0);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['non-numeric', INVALID_THRESHOLD_VALUES[1]],
+    ['whitespace', '   '],
+    ['numeric prefix', INVALID_THRESHOLD_VALUES[2]],
+    ['comma decimal', INVALID_THRESHOLD_VALUES[3]],
+    ['non-finite literal', INVALID_THRESHOLD_VALUES[4]],
+    ['overflow', INVALID_THRESHOLD_VALUES[5]],
+    ['hexadecimal', INVALID_THRESHOLD_VALUES[6]],
+  ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // A blank/garbage cell must be treated as "unset" so it inherits defaultTest.threshold
+    // via `testCase.threshold ?? defaultTest?.threshold` in the evaluator. Leaking NaN here
+    // would clobber that inheritance (NaN ?? x === NaN), so the key must be omitted entirely.
+    expect(result).not.toHaveProperty('threshold');
+  });
+
+  it.each([
+    ['integer', '5', 5],
+    ['decimal', '0.8', 0.8],
+    ['leading-dot decimal', '.5', 0.5],
+    ['trailing-dot decimal', '5.', 5],
+    ['negative', '-1', -1],
+    ['exponent', '1e3', 1000],
+    ['signed exponent', '-2.5e-2', -0.025],
+    ['explicit plus', '+1', 1],
+    ['surrounding whitespace', '  0.8  ', 0.8],
+  ])('should parse a %s __threshold cell to %s', (_label, thresholdValue, expected) => {
+    const row: CsvRow = {
+      __expected: 'equals:ok',
+      __threshold: thresholdValue,
+      var1: 'value1',
+    };
+
+    const result = testCaseFromCsvRow(row);
+    // Pins the numeric contract of parseFiniteNumber: complete numeric literals
+    // (including negatives, exponents, and leading-dot decimals) are accepted and
+    // trimmed. This is intentionally wider than a bare integer parse, so the behavior
+    // is locked down here to catch any future regression in the shared parser.
+    expect(result.threshold).toBe(expected);
   });
 });
 
@@ -341,6 +472,8 @@ describe('assertionFromString', () => {
   });
 
   it('should create an is-json assertion with value', () => {
+    // Intentionally uses YAML-like `key:value` (without a space after `:`) to verify
+    // that assertionFromString preserves the original formatting exactly.
     const expected = `is-json:
       required: ['color']
       type:object
@@ -362,7 +495,7 @@ describe('assertionFromString', () => {
     );
   });
 
-  it('should create an contains-json assertion', () => {
+  it('should create a contains-json assertion', () => {
     const expected = 'contains-json';
 
     const result: Assertion = assertionFromString(expected);
@@ -408,6 +541,95 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('contains-any');
     expect(result.value).toEqual(['substring1', 'substring2']);
+  });
+
+  it.each([
+    'contains-any',
+    'contains-all',
+    'icontains-any',
+    'icontains-all',
+    'not-contains-any',
+    'not-contains-all',
+    'not-icontains-any',
+    'not-icontains-all',
+  ])('should preserve quoted commas in a %s assertion read from a CSV row', (type) => {
+    const [row] = parseCsv<CsvRow>(`__expected\n"${type}:""hello, world"",foo"`, {
+      columns: true,
+    });
+
+    const result = testCaseFromCsvRow(row);
+    expect(result.assert).toEqual([{ type, value: ['hello, world', 'foo'] }]);
+  });
+
+  it('should preserve escaped and doubled quotes in contains assertion values', () => {
+    const expected = String.raw`contains-all:"say \"hello, world\"","a ""quoted"" value", plain`;
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.value).toEqual(['say "hello, world"', 'a "quoted" value', 'plain']);
+  });
+
+  it('should match runtime handling of whitespace and repeated delimiters', () => {
+    const result: Assertion = assertionFromString('icontains-any: alpha, , beta,, ');
+
+    expect(result.value).toEqual(['alpha', 'beta']);
+  });
+
+  // csv.ts intentionally keeps a private copy of the contains-assertion value
+  // parser (it cannot import the assertion handlers without bundling backend code
+  // into the frontend; see the comment in src/csv.ts). This drift guard covers
+  // representative valid and malformed inputs so changes to either implementation
+  // have to preserve the same behavior.
+  it.each([
+    '"hello, world",foo',
+    String.raw`"say \"hi\"",b`,
+    'a ""quoted"" value, plain',
+    'alpha, , beta,, ',
+    '  spaced  ,  next  ',
+    '"only one"',
+    'no-quotes-at-all',
+    '"trailing"   ',
+    'a,b,c',
+    '""',
+    '" ",x',
+    'x,"y,z"',
+    '"a","b"',
+    '"a" , "b"',
+    String.raw`"\n",x`,
+    String.raw`"\\",x`,
+    'a,',
+    ',a',
+    ',,,',
+    '"comma,inside","another, one"',
+    'mix,"quoted, field",bare',
+    '"a""b""c"',
+    '"a"b,c',
+    '"unterminated',
+  ])('csv parser matches the canonical contains parser for %j', (input) => {
+    const parseViaCsv = () => assertionFromString(`contains-any:${input}`).value;
+    const parseViaContains = () => parseCommaSeparatedValues(input);
+
+    let canonical: string[] | undefined;
+    let canonicalError: Error | undefined;
+    try {
+      canonical = parseViaContains();
+    } catch (error) {
+      canonicalError = error as Error;
+    }
+
+    if (canonicalError) {
+      expect(parseViaCsv).toThrow(canonicalError.message);
+    } else {
+      expect(parseViaCsv()).toEqual(canonical);
+    }
+  });
+
+  it('should reject malformed quoted contains assertion values', () => {
+    expect(() => assertionFromString('icontains-any:"unterminated')).toThrow(
+      'Unterminated quoted field in contains assertion value',
+    );
+    expect(() => assertionFromString('contains-all:"hello"world')).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
   });
 
   it('should create a contains-all assertion', () => {
@@ -667,6 +889,24 @@ describe('assertionFromString', () => {
       expect(result.type).toBe(type);
       expect(result.value).toBe('Expected output');
       expect(result.threshold).toBe(0.75);
+    }
+  });
+
+  it('should return complete assertion object structure for representative threshold-based assertion types', () => {
+    // All three genuinely consume `threshold` in their handlers (unlike e.g.
+    // starts-with, which receives the 0.75 default but ignores it), so the
+    // parsed default is meaningful for these types.
+    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
+
+    for (const type of representativeAssertions) {
+      const expected = `${type}:Expected output`;
+      const result: Assertion = assertionFromString(expected);
+
+      expect(result).toEqual({
+        type,
+        value: 'Expected output',
+        threshold: 0.75,
+      });
     }
   });
 
