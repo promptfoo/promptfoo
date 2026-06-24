@@ -1,7 +1,11 @@
 import { getEnvBool } from '../envars';
-import { isGradingResult, setNonstandardScoringBaseline } from '../types/index';
-
-import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
+import {
+  type AssertionSet,
+  type GradingResult,
+  isGradingResult,
+  type ScoringFunction,
+  setNonstandardScoringBaseline,
+} from '../types/internal';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 

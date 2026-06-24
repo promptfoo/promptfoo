@@ -5,7 +5,7 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
-import { getNonstandardScoringBaseline } from '../../src/types/index';
+import { getNonstandardScoringBaseline } from '../../src/types/internal';
 
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 

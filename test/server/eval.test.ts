@@ -1550,6 +1550,48 @@ describe('eval routes', () => {
       });
     });
 
+    it('fails closed when a pre-provenance rating retains an unexplained failure', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      invariant(result.gradingResult, 'Grading result is required');
+
+      result.gradingResult = createManualRatingPayload(result, true);
+      result.success = true;
+      result.score = 1;
+      result.failureReason = ResultFailureReason.NONE;
+      result.error = 'Custom aggregate failed';
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const legacyRating = await EvalResult.findById(result.id);
+      invariant(legacyRating, 'Legacy rating is required');
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(legacyRating));
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+        error: 'Custom aggregate failed',
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 1,
+      });
+    });
+
     it('fails closed on caller aggregate fields when a legacy error has no components', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

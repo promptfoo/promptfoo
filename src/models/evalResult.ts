@@ -22,7 +22,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   setNonstandardScoringBaseline,
-} from '../types/index';
+} from '../types/internal';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
@@ -1018,6 +1018,8 @@ function buildServerOwnedClearGradingResult(
   if (executionError) {
     automatedPass = false;
   }
+  const hasUnreconstructableRetainedFailure =
+    !executionError && automatedPass && typeof result.error === 'string' && result.error.length > 0;
   const fallbackPass =
     !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
   const hasNonstandardScoring =
@@ -1030,8 +1032,21 @@ function buildServerOwnedClearGradingResult(
     // automated components using the evaluator's weighting/threshold rules. Component-less or
     // nonstandard-scored legacy rows have no recoverable standard score, so use the failure
     // category's canonical baseline rather than accepting caller-controlled aggregate fields.
-    pass: canReconstructAutomatedOutcome ? automatedPass : fallbackPass,
-    score: canReconstructAutomatedOutcome ? automatedScore : fallbackPass ? 1 : 0,
+    // A historical/imported manual pass can retain a top-level assertion failure after the
+    // custom scorer itself has been stripped. If ordinary components all pass, they cannot
+    // explain that failure; fail closed instead of fabricating a pass from incomplete evidence.
+    pass: hasUnreconstructableRetainedFailure
+      ? false
+      : canReconstructAutomatedOutcome
+        ? automatedPass
+        : fallbackPass,
+    score: hasUnreconstructableRetainedFailure
+      ? 0
+      : canReconstructAutomatedOutcome
+        ? automatedScore
+        : fallbackPass
+          ? 1
+          : 0,
   } as GradingResult;
   cleared.reason = current.reason;
   if (hasOwn(normalized, 'componentResults')) {

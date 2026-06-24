@@ -13,8 +13,8 @@ import {
   type Prompt,
   type ProviderOptions,
   ResultFailureReason,
-  setNonstandardScoringBaseline,
 } from '../../src/types/index';
+import { setNonstandardScoringBaseline } from '../../src/types/internal';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,

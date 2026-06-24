@@ -573,41 +573,6 @@ export interface GradingResult {
   };
 }
 
-type NonstandardScoringBaseline = { pass: boolean; score: number };
-const NONSTANDARD_SCORING_BASELINE = Symbol('promptfoo.nonstandardScoringBaseline');
-
-/** @internal Carries a non-serializable aggregate from evaluation into private persistence. */
-export function setNonstandardScoringBaseline(
-  gradingResult: GradingResult,
-  baseline: NonstandardScoringBaseline,
-): void {
-  Object.defineProperty(gradingResult, NONSTANDARD_SCORING_BASELINE, {
-    configurable: true,
-    enumerable: false,
-    value: baseline,
-    writable: true,
-  });
-}
-
-/** @internal Reads the non-serializable aggregate attached during evaluation. */
-export function getNonstandardScoringBaseline(
-  gradingResult: GradingResult | null | undefined,
-): NonstandardScoringBaseline | undefined {
-  const baseline = gradingResult
-    ? (
-        gradingResult as GradingResult & {
-          [NONSTANDARD_SCORING_BASELINE]?: NonstandardScoringBaseline;
-        }
-      )[NONSTANDARD_SCORING_BASELINE]
-    : undefined;
-  return baseline &&
-    typeof baseline.pass === 'boolean' &&
-    typeof baseline.score === 'number' &&
-    Number.isFinite(baseline.score)
-    ? baseline
-    : undefined;
-}
-
 export function isGradingResult(result: any): result is GradingResult {
   return (
     typeof result === 'object' &&

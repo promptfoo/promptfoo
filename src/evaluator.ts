@@ -65,9 +65,9 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
-  setNonstandardScoringBaseline,
   type TestSuite,
 } from './types/index';
+import { type InternalEvaluateOptions, setNonstandardScoringBaseline } from './types/internal';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
@@ -122,7 +122,6 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
-import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
