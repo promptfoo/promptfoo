@@ -6,6 +6,7 @@
  */
 
 import { parseRetryAfter } from './headerParser';
+import { getProviderCallExecutionContext } from './providerCallExecutionContext';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
@@ -111,9 +112,13 @@ export function wrapProviderWithRateLimiting(
       context?: CallApiContextParams,
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
+      const queuedCallAbortSignal = getProviderCallExecutionContext()?.queuedCallAbortSignal;
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
+        () => {
+          queuedCallAbortSignal?.throwIfAborted();
+          return originalCallApi(prompt, context, options);
+        },
         createProviderRateLimitOptions(),
       );
     },
