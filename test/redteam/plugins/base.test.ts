@@ -303,6 +303,136 @@ describe('RedteamPluginBase', () => {
     });
   });
 
+  it('should propagate accumulated usage after provider errors exhaust retries', async () => {
+    provider.callApi.mockResolvedValue({
+      error: 'billed generation failure',
+      tokenUsage: { total: 10, prompt: 7, completion: 3 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error).toMatchObject({
+      message: expect.stringContaining('billed generation failure'),
+      tokenUsage: {
+        total: 30,
+        prompt: 21,
+        completion: 9,
+        numRequests: 3,
+      },
+    });
+  });
+
+  it('should keep tokenless provider errors non-fatal after retries', async () => {
+    provider.callApi.mockResolvedValue({ error: 'tokenless generation failure' });
+
+    const tests = await plugin.generateTests(1);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(tests).toEqual([]);
+  });
+
+  it('should preserve explicit zero request counts on rowless provider usage', async () => {
+    provider.callApi.mockResolvedValue({
+      error: 'zero-count generation failure',
+      tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 0 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error.tokenUsage).toMatchObject({
+      total: 15,
+      prompt: 9,
+      completion: 6,
+      numRequests: 0,
+    });
+  });
+
+  it('should preserve refusal identity and usage', async () => {
+    provider.callApi.mockResolvedValue({
+      output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: 'Error',
+      message: expect.stringContaining('returned a refusal'),
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
+
+  it('should propagate accumulated usage when filtering leaves no prompts', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', { maxCharsPerMessage: 5 });
+    provider.callApi.mockResolvedValue({
+      output: 'Prompt: definitely too long',
+      tokenUsage: { total: 4, prompt: 3, completion: 1 },
+    });
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(error).toMatchObject({
+      message: expect.stringContaining('generated no valid test cases'),
+      tokenUsage: {
+        total: 12,
+        prompt: 9,
+        completion: 3,
+        numRequests: 3,
+      },
+    });
+  });
+
+  it('should preserve accumulated usage and identity when a later provider call throws', async () => {
+    const abortError = Object.assign(new Error('generation cancelled'), {
+      name: 'AbortError',
+      tokenUsage: { total: 5, prompt: 3, completion: 2 },
+    });
+    provider.callApi
+      .mockResolvedValueOnce({
+        output: 'No prompt markers here',
+        tokenUsage: { total: 3, prompt: 2, completion: 1 },
+      })
+      .mockRejectedValueOnce(abortError);
+
+    const error = await plugin.generateTests(1).catch((error) => error);
+
+    expect(error).toBe(abortError);
+    expect(error.tokenUsage).toMatchObject({
+      total: 8,
+      prompt: 5,
+      completion: 3,
+      numRequests: 2,
+    });
+  });
+
+  it('should retain failed-attempt usage when a later retry succeeds', async () => {
+    provider.callApi
+      .mockResolvedValueOnce({
+        error: 'retryable generation failure',
+        tokenUsage: { total: 3, prompt: 2, completion: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: recovered prompt',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      });
+
+    const tests = await plugin.generateTests(1);
+
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(tests).toHaveLength(1);
+    expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 7,
+      prompt: 4,
+      completion: 3,
+      numRequests: 2,
+    });
+  });
+
   describe('false positive refusal detection', () => {
     it('should not throw refusal error when output contains valid Prompt: markers with refusal-like content', async () => {
       // Generated prompts about AI identity testing naturally contain "as an AI" phrases

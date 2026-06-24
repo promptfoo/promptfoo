@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  detachProviderTokenUsage,
   mergeProviderTokenUsage,
   pluginMatchesStrategyTargets,
 } from '../../../src/redteam/strategies/util';
@@ -381,5 +382,39 @@ describe('mergeProviderTokenUsage', () => {
     expect(merged?.completionDetails).not.toBe(existing.completionDetails);
     expect(merged?.assertions).not.toBe(existing.assertions);
     expect(merged?.assertions?.completionDetails).not.toBe(existing.assertions.completionDetails);
+  });
+});
+
+describe('detachProviderTokenUsage', () => {
+  it('normalizes a valid carrier and strips it from the test row', () => {
+    const result = detachProviderTokenUsage([
+      {
+        metadata: { providerTokenUsage: { total: 5, prompt: 3, completion: 2 } },
+        vars: { input: 'test' },
+      },
+    ]);
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 5,
+      prompt: 3,
+      completion: 2,
+      numRequests: 1,
+    });
+    expect(result.testCases[0]?.metadata).not.toHaveProperty('providerTokenUsage');
+  });
+
+  it('strips a malformed carrier without corrupting the aggregate', () => {
+    const result = detachProviderTokenUsage([
+      {
+        metadata: {
+          pluginId: 'test-plugin',
+          providerTokenUsage: { total: 'invalid' } as any,
+        },
+        vars: { input: 'test' },
+      },
+    ]);
+
+    expect(result.tokenUsage).toBeUndefined();
+    expect(result.testCases[0]?.metadata).not.toHaveProperty('providerTokenUsage');
   });
 });

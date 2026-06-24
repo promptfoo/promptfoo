@@ -8,7 +8,11 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -36,6 +40,17 @@ import type {
   TestCase,
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
+
+const TERMINAL_GENERATION_ERROR = Symbol('terminalGenerationError');
+
+export function isTerminalRedteamPluginGenerationError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && TERMINAL_GENERATION_ERROR in error);
+}
+
+function markTerminalGenerationError<T extends Error>(error: T): T {
+  Object.defineProperty(error, TERMINAL_GENERATION_ERROR, { value: true });
+  return error;
+}
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -130,6 +145,26 @@ export abstract class RedteamPluginBase {
     let retryInstructions: string | undefined;
     const generationTokenUsage = createEmptyTokenUsage();
     let hasGenerationTokenUsage = false;
+    let hasReportedGenerationTokenUsage = false;
+    let lastGenerationError: Error | undefined;
+    const withGenerationTokenUsage = (error: unknown): Error => {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const errorTokenUsage = getErrorTokenUsage(error);
+      if (!hasReportedGenerationTokenUsage && !errorTokenUsage) {
+        return normalizedError;
+      }
+      const tokenUsage = mergeProviderTokenUsage(
+        hasGenerationTokenUsage ? generationTokenUsage : undefined,
+        errorTokenUsage
+          ? {
+              ...errorTokenUsage,
+              numRequests: errorTokenUsage.numRequests ?? 1,
+            }
+          : undefined,
+      )!;
+      Object.assign(normalizedError, { tokenUsage });
+      return errorTokenUsage ? normalizedError : markTerminalGenerationError(normalizedError);
+    };
     // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
@@ -156,6 +191,7 @@ export abstract class RedteamPluginBase {
       const response = await this.provider.callApi(finalTemplate);
       accumulateResponseTokenUsage(generationTokenUsage, response);
       hasGenerationTokenUsage = true;
+      hasReportedGenerationTokenUsage ||= Boolean(response.tokenUsage);
       const { output: generatedPrompts, error } = response;
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -163,16 +199,16 @@ export abstract class RedteamPluginBase {
       }
 
       if (error) {
-        logger.error(
-          `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
-        );
+        const message = `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`;
+        logger.error(message);
+        lastGenerationError = new Error(message);
         return [];
       }
 
       if (typeof generatedPrompts !== 'string') {
-        logger.error(
-          `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
-        );
+        const message = `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`;
+        logger.error(message);
+        lastGenerationError = new Error(message);
         return [];
       }
 
@@ -239,10 +275,15 @@ export abstract class RedteamPluginBase {
     };
     // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
 
-    const allPrompts = await retryWithDeduplication(
-      generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
-      n,
-    );
+    let allPrompts: { __prompt: string }[];
+    try {
+      allPrompts = await retryWithDeduplication(
+        generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
+        n,
+      );
+    } catch (error) {
+      throw withGenerationTokenUsage(error);
+    }
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
@@ -250,7 +291,20 @@ export abstract class RedteamPluginBase {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    const testCases = await this.promptsToTestCases(prompts as { __prompt: string }[]);
+    let testCases: TestCase[];
+    try {
+      testCases = await this.promptsToTestCases(prompts as { __prompt: string }[]);
+    } catch (error) {
+      throw withGenerationTokenUsage(error);
+    }
+    if (testCases.length === 0 && hasReportedGenerationTokenUsage) {
+      throw withGenerationTokenUsage(
+        lastGenerationError ??
+          new Error(
+            `${this.provider.id()} generated no valid test cases for ${this.constructor.name}.`,
+          ),
+      );
+    }
     return attachProviderTokenUsage(
       testCases,
       hasGenerationTokenUsage ? generationTokenUsage : undefined,

@@ -321,7 +321,12 @@ export async function doTargetPurposeDiscovery(
         question = data.question;
         discoveryResult = data.purpose;
         state = data.state;
-        trackTokenUsage(data);
+        if (data.tokenUsage || !data.purpose?.tokenUsage) {
+          trackTokenUsage(data);
+        }
+        if (data.purpose?.tokenUsage) {
+          trackTokenUsage({ tokenUsage: data.purpose.tokenUsage });
+        }
 
         if (data.error) {
           const errorMessage = `Error from remote server: ${data.error}`;

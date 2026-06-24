@@ -239,6 +239,77 @@ describe('Plugins', () => {
       });
     });
 
+    it('should not multiply retries or replace local rowless generation errors', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi.mockResolvedValue({
+        error: 'billed local failure',
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const error = await plugin
+        ?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { maxCharsPerMessage: 10 },
+          delayMs: 0,
+        })
+        .catch((error) => error);
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(error).toMatchObject({
+        name: 'Error',
+        message: expect.stringContaining('billed local failure'),
+        tokenUsage: {
+          total: 15,
+          prompt: 9,
+          completion: 6,
+          numRequests: 3,
+        },
+      });
+    });
+
+    it.each([
+      ['Error', new Error('later local generation failure')],
+      ['primitive', 'later local generation failure'],
+    ])('should preserve earlier rejected usage when a later local attempt throws an %s', async (_, laterFailure) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        })
+        .mockRejectedValueOnce(laterFailure);
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const error = await plugin
+        ?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { maxCharsPerMessage: 10 },
+          delayMs: 0,
+        })
+        .catch((error) => error);
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      if (laterFailure instanceof Error) {
+        expect(error).toBe(laterFailure);
+      } else {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe(laterFailure);
+      }
+      expect((error as Error & { tokenUsage: object }).tokenUsage).toMatchObject({
+        total: 5,
+        prompt: 3,
+        completion: 2,
+        numRequests: 1,
+      });
+    });
+
     it('should deduplicate retries without losing their generation usage', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);

@@ -1,9 +1,14 @@
 import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../../types/index';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { TokenUsage } from '../../types/shared';
 import type { RedteamStrategyObject } from '../types';
+
+export function getGenerationErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  const tokenUsage = getErrorTokenUsage(error);
+  return tokenUsage ? { ...tokenUsage, numRequests: tokenUsage.numRequests ?? 1 } : undefined;
+}
 
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
@@ -86,9 +91,35 @@ export function mergeProviderTokenUsage(
   }
 
   const merged = cloneTokenUsage(existing);
-
   accumulateTokenUsage(merged, update);
   return merged;
+}
+
+export function detachProviderTokenUsage<T extends TestCase>(
+  testCases: T[],
+): {
+  testCases: T[];
+  tokenUsage: TokenUsage | undefined;
+} {
+  let tokenUsage: TokenUsage | undefined;
+
+  return {
+    testCases: testCases.map((testCase) => {
+      if (!testCase.metadata || !('providerTokenUsage' in testCase.metadata)) {
+        return testCase;
+      }
+      const providerTokenUsage = getGenerationErrorTokenUsage({
+        tokenUsage: testCase.metadata.providerTokenUsage,
+      });
+      if (providerTokenUsage) {
+        tokenUsage = mergeProviderTokenUsage(tokenUsage, providerTokenUsage);
+      }
+
+      const { providerTokenUsage: _providerTokenUsage, ...metadata } = testCase.metadata;
+      return { ...testCase, metadata } as T;
+    }),
+    tokenUsage,
+  };
 }
 
 /**

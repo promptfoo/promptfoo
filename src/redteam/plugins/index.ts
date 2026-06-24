@@ -43,7 +43,7 @@ import {
 import { attachProviderTokenUsage, mergeProviderTokenUsage } from '../strategies/util';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { type RedteamPluginBase } from './base';
+import { isTerminalRedteamPluginGenerationError, type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
@@ -324,6 +324,23 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
 
       let retryInstructions: string | undefined;
       let rejectedTokenUsage: TokenUsage | undefined;
+      const rethrowWithRejectedTokenUsage = (error: unknown): never => {
+        if (!rejectedTokenUsage) {
+          throw error;
+        }
+        const errorTokenUsage = getErrorTokenUsage(error);
+        const tokenUsage = mergeProviderTokenUsage(
+          rejectedTokenUsage,
+          errorTokenUsage
+            ? {
+                ...errorTokenUsage,
+                numRequests: errorTokenUsage.numRequests ?? 1,
+              }
+            : undefined,
+        )!;
+        const errorCarrier = error && typeof error === 'object' ? error : new Error(String(error));
+        throw Object.assign(errorCarrier, { tokenUsage });
+      };
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
         let generatedTestCases: TestCase[];
@@ -335,13 +352,19 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           });
         } catch (error) {
           if (error instanceof Error && error.name === 'AbortError') {
-            throw error;
+            rethrowWithRejectedTokenUsage(error);
+          }
+          if (isTerminalRedteamPluginGenerationError(error)) {
+            rethrowWithRejectedTokenUsage(error);
           }
           const errorTokenUsage = getErrorTokenUsage(error);
           if (!errorTokenUsage) {
-            throw error;
+            return rethrowWithRejectedTokenUsage(error);
           }
-          rejectedTokenUsage = mergeProviderTokenUsage(rejectedTokenUsage, errorTokenUsage);
+          rejectedTokenUsage = mergeProviderTokenUsage(rejectedTokenUsage, {
+            ...errorTokenUsage,
+            numRequests: errorTokenUsage.numRequests ?? 1,
+          });
           return [];
         }
 

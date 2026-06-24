@@ -61,7 +61,7 @@ describe('canGenerateRemote property and behavior', () => {
   beforeEach(() => {
     mockProvider = createMockProvider({
       response: createProviderResponse({
-        output: 'Sample output',
+        output: 'Prompt: Sample output',
         error: null as any,
       }),
     });

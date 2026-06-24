@@ -19,6 +19,7 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
+import { CustomPlugin } from '../../src/redteam/plugins/custom';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
@@ -263,6 +264,34 @@ describe('synthesize', () => {
       });
       expect(generatedRows[1]?.metadata).not.toHaveProperty('providerTokenUsage');
     });
+
+    it('preserves purpose usage when entity extraction fails', async () => {
+      vi.mocked(extractSystemPurposeWithMetadata).mockResolvedValueOnce({
+        result: 'Extracted purpose',
+        tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+      });
+      const entityError = Object.assign(new Error('entity extraction failed'), {
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      });
+      vi.mocked(extractEntitiesWithMetadata).mockRejectedValueOnce(entityError);
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(entityError);
+      expect(entityError.tokenUsage).toMatchObject({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 2,
+      });
+    });
   });
 
   // API provider tests
@@ -416,7 +445,7 @@ describe('synthesize', () => {
         ]),
       } as any);
       const strategyError = Object.assign(new Error('citation generation failed'), {
-        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
       });
       vi.spyOn(Strategies, 'find').mockReturnValue({
         id: 'citation',
@@ -437,6 +466,33 @@ describe('synthesize', () => {
         prompt: 9,
         completion: 6,
         numRequests: 3,
+      });
+    });
+
+    it('should preserve successful plugin usage when configuration emits no final rows', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'generated prompt' },
+            metadata: {
+              providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            },
+          },
+        ]),
+      } as any);
+
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'basic', config: { enabled: false } }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toMatchObject({
+        message: 'Redteam generation reported provider usage but produced no test cases',
+        tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
       });
     });
 
@@ -501,6 +557,169 @@ describe('synthesize', () => {
         total: 5,
         prompt: 3,
         completion: 2,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve prior plugin usage on a later AbortError', async () => {
+      const abortError = Object.assign(new Error('plugin generation cancelled'), {
+        name: 'AbortError',
+      });
+      vi.spyOn(Plugins, 'find').mockImplementation(
+        (predicate) =>
+          [
+            {
+              key: 'a-success',
+              action: vi.fn().mockResolvedValue([
+                {
+                  vars: { query: 'generated prompt' },
+                  metadata: {
+                    providerTokenUsage: {
+                      total: 10,
+                      prompt: 6,
+                      completion: 4,
+                      numRequests: 1,
+                    },
+                  },
+                },
+              ]),
+            },
+            {
+              key: 'b-abort',
+              action: vi.fn().mockRejectedValue(abortError),
+            },
+          ].find(predicate as any) as any,
+      );
+
+      await expect(
+        synthesize({
+          maxConcurrency: 1,
+          numTests: 1,
+          plugins: [
+            { id: 'a-success', numTests: 1 },
+            { id: 'b-abort', numTests: 1 },
+          ],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(abortError);
+      expect((abortError as Error & { tokenUsage?: unknown }).tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 6,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('should await in-flight plugin usage before propagating a concurrent AbortError', async () => {
+      let signalDelayedPluginStarted!: () => void;
+      const delayedPluginStarted = new Promise<void>((resolve) => {
+        signalDelayedPluginStarted = resolve;
+      });
+      let releaseDelayedPlugin!: () => void;
+      const delayedPluginResult = new Promise<any[]>((resolve) => {
+        releaseDelayedPlugin = () =>
+          resolve([
+            {
+              vars: { query: 'delayed generated prompt' },
+              metadata: {
+                providerTokenUsage: {
+                  total: 10,
+                  prompt: 6,
+                  completion: 4,
+                  numRequests: 1,
+                },
+              },
+            },
+          ]);
+      });
+      const abortError = Object.assign(new Error('concurrent plugin generation cancelled'), {
+        name: 'AbortError',
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      });
+      vi.spyOn(Plugins, 'find').mockImplementation(
+        (predicate) =>
+          [
+            {
+              key: 'a-delayed',
+              action: vi.fn().mockImplementation(() => {
+                signalDelayedPluginStarted();
+                return delayedPluginResult;
+              }),
+            },
+            {
+              key: 'b-abort',
+              action: vi.fn().mockImplementation(async () => {
+                await delayedPluginStarted;
+                throw abortError;
+              }),
+            },
+          ].find(predicate as any) as any,
+      );
+
+      const generationPromise = synthesize({
+        maxConcurrency: 2,
+        numTests: 1,
+        plugins: [
+          { id: 'a-delayed', numTests: 1 },
+          { id: 'b-abort', numTests: 1 },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+      await delayedPluginStarted;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseDelayedPlugin();
+
+      await expect(generationPromise).rejects.toBe(abortError);
+      expect(abortError.tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve plugin usage when a strategy aborts', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'generated prompt' },
+            metadata: {
+              providerTokenUsage: {
+                total: 10,
+                prompt: 6,
+                completion: 4,
+                numRequests: 1,
+              },
+            },
+          },
+        ]),
+      } as any);
+      const abortError = Object.assign(new Error('strategy generation cancelled'), {
+        name: 'AbortError',
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'citation',
+        action: vi.fn().mockRejectedValue(abortError),
+      });
+
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'citation' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(abortError);
+      expect((abortError as Error & { tokenUsage?: unknown }).tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 6,
+        completion: 4,
         numRequests: 1,
       });
     });
@@ -662,6 +881,83 @@ describe('synthesize', () => {
       );
     });
 
+    it('should preserve custom plugin usage when max-length filtering removes every row', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-filtered.yaml';
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockReturnValue({
+        generator: 'Prompt: filtered probe',
+        grader: 'Grade the response based on {{ purpose }}',
+        metric: 'custom-filtered',
+      });
+      vi.spyOn(CustomPlugin.prototype, 'generateTests').mockResolvedValue([
+        {
+          metadata: {
+            providerTokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+          },
+          vars: { query: 'definitely too long' },
+        },
+      ]);
+
+      const error = await synthesize({
+        entities: [],
+        maxCharsPerMessage: 5,
+        numTests: 1,
+        plugins: [{ id: `file://./${pluginPath}`, numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      }).catch((error) => error);
+
+      expect(error).toMatchObject({
+        message: expect.stringContaining('produced no test cases after filtering'),
+        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      });
+    });
+
+    it('should transfer custom plugin usage from a filtered row to a surviving row once', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-filtered.yaml';
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockReturnValue({
+        generator: 'Prompt: filtered probe',
+        grader: 'Grade the response based on {{ purpose }}',
+        metric: 'custom-filtered',
+      });
+      vi.spyOn(CustomPlugin.prototype, 'generateTests').mockResolvedValue([
+        {
+          metadata: {
+            providerTokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+          },
+          vars: { query: 'definitely too long' },
+        },
+        { vars: { query: 'short' } },
+      ]);
+
+      const result = await synthesize({
+        entities: [],
+        maxCharsPerMessage: 5,
+        numTests: 2,
+        plugins: [{ id: `file://./${pluginPath}`, numTests: 2 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0]?.vars?.query).toBe('short');
+      expect(result.testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 8,
+        prompt: 5,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
+
     it('should report failed custom file plugin language batches', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-language-failure.yaml';
@@ -716,6 +1012,111 @@ describe('synthesize', () => {
           `[Language Processing] Error generating tests for custom plugin file://./${pluginPath}: Error: French generation failed`,
         ),
       );
+    });
+
+    it('should retain usage from a failed custom file plugin language batch', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-language-failure.yaml';
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockImplementation((filePath) => {
+        if (String(filePath).endsWith(pluginPath)) {
+          return {
+            generator: 'Prompt: language-specific probe',
+            grader: 'Grade the response based on {{ purpose }}',
+            metric: 'custom-language-failure',
+          };
+        }
+        return filePath;
+      });
+
+      mockProvider.callApi.mockImplementation(async (input: string) =>
+        input.includes('language: fr')
+          ? {
+              error: 'French generation failed',
+              tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            }
+          : { output: 'Prompt: guten tag' },
+      );
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: `file://./${pluginPath}`,
+            numTests: 1,
+            config: { language: ['fr', 'de'] },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.language).toBe('de');
+      expect(result.testCases[0].metadata?.providerTokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 4,
+      });
+    });
+
+    it('should preserve all settled language usage on AbortError', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-language-failure.yaml';
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockImplementation((filePath) => {
+        if (String(filePath).endsWith(pluginPath)) {
+          return {
+            generator: 'Prompt: language-specific probe',
+            grader: 'Grade the response based on {{ purpose }}',
+            metric: 'custom-language-failure',
+          };
+        }
+        return filePath;
+      });
+      const abortError = Object.assign(new Error('French generation cancelled'), {
+        name: 'AbortError',
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      });
+      mockProvider.callApi.mockImplementation(async (input: string) => {
+        if (input.includes('language: fr')) {
+          throw abortError;
+        }
+        return {
+          output: 'Prompt: guten tag',
+          tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        };
+      });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [
+            {
+              id: `file://./${pluginPath}`,
+              numTests: 1,
+              config: { language: ['fr', 'de'] },
+            },
+          ],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Custom plugin purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(abortError);
+      expect(abortError.tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 2,
+      });
     });
 
     it('should pass target inputs into custom file plugins in multi-input mode', async () => {
@@ -1230,10 +1631,216 @@ describe('synthesize', () => {
           wrapperSummary,
         },
       });
-      expect(strategyTestCase?.metadata?.providerTokenUsage).toMatchObject({
+      const usageTestCases = result.testCases.filter(
+        (testCase) => testCase.metadata?.providerTokenUsage,
+      );
+      expect(usageTestCases).toHaveLength(1);
+      expect(usageTestCases[0]?.metadata?.providerTokenUsage).toMatchObject({
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
+      });
+      expect(strategyTestCase?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
+    it('should preserve billed usage when strategy input re-materialization falls back', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+      } satisfies Inputs;
+      const materializationError = Object.assign(new Error('materialization failed'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      });
+      mockProvider.callApi.mockRejectedValue(materializationError);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([
+          {
+            metadata: { pluginConfig: { inputs }, pluginId: 'prompt-extraction' },
+            vars: { [MULTI_INPUT_VAR]: JSON.stringify({ document: 'base payload' }) },
+          },
+        ]),
+        key: 'prompt-extraction',
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockImplementation((testCases: any[]) =>
+          testCases.map((testCase) => ({
+            ...testCase,
+            vars: {
+              ...testCase.vars,
+              [MULTI_INPUT_VAR]: JSON.stringify({ document: 'strategy payload' }),
+            },
+          })),
+        ),
+        id: 'jailbreak:meta',
+      });
+
+      const result = await synthesize({
+        inputs,
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{document}}'],
+        provider: mockProvider,
+        purpose: 'Summarize uploaded documents',
+        strategies: [{ id: 'jailbreak:meta' }],
+        targetIds: ['test-provider'],
+      });
+
+      const usageTestCases = result.testCases.filter(
+        (testCase) => testCase.metadata?.providerTokenUsage,
+      );
+      expect(usageTestCases).toHaveLength(1);
+      expect(usageTestCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve earlier strategy re-materialization usage on a later AbortError', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+      } satisfies Inputs;
+      mockProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          bodyText: 'Strategy document body',
+          injectedInstruction: 'Strategy instruction',
+          injectionPlacement: 'comment',
+          wrapperSummary: 'Strategy wrapper',
+        }),
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([
+          {
+            metadata: { pluginConfig: { inputs }, pluginId: 'prompt-extraction' },
+            vars: { [MULTI_INPUT_VAR]: JSON.stringify({ document: 'base payload' }) },
+          },
+        ]),
+        key: 'prompt-extraction',
+      });
+      const abortError = Object.assign(new Error('later strategy cancelled'), {
+        name: 'AbortError',
+      });
+      vi.spyOn(Strategies, 'find').mockImplementation((predicate) =>
+        [
+          {
+            action: vi.fn().mockImplementation((testCases: any[]) =>
+              testCases.map((testCase) => ({
+                ...testCase,
+                vars: {
+                  ...testCase.vars,
+                  [MULTI_INPUT_VAR]: JSON.stringify({ document: 'strategy payload' }),
+                },
+              })),
+            ),
+            id: 'jailbreak:meta',
+          },
+          { action: vi.fn().mockRejectedValue(abortError), id: 'citation' },
+        ].find(predicate as any),
+      );
+
+      await expect(
+        synthesize({
+          inputs,
+          numTests: 1,
+          plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+          prompts: ['{{document}}'],
+          provider: mockProvider,
+          purpose: 'Summarize uploaded documents',
+          strategies: [{ id: 'jailbreak:meta' }, { id: 'citation' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(abortError);
+      expect((abortError as Error & { tokenUsage?: unknown }).tokenUsage).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve retry re-materialization usage when a later strategy aborts', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+      } satisfies Inputs;
+      mockProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          bodyText: 'Retry document body',
+          injectedInstruction: 'Retry instruction',
+          injectionPlacement: 'comment',
+          wrapperSummary: 'Retry wrapper',
+        }),
+        tokenUsage: { total: 6, prompt: 4, completion: 2, numRequests: 1 },
+      });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([
+          {
+            metadata: { pluginConfig: { inputs }, pluginId: 'prompt-extraction' },
+            vars: { [MULTI_INPUT_VAR]: JSON.stringify({ document: 'base payload' }) },
+          },
+        ]),
+        key: 'prompt-extraction',
+      });
+      const abortError = Object.assign(new Error('post-retry strategy cancelled'), {
+        name: 'AbortError',
+      });
+      vi.spyOn(Strategies, 'find').mockImplementation((predicate) =>
+        [
+          {
+            action: vi.fn().mockImplementation((testCases: any[]) =>
+              testCases.map((testCase) => ({
+                ...testCase,
+                metadata: { ...testCase.metadata, retry: true },
+                vars: {
+                  ...testCase.vars,
+                  [MULTI_INPUT_VAR]: JSON.stringify({ document: 'retry payload' }),
+                },
+              })),
+            ),
+            id: 'retry',
+          },
+          { action: vi.fn().mockRejectedValue(abortError), id: 'citation' },
+        ].find(predicate as any),
+      );
+
+      await expect(
+        synthesize({
+          inputs,
+          numTests: 1,
+          plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+          prompts: ['{{document}}'],
+          provider: mockProvider,
+          purpose: 'Summarize uploaded documents',
+          strategies: [{ id: 'retry' }, { id: 'citation' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(abortError);
+      expect((abortError as Error & { tokenUsage?: unknown }).tokenUsage).toMatchObject({
+        total: 6,
+        prompt: 4,
+        completion: 2,
         numRequests: 1,
       });
     });
@@ -3789,12 +4396,19 @@ describe('Language configuration', () => {
       });
 
       // Mock strategy that generates 2x the input (1:2 fan-out)
-      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
-        testCases.flatMap((tc: any) => [
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) => {
+        const generated = testCases.flatMap((tc: any) => [
           { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'a' } },
           { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'b' } },
-        ]),
-      );
+        ]);
+        generated.at(-1).metadata.providerTokenUsage = {
+          total: 17,
+          prompt: 10,
+          completion: 7,
+          numRequests: 1,
+        };
+        return generated;
+      });
       vi.spyOn(Strategies, 'find').mockReturnValue({
         id: 'multilingual',
         action: mockStrategyAction,
@@ -3813,11 +4427,65 @@ describe('Language configuration', () => {
         (tc) => tc.metadata?.strategyId === 'multilingual',
       );
       expect(strategyTests.length).toBe(3);
+      expect(result.testCases.filter((testCase) => testCase.metadata?.providerTokenUsage)).toEqual([
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            providerTokenUsage: {
+              total: 17,
+              prompt: 10,
+              completion: 7,
+              numRequests: 1,
+            },
+          }),
+        }),
+      ]);
 
       // Should have logged warning about post-cap safety net
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Post-cap safety net applied'),
       );
+    });
+
+    it('should preserve strategy usage when every generated row is oversized', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'base' } }]),
+      } as any);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'this is too long' },
+            metadata: {
+              providerTokenUsage: {
+                total: 17,
+                prompt: 10,
+                completion: 7,
+                numRequests: 1,
+              },
+            },
+          },
+        ]),
+      });
+
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'basic', config: { enabled: false } }, { id: 'base64' }],
+          targetIds: ['test-provider'],
+          maxCharsPerMessage: 5,
+        }),
+      ).rejects.toMatchObject({
+        message: 'Redteam strategies reported provider usage but produced no test cases',
+        tokenUsage: {
+          total: 17,
+          prompt: 10,
+          completion: 7,
+          numRequests: 1,
+        },
+      });
     });
   });
 
