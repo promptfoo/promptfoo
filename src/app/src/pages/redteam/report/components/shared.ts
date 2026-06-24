@@ -72,6 +72,13 @@ export function getStrategyIdFromTest(test: TestWithMetadata): string {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
+  if (result.metadata?.pluginId === 'policy') {
+    const policyId = result.testCase?.metadata?.policyId ?? result.metadata.policyId;
+    if (typeof policyId === 'string') {
+      return policyId;
+    }
+  }
+
   if (
     result.metadata?.pluginId &&
     // Policy plugins are handled separately

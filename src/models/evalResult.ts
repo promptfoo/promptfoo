@@ -118,6 +118,14 @@ export function projectMetadataForOutput(
   const projectedMetadata = { ...metadata };
   if (stripFlags.shouldStripPromptText) {
     delete projectedMetadata.redteamFinalPrompt;
+    delete projectedMetadata.__promptfooMaterializedMultiInputPrompt;
+    delete projectedMetadata.inputMaterialization;
+  }
+  if (stripFlags.shouldStripTestVars) {
+    delete projectedMetadata.inputVars;
+    delete projectedMetadata.transformDisplayVars;
+    delete projectedMetadata.__promptfooMaterializedMultiInputPrompt;
+    delete projectedMetadata.inputMaterialization;
   }
   for (const historyKey of ['redteamHistory', 'redteamTreeHistory'] as const) {
     if (historyKey in projectedMetadata) {

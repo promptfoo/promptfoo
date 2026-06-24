@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, {
+  projectEvaluateResultForOutput,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
@@ -1471,6 +1472,86 @@ describe('EvalResult', () => {
   });
 
   describe('sanitizeResultForJsonlArtifact', () => {
+    it.each([
+      {
+        name: 'prompt text',
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        removed: [
+          'redteamFinalPrompt',
+          '__promptfooMaterializedMultiInputPrompt',
+          'inputMaterialization',
+        ],
+        retained: ['inputVars', 'transformDisplayVars'],
+      },
+      {
+        name: 'test variables',
+        env: { PROMPTFOO_STRIP_TEST_VARS: 'true' },
+        removed: [
+          'inputVars',
+          'transformDisplayVars',
+          '__promptfooMaterializedMultiInputPrompt',
+          'inputMaterialization',
+        ],
+        retained: ['redteamFinalPrompt'],
+      },
+      {
+        name: 'prompt text and test variables',
+        env: {
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+        },
+        removed: [
+          'redteamFinalPrompt',
+          'inputVars',
+          'transformDisplayVars',
+          '__promptfooMaterializedMultiInputPrompt',
+          'inputMaterialization',
+        ],
+        retained: [],
+      },
+    ])('removes known metadata duplicates when stripping $name', ({ env, removed, retained }) => {
+      const createMetadata = () => ({
+        safeMetadata: 'retained',
+        redteamFinalPrompt: 'sensitive final prompt',
+        __promptfooMaterializedMultiInputPrompt: { prompt: 'sensitive materialized prompt' },
+        inputMaterialization: {
+          prompt: { injectedInstruction: 'sensitive injected instruction' },
+        },
+        inputVars: { account: 'sensitive input variable' },
+        transformDisplayVars: { prompt: 'sensitive rendered variable' },
+      });
+      const createResult = () =>
+        createEvaluateResult({
+          metadata: createMetadata(),
+          response: { output: 'visible output', metadata: createMetadata() },
+          testCase: { metadata: createMetadata(), vars: { account: 'sensitive variable' } },
+        });
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(createResult()),
+          sanitizeResultForJsonlArtifact(createResult()),
+        ]) {
+          for (const metadata of [
+            result.metadata,
+            result.response?.metadata,
+            result.testCase.metadata,
+          ]) {
+            expect(metadata).toMatchObject({ safeMetadata: 'retained' });
+            for (const key of removed) {
+              expect(metadata).not.toHaveProperty(key);
+            }
+            for (const key of retained) {
+              expect(metadata).toHaveProperty(key);
+            }
+          }
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('projects histories and errors under granular strip flags', () => {
       const restoreEnv = mockProcessEnv({
         PROMPTFOO_STRIP_PROMPT_TEXT: 'true',

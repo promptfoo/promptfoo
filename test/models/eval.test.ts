@@ -1620,6 +1620,100 @@ describe('evaluator', () => {
       expect(JSON.stringify(projected.config)).not.toContain('policy-object-secret');
     });
 
+    it('preserves safe singleton and named Claude Agent SDK tools in compact config', async () => {
+      const singletonEval = new Eval({});
+      singletonEval.config = {
+        providers: [
+          {
+            id: 'anthropic:claude-agent-sdk',
+            config: {
+              tools: {
+                type: 'preset',
+                preset: 'claude_code',
+                apiKey: 'singleton-tool-secret',
+              },
+            },
+          },
+        ],
+      };
+      const namedToolsEval = new Eval({});
+      namedToolsEval.config = {
+        providers: [
+          {
+            id: 'anthropic:claude-agent-sdk',
+            config: { tools: ['Read', 'Edit'] },
+          },
+        ],
+      };
+
+      const singletonProjection = await singletonEval.toResultsFile({
+        resultProjection: 'redteamReport',
+      });
+      const namedToolsProjection = await namedToolsEval.toResultsFile({
+        resultProjection: 'redteamReport',
+      });
+
+      expect(singletonProjection.config.providers).toEqual([
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: [{ type: 'preset', preset: 'claude_code' }] },
+        },
+      ]);
+      expect(namedToolsProjection.config.providers).toEqual([
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: ['Read', 'Edit'] },
+        },
+      ]);
+      expect(JSON.stringify(singletonProjection.config)).not.toContain('singleton-tool-secret');
+    });
+
+    it('preserves policy row identity when compact grading details are stripped', async () => {
+      const policyId = '550e8400-e29b-41d4-a716-446655440000';
+      const policyResult = createEvaluateResult({
+        metadata: { pluginId: 'policy' },
+        testCase: {
+          metadata: { pluginId: 'policy', policyId, strategyId: 'basic' },
+        },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'policy violation',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'policy violation',
+              assertion: {
+                type: 'promptfoo:redteam:policy',
+                metric: `PolicyViolation:${policyId}`,
+              },
+            },
+          ],
+        },
+      });
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(policyResult);
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [policyResult] });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+
+      try {
+        for (const eval_ of [persistedEval, legacyEval]) {
+          const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+          const result = projected.results.results[0];
+
+          expect(result.gradingResult).toBeNull();
+          expect(result.testCase.metadata).toMatchObject({
+            pluginId: 'policy',
+            policyId,
+          });
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should omit legacy table bodies from redteam report result projections', async () => {
       const eval1 = new Eval({});
       eval1.oldResults = createEvaluateSummaryV2({

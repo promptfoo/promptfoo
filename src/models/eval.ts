@@ -117,6 +117,7 @@ interface RedteamReportResultRow {
   metadataRedteamTreeHistory: string | null;
   testCasePluginId: string | null;
   testCaseStrategyId: string | null;
+  testCasePolicyId: string | null;
 }
 
 type RedteamReportStripFlags = OutputStripFlags;
@@ -355,6 +356,7 @@ function createRedteamReportResult(
     : {
         ...(row.testCasePluginId !== null && { pluginId: row.testCasePluginId }),
         ...(row.testCaseStrategyId !== null && { strategyId: row.testCaseStrategyId }),
+        ...(row.testCasePolicyId !== null && { policyId: row.testCasePolicyId }),
       };
 
   return {
@@ -397,6 +399,7 @@ function projectTestCaseForRedteamReport(
     metadata: {
       ...(metadata.pluginId !== undefined && { pluginId: metadata.pluginId }),
       ...(metadata.strategyId !== undefined && { strategyId: metadata.strategyId }),
+      ...(metadata.policyId !== undefined && { policyId: metadata.policyId }),
     },
   };
 }
@@ -515,16 +518,23 @@ function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | u
       ...(allowedTools !== undefined && { allowed_tools: allowedTools }),
     };
   }
+  if (tool.type === 'preset' && tool.preset === 'claude_code') {
+    return { type: 'preset', preset: 'claude_code' };
+  }
   return { type: tool.type };
 }
 
-function projectToolsForRedteamReport(tools: unknown): Record<string, unknown>[] | undefined {
-  if (!Array.isArray(tools)) {
-    return undefined;
-  }
-  const projectedTools = tools
-    .map(projectToolForRedteamReport)
-    .filter((tool): tool is Record<string, unknown> => tool !== undefined);
+function projectToolsForRedteamReport(
+  tools: unknown,
+  providerId: string,
+): (Record<string, unknown> | string)[] | undefined {
+  const toolEntries = Array.isArray(tools) ? tools : [tools];
+  const supportsNamedTools = providerId === 'anthropic:claude-agent-sdk';
+  const projectedTools = toolEntries
+    .map((tool) =>
+      supportsNamedTools && typeof tool === 'string' ? tool : projectToolForRedteamReport(tool),
+    )
+    .filter((tool): tool is Record<string, unknown> | string => tool !== undefined);
   return projectedTools.length > 0 ? projectedTools : undefined;
 }
 
@@ -562,18 +572,20 @@ function projectPluginForRedteamReport(plugin: unknown): unknown {
 
 function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
   const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+  const providerRecord = isRecord(firstProvider) ? firstProvider : undefined;
+  const providerId = typeof providerRecord?.id === 'string' ? providerRecord.id : undefined;
   const tools =
-    isRecord(firstProvider) && isRecord(firstProvider.config)
-      ? projectToolsForRedteamReport(firstProvider.config.tools)
+    providerId !== undefined && isRecord(providerRecord?.config)
+      ? projectToolsForRedteamReport(providerRecord.config.tools, providerId)
       : undefined;
   const provider =
-    isRecord(firstProvider) && typeof firstProvider.id === 'string'
-      ? {
-          id: firstProvider.id,
-          ...(typeof firstProvider.label === 'string' && { label: firstProvider.label }),
+    providerId === undefined
+      ? undefined
+      : {
+          id: providerId,
+          ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
           ...(tools !== undefined && { config: { tools } }),
-        }
-      : undefined;
+        };
   const plugins = config.redteam?.plugins
     ?.map(projectPluginForRedteamReport)
     .filter((plugin) => plugin !== undefined) as
@@ -2296,6 +2308,9 @@ export default class Eval {
         testCaseStrategyId: sql<
           string | null
         >`json_extract(${validTestCaseJson}, '$.metadata.strategyId')`,
+        testCasePolicyId: sql<
+          string | null
+        >`json_extract(${validTestCaseJson}, '$.metadata.policyId')`,
       })
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, this.id))

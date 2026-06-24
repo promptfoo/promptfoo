@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getReportPrompt } from './shared';
+import { getPluginIdFromResult, getReportPrompt } from './shared';
 
 describe('getReportPrompt', () => {
   it('preserves an explicitly empty provider prompt', () => {
@@ -13,5 +13,17 @@ describe('getReportPrompt', () => {
     } as unknown as Parameters<typeof getReportPrompt>[0];
 
     expect(getReportPrompt(result, 'prompt')).toBe('');
+  });
+});
+
+describe('getPluginIdFromResult', () => {
+  it('uses the canonical test-case policy ID when grading details are stripped', () => {
+    const result = {
+      metadata: { pluginId: 'policy' },
+      testCase: { metadata: { pluginId: 'policy', policyId: 'policy-123' } },
+      gradingResult: null,
+    } as unknown as Parameters<typeof getPluginIdFromResult>[0];
+
+    expect(getPluginIdFromResult(result)).toBe('policy-123');
   });
 });
