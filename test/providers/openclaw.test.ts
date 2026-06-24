@@ -840,6 +840,17 @@ describe('OpenClaw Provider', () => {
       }
     });
 
+    it.each([':', '::', ' : '])('should reject empty unscoped session key %s', (sessionKey) => {
+      for (const agentId of [undefined, 'main']) {
+        expect(
+          () =>
+            new OpenClawChatProvider(agentId, {
+              config: { session_key: sessionKey },
+            }),
+        ).toThrow('must include a non-empty session ID');
+      }
+    });
+
     it('should not set session key header when not provided', () => {
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.config.headers?.['x-openclaw-session-key']).toBeUndefined();
@@ -2462,6 +2473,20 @@ describe('OpenClaw Provider', () => {
 
       await expect(provider.callApi('Hello')).rejects.toThrow(
         'must use the form "agent:<agent-id>:<session-id>"',
+      );
+      expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject empty unscoped sessions for explicit WS agents', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          session_key: '::',
+        },
+      });
+
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        'must include a non-empty session ID',
       );
       expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
     });

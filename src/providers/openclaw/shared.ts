@@ -379,6 +379,12 @@ export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey:
     return trimmedSessionKey;
   }
 
+  if (!trimmedSessionKey.split(':').some((part) => part.trim().length > 0)) {
+    throw new Error(
+      `OpenClaw session key "${trimmedSessionKey}" must include a non-empty session ID`,
+    );
+  }
+
   if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
     const sessionKeyParts = trimmedSessionKey.split(':');
     const scopedAgentId = sessionKeyParts[1]?.trim();
