@@ -291,8 +291,11 @@ describe('handleTrajectoryGoalSuccess', () => {
     vi.useFakeTimers();
     try {
       let judgeAbortSignal: AbortSignal | undefined;
+      let queuedCallAbortSignal: AbortSignal | undefined;
       vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => {
-        judgeAbortSignal = getProviderCallExecutionContext()?.abortSignal;
+        const executionContext = getProviderCallExecutionContext();
+        judgeAbortSignal = executionContext?.abortSignal;
+        queuedCallAbortSignal = executionContext?.queuedCallAbortSignal;
         return new Promise(() => {
           /* never resolves; simulate a stuck judge call */
         });
@@ -317,6 +320,7 @@ describe('handleTrajectoryGoalSuccess', () => {
       expect(result.assertion).toBe(params.assertion);
       expect(result.metadata?.graderError).toBe(true);
       expect(judgeAbortSignal?.aborted).toBe(true);
+      expect(queuedCallAbortSignal?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }

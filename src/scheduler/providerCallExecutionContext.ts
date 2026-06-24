@@ -13,6 +13,8 @@ import type { ProviderCallQueue } from './providerCallQueue';
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
+  // Cancels this call before provider invocation without changing outer evaluator flush semantics.
+  queuedCallAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
 }
 

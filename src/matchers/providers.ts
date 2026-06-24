@@ -65,13 +65,15 @@ export function callProviderWithContext(
   const callApiOptions = executionContext?.abortSignal
     ? { abortSignal: executionContext.abortSignal }
     : undefined;
-  const callApi = () =>
-    callApiOptions
+  const callApi = () => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+    return callApiOptions
       ? provider.callApi(prompt, callApiContext, callApiOptions)
       : provider.callApi(prompt, callApiContext);
+  };
 
   const executeCall = () => {
-    executionContext?.abortSignal?.throwIfAborted();
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
 
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(

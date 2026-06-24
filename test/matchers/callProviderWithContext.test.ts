@@ -165,13 +165,17 @@ describe('callProviderWithContext', () => {
     });
   });
 
-  it('skips queued provider calls whose execution signal was aborted', async () => {
+  it('skips provider calls whose queued-call signal was aborted', async () => {
     const provider = createProvider();
     const providerCallQueue = new ProviderGroupedCallQueue();
     const abortController = new AbortController();
 
     const promise = withProviderCallExecutionContext(
-      { abortSignal: abortController.signal, providerCallQueue },
+      {
+        abortSignal: abortController.signal,
+        providerCallQueue,
+        queuedCallAbortSignal: abortController.signal,
+      },
       () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
     );
     abortController.abort();
@@ -183,5 +187,31 @@ describe('callProviderWithContext', () => {
 
     await rejection;
     expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('still drains queued provider calls after an outer execution abort', async () => {
+    const provider = createProvider();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: abortController.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    abortController.abort();
+
+    const group = providerCallQueue.takeNextGroup();
+    expect(group).toHaveLength(1);
+    await providerCallQueue.run(group[0]);
+
+    await expect(promise).resolves.toEqual({ output: 'ok' });
+    expect(provider.callApi).toHaveBeenCalledWith(
+      'grade this',
+      {
+        prompt: { raw: 'grade this', label: 'rubric' },
+        vars,
+      },
+      { abortSignal: abortController.signal },
+    );
   });
 });
