@@ -65,8 +65,8 @@ async function main() {
   // Keep startup messaging focused: runtime reminders take priority, while compatible update
   // checks resume without duplicating post-cutoff runtime guidance.
   const runtimeNoticeApplies = getRuntimeCompatibilityNotice() !== null;
-  const runtimeNoticeShown = maybeWarnAboutRuntime();
-  if (!runtimeNoticeShown) {
+  const runtimeNoticeHandled = maybeWarnAboutRuntime();
+  if (!runtimeNoticeHandled) {
     await checkForUpdates({ suppressRuntimeBlockedWarning: runtimeNoticeApplies });
   }
   await runDbMigrations({ suppressBindingErrorLogging: true });

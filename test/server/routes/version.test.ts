@@ -1,7 +1,10 @@
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { describe, expect, it } from 'vitest';
-import { getRuntimeNoticeForVersionResponse } from '../../../src/server/routes/versionUtils';
+import {
+  getRuntimeNoticeForVersionResponse,
+  isUpdateAvailableForRuntime,
+} from '../../../src/server/routes/versionUtils';
 
 /**
  * These tests verify the logic used in src/server/routes/version.ts
@@ -131,5 +134,16 @@ describe('getRuntimeNoticeForVersionResponse', () => {
       currentMajor: 20,
       id: 'node20-removal-2026-07-30',
     });
+  });
+});
+
+describe('isUpdateAvailableForRuntime', () => {
+  it('should hide runtime-blocked updates from legacy clients', () => {
+    expect(isUpdateAvailableForRuntime(true, true)).toBe(false);
+  });
+
+  it('should preserve compatible updates such as Docker image pulls', () => {
+    expect(isUpdateAvailableForRuntime(true, false)).toBe(true);
+    expect(isUpdateAvailableForRuntime(false, false)).toBe(false);
   });
 });

@@ -113,6 +113,21 @@ describe('runtime compatibility CLI notice', () => {
     });
   });
 
+  it('allows compatible update checks to continue when notice persistence fails', () => {
+    vi.mocked(writeGlobalConfig).mockImplementation(() => {
+      throw new Error('Read-only config');
+    });
+
+    expect(
+      maybeWarnAboutRuntime({
+        currentVersion: 'v20.20.2',
+        now: new Date('2026-06-22T12:00:00.000Z'),
+      }),
+    ).toBe(false);
+    expect(console.warn).toHaveBeenCalled();
+    expect(telemetry.record).toHaveBeenCalled();
+  });
+
   it('does not repeat the notice before the reminder interval', () => {
     vi.mocked(readGlobalConfig).mockReturnValue({
       id: 'test-installation',

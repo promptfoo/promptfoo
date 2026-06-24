@@ -89,9 +89,11 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
         [notice.id]: { lastShownAt: now.toISOString() },
       },
     });
+    return true;
   } catch (error) {
     logger.debug('Unable to persist runtime notice state', { error });
+    // The warning was displayed, but it will recur because no reminder state was saved. Let the
+    // caller continue compatible update checks instead of suppressing them indefinitely.
+    return false;
   }
-
-  return true;
 }
