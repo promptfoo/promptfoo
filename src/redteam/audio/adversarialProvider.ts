@@ -14,7 +14,7 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 
 /**
  * Standard attack types supported by adversarial audio providers

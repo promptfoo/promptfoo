@@ -11,8 +11,8 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
@@ -30,7 +30,7 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { getTokenUsage, OPENAI_CHAT_MODELS, validateFunctionCall } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -66,6 +66,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.functions, vars);
+  }
+
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
@@ -85,15 +89,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
@@ -188,31 +184,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
-  }
-
-  protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+  protected getGenAISystem(): string {
+    return 'openai';
   }
 
   async getOpenAiBody(
@@ -378,7 +351,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'openai',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
@@ -502,14 +475,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 
@@ -662,7 +634,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
       // Handle reasoning as thinking content if present and showThinking is enabled
-      if (reasoning && (this.config.showThinking ?? true)) {
+      if (reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 

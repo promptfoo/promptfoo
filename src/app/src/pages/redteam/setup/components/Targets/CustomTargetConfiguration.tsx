@@ -222,7 +222,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
               code: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
               description: 'Claude 3 Sonnet',
             },
-            { code: 'bedrock:amazon.titan-text-express-v1', description: 'Amazon Titan' },
+            { code: 'bedrock:amazon.nova-lite-v1:0', description: 'Amazon Nova Lite' },
             { code: 'bedrock:meta.llama3-70b-instruct-v1:0', description: 'Llama 3' },
           ],
         },
