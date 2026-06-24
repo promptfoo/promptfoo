@@ -1119,6 +1119,45 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('ignores a stale background refresh without superseding the active eval request', async () => {
+      let resolveCurrent!: (response: Response) => void;
+      const currentResponse = new Promise<Response>((resolve) => {
+        resolveCurrent = resolve;
+      });
+      vi.mocked(callApi).mockReturnValueOnce(currentResponse);
+      act(() => {
+        useTableStore.getState().setEvalId('current-eval');
+      });
+
+      let currentFetch!: Promise<EvalTableDTO | null>;
+      let staleFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        currentFetch = useTableStore
+          .getState()
+          .fetchEvalData('current-eval', { skipSettingEvalId: true });
+        staleFetch = useTableStore
+          .getState()
+          .fetchEvalData('previous-eval', { skipLoadingState: true, skipSettingEvalId: true });
+      });
+      expect(await staleFetch).toBeNull();
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveCurrent({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      } as Response);
+      await act(async () => {
+        await currentFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+      expect(useTableStore.getState().table).toEqual({ head: { prompts: [] }, body: [] });
+    });
+
     it('keeps loading active when a stale foreground request fails before the latest request', async () => {
       let resolveFirst!: (response: Response) => void;
       let resolveSecond!: (response: Response) => void;

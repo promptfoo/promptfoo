@@ -523,7 +523,7 @@ const MANUAL_RATING_REASON = 'Manual result (overrides all other grading results
 
 const ManualRatingStateSchema = z.object({
   version: z.literal(1),
-  status: z.enum(['active', 'cleared']),
+  status: z.enum(['active', 'legacy-active', 'cleared']),
   original: z.object({
     success: z.boolean(),
     score: z.number(),
@@ -708,7 +708,9 @@ function applyExplicitRatingUpdate(
   previousScore: number,
   ratingUpdate: SubmitRatingUpdate,
 ): GradingResult {
-  const updated = { ...(previous ?? submitted) } as GradingResult;
+  const updated = {
+    ...(previous ?? { pass: previousSuccess, score: previousScore }),
+  } as GradingResult;
   updated.pass = previousSuccess;
   updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
   if (ratingUpdate === 'comment') {
@@ -853,6 +855,66 @@ function shouldRefreshClearedManualRatingState(
   return !previousHasManualRating && existingState?.status === 'cleared' && !nextHasManualRating;
 }
 
+function getManualRatingFailureReason(
+  hasManualRating: boolean,
+  success: boolean,
+  previousFailureReason: number,
+): ResultFailureReason {
+  if (!hasManualRating) {
+    return normalizeFailureReason(previousFailureReason);
+  }
+  return success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
+}
+
+function getEditedManualRatingState(
+  result: RatingEvalResult,
+  existingState: ManualRatingState | undefined,
+): ManualRatingState | undefined {
+  if (!existingState) {
+    return { ...captureManualRatingState(result), status: 'legacy-active' };
+  }
+  return existingState.status === 'cleared' ? undefined : existingState;
+}
+
+function resolveClearingManualRating(
+  result: RatingEvalResult,
+  normalizedGradingResult: GradingResult,
+  existingState: ManualRatingState | undefined,
+  clearRestoreBase: GradingResult,
+  legacyClearRequestHash: string | undefined,
+) {
+  if (existingState?.status === 'active') {
+    return {
+      gradingResult: restoreOriginalGradingResult(clearRestoreBase, existingState),
+      success: existingState.original.success,
+      score: existingState.original.score,
+      failureReason: existingState.original.failureReason,
+      nextState: {
+        ...existingState,
+        status: 'cleared' as const,
+        clearRequestHash: legacyClearRequestHash,
+      },
+    };
+  }
+  return {
+    gradingResult: normalizedGradingResult,
+    success: normalizedGradingResult.pass,
+    score: normalizedGradingResult.score,
+    failureReason:
+      existingState?.status === 'legacy-active'
+        ? existingState.original.failureReason
+        : normalizeFailureReason(result.failureReason),
+    nextState:
+      existingState?.status === 'legacy-active'
+        ? {
+            ...existingState,
+            status: 'cleared' as const,
+            clearRequestHash: legacyClearRequestHash,
+          }
+        : undefined,
+  };
+}
+
 function resolveRatingTransition(
   result: RatingEvalResult,
   submittedGradingResult: GradingResult,
@@ -904,11 +966,15 @@ function resolveRatingTransition(
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
   let score = gradingResult.score;
-  let failureReason: ResultFailureReason = normalized.hasManualRating
-    ? success
-      ? ResultFailureReason.NONE
-      : ResultFailureReason.ASSERT
-    : normalizeFailureReason(result.failureReason);
+  let failureReason = getManualRatingFailureReason(
+    normalized.hasManualRating,
+    success,
+    result.failureReason,
+  );
+  const clearRestoreBase =
+    ratingAction === 'clear' && result.gradingResult
+      ? result.gradingResult
+      : normalized.gradingResult;
 
   if (isRepeatedClear) {
     // The rating is already absent. Keep the authoritative current baseline rather than
@@ -919,18 +985,15 @@ function resolveRatingTransition(
     failureReason = normalizeFailureReason(result.failureReason);
     nextState = existingState;
   } else if (stateToRestore) {
-    gradingResult = restoreOriginalGradingResult(normalized.gradingResult, stateToRestore);
+    gradingResult = restoreOriginalGradingResult(clearRestoreBase, stateToRestore);
     success = stateToRestore.original.success;
     score = stateToRestore.original.score;
     failureReason = stateToRestore.original.failureReason;
-    nextState =
-      stateToRestore.status === 'active'
-        ? {
-            ...stateToRestore,
-            status: 'cleared',
-            clearRequestHash: legacyClearRequestHash ?? stateToRestore.clearRequestHash,
-          }
-        : stateToRestore;
+    nextState = {
+      ...stateToRestore,
+      status: 'cleared',
+      clearRequestHash: legacyClearRequestHash ?? stateToRestore.clearRequestHash,
+    };
   } else if (!previousHasManualRating && ratingAction === 'clear') {
     // Deleting a missing rating is idempotent. Never apply caller-supplied outcome fields.
     gradingResult = result.gradingResult;
@@ -961,27 +1024,16 @@ function resolveRatingTransition(
   } else if (!previousHasManualRating && normalized.hasManualRating) {
     nextState = captureManualRatingState(result);
   } else if (previousHasManualRating && normalized.hasManualRating) {
-    nextState = existingState?.status === 'active' ? existingState : undefined;
-    if (!existingState) {
-      // Ratings created before provenance existed retained their underlying failure category.
-      // Keep that recoverable category across edits so a later legacy clear does not erase it.
-      failureReason = normalizeFailureReason(result.failureReason);
-    }
+    nextState = getEditedManualRatingState(result, existingState);
   } else if (normalized.clearingManualRating) {
-    if (existingState?.status === 'active') {
-      gradingResult = restoreOriginalGradingResult(normalized.gradingResult, existingState);
-      success = existingState.original.success;
-      score = existingState.original.score;
-      failureReason = existingState.original.failureReason;
-      nextState = {
-        ...existingState,
-        status: 'cleared',
-        clearRequestHash: legacyClearRequestHash,
-      };
-    } else {
-      // Ratings created before provenance was recorded cannot be restored exactly.
-      failureReason = normalizeFailureReason(result.failureReason);
-    }
+    const cleared = resolveClearingManualRating(
+      result,
+      normalized.gradingResult,
+      existingState,
+      clearRestoreBase,
+      legacyClearRequestHash,
+    );
+    ({ gradingResult, success, score, failureReason, nextState } = cleared);
   }
 
   if (gradingResult) {
@@ -1005,12 +1057,10 @@ function countGradingAssertions(gradingResult: GradingResult | null | undefined)
   pass: number;
   fail: number;
 } {
-  const componentResults = gradingResult?.componentResults;
-  if (!Array.isArray(componentResults)) {
-    return { pass: 0, fail: 0 };
-  }
-
-  return componentResults.reduce(
+  const componentResults = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults
+    : [];
+  const counts = componentResults.reduce(
     (counts, componentResult: unknown) => {
       if (!componentResult || typeof componentResult !== 'object') {
         return counts;
@@ -1025,6 +1075,10 @@ function countGradingAssertions(gradingResult: GradingResult | null | undefined)
     },
     { pass: 0, fail: 0 },
   );
+  if (isHumanAssertion(gradingResult?.assertion) && !componentResults.some(isHumanGradingResult)) {
+    counts[gradingResult?.pass ? 'pass' : 'fail'] += 1;
+  }
+  return counts;
 }
 
 function getResultMetricCategory(
@@ -1050,7 +1104,7 @@ function applyResultMetricDelta(
     if (category === 'pass') {
       metrics.testPassCount += delta;
     } else if (category === 'error') {
-      metrics.testErrorCount += delta;
+      metrics.testErrorCount = (metrics.testErrorCount ?? (delta < 0 ? 1 : 0)) + delta;
     } else {
       metrics.testFailCount += delta;
     }

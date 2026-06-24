@@ -656,6 +656,9 @@ export const useTableStore = create<TableState>()(
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
+      if (skipSettingEvalId && currentState.evalId !== id) {
+        return null;
+      }
       const requestGeneration = currentState.tableRequestGeneration + 1;
       const isCurrentRequest = () =>
         get().tableRequestGeneration === requestGeneration &&
