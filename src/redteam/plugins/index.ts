@@ -35,7 +35,7 @@ import {
   requiresRemoteMaterialization,
 } from '../remoteMaterialization';
 import {
-  getGeneratedPromptLengthViolation,
+  getGeneratedTestCaseLengthViolation,
   getMaxCharsPerMessageModifierValue,
   getMinCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -347,13 +347,10 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
         }> = [];
 
         for (const testCase of generatedTestCases) {
-          const violation = getGeneratedPromptLengthViolation(
-            String(testCase.vars?.[params.injectVar] ?? ''),
-            {
-              maxCharsPerMessage,
-              minCharsPerMessage: getMinCharsPerMessageFromConfig(params.config),
-            },
-          );
+          const violation = getGeneratedTestCaseLengthViolation(testCase.vars, params.injectVar, {
+            maxCharsPerMessage,
+            minCharsPerMessage: getMinCharsPerMessageFromConfig(params.config),
+          });
           if (violation) {
             rejectedPromptViolations.push(violation);
             continue;

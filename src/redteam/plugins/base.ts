@@ -11,7 +11,7 @@ import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
-  getGeneratedPromptLengthViolation,
+  getGeneratedPromptObjectLengthViolation,
   getMaxCharsPerMessageModifierValue,
   getMinCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -209,10 +209,7 @@ export abstract class RedteamPluginBase {
       }> = [];
 
       for (const prompt of parsedPrompts) {
-        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
-        // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
-        // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation = getGeneratedPromptLengthViolation(promptText, {
+        const violation = getGeneratedPromptObjectLengthViolation(prompt, {
           maxCharsPerMessage: this.config.maxCharsPerMessage,
           minCharsPerMessage: this.config.minCharsPerMessage,
         });

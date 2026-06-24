@@ -159,20 +159,42 @@ export function getGeneratedPromptLengthViolation(
   return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
 }
 
+function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar: string): string[] {
+  return injectVar === MULTI_INPUT_VAR
+    ? Object.entries(vars ?? {})
+        .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
+        .map(([, value]) => String(value))
+    : [String(vars?.[injectVar] ?? '')];
+}
+
+function getFirstGeneratedPromptLengthViolation(
+  prompts: string[],
+  charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): PromptLengthViolation | undefined {
+  return prompts
+    .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
+    .find((candidate) => candidate !== undefined);
+}
+
 export function getGeneratedTestCaseLengthViolation(
   vars: TestCase['vars'] | undefined,
   injectVar: string,
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
 ): PromptLengthViolation | undefined {
-  const generatedPrompts =
-    injectVar === MULTI_INPUT_VAR
-      ? Object.entries(vars ?? {})
-          .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
-          .map(([, value]) => String(value))
-      : [String(vars?.[injectVar] ?? '')];
-  return generatedPrompts
-    .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
-    .find((candidate) => candidate !== undefined);
+  return getFirstGeneratedPromptLengthViolation(
+    getGeneratedPromptValues(vars, injectVar),
+    charLimits,
+  );
+}
+
+export function getGeneratedPromptObjectLengthViolation(
+  prompt: { __prompt: string } | Record<string, string>,
+  charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): PromptLengthViolation | undefined {
+  return getFirstGeneratedPromptLengthViolation(
+    '__prompt' in prompt ? [prompt.__prompt] : Object.values(prompt),
+    charLimits,
+  );
 }
 
 export function getGeneratedPromptOverLimit(
