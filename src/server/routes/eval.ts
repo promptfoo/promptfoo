@@ -1,14 +1,9 @@
-import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getDb } from '../../database';
-import { evalResultsTable, evalsTable } from '../../database/tables';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
-import { notifyEvaluationChanged } from '../../models/evalMutation';
-import EvalResult, { PROMPTFOO_METADATA_KEY } from '../../models/evalResult';
+import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import {
@@ -17,13 +12,10 @@ import {
   type EvaluateTable,
   type EvaluateTestSuite,
   type GradingResult,
-  isResultFailureReason,
   type PromptMetrics,
-  ResultFailureReason,
   type ResultsFile,
   type Vars,
 } from '../../types/index';
-import { sha256 } from '../../util/createHash';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -40,7 +32,6 @@ import {
   sanitizeObject,
 } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
-import { getCurrentTimestamp } from '../../util/time';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -48,375 +39,6 @@ import type { Request, Response } from 'express';
 
 export const evalRouter = Router();
 
-type ResultMetricCategory = 'pass' | 'fail' | 'error';
-const MANUAL_RATING_METADATA_KEY = 'manualRating';
-const MANUAL_RATING_REASON = 'Manual result (overrides all other grading results)';
-
-const ManualRatingStateSchema = z.object({
-  version: z.literal(1),
-  status: z.enum(['active', 'cleared']),
-  original: z.object({
-    success: z.boolean(),
-    score: z.number(),
-    failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-    gradingResult: z
-      .object({
-        pass: z.boolean(),
-        score: z.number(),
-        reason: z.string(),
-        comment: z.string().optional(),
-        assertion: z.unknown().optional(),
-        hadComment: z.boolean(),
-        hadAssertion: z.boolean(),
-        hadComponentResults: z.boolean(),
-      })
-      .nullable(),
-  }),
-  clearRequestHash: z.string().optional(),
-});
-
-type ManualRatingState = z.infer<typeof ManualRatingStateSchema>;
-type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
-
-function normalizeFailureReason(value: number): ResultFailureReason {
-  return isResultFailureReason(value) ? value : ResultFailureReason.NONE;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function isHumanAssertion(assertion: unknown): boolean {
-  return asRecord(assertion)?.type === HUMAN_ASSERTION_TYPE;
-}
-
-function isHumanGradingResult(value: unknown): value is GradingResult {
-  return Boolean(asRecord(value) && isHumanAssertion(asRecord(value)?.assertion));
-}
-
-function stableJsonStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJsonStringify).join(',')}]`;
-  }
-  const record = asRecord(value);
-  if (record) {
-    return `{${Object.keys(record)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(record[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-function getManualRatingState(metadata: unknown): ManualRatingState | undefined {
-  const promptfooMetadata = asRecord(asRecord(metadata)?.[PROMPTFOO_METADATA_KEY]);
-  const parsed = ManualRatingStateSchema.safeParse(promptfooMetadata?.[MANUAL_RATING_METADATA_KEY]);
-  return parsed.success ? parsed.data : undefined;
-}
-
-function setManualRatingState(
-  metadata: unknown,
-  state: ManualRatingState | undefined,
-): Record<string, unknown> | null {
-  const metadataRecord = { ...(asRecord(metadata) ?? {}) };
-  const promptfooMetadata = {
-    ...(asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]) ?? {}),
-  };
-
-  if (state) {
-    promptfooMetadata[MANUAL_RATING_METADATA_KEY] = state;
-  } else {
-    delete promptfooMetadata[MANUAL_RATING_METADATA_KEY];
-  }
-
-  if (Object.keys(promptfooMetadata).length > 0) {
-    metadataRecord[PROMPTFOO_METADATA_KEY] = promptfooMetadata;
-  } else {
-    delete metadataRecord[PROMPTFOO_METADATA_KEY];
-  }
-  return Object.keys(metadataRecord).length > 0 ? metadataRecord : null;
-}
-
-function captureManualRatingState(result: PersistedEvalResult): ManualRatingState {
-  const gradingResult = result.gradingResult;
-  return {
-    version: 1,
-    status: 'active',
-    original: {
-      success: result.success,
-      score: result.score,
-      failureReason: normalizeFailureReason(result.failureReason),
-      gradingResult: gradingResult
-        ? {
-            pass: gradingResult.pass,
-            score: gradingResult.score,
-            reason: gradingResult.reason,
-            comment: gradingResult.comment,
-            assertion: gradingResult.assertion,
-            hadComment: Object.hasOwn(gradingResult, 'comment'),
-            hadAssertion: Object.hasOwn(gradingResult, 'assertion'),
-            hadComponentResults: Object.hasOwn(gradingResult, 'componentResults'),
-          }
-        : null,
-    },
-  };
-}
-
-function restoreOriginalGradingResult(
-  gradingResult: GradingResult,
-  state: ManualRatingState,
-): GradingResult {
-  const original = state.original.gradingResult;
-  const restored = { ...gradingResult } as GradingResult;
-  const restoredRecord = restored as unknown as Record<string, unknown>;
-  if (Array.isArray(restored.componentResults)) {
-    restored.componentResults = restored.componentResults.filter(
-      (componentResult) => !isHumanGradingResult(componentResult),
-    );
-  }
-
-  if (original) {
-    restored.pass = original.pass;
-    restored.score = original.score;
-    restored.reason = original.reason;
-    if (original.hadComment) {
-      restored.comment = original.comment;
-    } else {
-      delete restored.comment;
-    }
-    if (original.hadAssertion) {
-      restoredRecord.assertion = original.assertion;
-    } else {
-      delete restored.assertion;
-    }
-    if (!original.hadComponentResults) {
-      delete restored.componentResults;
-    }
-  } else {
-    restored.pass = state.original.success;
-    restored.score = state.original.score;
-  }
-
-  return restored;
-}
-
-function normalizeRatingSubmission(
-  previous: GradingResult | null,
-  submitted: GradingResult,
-  previousSuccess: boolean,
-): {
-  gradingResult: GradingResult;
-  clearingManualRating: boolean;
-  hasManualRating: boolean;
-} {
-  const previousComponents = Array.isArray(previous?.componentResults)
-    ? previous.componentResults
-    : [];
-  const submittedHasComponents = Array.isArray(submitted.componentResults);
-  const submittedComponents = Array.isArray(submitted.componentResults)
-    ? submitted.componentResults
-    : previousComponents;
-  const explicitHumanComponent = submittedComponents.find(isHumanGradingResult);
-  const explicitTopLevelHuman = isHumanAssertion(submitted.assertion);
-  const previousHasManualRating = hasManualRating(previous);
-  const clearingManualRating =
-    previousHasManualRating &&
-    submittedHasComponents &&
-    !explicitHumanComponent &&
-    !explicitTopLevelHuman;
-  const outcomeChanged = previousSuccess !== submitted.pass;
-  const shouldHaveManualRating =
-    !clearingManualRating &&
-    (Boolean(explicitHumanComponent) ||
-      explicitTopLevelHuman ||
-      previousHasManualRating ||
-      outcomeChanged);
-  const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
-
-  if (!shouldHaveManualRating) {
-    if (clearingManualRating) {
-      gradingResult.componentResults = submittedComponents.filter(
-        (componentResult) => !isHumanGradingResult(componentResult),
-      );
-      if (isHumanAssertion(gradingResult.assertion)) {
-        delete gradingResult.assertion;
-      }
-    }
-    return { gradingResult, clearingManualRating, hasManualRating: false };
-  }
-
-  const previousHumanComponent = previousComponents.find(isHumanGradingResult);
-  const humanSource =
-    explicitHumanComponent ?? (explicitTopLevelHuman ? submitted : previousHumanComponent);
-  const submittedHasReason = Object.hasOwn(submitted, 'reason');
-  const manualReason = submittedHasReason
-    ? submitted.reason
-    : (humanSource?.reason ?? MANUAL_RATING_REASON);
-  const humanAssertion = asRecord(humanSource?.assertion);
-  const humanRating = {
-    ...(humanSource ?? {}),
-    pass: submitted.pass,
-    score: submitted.score,
-    reason: manualReason,
-    assertion: { ...(humanAssertion ?? {}), type: HUMAN_ASSERTION_TYPE },
-  } as GradingResult;
-
-  if (Object.hasOwn(submitted, 'comment')) {
-    humanRating.comment = submitted.comment;
-  }
-  gradingResult.pass = submitted.pass;
-  gradingResult.score = submitted.score;
-  gradingResult.reason = manualReason;
-  gradingResult.componentResults = [
-    ...submittedComponents.filter((componentResult) => !isHumanGradingResult(componentResult)),
-    humanRating,
-  ];
-  if (isHumanAssertion(gradingResult.assertion)) {
-    delete gradingResult.assertion;
-  }
-
-  return { gradingResult, clearingManualRating: false, hasManualRating: true };
-}
-
-function resolveRatingTransition(
-  result: PersistedEvalResult,
-  submittedGradingResult: GradingResult,
-  clearRequestHash: string,
-): {
-  gradingResult: GradingResult;
-  success: boolean;
-  score: number;
-  failureReason: ResultFailureReason;
-  metadata: PersistedEvalResult['metadata'];
-} {
-  const previousHasManualRating = hasManualRating(result.gradingResult);
-  const normalized = normalizeRatingSubmission(
-    result.gradingResult,
-    submittedGradingResult,
-    result.success,
-  );
-  const existingState = getManualRatingState(result.metadata);
-  let nextState: ManualRatingState | undefined;
-  let gradingResult = normalized.gradingResult;
-  let success = gradingResult.pass;
-  let score = gradingResult.score;
-  let failureReason: ResultFailureReason = normalized.hasManualRating
-    ? success
-      ? ResultFailureReason.NONE
-      : ResultFailureReason.ASSERT
-    : normalizeFailureReason(result.failureReason);
-
-  if (
-    !previousHasManualRating &&
-    existingState?.status === 'cleared' &&
-    existingState.clearRequestHash === clearRequestHash
-  ) {
-    gradingResult = restoreOriginalGradingResult(gradingResult, existingState);
-    success = existingState.original.success;
-    score = existingState.original.score;
-    failureReason = existingState.original.failureReason;
-    nextState = existingState;
-  } else if (!previousHasManualRating && normalized.hasManualRating) {
-    nextState = captureManualRatingState(result);
-  } else if (previousHasManualRating && normalized.hasManualRating) {
-    nextState = existingState?.status === 'active' ? existingState : undefined;
-  } else if (normalized.clearingManualRating) {
-    if (existingState?.status === 'active') {
-      gradingResult = restoreOriginalGradingResult(gradingResult, existingState);
-      success = existingState.original.success;
-      score = existingState.original.score;
-      failureReason = existingState.original.failureReason;
-      nextState = { ...existingState, status: 'cleared', clearRequestHash };
-    } else {
-      // Ratings created before provenance was recorded cannot be restored exactly.
-      failureReason = success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
-    }
-  }
-
-  gradingResult.pass = success;
-  gradingResult.score = score;
-  const shouldUpdateManualRatingState = existingState !== undefined || nextState !== undefined;
-  const metadata = shouldUpdateManualRatingState
-    ? setManualRatingState(result.metadata, nextState)
-    : result.metadata;
-  return {
-    gradingResult,
-    success,
-    score,
-    failureReason,
-    metadata: metadata as PersistedEvalResult['metadata'],
-  };
-}
-
-function countGradingAssertions(gradingResult: GradingResult | null | undefined): {
-  pass: number;
-  fail: number;
-} {
-  const componentResults = gradingResult?.componentResults;
-  if (!Array.isArray(componentResults)) {
-    return { pass: 0, fail: 0 };
-  }
-
-  return componentResults.reduce(
-    (counts, componentResult: unknown) => {
-      if (!componentResult || typeof componentResult !== 'object') {
-        return counts;
-      }
-
-      const { pass } = componentResult as { pass?: unknown };
-      if (pass === true) {
-        counts.pass += 1;
-      } else if (pass === false) {
-        counts.fail += 1;
-      }
-      return counts;
-    },
-    { pass: 0, fail: 0 },
-  );
-}
-
-function hasManualRating(gradingResult: GradingResult | null | undefined): boolean {
-  return Boolean(
-    isHumanAssertion(gradingResult?.assertion) ||
-      (Array.isArray(gradingResult?.componentResults) &&
-        gradingResult.componentResults.some(isHumanGradingResult)),
-  );
-}
-
-function getResultMetricCategory(
-  success: boolean,
-  failureReason: ResultFailureReason | number | undefined,
-): ResultMetricCategory {
-  if (success) {
-    return 'pass';
-  }
-  return failureReason === ResultFailureReason.ERROR ? 'error' : 'fail';
-}
-
-function applyResultMetricDelta(
-  metrics: PromptMetrics,
-  previousCategory: ResultMetricCategory,
-  nextCategory: ResultMetricCategory,
-): void {
-  if (previousCategory === nextCategory) {
-    return;
-  }
-
-  const updateCategory = (category: ResultMetricCategory, delta: number) => {
-    if (category === 'pass') {
-      metrics.testPassCount += delta;
-    } else if (category === 'error') {
-      metrics.testErrorCount += delta;
-    } else {
-      metrics.testFailCount += delta;
-    }
-  };
-
-  updateCategory(previousCategory, -1);
-  updateCategory(nextCategory, 1);
-}
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
   try {
@@ -1089,94 +711,22 @@ evalRouter.post(
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const submittedGradingResult = bodyResult.data as unknown as GradingResult;
-      const clearRequestHash = sha256(stableJsonStringify(submittedGradingResult));
-      const db = await getDb();
-      const transactionResult = await db.transaction(async (tx) => {
-        const result = await tx
-          .select()
-          .from(evalResultsTable)
-          .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
-          .get();
-        if (!result) {
-          return { status: 'result-not-found' as const };
-        }
+      const ratingResult = await EvalResult.submitRating(evalId, id, submittedGradingResult);
 
-        const evalRow = await tx
-          .select({ prompts: evalsTable.prompts })
-          .from(evalsTable)
-          .where(eq(evalsTable.id, evalId))
-          .get();
-        if (!evalRow) {
-          return { status: 'eval-not-found' as const };
-        }
-
-        const prompts = structuredClone(evalRow.prompts ?? []);
-        const prompt = prompts[result.promptIdx];
-        invariant(prompt, 'Prompt not found');
-        if (!prompt.metrics) {
-          logger.error(
-            `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
-          );
-          return { status: 'prompt-metrics-not-found' as const };
-        }
-
-        const previousScore = result.score;
-        const previousCategory = getResultMetricCategory(result.success, result.failureReason);
-        const previousAssertions = countGradingAssertions(result.gradingResult);
-        const transition = resolveRatingTransition(
-          result,
-          submittedGradingResult,
-          clearRequestHash,
-        );
-        const nextAssertions = countGradingAssertions(transition.gradingResult);
-        const nextCategory = getResultMetricCategory(transition.success, transition.failureReason);
-
-        prompt.metrics.score += transition.score - previousScore;
-        applyResultMetricDelta(prompt.metrics, previousCategory, nextCategory);
-        prompt.metrics.assertPassCount += nextAssertions.pass - previousAssertions.pass;
-        prompt.metrics.assertFailCount += nextAssertions.fail - previousAssertions.fail;
-
-        const persistedResult = await tx
-          .update(evalResultsTable)
-          .set({
-            gradingResult: transition.gradingResult,
-            success: transition.success,
-            score: transition.score,
-            failureReason: transition.failureReason,
-            metadata: transition.metadata,
-            updatedAt: getCurrentTimestamp(),
-          })
-          .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
-          .returning()
-          .get();
-        invariant(persistedResult, 'Result disappeared while submitting rating');
-
-        const evalUpdate = await tx
-          .update(evalsTable)
-          .set({ prompts })
-          .where(eq(evalsTable.id, evalId))
-          .run();
-        invariant(evalUpdate.rowsAffected === 1, 'Eval disappeared while submitting rating');
-
-        return { status: 'updated' as const, result: persistedResult };
-      });
-
-      if (transactionResult.status === 'result-not-found') {
+      if (ratingResult.status === 'result-not-found') {
         res.status(404).json({ error: 'Result not found' });
         return;
       }
-      if (transactionResult.status === 'eval-not-found') {
+      if (ratingResult.status === 'eval-not-found') {
         res.status(404).json({ error: 'Eval not found' });
         return;
       }
-      if (transactionResult.status === 'prompt-metrics-not-found') {
+      if (ratingResult.status === 'prompt-metrics-not-found') {
         res.status(400).json({ error: 'Prompt metrics not found' });
         return;
       }
 
-      notifyEvaluationChanged(evalId);
-      const result = new EvalResult({ ...transactionResult.result, persisted: true });
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(EvalSchemas.SubmitRating.Response.parse(ratingResult.result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
