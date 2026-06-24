@@ -15,6 +15,8 @@ import {
   type GenAISpanResult,
   getTraceparent,
   openTurnSpan,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
@@ -23,6 +25,11 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  applyApiKeyToCliEnv,
+  shouldInjectApiKey,
+  usesCustomModelProvider,
+} from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -37,6 +44,41 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+
+function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const traceKey = PROMPTFOO_RESOURCE_ATTR_TRACE_ID;
+  const parentSpanKey = PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID;
+  const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${traceKey}=`) &&
+        !pair.startsWith(`${parentSpanKey}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
+
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
 
 /**
  * OpenAI Codex SDK Provider
@@ -223,9 +265,21 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
+   * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
    */
   model?: string;
+
+  /**
+   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
+   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.5'` and AWS credentials in `cli_env`).
+   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
+   *
+   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
+   */
+  model_provider?: string;
 
   /**
    * Sandbox access level controlling filesystem permissions
@@ -352,6 +406,7 @@ const OpenAICodexSDKConfigShape = {
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
   network_access_enabled: z.boolean().optional(),
@@ -630,7 +685,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.providerId = id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
+    if (
+      this.config.model &&
+      !usesCustomModelProvider(this.config) &&
+      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
+    ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
   }
@@ -746,13 +805,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject only the resolved Codex/OpenAI API key from provider env/config.
-    // Other promptfoo env overrides should be passed explicitly via cli_env so
-    // unrelated secrets are not exposed to shell commands.
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -775,6 +828,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
+        const [, tpTraceId, tpSpanId] = traceparent.split('-');
+        if (tpTraceId && tpSpanId) {
+          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+            tpTraceId,
+            tpSpanId,
+          );
+        }
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
@@ -812,12 +873,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+    if (!config.cli_config && !config.collaboration_mode && !config.model_provider) {
       return undefined;
     }
 
     return {
       ...(config.cli_config ?? {}),
+      // The first-class `model_provider` option takes precedence over any value
+      // supplied through raw `cli_config`.
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
   }
@@ -921,9 +985,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): Record<string, any> {
     const cliConfig = this.getResolvedCliConfig(config);
 
+    // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
+    // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
+    // OPENAI_API_KEY / CODEX_API_KEY isn't leaked to the agent shell when routing through a
+    // non-OpenAI model_provider (Bedrock authenticates via AWS credentials in cli_env).
     return {
       env,
-      ...(apiKey ? { apiKey } : {}),
+      ...(shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),
@@ -2059,7 +2127,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent();
+    const activeTraceparent = getTraceparent();
+    const currentTraceparent = isValidTraceparent(activeTraceparent)
+      ? activeTraceparent
+      : context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();

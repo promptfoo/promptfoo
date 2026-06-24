@@ -56,9 +56,11 @@ vi.mock('../src/logger', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -161,6 +163,7 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -1247,6 +1250,17 @@ describe('computeRateLimitWaitMs', () => {
     // resolves close to 3000ms; allow a few ms of clock drift
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
+  });
+
+  it('falls back to Retry-After when a reset header is non-finite', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': 'Infinity',
+        'Retry-After': '7',
+      }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
   });
 });
 

@@ -4,12 +4,12 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
+import type { ProviderTestResult } from '../../../src/node/testProvider';
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
-import type { ProviderTestResult } from '../../../src/validators/testProvider';
 
 // Mock dependencies
 vi.mock('../../../src/providers/index');
-vi.mock('../../../src/validators/testProvider');
+vi.mock('../../../src/node/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
@@ -24,15 +24,12 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
 
 // Import after mocking
 import { cloudConfig } from '../../../src/globalConfig/cloud';
+import { testProviderConnectivity, testProviderSession } from '../../../src/node/testProvider';
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
-import {
-  testProviderConnectivity,
-  testProviderSession,
-} from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);

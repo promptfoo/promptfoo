@@ -6,6 +6,20 @@
     "@promptfoo": "src"
   },
   "ignoredRoots": ["src/__mocks__"],
+  "tierOrder": [
+    "contracts",
+    "legacy-contracts",
+    "legacy-runtime",
+    "node",
+    "providers",
+    "redteam",
+    "core",
+    "view-server",
+    "cli",
+    "app",
+    "facade"
+  ],
+  "maxStronglyConnectedComponentSize": 6,
   "layers": [
     {
       "name": "facade",
@@ -57,7 +71,7 @@
     },
     {
       "name": "cli",
-      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"],
+      "roots": ["src/entrypoint.ts", "src/localEntrypoint.ts", "src/main.ts", "src/commands"],
       "allowedDependencies": [
         "core",
         "legacy-contracts",
@@ -84,15 +98,7 @@
     {
       "name": "redteam",
       "roots": ["src/redteam"],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "node",
-        "providers",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "providers"]
     },
     {
       "name": "providers",
@@ -113,20 +119,19 @@
         "src/storage",
         "src/util"
       ],
-      "allowedDependencies": [
-        "cli",
-        "core",
-        "legacy-contracts",
-        "legacy-runtime",
-        "providers",
-        "redteam",
-        "view-server"
-      ]
+      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "providers", "redteam"]
     },
     {
       "name": "core",
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"],
-      "allowedDependencies": ["legacy-contracts", "legacy-runtime", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "providers",
+        "redteam"
+      ]
     },
     {
       "name": "legacy-contracts",
@@ -152,6 +157,7 @@
         "src/envOverrides.ts",
         "src/envars.ts",
         "src/esm.ts",
+        "src/evaluator",
         "src/evaluator.ts",
         "src/evaluatorHelpers.ts",
         "src/external",
@@ -181,7 +187,14 @@
         "src/updates",
         "src/version.ts"
       ],
-      "allowedDependencies": ["core", "legacy-contracts", "node", "providers", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "node",
+        "providers",
+        "redteam"
+      ]
     }
   ]
 }

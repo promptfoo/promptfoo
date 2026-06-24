@@ -4,6 +4,8 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isClaudeOpus47Model,
   isClaudeOpus48Model,
   isSamplingParamsDeprecatedClaudeModel,
@@ -637,6 +639,17 @@ describe('Anthropic utilities', () => {
       expect(result).toBe(
         'Hello\n\nThinking: I need to consider the weather\nSignature: abc123\n\nWorld',
       );
+    });
+
+    it('should omit empty thinking blocks returned by Claude 5', () => {
+      const message = {
+        content: [
+          { type: 'thinking', thinking: '', signature: 'abc123' },
+          { type: 'text', text: 'Final answer', citations: [] },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, true)).toBe('Final answer');
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
@@ -1528,6 +1541,88 @@ describe('Anthropic utilities', () => {
       expect(result).toEqual({ total: 150, prompt: 100, completion: 50 });
     });
 
+    it('should preserve Anthropic thinking token usage', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 150,
+        prompt: 100,
+        completion: 50,
+        completionDetails: { reasoning: 20 },
+      });
+    });
+
+    it('should merge thinking tokens with cache details into one completionDetails object', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+          cache_read_input_tokens: 80,
+          cache_creation_input_tokens: 0,
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 230,
+        prompt: 180,
+        completion: 50,
+        completionDetails: {
+          reasoning: 20,
+          cacheReadInputTokens: 80,
+          cacheCreationInputTokens: 0,
+        },
+      });
+    });
+
+    it('should preserve a zero thinking token count', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 0 },
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({
+        total: 150,
+        prompt: 100,
+        completion: 50,
+        completionDetails: { reasoning: 0 },
+      });
+    });
+
+    it('should omit completionDetails when output_tokens_details is null', () => {
+      // The live API returns output_tokens_details: null for non-thinking responses
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: null,
+        },
+      };
+      const result = getTokenUsage(data, false);
+      expect(result).toEqual({ total: 150, prompt: 100, completion: 50 });
+    });
+
+    it('should not report thinking tokens for cached responses', () => {
+      const data = {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          output_tokens_details: { thinking_tokens: 20 },
+        },
+      };
+      const result = getTokenUsage(data, true);
+      expect(result).toEqual({ cached: 150, total: 150 });
+    });
+
     it('should return cached token usage', () => {
       const data = { usage: { input_tokens: 100, output_tokens: 50 } };
       const result = getTokenUsage(data, true);
@@ -1686,6 +1781,60 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe.each(['claude-fable-5', 'claude-mythos-5'])('calculateAnthropicCost for %s', (model) => {
+    it('uses Claude 5 input and output pricing', () => {
+      expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.035, 6);
+    });
+
+    it('applies prompt cache pricing', () => {
+      expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.03645, 6);
+    });
+
+    it('applies the Bedrock regional endpoint premium', () => {
+      expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(0.0385, 6);
+      // Every geo prefix that normalizeAnthropicModelName can price bills at the
+      // same 10% regional premium; only the `global.` endpoint bills at base rate.
+      for (const geo of ['us', 'eu', 'jp', 'au']) {
+        expect(calculateAnthropicCost(`${geo}.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+          0.0385,
+          6,
+        );
+      }
+      expect(calculateAnthropicCost(`global.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.035,
+        6,
+      );
+    });
+
+    it('suppresses the Bedrock regional premium when user cost overrides are set', () => {
+      // A flat config.cost is used verbatim for both sides — no 1.1x multiplier:
+      // 1000 * 20e-6 + 500 * 20e-6 = 0.03
+      expect(
+        calculateAnthropicCost(`anthropic.${model}`, { cost: 20 / 1e6 }, 1000, 500),
+      ).toBeCloseTo(0.03, 6);
+      // Explicit inputCost/outputCost also win over the premium-adjusted defaults:
+      // 1000 * 1e-6 + 500 * 2e-6 = 0.002
+      expect(
+        calculateAnthropicCost(
+          `anthropic.${model}`,
+          { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+          1000,
+          500,
+        ),
+      ).toBeCloseTo(0.002, 6);
+    });
+
+    it('applies prompt cache pricing at the premium-multiplied regional rates', () => {
+      // Regional rates are $11/$55 per MTok ($10/$50 base * 1.1). Cache reads bill
+      // at 0.1x and cache writes at 1.25x the premium input rate:
+      // 1000*11e-6 + 200*1.1e-6 + 100*13.75e-6 + 500*55e-6 = 0.040095
+      expect(calculateAnthropicCost(`anthropic.${model}`, {}, 1000, 500, 200, 100)).toBeCloseTo(
+        0.040095,
+        8,
+      );
+    });
+  });
+
   describe('sampling-params-deprecated model detection', () => {
     it('detects Claude Opus 4.8 across provider naming schemes', () => {
       for (const id of [
@@ -1724,6 +1873,25 @@ describe('Anthropic utilities', () => {
       expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
       // The 4.7-only predicate stays scoped to 4.7.
       expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
+    });
+
+    it('detects Fable 5 and Mythos 5 across provider naming schemes', () => {
+      for (const id of [
+        'claude-fable-5',
+        'anthropic:messages:claude-mythos-5',
+        'anthropic.claude-fable-5',
+        'vertex:claude-mythos-5',
+      ]) {
+        expect(isClaudeFableOrMythos5Model(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not match hypothetical Claude 50 or suffix-collision model IDs', () => {
+      for (const id of ['claude-fable-50', 'claude-mythos-51', 'claude-fable-5x']) {
+        expect(isClaudeFableOrMythos5Model(id)).toBe(false);
+      }
     });
 
     it('does not treat temperature-supporting models as deprecated', () => {
