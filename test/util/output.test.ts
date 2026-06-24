@@ -451,6 +451,7 @@ describe('writeOutput', () => {
             name: 'provider',
             startTime: 1,
             attributes: {
+              'promptfoo.prompt.label': 'trace-prompt-label-secret',
               'promptfoo.request.body': 'trace-prompt-secret',
               'promptfoo.response.body': 'trace-response-secret',
               operation: 'provider-call',
@@ -466,6 +467,7 @@ describe('writeOutput', () => {
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = JSON.parse(written);
       expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(written).not.toContain('trace-prompt-label-secret');
       expect(written).not.toContain('trace-prompt-secret');
       expect(written).not.toContain('trace-response-secret');
     } finally {

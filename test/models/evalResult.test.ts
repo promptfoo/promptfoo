@@ -1236,6 +1236,100 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().response).toBe(response);
     });
 
+    it.each([
+      {
+        name: 'response outputs',
+        env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' },
+        removed: ['raw', 'providerTransformedOutput', 'audio', 'images', 'video'],
+        retained: ['prompt', 'materializedVars', 'inputMaterialization'],
+      },
+      {
+        name: 'prompt inputs',
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        removed: ['prompt', 'inputMaterialization'],
+        retained: [
+          'raw',
+          'providerTransformedOutput',
+          'audio',
+          'images',
+          'video',
+          'materializedVars',
+        ],
+      },
+      {
+        name: 'test variables',
+        env: { PROMPTFOO_STRIP_TEST_VARS: 'true' },
+        removed: ['materializedVars', 'inputMaterialization'],
+        retained: ['prompt', 'raw', 'providerTransformedOutput', 'audio', 'images', 'video'],
+      },
+    ])('strips duplicate provider response $name', ({ env, removed, retained }) => {
+      const createResult = () =>
+        createEvaluateResult({
+          response: {
+            output: 'sensitive output',
+            raw: { secret: 'sensitive raw output' },
+            providerTransformedOutput: 'sensitive transformed output',
+            prompt: 'sensitive provider prompt',
+            audio: { data: 'sensitive response audio' },
+            images: [{ data: 'sensitive response image' }],
+            video: { url: 'sensitive response video' },
+            materializedVars: { prompt: 'sensitive materialized var' },
+            inputMaterialization: { prompt: 'sensitive input materialization' },
+            tokenUsage: { total: 1, prompt: 1, completion: 0 },
+          },
+        });
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(createResult()),
+          sanitizeResultForJsonlArtifact(createResult()),
+        ]) {
+          expect(result.response?.tokenUsage).toEqual({ total: 1, prompt: 1, completion: 0 });
+          for (const key of removed) {
+            expect(result.response).not.toHaveProperty(key);
+          }
+          for (const key of retained) {
+            expect(result.response).toHaveProperty(key);
+          }
+          if ('PROMPTFOO_STRIP_RESPONSE_OUTPUT' in env) {
+            expect(result.response?.output).toBe('[output stripped]');
+          }
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('fails closed on malformed scalar prompts and responses under strip flags', () => {
+      const malformed = createEvaluateResult({
+        prompt: 'MALFORMED_PROMPT_SECRET',
+        response: 'MALFORMED_RESPONSE_SECRET',
+      } as unknown as Partial<EvaluateResult>);
+
+      expect(projectEvaluateResultForOutput(malformed)).toBe(malformed);
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      });
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(malformed),
+          sanitizeResultForJsonlArtifact(malformed),
+        ]) {
+          expect(result.prompt).toEqual({
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+          });
+          expect(result.response).toEqual({ output: '[output stripped]' });
+          expect(JSON.stringify(result)).not.toContain('MALFORMED_');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should strip prompt-bearing fields when prompt-text stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
 

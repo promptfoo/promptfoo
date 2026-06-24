@@ -541,6 +541,13 @@ describe('programmatic JSONL output', () => {
       id: () => 'stripped-recovery-provider',
       callApi: vi.fn().mockResolvedValue({
         output: 'response-output-secret',
+        raw: { secret: 'response-raw-secret' },
+        providerTransformedOutput: 'response-transformed-secret',
+        audio: { data: 'response-audio-secret' },
+        images: [{ data: 'response-image-secret' }],
+        video: { url: 'response-video-secret' },
+        materializedVars: { prompt: 'materialized-var-secret' },
+        inputMaterialization: { prompt: 'input-materialization-secret' },
         metadata: {
           debug: 'response-metadata-secret',
         },
@@ -572,6 +579,13 @@ describe('programmatic JSONL output', () => {
       expect(result.testCase.metadata).toBeUndefined();
       expect(result.metadata).toEqual({});
       expect(JSON.stringify(result)).not.toContain('response-output-secret');
+      expect(JSON.stringify(result)).not.toContain('response-raw-secret');
+      expect(JSON.stringify(result)).not.toContain('response-transformed-secret');
+      expect(JSON.stringify(result)).not.toContain('response-audio-secret');
+      expect(JSON.stringify(result)).not.toContain('response-image-secret');
+      expect(JSON.stringify(result)).not.toContain('response-video-secret');
+      expect(JSON.stringify(result)).not.toContain('materialized-var-secret');
+      expect(JSON.stringify(result)).not.toContain('input-materialization-secret');
       expect(JSON.stringify(result)).not.toContain('response-metadata-secret');
       expect(JSON.stringify(result)).not.toContain('vars-secret@example.com');
       expect(JSON.stringify(result)).not.toContain('testcase-metadata-secret');
@@ -592,6 +606,7 @@ describe('programmatic JSONL output', () => {
       callApi: vi.fn().mockResolvedValue({
         output: 'hello world',
         prompt: 'sensitive provider prompt',
+        inputMaterialization: { prompt: 'sensitive input materialization' },
         metadata: {
           redteamFinalPrompt: 'sensitive response final prompt',
           keep: 'visible response metadata',

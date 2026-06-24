@@ -1435,7 +1435,14 @@ describe('evaluator', () => {
           vars: { prompt: 'V4_RESULT_VAR' },
           response: {
             output: 'V4_RESULT_OUTPUT',
+            raw: { secret: 'V4_RESPONSE_RAW' },
+            providerTransformedOutput: 'V4_TRANSFORMED_OUTPUT',
             prompt: 'V4_PROVIDER_PROMPT',
+            audio: { data: 'V4_RESPONSE_AUDIO' },
+            images: [{ data: 'V4_RESPONSE_IMAGE' }],
+            video: { url: 'V4_RESPONSE_VIDEO' },
+            materializedVars: { prompt: 'V4_MATERIALIZED_VAR' },
+            inputMaterialization: { prompt: 'V4_INPUT_MATERIALIZATION' },
             metadata: { redteamFinalPrompt: 'V4_FINAL_PROMPT' },
           },
           testCase: {
@@ -1464,6 +1471,7 @@ describe('evaluator', () => {
             name: 'provider call',
             startTime: 0,
             attributes: {
+              [PromptfooAttributes.PROMPT_LABEL]: 'V4_TRACE_PROMPT_LABEL',
               [PromptfooAttributes.REQUEST_BODY]: 'V4_TRACE_REQUEST',
               [PromptfooAttributes.RESPONSE_BODY]: 'V4_TRACE_RESPONSE',
               safe: 'retained',
@@ -1475,6 +1483,7 @@ describe('evaluator', () => {
 
       const unstripped = await eval1.toResultsFile();
       expect(JSON.stringify(unstripped)).toContain('V4_PROMPT_TEMPLATE');
+      expect(JSON.stringify(unstripped)).toContain('V4_RESPONSE_RAW');
       expect(JSON.stringify(unstripped)).toContain('V4_TRACE_REQUEST');
 
       const restoreEnv = mockProcessEnv({
@@ -1530,6 +1539,13 @@ describe('evaluator', () => {
         'V2_TABLE_OUTPUT_TEXT',
         'V2_TABLE_RESPONSE_OUTPUT',
         'V2_TABLE_RESPONSE_PROMPT',
+        'V2_TABLE_RESPONSE_RAW',
+        'V2_TABLE_TRANSFORMED_OUTPUT',
+        'V2_TABLE_RESPONSE_AUDIO',
+        'V2_TABLE_RESPONSE_IMAGE',
+        'V2_TABLE_RESPONSE_VIDEO',
+        'V2_TABLE_MATERIALIZED_VAR',
+        'V2_TABLE_INPUT_MATERIALIZATION',
         'V2_TABLE_GRADING_REASON',
         'V2_TABLE_TEST_CASE_VAR',
         'V2_TABLE_TEST_CASE_METADATA',
@@ -1574,6 +1590,13 @@ describe('evaluator', () => {
                   response: {
                     output: 'V2_TABLE_RESPONSE_OUTPUT',
                     prompt: 'V2_TABLE_RESPONSE_PROMPT',
+                    raw: { secret: 'V2_TABLE_RESPONSE_RAW' },
+                    providerTransformedOutput: 'V2_TABLE_TRANSFORMED_OUTPUT',
+                    audio: { data: 'V2_TABLE_RESPONSE_AUDIO' },
+                    images: [{ data: 'V2_TABLE_RESPONSE_IMAGE' }],
+                    video: { url: 'V2_TABLE_RESPONSE_VIDEO' },
+                    materializedVars: { prompt: 'V2_TABLE_MATERIALIZED_VAR' },
+                    inputMaterialization: { prompt: 'V2_TABLE_INPUT_MATERIALIZATION' },
                   },
                   gradingResult: {
                     pass: false,
@@ -1636,6 +1659,115 @@ describe('evaluator', () => {
         expect(tableOutput).not.toHaveProperty('metadata');
       } finally {
         restoreEnv();
+      }
+    });
+
+    it('projects historical V2 rows that omit result and table-output test cases', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const eval1 = await Eval.findById(stored.id);
+      expect(eval1).toBeDefined();
+
+      const unstripped = await eval1!.toResultsFile({ includeTraces: false });
+      expect(unstripped.results.version).toBe(2);
+      if (unstripped.results.version !== 2) {
+        throw new Error('Expected a legacy V2 result');
+      }
+      expect(unstripped.results.results).toHaveLength(2);
+      expect(unstripped.results.results[0]).not.toHaveProperty('testCase');
+      expect(unstripped.results.table.body[0].outputs).toHaveLength(2);
+      expect(unstripped.results.table.body[0].outputs[0]).not.toHaveProperty('testCase');
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1!.toResultsFile({ includeTraces: false });
+        expect(projected.results.version).toBe(2);
+        if (projected.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+
+        expect(projected.results.results).toHaveLength(2);
+        expect(projected.results.results[0]).not.toHaveProperty('testCase');
+        expect(projected.results.results[0]).toMatchObject({
+          prompt: { raw: '[prompt stripped]', label: '[prompt stripped]' },
+          response: { output: '[output stripped]' },
+          vars: {},
+          gradingResult: null,
+        });
+        expect(projected.results.table.body[0].outputs).toHaveLength(2);
+        expect(projected.results.table.body[0].outputs[0]).not.toHaveProperty('testCase');
+        expect(projected.results.table.body[0].outputs[0]).toMatchObject({
+          prompt: '[prompt stripped]',
+          text: '[output stripped]',
+          gradingResult: null,
+        });
+        expect(projected.results.table.body[0].vars).toEqual(['', '']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('fails closed on malformed legacy prompts, responses, and table vars', async () => {
+      for (const malformedVars of [
+        null,
+        'MALFORMED_ROW_VARS_STRING',
+        { secret: 'MALFORMED_ROW_VARS_OBJECT' },
+      ]) {
+        const eval1 = new Eval({});
+        eval1.oldResults = createEvaluateSummaryV2({
+          results: [
+            createEvaluateResult({
+              prompt: 'MALFORMED_PROMPT_SECRET',
+              response: 'MALFORMED_RESPONSE_SECRET',
+            } as unknown as Partial<EvaluateResult>),
+          ],
+          table: createEvaluateTable({
+            body: [
+              createEvaluateTableRow({
+                vars: malformedVars,
+              } as unknown as Parameters<typeof createEvaluateTableRow>[0]),
+            ],
+          }),
+        });
+
+        const unstripped = await eval1.toResultsFile({ includeTraces: false });
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_PROMPT_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_RESPONSE_SECRET');
+        expect(unstripped.results.version).toBe(2);
+        if (unstripped.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+        expect(unstripped.results.table.body[0].vars).toBe(malformedVars);
+
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+        });
+
+        try {
+          const projected = await eval1.toResultsFile({ includeTraces: false });
+          expect(projected.results.version).toBe(2);
+          if (projected.results.version !== 2) {
+            throw new Error('Expected a legacy V2 result');
+          }
+
+          expect(JSON.stringify(projected)).not.toContain('MALFORMED_');
+          expect(projected.results.results[0]).toMatchObject({
+            prompt: { raw: '[prompt stripped]', label: '[prompt stripped]' },
+            response: { output: '[output stripped]' },
+          });
+          expect(projected.results.results[0].promptId).toEqual(expect.any(String));
+          expect(projected.results.table.body[0].vars).toEqual([]);
+        } finally {
+          restoreEnv();
+        }
       }
     });
 

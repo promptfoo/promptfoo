@@ -168,6 +168,10 @@ function projectProviderResponse(
     return response;
   }
 
+  if (!isRecord(response)) {
+    return stripFlags.shouldStripResponseOutput ? { output: '[output stripped]' } : undefined;
+  }
+
   const projectedResponse: ProviderResponse = { ...response };
   const metadata = projectMetadataForOutput(
     response.metadata as Record<string, unknown> | undefined,
@@ -181,10 +185,21 @@ function projectProviderResponse(
 
   if (stripFlags.shouldStripPromptText) {
     delete projectedResponse.prompt;
+    delete projectedResponse.inputMaterialization;
+  }
+
+  if (stripFlags.shouldStripTestVars) {
+    delete projectedResponse.materializedVars;
+    delete projectedResponse.inputMaterialization;
   }
 
   if (stripFlags.shouldStripResponseOutput) {
     projectedResponse.output = '[output stripped]';
+    delete projectedResponse.raw;
+    delete projectedResponse.providerTransformedOutput;
+    delete projectedResponse.audio;
+    delete projectedResponse.images;
+    delete projectedResponse.video;
   }
 
   return projectedResponse;
@@ -193,6 +208,10 @@ function projectProviderResponse(
 export function projectPromptForOutput<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   if (!stripPromptText) {
     return prompt;
+  }
+
+  if (!isRecord(prompt)) {
+    return { raw: '[prompt stripped]', label: '[prompt stripped]' } as T;
   }
 
   const { config: _config, function: _function, template: _template, ...projectedPrompt } = prompt;
@@ -204,8 +223,22 @@ export function projectPromptForOutput<T extends Prompt>(prompt: T, stripPromptT
   } as T;
 }
 
-function projectTestCase(testCase: AtomicTestCase, stripFlags: OutputStripFlags): AtomicTestCase {
-  if (!hasAnyStripFlag(stripFlags)) {
+function isHashablePrompt(prompt: unknown): prompt is Prompt {
+  return (
+    isRecord(prompt) &&
+    ((typeof prompt.label === 'string' && prompt.label.length > 0) ||
+      (typeof prompt.id === 'string' && prompt.id.length > 0) ||
+      typeof prompt.raw === 'string' ||
+      isRecord(prompt.raw) ||
+      Array.isArray(prompt.raw))
+  );
+}
+
+function projectTestCase<T extends AtomicTestCase | undefined>(
+  testCase: T,
+  stripFlags: OutputStripFlags,
+): T {
+  if (!testCase || !hasAnyStripFlag(stripFlags)) {
     return testCase;
   }
 
@@ -224,7 +257,7 @@ function projectTestCase(testCase: AtomicTestCase, stripFlags: OutputStripFlags)
     projectedTestCase.vars = undefined;
   }
 
-  return projectedTestCase;
+  return projectedTestCase as T;
 }
 
 function projectResultMetadata(
@@ -263,12 +296,16 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
     return result;
   }
 
+  const prompt = projectPromptForOutput(result.prompt, shouldStripPromptText);
+  const testCase = projectTestCase(result.testCase, stripFlags);
   return {
     ...result,
-    prompt: projectPromptForOutput(result.prompt, shouldStripPromptText),
-    promptId: shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
+    prompt,
+    promptId: shouldStripPromptText
+      ? hashPrompt(isHashablePrompt(result.prompt) ? result.prompt : prompt)
+      : result.promptId,
     response: projectProviderResponse(result.response, stripFlags),
-    testCase: projectTestCase(result.testCase, stripFlags),
+    ...(testCase === undefined ? {} : { testCase }),
     gradingResult: shouldStripGradingResult ? null : result.gradingResult,
     vars: shouldStripTestVars ? {} : result.vars,
     metadata: projectResultMetadata(result.metadata, stripFlags),
@@ -295,6 +332,7 @@ export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTab
       stripFlags,
     );
     const error = projectErrorForOutput(output.error, stripFlags);
+    const testCase = projectTestCase(output.testCase, stripFlags);
     const projected = {
       ...projectedOutput,
       prompt: stripFlags.shouldStripPromptText ? '[prompt stripped]' : output.prompt,
@@ -305,7 +343,7 @@ export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTab
           : output.text,
       response: projectProviderResponse(output.response, stripFlags),
       gradingResult: stripFlags.shouldStripGradingResult ? null : output.gradingResult,
-      testCase: projectTestCase(output.testCase, stripFlags),
+      ...(testCase === undefined ? {} : { testCase }),
       error,
       metadata,
     };
@@ -325,7 +363,11 @@ export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTab
     },
     body: table.body.map((row) => ({
       ...row,
-      vars: stripFlags.shouldStripTestVars ? row.vars.map(() => '') : row.vars,
+      vars: stripFlags.shouldStripTestVars
+        ? Array.isArray(row.vars)
+          ? row.vars.map(() => '')
+          : []
+        : row.vars,
       test: projectTestCase(row.test, stripFlags),
       outputs: row.outputs.map(projectOutput),
     })),
@@ -822,6 +864,7 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
 
         const projectedAttributes = { ...span.attributes };
         if (stripFlags.shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
           delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
         }
         if (stripFlags.shouldStripResponseOutput) {
