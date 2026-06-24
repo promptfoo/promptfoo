@@ -314,6 +314,18 @@ describe('readStandaloneTestsFile', () => {
     });
   });
 
+  it('should resolve nested JSONL var file references relative to the declaring file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({ vars: { context: { report: 'file://data/report.txt' } } }),
+    );
+
+    const [result] = await readStandaloneTestsFile('fixtures/tests.jsonl', path.resolve('/suite'));
+
+    expect(result.vars).toEqual({
+      context: { report: 'file://fixtures/data/report.txt' },
+    });
+  });
+
   it('should rebase a nested YAML anchor shared across test cases only once', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(dedent`
       - context: &shared
@@ -1897,6 +1909,30 @@ describe('loadTestsFromGlob', () => {
     const [result] = await loadTestsFromGlob('fixtures/tests.yaml', path.resolve('/suite'));
 
     expect(result.vars).toEqual({ context: { report: 'file://fixtures/data/report.txt' } });
+  });
+
+  it('rebases nested refs loaded from a vars file in an external YAML test', async () => {
+    vi.mocked(globSync).mockImplementation((input) => {
+      const filePath = String(input);
+      if (filePath.endsWith('tests.yaml')) {
+        return [path.resolve('/suite/fixtures/tests.yaml')];
+      }
+      if (filePath.endsWith('vars.yaml')) {
+        return [path.resolve('/suite/fixtures/data/vars.yaml')];
+      }
+      return [];
+    });
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      String(filePath).endsWith('tests.yaml')
+        ? yaml.dump([{ vars: 'file://data/vars.yaml' }])
+        : yaml.dump({ context: { report: 'file://nested/report.txt' } }),
+    );
+
+    const [result] = await loadTestsFromGlob('fixtures/tests.yaml', path.resolve('/suite'));
+
+    expect(result.vars).toEqual({
+      context: { report: 'file://fixtures/data/nested/report.txt' },
+    });
   });
 
   it('should handle nested file:// references in complex test structures', async () => {

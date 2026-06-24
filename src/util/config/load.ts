@@ -43,6 +43,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { parseFileUrl } from '../functions/loadFunction';
 import { toPosixPath } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests, rebaseTestCaseVarFileReferences } from '../testCaseReader';
@@ -929,7 +930,7 @@ export async function resolveConfigs(
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    processedDefaultTest = await readTest(defaultTestRaw.slice('file://'.length), basePath, true);
+    processedDefaultTest = await readTest(parseFileUrl(defaultTestRaw).filePath, basePath, true);
   } else if (defaultTestRaw) {
     processedDefaultTest = await readTest(defaultTestRaw as Partial<TestCase>, basePath, true);
   }
@@ -1069,7 +1070,7 @@ export async function resolveConfigs(
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
     const loadedScenarios: Scenario[] = [];
-    for (const scenario of config.scenarios) {
+    for (const scenario of [config.scenarios].flat()) {
       if (typeof scenario !== 'string') {
         loadedScenarios.push(scenario);
         continue;

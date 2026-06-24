@@ -1741,6 +1741,28 @@ describe('resolveConfigs', () => {
     expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://scenarios/tests.yaml' }]);
   });
 
+  it('should load a single scenario file from the default config', async () => {
+    const scenario = { description: 'Scenario', tests: [] };
+    vi.mocked(maybeLoadFromExternalFile).mockReset().mockResolvedValueOnce([scenario]);
+    vi.mocked(readTests)
+      .mockReset()
+      .mockImplementation(async (tests) => (Array.isArray(tests) ? (tests as TestCase[]) : []));
+
+    const result = await resolveConfigs(
+      {},
+      {
+        prompts: ['prompt'],
+        providers: ['echo'],
+        scenarios: 'file://scenarios/scenario.yaml' as unknown as Scenario[],
+      },
+      undefined,
+      path.resolve('/suite'),
+    );
+
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/scenario.yaml']);
+    expect(result.testSuite.scenarios).toEqual([expect.objectContaining(scenario)]);
+  });
+
   it('should apply configured seeded sampling independently to default config scenarios', async () => {
     const createDefaultConfig = (): Partial<UnifiedConfig> => ({
       prompts: ['Hello {{position}}'],
@@ -2662,6 +2684,32 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: externalDefaultTest.vars,
       }),
     );
+  });
+
+  it('should normalize a canonical Windows file URL before reading defaultTest', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    vi.mocked(readTest).mockResolvedValueOnce({ vars: { loaded: true } });
+
+    try {
+      await resolveConfigs(
+        {},
+        {
+          prompts: ['prompt'],
+          providers: ['echo'],
+          defaultTest: 'file:///C:/suite/default.yaml',
+        },
+        undefined,
+        'D:/config',
+      );
+
+      expect(readTest).toHaveBeenCalledWith('C:/suite/default.yaml', 'D:/config', true);
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
   });
 
   it('should handle inline defaultTest object in resolveConfigs', async () => {

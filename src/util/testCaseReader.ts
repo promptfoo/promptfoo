@@ -114,7 +114,10 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const filePathOrGlob = pathOrGlob.startsWith('file://')
+      ? parseFileUrl(pathOrGlob).filePath
+      : pathOrGlob;
+    const resolvedPath = path.resolve(basePath, filePathOrGlob);
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
@@ -186,7 +189,12 @@ export async function readStandaloneTestsFile(
       varsPath,
       basePath,
     );
-    if (fileExtension === 'json' || fileExtension === 'yaml' || fileExtension === 'yml') {
+    if (
+      fileExtension === 'json' ||
+      fileExtension === 'jsonl' ||
+      fileExtension === 'yaml' ||
+      fileExtension === 'yml'
+    ) {
       const visited = new WeakSet<object>();
       return testCases.map((testCase) =>
         rebaseTestCaseVarFileReferences(
@@ -629,15 +637,16 @@ export async function loadTestsFromGlob(
       }
       const visited = new WeakSet<object>();
       for (const testCase of testCases) {
+        const loadedTestCase = await readTest(testCase, path.dirname(testFile));
         if (testCasesDeclareNestedVarPaths) {
           rebaseTestCaseVarFileReferences(
-            testCase,
+            loadedTestCase,
             path.dirname(testFile),
             basePath || process.cwd(),
             visited,
           );
         }
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+        ret.push(loadedTestCase);
       }
     }
   }
