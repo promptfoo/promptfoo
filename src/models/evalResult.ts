@@ -852,7 +852,7 @@ function getEditedManualRatingState(
   return existingState.status === 'cleared' ? undefined : existingState;
 }
 
-function buildExplicitClearGradingResult(
+function buildServerOwnedClearGradingResult(
   current: GradingResult,
   normalized: GradingResult,
 ): GradingResult {
@@ -969,13 +969,14 @@ function resolveRatingTransition(
     success,
     result.failureReason,
   );
+  const isClearingManualRating = ratingAction === 'clear' || normalized.clearingManualRating;
   const clearRestoreBase =
-    ratingAction === 'clear' && result.gradingResult
+    result.gradingResult && isClearingManualRating
       ? result.gradingResult
       : normalized.gradingResult;
-  const explicitClearGradingResult =
-    ratingAction === 'clear' && result.gradingResult
-      ? buildExplicitClearGradingResult(result.gradingResult, normalized.gradingResult)
+  const serverOwnedClearGradingResult =
+    result.gradingResult && isClearingManualRating
+      ? buildServerOwnedClearGradingResult(result.gradingResult, normalized.gradingResult)
       : normalized.gradingResult;
 
   if (isRepeatedClear) {
@@ -1032,7 +1033,7 @@ function resolveRatingTransition(
       result,
       existingState,
       clearRestoreBase,
-      explicitClearGradingResult,
+      serverOwnedClearGradingResult,
       legacyClearRequestHash,
     );
     ({ gradingResult, success, score, failureReason, nextState } = cleared);

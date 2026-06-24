@@ -1193,7 +1193,7 @@ describe('eval routes', () => {
       });
     });
 
-    it('preserves server-owned fields when explicitly clearing a legacy rating', async () => {
+    it('preserves server-owned fields when implicitly clearing a legacy rating', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const results = await eval_.getResults();
@@ -1229,7 +1229,7 @@ describe('eval routes', () => {
       clearPayload.tokensUsed = { total: 999 };
       const response = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ ...clearPayload, ratingAction: 'clear' });
+        .send(clearPayload);
 
       expect(response.status).toBe(200);
       expect(response.body.gradingResult).toMatchObject({
