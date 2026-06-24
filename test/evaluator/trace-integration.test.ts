@@ -1,6 +1,6 @@
-import { context as otelContext } from '@opentelemetry/api';
-import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import { context as otelContext, trace as otelTrace } from '@opentelemetry/api';
 import { isTracingSuppressed } from '@opentelemetry/core';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
@@ -237,8 +237,8 @@ describe('evaluator trace integration', () => {
   });
 
   it('suppresses provider instrumentation when an evaluation has tracing disabled', async () => {
-    const contextManager = new AsyncLocalStorageContextManager().enable();
-    otelContext.setGlobalContextManager(contextManager);
+    const tracerProvider = new NodeTracerProvider();
+    tracerProvider.register();
     let observedSuppression = false;
     const provider = createMockProvider({
       callApi: async () => {
@@ -261,8 +261,9 @@ describe('evaluator trace integration', () => {
       expect(observedSuppression).toBe(true);
       expect(mockInitializeOtel).not.toHaveBeenCalled();
     } finally {
-      contextManager.disable();
       otelContext.disable();
+      otelTrace.disable();
+      await tracerProvider.shutdown();
     }
   });
 
