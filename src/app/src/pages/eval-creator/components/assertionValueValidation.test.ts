@@ -175,6 +175,15 @@ describe('getAssertionValueError', () => {
 });
 
 describe('structured value assertions', () => {
+  it.each([
+    ['tokens-used', 'file://budget.js'],
+    ['tokens-used', 'package:@scope/assertions:tokenBudget'],
+    ['trajectory:tool-set', 'file://tools.js'],
+    ['trajectory:tool-set', 'package:@scope/assertions:toolSet'],
+  ] as const)('defers runtime-resolved %s values', (type, value) => {
+    expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
+  });
+
   it('rejects optional SQL config that is not an object', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'is-sql', value: 'not-json' as any })),

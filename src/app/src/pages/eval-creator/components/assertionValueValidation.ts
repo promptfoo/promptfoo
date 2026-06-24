@@ -278,6 +278,10 @@ function hasNonBlankStringOrStringArray(value: unknown): boolean {
   return hasNonBlankString(value) || hasNonBlankStringArray(value);
 }
 
+function isRuntimeResolvedAssertionValue(value: unknown): boolean {
+  return typeof value === 'string' && (value.startsWith('file://') || value.startsWith('package:'));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -803,6 +807,9 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
 export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
   if (!isSupportedAssertionType(assertion.type)) {
     return 'Select a supported assertion type before running.';
+  }
+  if (isRuntimeResolvedAssertionValue(assertion.value)) {
+    return undefined;
   }
 
   return (

@@ -103,6 +103,23 @@ describe('RunTestSuiteButton', () => {
     expect(screen.getByText(/required assertion values/)).toBeInTheDocument();
   });
 
+  it.each([
+    { type: 'tokens-used', value: 'file://budget.js' },
+    { type: 'tokens-used', value: 'package:@scope/assertions:tokenBudget' },
+    { type: 'trajectory:tool-set', value: 'file://tools.js' },
+    { type: 'trajectory:tool-set', value: 'package:@scope/assertions:toolSet' },
+  ])('should allow runtime-resolved assertion configuration', (assertion) => {
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ assert: [assertion as any] }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',
