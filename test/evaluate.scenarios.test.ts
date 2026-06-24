@@ -178,12 +178,16 @@ describe('programmatic scenario config expansion', () => {
       process.chdir(originalCwd);
     }
     const summary = await record.toEvaluateSummary();
-    const configProvider = record.config.scenarios?.[0]?.config[0]?.provider as
+    const resolvedScenarios = record.config.scenarios as unknown as
+      | Array<{
+          config: Array<{ provider?: unknown }>;
+          tests: Array<{ provider?: unknown }>;
+        }>
+      | undefined;
+    const configProvider = resolvedScenarios?.[0]?.config[0]?.provider as
       | { id: string; config: { payload: string } }
       | undefined;
-    const testProvider = record.config.scenarios?.[1]?.tests[0]?.provider as
-      | { id: string }
-      | undefined;
+    const testProvider = resolvedScenarios?.[1]?.tests[0]?.provider as { id: string } | undefined;
 
     expect(summary.results.map((result) => result.response?.output)).toEqual([
       'scenario-provider',
