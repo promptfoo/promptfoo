@@ -1192,6 +1192,10 @@ describe('combineConfigs', () => {
     vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
+    const configDir = path.join(path.parse(import.meta.filename).root, 'mock', 'cwd');
+    vi.mocked(globSync)
+      .mockReturnValueOnce([path.join(configDir, 'config1.json')])
+      .mockReturnValueOnce([path.join(configDir, 'config2.json')]);
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
