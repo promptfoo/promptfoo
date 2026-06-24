@@ -28,14 +28,12 @@ const mockGetTestSuite = vi.fn().mockReturnValue({
   tests: [{ description: 'test case' }],
 });
 const mockSetConfig = vi.fn();
-let mockSourceEvalId: string | undefined;
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: vi.fn(() => ({
     config: {}, // Mock config object
     getTestSuite: mockGetTestSuite,
     setConfig: mockSetConfig,
-    sourceEvalId: mockSourceEvalId,
     setState: vi.fn(),
   })),
 }));
@@ -73,7 +71,6 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSourceEvalId = undefined;
     mockClipboard();
     mockObjectUrl('blob:yaml-editor-test');
 
@@ -129,26 +126,9 @@ describe('YamlEditor', () => {
     await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
-    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' }, undefined);
+    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
-  });
-
-  it('preserves the source eval lineage when saving edited YAML', async () => {
-    const user = userEvent.setup();
-    mockSourceEvalId = 'source-eval-id';
-    render(<YamlEditorComponent />);
-
-    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
-    await user.click(editor);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('description: Edited source config');
-    await user.click(screen.getByRole('button', { name: /Save/ }));
-
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      { description: 'Edited source config' },
-      'source-eval-id',
-    );
   });
 
   it('initializes with initialConfig', () => {
