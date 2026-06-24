@@ -110,25 +110,6 @@ describe('EvalResult', () => {
         },
       });
     });
-
-    it('should log structured context before falling back from a provider projection error', () => {
-      const error = new Error('provider id failed');
-      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
-      const provider = {
-        id: () => {
-          throw error;
-        },
-        label: 'Test Provider',
-        callApi: vi.fn(),
-      } as ApiProvider;
-
-      sanitizeProvider(provider);
-
-      expect(debugSpy).toHaveBeenCalledWith(
-        '[EvalResult] Failed to sanitize provider object; using JSON fallback',
-        { error },
-      );
-    });
   });
 
   describe('createFromEvaluateResult', () => {

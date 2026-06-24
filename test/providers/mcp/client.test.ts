@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
 vi.mock('../../../src/envars', async () => ({
@@ -122,7 +122,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import cliState from '../../../src/cliState';
-import logger from '../../../src/logger';
+import { winstonLogger } from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -156,6 +156,10 @@ describe('MCPClient', () => {
       expiresAt: Date.now() + 3600000, // 1 hour from now
     });
     cliState.basePath = undefined;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('initialize', () => {
@@ -1409,12 +1413,29 @@ describe('MCPClient', () => {
 
       // Should have called getOAuthTokenWithExpiry twice (initial + refresh)
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mockStreamableHTTPTransport.close).not.toHaveBeenCalled();
     });
 
-    it('should log structured close failures and continue an OAuth refresh reconnect', async () => {
-      const transportError = new Error('transport close failed');
-      const clientError = new Error('client close failed');
-      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    it.each([
+      ['succeeded', false],
+      ['failed', true],
+    ] as const)('should emit one bounded diagnostic when client close fails and transport fallback %s', async (expectedFallback, shouldTransportFail) => {
+      const sentinels = [
+        'PROMPT_SENTINEL',
+        'PROVIDER_RESPONSE_SENTINEL',
+        '/home/synthetic-user/private/config.yaml',
+        'synthetic-user@example.invalid',
+        'sk-synthetic-credential-1234567890',
+      ];
+      const cause = new Error(sentinels[1]);
+      const clientError = new Error(`${sentinels[0]} ${sentinels[2]}`, { cause });
+      clientError.name = sentinels[3];
+      const transportError = {
+        response: `${sentinels[1]} ${sentinels[4]}`,
+        toJSON: () => ({ prompt: sentinels[0] }),
+      };
+      const debugSpy = vi.spyOn(winstonLogger, 'debug').mockReturnValue(winstonLogger);
 
       mockClient.connect.mockResolvedValue(undefined);
       mockClient.listTools.mockResolvedValue({
@@ -1446,21 +1467,103 @@ describe('MCPClient', () => {
       });
 
       await mcpClient.initialize();
-      mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
       mockClient.close.mockRejectedValueOnce(clientError);
+      if (shouldTransportFail) {
+        mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
+      }
 
       await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
         content: 'result',
         raw: { content: 'result' },
       });
-      expect(debugSpy).toHaveBeenCalledWith(
-        '[MCP] Failed to close existing transport during OAuth refresh',
-        { error: transportError, serverKey: 'http://localhost:3000' },
-      );
-      expect(debugSpy).toHaveBeenCalledWith(
-        '[MCP] Failed to close existing client during OAuth refresh',
-        { error: clientError, serverKey: 'http://localhost:3000' },
-      );
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
+
+      const diagnostics = debugSpy.mock.calls
+        .map(([info]) => (info as { message?: unknown }).message)
+        .filter(
+          (message): message is string =>
+            typeof message === 'string' &&
+            message.startsWith('[MCP] Failed to close existing client during OAuth refresh'),
+        );
+      expect(diagnostics).toHaveLength(1);
+      const [message, ...contextLines] = diagnostics[0].split('\n');
+      expect(message).toBe('[MCP] Failed to close existing client during OAuth refresh');
+      expect(JSON.parse(contextLines.join('\n'))).toEqual({
+        operation: 'oauth-refresh',
+        resource: 'client',
+        transportFallback: expectedFallback,
+        nextAction: 'reconnect',
+      });
+      for (const sentinel of sentinels) {
+        expect(diagnostics[0]).not.toContain(sentinel);
+      }
+    });
+
+    it('should log a transport-only close failure without inspecting the rejection', async () => {
+      const debugSpy = vi.spyOn(winstonLogger, 'debug').mockReturnValue(winstonLogger);
+      const rejection = Object.create(null, {
+        toJSON: {
+          get: () => {
+            throw new Error('TO_JSON_GETTER_SENTINEL');
+          },
+        },
+      });
+
+      mockClient.connect.mockResolvedValue(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValue({ content: 'result' });
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({
+          accessToken: 'initial-token',
+          expiresAt: Date.now() + 30_000,
+        })
+        .mockResolvedValueOnce({
+          accessToken: 'refreshed-token',
+          expiresAt: Date.now() + 3_600_000,
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+
+      await mcpClient.initialize();
+      (mcpClient as any).clients.delete('http://localhost:3000');
+      mockStreamableHTTPTransport.close.mockRejectedValueOnce(rejection);
+
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'result',
+        raw: { content: 'result' },
+      });
+
+      const diagnostics = debugSpy.mock.calls
+        .map(([info]) => (info as { message?: unknown }).message)
+        .filter(
+          (message): message is string =>
+            typeof message === 'string' &&
+            message.startsWith('[MCP] Failed to close transport without an owning client'),
+        );
+      expect(diagnostics).toHaveLength(1);
+      const [message, ...contextLines] = diagnostics[0].split('\n');
+      expect(message).toBe('[MCP] Failed to close transport without an owning client');
+      expect(JSON.parse(contextLines.join('\n'))).toEqual({
+        operation: 'oauth-refresh',
+        resource: 'transport',
+        nextAction: 'reconnect',
+      });
+      expect(diagnostics[0]).not.toContain('TO_JSON_GETTER_SENTINEL');
     });
 
     it('should call the reconnected client after a proactive token refresh', async () => {

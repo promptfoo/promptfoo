@@ -126,11 +126,7 @@ export function sanitizeProvider(
         }),
       };
     }
-  } catch (err) {
-    logger.debug('[EvalResult] Failed to sanitize provider object; using JSON fallback', {
-      error: err,
-    });
-  }
+  } catch {}
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
