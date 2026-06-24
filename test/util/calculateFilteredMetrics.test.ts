@@ -1,7 +1,7 @@
 /**
  * Unit tests for calculateFilteredMetrics utility.
  *
- * Tests the optimized SQL aggregation approach for calculating metrics
+ * Tests the grouped SQL and bounded row aggregation used to calculate metrics
  * on filtered evaluation results.
  */
 
@@ -17,26 +17,32 @@ import EvalFactory from '../factories/evalFactory';
 async function insertRawNamedScoreResult({
   id,
   evalId,
+  promptIdx = 0,
   testIdx = 0,
   namedScores,
   gradingResult,
   testCase = '{"vars": {}}',
+  success = false,
+  failureReason = ResultFailureReason.ASSERT,
 }: {
   id: string;
   evalId: string;
+  promptIdx?: number;
   testIdx?: number;
   namedScores: string;
   gradingResult: string;
   testCase?: string;
+  success?: boolean;
+  failureReason?: ResultFailureReason;
 }): Promise<void> {
   const db = await getDb();
   await db.run(sql`
     INSERT INTO eval_results (
       id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
-      success, score, named_scores, grading_result, latency_ms, cost
+      success, score, named_scores, grading_result, failure_reason, latency_ms, cost
     ) VALUES (
-      ${id}, ${evalId}, 0, ${testIdx}, ${testCase}, ${'{}'}, ${'{}'},
-      0, 0.8, ${namedScores}, ${gradingResult}, 100, 0.001
+      ${id}, ${evalId}, ${promptIdx}, ${testIdx}, ${testCase}, ${'{}'}, ${'{}'},
+      ${success ? 1 : 0}, 0.8, ${namedScores}, ${gradingResult}, ${failureReason}, 100, 0.001
     )
   `);
 }
@@ -57,6 +63,7 @@ describe('calculateFilteredMetrics', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('basic metrics aggregation', () => {
@@ -237,7 +244,7 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('named scores aggregation', () => {
-    it('should aggregate named scores using SQL json_each', async () => {
+    it('should aggregate named scores from persisted result details', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
         resultTypes: ['success', 'failure'],
@@ -479,6 +486,100 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
       expect(metrics[0].namedScoresCount.accuracy).toBe(2);
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
+    it('should preserve a finite zero named score weight', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await insertRawNamedScoreResult({
+        id: 'zero-weight',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult:
+          '{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}], "namedScoreWeights": {"accuracy": 0}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBe(0);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(0);
+    });
+
+    it('should keep filtered metrics finite when score times weight overflows', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await insertRawNamedScoreResult({
+        id: 'finite-product-overflow',
+        evalId: eval_.id,
+        namedScores: '{"huge": 1e308}',
+        gradingResult: '{"namedScoreWeights": {"huge": 1e308}}',
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.huge).toBe(1e308);
+      expect(metrics[0].namedScoresCount.huge).toBe(1);
+      expect(metrics[0].namedScoreWeights?.huge).toBe(1);
+      expect(JSON.parse(JSON.stringify(metrics))[0].namedScores.huge).toBe(1e308);
+    });
+
+    it('should count repeated failed and errored rows selected by a partial filter', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await insertRawNamedScoreResult({
+        id: 'repeat-failure-named',
+        evalId: eval_.id,
+        testIdx: 7,
+        namedScores: '{"accuracy": 0.75}',
+        gradingResult: '{"namedScoreWeights": {"accuracy": 2}}',
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      await insertRawNamedScoreResult({
+        id: 'repeat-error-named',
+        evalId: eval_.id,
+        testIdx: 7,
+        namedScores: '{"accuracy": 0.25}',
+        gradingResult: '{}',
+        failureReason: ResultFailureReason.ERROR,
+      });
+      await insertRawNamedScoreResult({
+        id: 'repeat-error-unnamed',
+        evalId: eval_.id,
+        testIdx: 7,
+        namedScores: '{}',
+        gradingResult: '{}',
+        failureReason: ResultFailureReason.ERROR,
+      });
+      await insertRawNamedScoreResult({
+        id: 'excluded-pass-named',
+        evalId: eval_.id,
+        testIdx: 8,
+        namedScores: '{"accuracy": 1}',
+        gradingResult: '{}',
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 7`,
+      });
+
+      expect(metrics[0]).toMatchObject({
+        testPassCount: 0,
+        testFailCount: 1,
+        testErrorCount: 2,
+        namedScores: { accuracy: 1.75 },
+        namedScoresCount: { accuracy: 2 },
+        namedScoreWeights: { accuracy: 3 },
+      });
     });
 
     it('should ignore malformed componentResults without zeroing valid metrics', async () => {
@@ -853,12 +954,13 @@ describe('calculateFilteredMetrics', () => {
     });
 
     it.each([
-      ['expression', 'accuracy:\\u007b\\u007b suffix \\u007d\\u007d'],
+      ['expression', 'accuracy:\\u007b\\u007b suffix \\u007d\\u007d', 2],
       [
         'block',
         'accuracy:\\u007b\\u0025 if suffix \\u0025\\u007dalpha\\u007b\\u0025 endif \\u0025\\u007d',
+        1,
       ],
-    ])('should render Unicode-escaped weighted %s metric templates', async (syntaxType, metric) => {
+    ])('should handle Unicode-escaped weighted %s metric templates without executing stored code', async (syntaxType, metric, expectedCount) => {
       const eval_ = await EvalFactory.create({
         numResults: 0,
       });
@@ -877,8 +979,37 @@ describe('calculateFilteredMetrics', () => {
       });
 
       expect(metrics[0].namedScores['accuracy:alpha']).toBeCloseTo(3, 10);
-      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(2);
+      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(expectedCount);
       expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(4);
+    });
+
+    it('should not execute persisted Nunjucks control flow while calculating filtered metrics', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      vi.stubEnv('PR9355_ORACLE_SECRET', 'sentinel');
+      const persistedMetric =
+        'accuracy:{% if env.PR9355_ORACLE_SECRET == "sentinel" %}hit{% else %}miss{% endif %}';
+      await insertRawNamedScoreResult({
+        id: 'persisted-template-code',
+        evalId: eval_.id,
+        namedScores: JSON.stringify({ 'accuracy:hit': 0.75 }),
+        gradingResult: JSON.stringify({
+          componentResults: [
+            { assertion: { metric: persistedMetric } },
+            { assertion: { metric: persistedMetric } },
+          ],
+          namedScoreWeights: { 'accuracy:hit': 4 },
+        }),
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores['accuracy:hit']).toBe(3);
+      expect(metrics[0].namedScoresCount['accuracy:hit']).toBe(1);
+      expect(metrics[0].namedScoreWeights?.['accuracy:hit']).toBe(4);
     });
 
     it('should process weighted templated counts across bounded fallback batches', async () => {
@@ -1254,24 +1385,58 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('OOM protection', () => {
-    it('should throw error when result count exceeds limit', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 10,
-        resultTypes: ['success'],
-      });
+    it('should stop before aggregating result details when the row limit is exceeded', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const db = await getDb();
+      await db.run(sql`
+        WITH RECURSIVE row_numbers(value) AS (
+          SELECT 1
+          UNION ALL
+          SELECT value + 1 FROM row_numbers WHERE value < 50001
+        )
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score
+        )
+        SELECT
+          printf('over-limit-%06d', value),
+          ${eval_.id},
+          0,
+          value,
+          ${'{"vars": {}}'},
+          ${'{}'},
+          ${'{}'},
+          1,
+          1
+        FROM row_numbers
+      `);
 
-      // Mock a WHERE clause that would return too many results
-      // We can't actually create 50k+ results in the test, but we can test the check
-      const whereSql = sql`eval_id = ${eval_.id}`;
-
-      // This should succeed (10 results < 50000)
       await expect(
         calculateFilteredMetrics({
           evalId: eval_.id,
           numPrompts: 1,
-          whereSql,
+          whereSql: sql`eval_id = ${eval_.id}`,
         }),
-      ).resolves.toBeDefined();
+      ).rejects.toThrow('Result count exceeds maximum 50000');
+    });
+
+    it('should reject an oversized result-detail page before loading its JSON', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await insertRawNamedScoreResult({
+        id: 'oversized-result-details',
+        evalId: eval_.id,
+        namedScores: '{"accuracy": 0.8}',
+        gradingResult: '{}',
+        testCase: JSON.stringify({ vars: { payload: 'x'.repeat(9 * 1024 * 1024) } }),
+      });
+
+      await expect(
+        calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${eval_.id}`,
+        }),
+      ).rejects.toThrow('Filtered result details exceed the safe processing limit');
     });
   });
 

@@ -1,4 +1,4 @@
-import { renderMetricName } from './metricNames';
+import { getEnvBool } from '../envars';
 
 import type { GradingResult, Vars } from '../types/index';
 
@@ -8,33 +8,113 @@ export interface NamedMetricAccumulator {
   namedScoreWeights?: Record<string, number>;
 }
 
+export type NamedMetricGradingResult =
+  | Pick<GradingResult, 'componentResults' | 'namedScoreWeights'>
+  | Record<string, unknown>;
+
+export type MetricNameRenderer = (
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+) => string | undefined;
+
 interface NamedMetricContribution {
   assertionCount: number;
   metricWeightTotal: number;
   weightedScoreTotal: number;
 }
 
+const SIMPLE_METRIC_PLACEHOLDER = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Render persisted metric names without executing stored template code.
+ *
+ * Only documented root-variable placeholders are supported. Complex Nunjucks
+ * syntax remains literal so imported rows cannot access globals, call methods,
+ * invoke functions, or run unbounded template control flow during a read.
+ */
+export function renderPersistedMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric || !metric.includes('{') || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return metric;
+  }
+
+  const remainder = metric.replace(SIMPLE_METRIC_PLACEHOLDER, '');
+  if (
+    remainder.includes('{{') ||
+    remainder.includes('}}') ||
+    remainder.includes('{%') ||
+    remainder.includes('%}') ||
+    remainder.includes('{#') ||
+    remainder.includes('#}')
+  ) {
+    return metric;
+  }
+
+  let safe = true;
+  const rendered = metric.replace(SIMPLE_METRIC_PLACEHOLDER, (_placeholder, variable: string) => {
+    const descriptor = Object.getOwnPropertyDescriptor(vars, variable);
+    if (!descriptor) {
+      return '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      safe = false;
+      return '';
+    }
+
+    const value = descriptor.value;
+    if (value == null) {
+      return '';
+    }
+    if (['string', 'number', 'boolean'].includes(typeof value)) {
+      return String(value);
+    }
+
+    safe = false;
+    return '';
+  });
+
+  return safe ? rendered : metric;
+}
+
 function getContributingAssertionCount(
-  gradingResult: GradingResult | null | undefined,
+  gradingResult: NamedMetricGradingResult | null | undefined,
   metricName: string,
   testVars: Vars,
+  renderComponentMetric: MetricNameRenderer,
 ): number {
   const componentResults = Array.isArray(gradingResult?.componentResults)
     ? gradingResult.componentResults
     : [];
   const contributingAssertions = componentResults.reduce((count, componentResult) => {
-    if (!componentResult || typeof componentResult !== 'object') {
+    if (!isRecord(componentResult) || !isRecord(componentResult.assertion)) {
       return count;
     }
-    const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+    const metric =
+      typeof componentResult.assertion.metric === 'string'
+        ? componentResult.assertion.metric
+        : undefined;
+    const renderedMetric = renderComponentMetric(metric, testVars);
     return renderedMetric === metricName ? count + 1 : count;
   }, 0);
 
   return contributingAssertions > 0 ? contributingAssertions : 1;
 }
 
-function getOwnMetricValue(record: Record<string, number>, metricName: string): number | undefined {
-  return Object.prototype.hasOwnProperty.call(record, metricName) ? record[metricName] : undefined;
+function getOwnFiniteMetricValue(
+  record: Record<string, number>,
+  metricName: string,
+): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(record, metricName)) {
+    return undefined;
+  }
+  const value = record[metricName];
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function setOwnMetricValue(
@@ -50,31 +130,51 @@ function setOwnMetricValue(
   });
 }
 
+export function isValidNamedScoreWeight(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function getStoredMetricWeight(
+  gradingResult: NamedMetricGradingResult | null | undefined,
+  metricName: string,
+): number | undefined {
+  const namedScoreWeights = isRecord(gradingResult?.namedScoreWeights)
+    ? gradingResult.namedScoreWeights
+    : undefined;
+  if (!namedScoreWeights || !Object.prototype.hasOwnProperty.call(namedScoreWeights, metricName)) {
+    return undefined;
+  }
+  const weight = namedScoreWeights[metricName];
+  return isValidNamedScoreWeight(weight) ? weight : undefined;
+}
+
 function getNamedMetricContribution({
   metricName,
   metricValue,
   gradingResult,
   testVars = {},
+  renderComponentMetric,
 }: {
   metricName: string;
   metricValue: number;
-  gradingResult: GradingResult | null | undefined;
+  gradingResult: NamedMetricGradingResult | null | undefined;
   testVars?: Vars;
+  renderComponentMetric: MetricNameRenderer;
 }): NamedMetricContribution {
-  const assertionCount = getContributingAssertionCount(gradingResult, metricName, testVars);
-  const namedScoreWeights = gradingResult?.namedScoreWeights;
-  const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
-    namedScoreWeights ?? {},
+  const assertionCount = getContributingAssertionCount(
+    gradingResult,
     metricName,
+    testVars,
+    renderComponentMetric,
   );
-  const metricWeightTotal = hasNamedScoreWeight
-    ? (namedScoreWeights?.[metricName] ?? 0)
-    : assertionCount;
+  const storedWeight = getStoredMetricWeight(gradingResult, metricName);
+  const weightedScore = storedWeight === undefined ? metricValue : metricValue * storedWeight;
+  const useStoredWeight = storedWeight !== undefined && Number.isFinite(weightedScore);
 
   return {
     assertionCount,
-    metricWeightTotal,
-    weightedScoreTotal: hasNamedScoreWeight ? metricValue * metricWeightTotal : metricValue,
+    metricWeightTotal: useStoredWeight ? storedWeight : assertionCount,
+    weightedScoreTotal: useStoredWeight ? weightedScore : metricValue,
   };
 }
 
@@ -88,41 +188,49 @@ export function accumulateNamedMetric(
   }: {
     metricName: string;
     metricValue: number;
-    gradingResult: GradingResult | null | undefined;
+    gradingResult: NamedMetricGradingResult | null | undefined;
     testVars?: Vars;
   },
+  renderComponentMetric: MetricNameRenderer = renderPersistedMetricName,
 ): void {
+  if (!Number.isFinite(metricValue)) {
+    return;
+  }
+
   const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
     metricName,
     metricValue,
     gradingResult,
     testVars,
+    renderComponentMetric,
   });
-
-  setOwnMetricValue(
-    accumulator.namedScores,
-    metricName,
-    (getOwnMetricValue(accumulator.namedScores, metricName) ?? 0) + weightedScoreTotal,
-  );
-  setOwnMetricValue(
-    accumulator.namedScoresCount,
-    metricName,
-    (getOwnMetricValue(accumulator.namedScoresCount, metricName) ?? 0) + assertionCount,
-  );
-
+  const nextScore =
+    (getOwnFiniteMetricValue(accumulator.namedScores, metricName) ?? 0) + weightedScoreTotal;
+  const nextCount =
+    (getOwnFiniteMetricValue(accumulator.namedScoresCount, metricName) ?? 0) + assertionCount;
   accumulator.namedScoreWeights ||= {};
-  setOwnMetricValue(
-    accumulator.namedScoreWeights,
-    metricName,
-    (getOwnMetricValue(accumulator.namedScoreWeights, metricName) ?? 0) + metricWeightTotal,
-  );
+  const nextWeight =
+    (getOwnFiniteMetricValue(accumulator.namedScoreWeights, metricName) ?? 0) + metricWeightTotal;
+
+  // A PromptMetrics payload cannot represent non-finite totals. Keep the
+  // contribution atomic instead of serializing Infinity/NaN as JSON null.
+  if (![nextScore, nextCount, nextWeight].every(Number.isFinite)) {
+    return;
+  }
+
+  setOwnMetricValue(accumulator.namedScores, metricName, nextScore);
+  setOwnMetricValue(accumulator.namedScoresCount, metricName, nextCount);
+  setOwnMetricValue(accumulator.namedScoreWeights, metricName, nextWeight);
 }
 
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
   accumulator.namedScoreWeights ||= {};
 
   for (const [metricName, assertionCount] of Object.entries(accumulator.namedScoresCount)) {
-    if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoreWeights, metricName)) {
+    if (
+      Number.isFinite(assertionCount) &&
+      getOwnFiniteMetricValue(accumulator.namedScoreWeights, metricName) === undefined
+    ) {
       setOwnMetricValue(accumulator.namedScoreWeights, metricName, assertionCount);
     }
   }

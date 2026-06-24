@@ -10,6 +10,7 @@ import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -3274,12 +3275,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }): Promise<void> {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
-      accumulateNamedMetric(metrics, {
-        metricName: key,
-        metricValue: value,
-        gradingResult: row.gradingResult,
-        testVars: row.testCase?.vars || {},
-      });
+      accumulateNamedMetric(
+        metrics,
+        {
+          metricName: key,
+          metricValue: value,
+          gradingResult: row.gradingResult,
+          testVars: row.testCase?.vars || {},
+        },
+        renderMetricName,
+      );
     }
 
     if (derivedMetrics) {
