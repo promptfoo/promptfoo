@@ -510,14 +510,18 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
    * filter policies from the categories stats for the framework compliance section.
    */
   const customPolicyIds = useMemo(() => {
-    const ids = new Set();
+    const ids = new Set<string>();
     if (!evalData) {
       return ids;
     }
 
     evalData.results.results.forEach((row) => {
-      if (row.metadata?.pluginId === 'policy') {
-        ids.add(getPluginIdFromResult(row));
+      const pluginMarker = row.metadata?.pluginId ?? row.testCase?.metadata?.pluginId;
+      if (pluginMarker === 'policy') {
+        const policyId = getPluginIdFromResult(row);
+        if (policyId) {
+          ids.add(policyId);
+        }
       }
     });
 

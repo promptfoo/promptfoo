@@ -426,7 +426,8 @@ const RiskCategoryDrawer = ({
               const firstFailure = failures.length > 0 ? failures[0] : null;
               const firstPass = passes.length > 0 ? passes[0] : null;
               const testWithPluginId = firstFailure || firstPass;
-              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+              const result = testWithPluginId?.result;
+              const pluginId = result?.metadata?.pluginId ?? result?.testCase?.metadata?.pluginId;
 
               const filterParam = encodeURIComponent(
                 JSON.stringify([

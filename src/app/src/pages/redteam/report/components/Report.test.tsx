@@ -84,7 +84,11 @@ vi.mock('./RiskCategories', () => ({
   ),
 }));
 vi.mock('./TestSuites', () => ({ default: () => null }));
-vi.mock('./FrameworkCompliance', () => ({ default: () => null }));
+vi.mock('./FrameworkCompliance', () => ({
+  default: ({ categoryStats }: { categoryStats: unknown }) => (
+    <div data-testid="framework-category-stats">{JSON.stringify(categoryStats)}</div>
+  ),
+}));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
 vi.mock('./ToolsDialog', () => ({ default: () => null }));
@@ -794,6 +798,45 @@ describe('App component target selection', () => {
     expect(passPrompts).not.toHaveTextContent('FAIL_WITHOUT_GRADING');
     expect(failurePrompts).toHaveTextContent('FAIL_WITHOUT_GRADING');
     expect(failurePrompts).not.toHaveTextContent('PASS_WITHOUT_GRADING');
+  });
+
+  it('classifies historical test-case plugin identity and excludes policies from frameworks', async () => {
+    const policyId = '550e8400-e29b-41d4-a716-446655440000';
+    const historicalPluginResult = {
+      ...createComponentMockResult(0, 'unused', false),
+      metadata: undefined,
+      testCase: { metadata: { pluginId: 'harmful:violent-crime' } },
+      vars: {},
+      gradingResult: null,
+    } as EvaluateResult;
+    const historicalPolicyResult = {
+      ...createComponentMockResult(0, 'unused', false),
+      metadata: undefined,
+      testCase: { metadata: { pluginId: 'policy', policyId } },
+      vars: {},
+      gradingResult: null,
+    } as EvaluateResult;
+    const evalData = createComponentMockEvalData(1, [
+      historicalPluginResult,
+      historicalPolicyResult,
+    ]);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App evalId="test-eval-id" />);
+
+    const categoryStats = JSON.parse(
+      (await screen.findByTestId('overview-category-stats')).textContent,
+    );
+    const frameworkCategoryStats = JSON.parse(
+      screen.getByTestId('framework-category-stats').textContent,
+    );
+    expect(categoryStats).toHaveProperty('harmful:violent-crime');
+    expect(categoryStats).toHaveProperty(policyId);
+    expect(frameworkCategoryStats).toHaveProperty('harmful:violent-crime');
+    expect(frameworkCategoryStats).not.toHaveProperty(policyId);
   });
 });
 

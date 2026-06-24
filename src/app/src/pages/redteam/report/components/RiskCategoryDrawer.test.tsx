@@ -111,6 +111,28 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(window.open).not.toHaveBeenCalled();
   });
 
+  it('uses test-case plugin identity when result metadata is unavailable', async () => {
+    const user = userEvent.setup();
+    const result = {
+      ...createMockEvaluateResult({}),
+      metadata: undefined,
+      testCase: { ...mockTestCase, metadata: { pluginId: 'harmful:violent-crime' } },
+    };
+    renderWithProviders(
+      <RiskCategoryDrawer
+        {...defaultProps}
+        failures={[{ ...defaultProps.failures[0], result }]}
+        category="harmful:violent-crime"
+      />,
+    );
+
+    await user.click(screen.getByText('View All Logs'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22harmful%3Aviolent-crime%22%7D%5D',
+    );
+  });
+
   it('should open in new tab when ctrl/cmd clicking View All Logs button', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);

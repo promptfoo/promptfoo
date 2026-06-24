@@ -528,7 +528,11 @@ function projectToolsForRedteamReport(
   tools: unknown,
   providerId: string,
 ): (Record<string, unknown> | string)[] | undefined {
-  const supportsNamedTools = providerId === 'anthropic:claude-agent-sdk';
+  const supportsNamedTools =
+    providerId === 'anthropic:claude-agent-sdk' ||
+    providerId.startsWith('anthropic:claude-agent-sdk:') ||
+    providerId === 'anthropic:claude-code' ||
+    providerId.startsWith('anthropic:claude-code:');
   const isSupportedSingletonPreset =
     supportsNamedTools &&
     isRecord(tools) &&

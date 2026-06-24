@@ -1668,6 +1668,33 @@ describe('evaluator', () => {
       expect(JSON.stringify(singletonProjection.config)).not.toContain('singleton-tool-secret');
     });
 
+    it.each([
+      'anthropic:claude-code',
+      'anthropic:claude-agent-sdk:sonnet',
+      'anthropic:claude-code:sonnet',
+    ])('preserves Claude Agent SDK tools for provider alias %s', async (providerId) => {
+      for (const [tools, expectedTools] of [
+        [
+          ['Read', 'Edit'],
+          ['Read', 'Edit'],
+        ],
+        [
+          { type: 'preset', preset: 'claude_code', apiKey: 'alias-tool-secret' },
+          [{ type: 'preset', preset: 'claude_code' }],
+        ],
+      ] as const) {
+        const eval_ = new Eval({});
+        eval_.config = { providers: [{ id: providerId, config: { tools } }] };
+
+        const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.config.providers).toEqual([
+          { id: providerId, config: { tools: expectedTools } },
+        ]);
+        expect(JSON.stringify(projected.config)).not.toContain('alias-tool-secret');
+      }
+    });
+
     it('omits unsupported singleton tool values from compact config', async () => {
       const configs = [
         {

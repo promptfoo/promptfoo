@@ -25,4 +25,14 @@ describe('getPluginIdFromResult', () => {
 
     expect(getPluginIdFromResult(result)).toBe('policy-123');
   });
+
+  it('uses historical test-case plugin identity when other fallbacks are stripped', () => {
+    const result = {
+      testCase: { metadata: { pluginId: 'harmful:violent-crime' } },
+      vars: {},
+      gradingResult: null,
+    } as unknown as Parameters<typeof getPluginIdFromResult>[0];
+
+    expect(getPluginIdFromResult(result)).toBe('harmful:violent-crime');
+  });
 });

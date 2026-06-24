@@ -72,8 +72,9 @@ export function getStrategyIdFromTest(test: TestWithMetadata): string {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  const isPolicy =
-    result.testCase?.metadata?.pluginId === 'policy' || result.metadata?.pluginId === 'policy';
+  const resultPluginId = result.metadata?.pluginId;
+  const testCasePluginId = result.testCase?.metadata?.pluginId;
+  const isPolicy = testCasePluginId === 'policy' || resultPluginId === 'policy';
   if (isPolicy) {
     const policyId = result.testCase?.metadata?.policyId ?? result.metadata?.policyId;
     if (typeof policyId === 'string') {
@@ -81,12 +82,12 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
     }
   }
 
-  if (
-    result.metadata?.pluginId &&
-    // Policy plugins are handled separately
-    result.metadata.pluginId !== 'policy'
-  ) {
-    return result.metadata.pluginId as string;
+  // Policy plugins are handled separately above.
+  if (typeof resultPluginId === 'string' && resultPluginId !== 'policy') {
+    return resultPluginId;
+  }
+  if (typeof testCasePluginId === 'string' && testCasePluginId !== 'policy') {
+    return testCasePluginId;
   }
 
   const harmCategory = result.vars?.harmCategory || result.metadata?.harmCategory;
