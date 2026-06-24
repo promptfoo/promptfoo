@@ -78,9 +78,24 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
       {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ getValue }) => (
-          <span className="font-mono text-sm">{getValue<string>().slice(0, 6)}</span>
-        ),
+        cell: ({ getValue, row }) => {
+          const id = getValue<string>();
+          return (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 font-mono text-sm"
+              aria-label={`View dataset ${row.original.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                openDatasetDetails(row.original);
+              }}
+            >
+              {id.slice(0, 6)}
+            </Button>
+          );
+        },
         size: 100,
       },
       {
@@ -151,27 +166,6 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           );
         },
         size: 150,
-      },
-      {
-        id: 'actions',
-        header: 'Actions',
-        enableSorting: false,
-        size: 140,
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto px-0"
-            aria-label={`View dataset ${row.original.id}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              openDatasetDetails(row.original);
-            }}
-          >
-            View dataset
-          </Button>
-        ),
       },
     ],
     [openDatasetDetails],

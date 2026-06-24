@@ -220,6 +220,22 @@ describe('MediaModal', () => {
       expect(screen.getByText('Safety')).toBeInTheDocument();
     });
 
+    it('renders grader results without reasons as non-interactive summaries', () => {
+      const item = createMockItem({
+        context: {
+          evalId: 'e',
+          graderResults: [{ name: 'Quality', pass: true, score: 0.9 }],
+        },
+      });
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      const graderName = screen.getByText('Quality');
+      expect(graderName).toBeInTheDocument();
+      expect(screen.getByText('90%')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Quality/ })).not.toBeInTheDocument();
+      expect(graderName.closest('[aria-expanded]')).toBeNull();
+    });
+
     it('expands grader reason on click', async () => {
       const user = userEvent.setup();
       const item = createMockItem({

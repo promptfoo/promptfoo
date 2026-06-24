@@ -81,8 +81,20 @@ export default function Prompts({
         accessorKey: 'label',
         header: 'Label',
         accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
-        cell: ({ getValue }) => (
-          <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+        cell: ({ getValue, row }) => (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto max-w-full justify-start px-0 text-left"
+            aria-label={`View prompt ${row.original.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              openPromptDetails(row.original);
+            }}
+          >
+            <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+          </Button>
         ),
         size: 200,
       },
@@ -122,27 +134,6 @@ export default function Prompts({
         ),
         size: 120,
         meta: { align: 'right' },
-      },
-      {
-        id: 'actions',
-        header: 'Actions',
-        enableSorting: false,
-        size: 130,
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto px-0"
-            aria-label={`View prompt ${row.original.id}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              openPromptDetails(row.original);
-            }}
-          >
-            View prompt
-          </Button>
-        ),
       },
     ],
     [openPromptDetails],

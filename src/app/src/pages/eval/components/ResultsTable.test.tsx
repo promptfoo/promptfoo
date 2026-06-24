@@ -2866,13 +2866,14 @@ describe('ResultsTable Pagination', () => {
     expect(paginationFooter).not.toHaveClass('w-screen');
   });
 
-  it('should keep sticky results headers below the dynamic update banner offset', () => {
+  it('should keep sticky results headers directly below the sticky navigation', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'src/pages/eval/components/ResultsTable.css'),
       'utf8',
     );
 
-    expect(css).toContain('top: calc(var(--nav-height) + var(--update-banner-height, 0px));');
+    expect(css).toContain('top: var(--nav-height);');
+    expect(css).not.toContain('top: calc(var(--nav-height) + var(--update-banner-height, 0px));');
   });
 });
 

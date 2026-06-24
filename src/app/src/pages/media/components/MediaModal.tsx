@@ -114,6 +114,36 @@ interface GraderItemProps {
 
 function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
   const reasonId = useId();
+  const hasReason = Boolean(grader.reason);
+  const summary = (
+    <>
+      {grader.pass ? (
+        <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+      ) : (
+        <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+      )}
+      <span className="text-sm font-medium min-w-0 flex-1 break-words">{grader.name}</span>
+      <span
+        className={cn(
+          'text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded',
+          grader.pass
+            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'
+            : 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/50',
+        )}
+      >
+        {Math.round(grader.score * 100)}%
+      </span>
+      {hasReason && (
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 text-muted-foreground transition-transform shrink-0',
+            isExpanded && 'rotate-180',
+          )}
+        />
+      )}
+    </>
+  );
+  const summaryClassName = 'w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-lg';
 
   return (
     <div
@@ -124,39 +154,23 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
           : 'border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20',
       )}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        aria-controls={grader.reason ? reasonId : undefined}
-        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-left rounded-lg"
-      >
-        {grader.pass ? (
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        ) : (
-          <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
-        )}
-        <span className="text-sm font-medium min-w-0 flex-1 break-words">{grader.name}</span>
-        <span
+      {hasReason ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-controls={reasonId}
           className={cn(
-            'text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded',
-            grader.pass
-              ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'
-              : 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/50',
+            summaryClassName,
+            'transition-colors hover:bg-black/5 dark:hover:bg-white/5',
           )}
         >
-          {Math.round(grader.score * 100)}%
-        </span>
-        {grader.reason && (
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform shrink-0',
-              isExpanded && 'rotate-180',
-            )}
-          />
-        )}
-      </button>
-      {isExpanded && grader.reason && (
+          {summary}
+        </button>
+      ) : (
+        <div className={summaryClassName}>{summary}</div>
+      )}
+      {isExpanded && hasReason && (
         <div id={reasonId} className="px-3 pb-3 pt-1">
           <div className="bg-white/80 dark:bg-black/20 rounded-md p-2.5 max-h-48 overflow-y-auto">
             <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
