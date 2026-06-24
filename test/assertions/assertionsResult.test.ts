@@ -3,7 +3,7 @@ import {
   AssertionsResult,
   DEFAULT_TOKENS_USED,
   GUARDRAIL_BLOCKED_REASON,
-  NONSTANDARD_SCORING_BASELINE_METADATA_KEY,
+  getNonstandardScoringBaseline,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
 
@@ -268,10 +268,11 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.9);
       expect(result.reason).toBe('Custom scoring');
-      expect(result.metadata?.[NONSTANDARD_SCORING_BASELINE_METADATA_KEY]).toEqual({
+      expect(getNonstandardScoringBaseline(result)).toEqual({
         pass: true,
         score: 0.9,
       });
+      expect(result.metadata).toBeUndefined();
       expect(scoringFunction).toHaveBeenCalledWith(
         {},
         {
@@ -292,10 +293,11 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toBe('Scoring function error: Scoring failed');
-      expect(result.metadata?.[NONSTANDARD_SCORING_BASELINE_METADATA_KEY]).toEqual({
+      expect(getNonstandardScoringBaseline(result)).toEqual({
         pass: false,
         score: 0,
       });
+      expect(result.metadata).toBeUndefined();
     });
 
     it('should handle failed content safety checks', async () => {

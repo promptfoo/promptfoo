@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { setNonstandardScoringBaseline } from '../../src/assertions/assertionsResult';
 import { getDb } from '../../src/database';
 import { evalResultsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
@@ -143,6 +144,50 @@ describe('EvalResult', () => {
       // Verify it was not persisted to database
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).toBeNull();
+    });
+
+    it.each([
+      true,
+      false,
+    ])('persists a private nonstandard baseline when persist starts as %s', async (persistInitially) => {
+      const gradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'Custom aggregate failed',
+      };
+      setNonstandardScoringBaseline(gradingResult, { pass: false, score: 0.25 });
+      const result = await EvalResult.createFromEvaluateResult(
+        `test-eval-custom-baseline-${persistInitially}`,
+        {
+          ...mockEvaluateResult,
+          success: false,
+          score: 0.25,
+          failureReason: ResultFailureReason.ASSERT,
+          gradingResult,
+        },
+        { persist: persistInitially },
+      );
+      if (!persistInitially) {
+        await result.save();
+      }
+
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.manualRatingState).toMatchObject({
+        version: 1,
+        status: 'baseline',
+        original: {
+          success: false,
+          score: 0.25,
+          failureReason: ResultFailureReason.ASSERT,
+        },
+      });
+      expect(JSON.stringify(result.gradingResult)).not.toContain(
+        '__promptfooNonstandardScoringBaseline',
+      );
     });
 
     it('should preserve response headers when persist option is false', async () => {

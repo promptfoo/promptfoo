@@ -4,7 +4,39 @@ import { isGradingResult } from '../types/index';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
-export const NONSTANDARD_SCORING_BASELINE_METADATA_KEY = '__promptfooNonstandardScoringBaseline';
+
+type NonstandardScoringBaseline = { pass: boolean; score: number };
+const NONSTANDARD_SCORING_BASELINE = Symbol('promptfoo.nonstandardScoringBaseline');
+
+export function setNonstandardScoringBaseline(
+  gradingResult: GradingResult,
+  baseline: NonstandardScoringBaseline,
+): void {
+  Object.defineProperty(gradingResult, NONSTANDARD_SCORING_BASELINE, {
+    configurable: true,
+    enumerable: false,
+    value: baseline,
+    writable: true,
+  });
+}
+
+export function getNonstandardScoringBaseline(
+  gradingResult: GradingResult | null | undefined,
+): NonstandardScoringBaseline | undefined {
+  const baseline = gradingResult
+    ? (
+        gradingResult as GradingResult & {
+          [NONSTANDARD_SCORING_BASELINE]?: NonstandardScoringBaseline;
+        }
+      )[NONSTANDARD_SCORING_BASELINE]
+    : undefined;
+  return baseline &&
+    typeof baseline.pass === 'boolean' &&
+    typeof baseline.score === 'number' &&
+    Number.isFinite(baseline.score)
+    ? baseline
+    : undefined;
+}
 
 export const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -230,16 +262,13 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
-      // Function-valued test-case fields are intentionally stripped before persistence. Keep
-      // only the inert aggregate needed to restore a manual rating after export/import or when
-      // reading a pre-provenance row; never persist or re-execute the scoring function itself.
-      this.result.metadata = {
-        ...this.result.metadata,
-        [NONSTANDARD_SCORING_BASELINE_METADATA_KEY]: {
-          pass: this.result.pass,
-          score: this.result.score,
-        },
-      };
+      // Function-valued test-case fields are intentionally stripped before persistence. Attach
+      // only an in-memory aggregate for the persistence layer to move into private provenance;
+      // never serialize or re-execute the scoring function itself.
+      setNonstandardScoringBaseline(this.result, {
+        pass: this.result.pass,
+        score: this.result.score,
+      });
     }
 
     return this.result;

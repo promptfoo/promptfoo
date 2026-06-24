@@ -4523,7 +4523,9 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(clearButton);
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
     await user.click(clearButton);
-    resolveRefresh({ table: { head: mockTable.head, body: [] } });
+    resolveRefresh({
+      table: { head: mockTable.head, body: [] } as unknown as EvaluateTable,
+    });
 
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
   });
@@ -4921,7 +4923,12 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       ...currentTable.body[0].outputs[0],
       pass: true,
       score: 0.8,
-      gradingResult: { pass: true, score: 0.8, reason: 'Newer external rating' },
+      gradingResult: {
+        ...currentTable.body[0].outputs[0].gradingResult,
+        pass: true,
+        score: 0.8,
+        reason: 'Newer external rating',
+      },
     };
     rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
     resolveResponse({

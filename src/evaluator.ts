@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
-import { NONSTANDARD_SCORING_BASELINE_METADATA_KEY } from './assertions/assertionsResult';
+import { setNonstandardScoringBaseline } from './assertions/assertionsResult';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -1882,13 +1882,10 @@ function recordNonstandardScoringBaseline(result: EvaluationStoreResult) {
   if (!result.gradingResult) {
     return;
   }
-  result.gradingResult.metadata = {
-    ...result.gradingResult.metadata,
-    [NONSTANDARD_SCORING_BASELINE_METADATA_KEY]: {
-      pass: result.success,
-      score: result.score,
-    },
-  };
+  setNonstandardScoringBaseline(result.gradingResult, {
+    pass: result.success,
+    score: result.score,
+  });
 }
 
 function mergeSelectBestGradingResult(

@@ -1491,49 +1491,47 @@ describe('eval routes', () => {
         score: 0.25,
         reason: 'Custom aggregate failed',
       }));
-      result.gradingResult = {
-        ...customBaseline,
-        pass: true,
-        score: 1,
-        reason: 'Legacy manual pass',
-        componentResults: [
-          automatedComponent,
-          {
-            pass: true,
-            score: 1,
-            reason: 'Legacy manual pass',
-            assertion: { type: 'human' },
-          },
-        ],
-      };
-      result.success = true;
-      result.score = 1;
+      result.gradingResult = customBaseline;
+      result.success = false;
+      result.score = 0.25;
       result.failureReason = ResultFailureReason.ASSERT;
       result.error = 'Expected assertion failure';
       await result.save();
-      const reloadedLegacyRating = await EvalResult.findById(result.id);
-      invariant(reloadedLegacyRating, 'Reloaded legacy rating is required');
-      expect(
-        reloadedLegacyRating.gradingResult?.metadata?.__promptfooNonstandardScoringBaseline,
-      ).toEqual({ pass: false, score: 0.25 });
       const prompt = eval_.prompts[result.promptIdx];
       invariant(prompt.metrics, 'Prompt metrics are required');
-      Object.assign(prompt.metrics, {
-        score: 1,
-        testPassCount: 1,
-        testFailCount: 1,
-        testErrorCount: 0,
-        assertPassCount: 2,
-        assertFailCount: 1,
-      });
+      prompt.metrics.score -= 0.75;
+      prompt.metrics.testPassCount -= 1;
+      prompt.metrics.testFailCount += 1;
       await eval_.save();
+      const db = await getDb();
+      const persistedBaseline = await db
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(persistedBaseline?.manualRatingState).toMatchObject({
+        status: 'baseline',
+        original: { success: false, score: 0.25, failureReason: ResultFailureReason.ASSERT },
+      });
+      const reloadedBaseline = await EvalResult.findById(result.id);
+      invariant(reloadedBaseline, 'Reloaded custom baseline is required');
+      expect(reloadedBaseline.gradingResult?.metadata ?? {}).not.toHaveProperty(
+        '__promptfooNonstandardScoringBaseline',
+      );
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...createManualRatingPayload(reloadedBaseline, true), ratingAction: 'rate' });
+      expect(rateResponse.status).toBe(200);
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
 
       const clearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send({
-          pass: true,
+          ...createClearManualRatingPayload(manualResult),
           score: 999,
-          componentResults: [automatedComponent],
+          ratingAction: 'clear',
         });
 
       expect(clearResponse.status).toBe(200);
@@ -1566,6 +1564,10 @@ describe('eval routes', () => {
       prompt.metrics.assertFailCount -= 1;
       await eval_.save();
       await markResultAsError(eval_, result);
+      // Rows created before failure_reason was added retained execution errors only here.
+      result.failureReason = ResultFailureReason.NONE;
+      result.error = 'Legacy provider exception';
+      await result.save();
       const errorMetrics = structuredClone(prompt.metrics);
 
       result.gradingResult = {
@@ -1697,6 +1699,9 @@ describe('eval routes', () => {
           pass: true,
           score: 1,
           ratingAction: 'rate',
+          metadata: {
+            __promptfooNonstandardScoringBaseline: { pass: false, score: 31_337 },
+          },
           componentResults: [
             { pass: true, score: 1, assertion: { type: 'equals', value: 'forged-1' } },
             { pass: true, score: 1, assertion: { type: 'equals', value: 'forged-2' } },
@@ -1712,6 +1717,69 @@ describe('eval routes', () => {
         ...baselineMetrics,
         assertPassCount: baselineMetrics.assertPassCount + 1,
       });
+      const manualResult = await EvalResult.findById(result.id);
+      invariant(manualResult, 'Manual result is required');
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...createClearManualRatingPayload(manualResult), ratingAction: 'clear' });
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({ success: true, score: 1 });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        baselineMetrics,
+      );
+    });
+
+    it('derives a consistent failure category after updating a pre-provenance rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+
+      // Emulate an imported manual pass written before private rating provenance existed.
+      result.gradingResult = createManualRatingPayload(result, true);
+      result.success = true;
+      result.score = 1;
+      result.failureReason = ResultFailureReason.NONE;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.score += 1;
+      prompt.metrics.testFailCount -= 1;
+      prompt.metrics.testPassCount += 1;
+      prompt.metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const legacyRating = await EvalResult.findById(result.id);
+      invariant(legacyRating?.gradingResult, 'Legacy rating is required');
+      const updateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          ...legacyRating.gradingResult,
+          comment: 'Updated before clear',
+          metadata: {
+            __promptfooNonstandardScoringBaseline: { pass: false, score: 4_242 },
+          },
+        });
+      expect(updateResponse.status).toBe(200);
+
+      const updatedRating = await EvalResult.findById(result.id);
+      invariant(updatedRating, 'Updated legacy rating is required');
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(updatedRating));
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
     });
 
     it('restores server-owned automated components when a clear payload mutates them', async () => {
