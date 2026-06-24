@@ -8,7 +8,6 @@ import { getDefaultProviders } from '../providers/defaults';
 import {
   type CompletedPrompt,
   type EvaluateResult,
-  isScenarioConfigValuesRef,
   type Prompt,
   type TestSuite,
 } from '../types/index';
@@ -560,14 +559,10 @@ function buildCandidateScenarios(
 ): TestSuite['scenarios'] {
   return scenarios?.map((scenario) => ({
     ...scenario,
-    config: scenario.config.map((test) =>
-      isScenarioConfigValuesRef(test)
-        ? test
-        : {
-            ...test,
-            prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-          },
-    ),
+    config: scenario.config.map((test) => ({
+      ...test,
+      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+    })),
     tests: scenario.tests.map((test) => ({
       ...test,
       prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),

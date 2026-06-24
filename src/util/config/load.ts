@@ -53,8 +53,10 @@ import {
   expandScenarioConfigValues,
   loadScenarioConfigs,
   resolveFileRefFromBase,
-  resolveScenarioConfigValuesRefs,
+  resolveScenarioFileRefs,
 } from './scenarioMatrix';
+
+export { ConfigResolutionError, logConfigResolutionError } from './errors';
 
 function normalizeConfiguredCommandLineOptions(
   commandLineOptions: Partial<CommandLineOptions> | undefined,
@@ -641,6 +643,37 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts.push(...Array.from(seenPrompts));
   }
 
+  let scenarios: UnifiedConfig['scenarios'];
+  if (configs.some((config) => config.scenarios !== undefined)) {
+    const resolvedScenarios: NonNullable<UnifiedConfig['scenarios']> = [];
+    for (const [idx, config] of configs.entries()) {
+      if (!config.scenarios) {
+        continue;
+      }
+      const configBasePath = path.dirname(configSourcePaths[idx]);
+      const entries = Array.isArray(config.scenarios) ? config.scenarios : [config.scenarios];
+      for (const scenario of entries) {
+        if (typeof scenario === 'string') {
+          if (scenario.startsWith('file://')) {
+            const loadedScenarios = await loadScenarioConfigs(
+              [scenario],
+              configBasePath,
+              config.env ?? {},
+            );
+            loadedScenarios?.forEach((loadedScenario) => resolvedScenarios.push(loadedScenario));
+          } else {
+            resolvedScenarios.push(
+              resolveFileRefFromBase(configBasePath, scenario, config.env ?? {}),
+            );
+          }
+          continue;
+        }
+        resolvedScenarios.push(resolveScenarioFileRefs(configBasePath, scenario, config.env ?? {}));
+      }
+    }
+    scenarios = resolvedScenarios;
+  }
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -648,24 +681,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     providers,
     prompts,
     tests,
-    scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config, idx) => {
-          if (!config.scenarios) {
-            return [];
-          }
-          const configBasePath = path.dirname(configSourcePaths[idx]);
-          const entries = Array.isArray(config.scenarios) ? config.scenarios : [config.scenarios];
-          return entries.map((scenario) => {
-            if (typeof scenario === 'string') {
-              return resolveFileRefFromBase(configBasePath, scenario);
-            }
-            if (!scenario || typeof scenario !== 'object') {
-              return scenario;
-            }
-            return resolveScenarioConfigValuesRefs(configBasePath, scenario);
-          });
-        })
-      : undefined,
+    scenarios,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
@@ -930,7 +946,9 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
-    config.scenarios = (await loadScenarioConfigs(config.scenarios, basePath))?.map((scenario) =>
+    config.scenarios = (
+      await loadScenarioConfigs(config.scenarios, basePath, config.env ?? {})
+    )?.map((scenario) =>
       typeof scenario === 'object'
         ? {
             ...scenario,
@@ -954,7 +972,11 @@ export async function resolveConfigs(
         scenario.tests = parsedScenarioTests;
       }
       if (typeof scenario === 'object' && scenario.config !== undefined) {
-        scenario.config = await expandScenarioConfigValues(scenario.config, basePath);
+        scenario.config = await expandScenarioConfigValues(
+          scenario.config,
+          basePath,
+          config.env ?? {},
+        );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(

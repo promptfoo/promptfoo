@@ -951,7 +951,11 @@ export const TestCasesWithMetadataSchema = z.object({
 export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
 
 export type ScenarioConfigValuesRef = { $values: string };
-export type ScenarioConfig = Partial<TestCase> | ScenarioConfigValuesRef;
+export type ScenarioConfigRow = Partial<TestCase> & {
+  $values?: never;
+  $expand?: never;
+};
+export type ScenarioConfig = ScenarioConfigRow | ScenarioConfigValuesRef;
 
 /**
  * Type guard for `$values` matrix-file references in `scenarios[].config`.
@@ -985,6 +989,17 @@ const ScenarioConfigValuesSchema = z
 // instead, so a malformed matrix reference fails loudly rather than being silently
 // treated as an ordinary row.
 const ScenarioConfigRowSchema = TestCaseSchema.partial()
+  .extend({
+    $values: z
+      .never({
+        error:
+          'A scenario config $values entry must have $values as its only key, e.g. { $values: "file://matrix.yaml" }',
+      })
+      .optional(),
+    $expand: z
+      .never({ error: 'Scenario config rows do not support $expand; use $values' })
+      .optional(),
+  })
   .catchall(z.unknown())
   .refine((row) => !('$expand' in row), {
     error: 'Scenario config rows do not support $expand; use $values',
@@ -1000,18 +1015,31 @@ const ScenarioConfigSchema: z.ZodType<ScenarioConfig> = z.union([
   ScenarioConfigRowSchema,
 ]);
 
+const ResolvedScenarioConfigRowSchema = TestCaseSchema.partial()
+  .extend({
+    $values: z.never().optional(),
+    $expand: z.never().optional(),
+  })
+  .refine((row) => !('$values' in row) && !('$expand' in row));
+
 export const ScenarioSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
 
   // Default test case config
-  config: z.array(ScenarioConfigSchema),
+  config: z.array(ResolvedScenarioConfigRowSchema),
 
   // Optional list of automatic checks to run on the LLM output
   tests: z.array(TestCaseSchema),
 });
 
 export type Scenario = z.infer<typeof ScenarioSchema>;
+
+// Raw config accepts matrix-file references. ScenarioSchema remains the resolved
+// runtime contract so existing consumers can access scenario.config rows directly.
+const ScenarioInputSchema = ScenarioSchema.extend({
+  config: z.array(ScenarioConfigSchema),
+});
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
@@ -1246,7 +1274,7 @@ export const TestSuiteConfigSchema = z.object({
     .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
+  scenarios: z.array(z.union([z.string(), ScenarioInputSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest: z

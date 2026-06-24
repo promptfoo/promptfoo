@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { ConfigResolutionError } from '../../../src/util/config/errors';
 import {
@@ -12,7 +13,9 @@ import {
   resolveScenarioConfigValuesRefs,
 } from '../../../src/util/config/scenarioMatrix';
 
-import type { Scenario } from '../../../src/types/index';
+import type { TestSuiteConfig } from '../../../src/types/index';
+
+type ScenarioInput = Exclude<NonNullable<TestSuiteConfig['scenarios']>[number], string>;
 
 describe('scenarioMatrix (real filesystem)', () => {
   let tmpDir: string;
@@ -69,6 +72,77 @@ describe('scenarioMatrix (real filesystem)', () => {
         resolveFileRefFromBase('/base', 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}'),
       ).toBe(`file://${matrixPath}`);
     });
+
+    it('uses explicit config env instead of process env', () => {
+      vi.stubEnv('PROMPTFOO_SCENARIO_MATRIX_TEST_PATH', '/wrong/process/path.yaml');
+
+      expect(
+        resolveFileRefFromBase(tmpDir, 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}', {
+          PROMPTFOO_SCENARIO_MATRIX_TEST_PATH: 'matrix.yaml',
+        }),
+      ).toBe(`file://${path.join(tmpDir, 'matrix.yaml')}`);
+    });
+
+    it('honors file-path template environment policy', () => {
+      vi.stubEnv('PROMPTFOO_SCENARIO_MATRIX_TEST_PATH', '/process-only/secret.yaml');
+      vi.stubEnv('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true');
+
+      const processOnly = resolveFileRefFromBase(
+        tmpDir,
+        'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}',
+        {},
+      );
+      expect(processOnly).not.toContain('/process-only/secret.yaml');
+
+      const configDefined = resolveFileRefFromBase(
+        tmpDir,
+        'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}',
+        { PROMPTFOO_SCENARIO_MATRIX_TEST_PATH: 'matrix.yaml' },
+      );
+      expect(configDefined).toBe(`file://${path.join(tmpDir, 'matrix.yaml')}`);
+
+      vi.stubEnv('PROMPTFOO_DISABLE_TEMPLATING', 'true');
+      expect(
+        resolveFileRefFromBase(tmpDir, 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}', {
+          PROMPTFOO_SCENARIO_MATRIX_TEST_PATH: 'matrix.yaml',
+        }),
+      ).toContain('{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}');
+    });
+
+    it('defaults to hiding process env in self-hosted mode', () => {
+      vi.stubEnv('PROMPTFOO_SCENARIO_MATRIX_TEST_PATH', '/process-only/secret.yaml');
+      vi.stubEnv('PROMPTFOO_SELF_HOSTED', 'true');
+
+      expect(
+        resolveFileRefFromBase(tmpDir, 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}', {}),
+      ).not.toContain('/process-only/secret.yaml');
+      expect(
+        resolveFileRefFromBase(tmpDir, 'file://{{ env.PROMPTFOO_SCENARIO_MATRIX_TEST_PATH }}', {
+          PROMPTFOO_SCENARIO_MATRIX_TEST_PATH: 'matrix.yaml',
+        }),
+      ).toBe(`file://${path.join(tmpDir, 'matrix.yaml')}`);
+    });
+
+    it('does not use stale cliState env during a second file-path render', async () => {
+      vi.stubEnv('PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true');
+      write('stale-secret-matrix.yaml', '- vars:\n    source: stale\n');
+      const previousConfig = cliState.config;
+      cliState.config = { env: { STALE_MATRIX: 'stale-secret-matrix.yaml' } };
+
+      let error: unknown;
+      try {
+        await expandScenarioConfigValues([{ $values: 'file://{{ env.NESTED_MATRIX }}' }], tmpDir, {
+          NESTED_MATRIX: '{{ env.STALE_MATRIX }}',
+        });
+      } catch (caught) {
+        error = caught;
+      } finally {
+        cliState.config = previousConfig;
+      }
+
+      expect(error).toBeDefined();
+      expect(String(error)).not.toContain('stale-secret-matrix.yaml');
+    });
   });
 
   describe('expandScenarioConfigValues', () => {
@@ -109,6 +183,16 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(expanded).toEqual([{ vars: { language: 'French' } }]);
     });
 
+    it('expands globbed matrices above the JavaScript argument limit', async () => {
+      write('large-matrix.json', JSON.stringify(Array.from({ length: 150_000 }, () => ({}))));
+
+      const expanded = await expandScenarioConfigValues([
+        { $values: `file://${path.join(tmpDir, 'large-*.json')}` },
+      ]);
+
+      expect(expanded).toHaveLength(150_000);
+    });
+
     it('supports JSON matrix files', async () => {
       const matrixPath = write('matrix.json', JSON.stringify([{ vars: { topic: 'billing' } }]));
 
@@ -146,6 +230,27 @@ describe('scenarioMatrix (real filesystem)', () => {
       ).rejects.toThrow(/\$values as its only key/);
     });
 
+    it('bounds attacker-controlled key lists in diagnostics', async () => {
+      const malformedRef: Record<string, unknown> = { $values: 'file://matrix.yaml' };
+      for (let index = 0; index < 10_000; index++) {
+        malformedRef[`attacker-key-${index}`] = true;
+      }
+      malformedRef['late-secret-sentinel'] = true;
+
+      let error: unknown;
+      try {
+        await expandScenarioConfigValues([malformedRef]);
+      } catch (caught) {
+        error = caught;
+      }
+
+      const message = String(error);
+      expect(error).toBeInstanceOf(ConfigResolutionError);
+      expect(message.length).toBeLessThan(1_024);
+      expect(message).toContain('+9994 more');
+      expect(message).not.toContain('late-secret-sentinel');
+    });
+
     it('rejects non-file:// $values refs', async () => {
       await expect(expandScenarioConfigValues([{ $values: 'matrix.yaml' }])).rejects.toThrow(
         /must be a file:\/\/ reference/,
@@ -180,7 +285,46 @@ describe('scenarioMatrix (real filesystem)', () => {
 
       await expect(
         expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]),
-      ).rejects.toThrow(/must be objects/);
+      ).rejects.toThrow(/must be an object/);
+    });
+
+    it.each([
+      ['vars', { vars: 'super-secret-vars-value' }],
+      ['assert', { assert: { type: 'equals', value: 'super-secret-assert-value' } }],
+      ['options', { options: 'super-secret-options-value' }],
+      ['threshold', { threshold: 'super-secret-threshold-value' }],
+    ])('rejects invalid %s values without echoing matrix contents', async (_field, row) => {
+      const matrixPath = write('invalid-row.json', JSON.stringify([row]));
+
+      let error: unknown;
+      try {
+        await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeInstanceOf(ConfigResolutionError);
+      expect(String(error)).toContain('invalid test case field values');
+      expect(String(error)).not.toContain('super-secret');
+    });
+
+    it('reports cyclic malformed refs without serializing their values', async () => {
+      const cyclic: Record<string, unknown> = { $values: 42 };
+      cyclic.self = cyclic;
+
+      await expect(expandScenarioConfigValues([cyclic])).rejects.toThrow(ConfigResolutionError);
+      await expect(expandScenarioConfigValues([cyclic])).rejects.not.toThrow(
+        /Converting circular structure to JSON/,
+      );
+    });
+
+    it.each([
+      null,
+      { vars: { topic: 'billing' } },
+    ])('rejects non-array scenario config values: %j', async (config) => {
+      await expect(expandScenarioConfigValues(config)).rejects.toThrow(
+        /Scenario config must be an array/,
+      );
     });
 
     it('rejects nested $values rows instead of passing them through silently', async () => {
@@ -247,6 +391,59 @@ describe('scenarioMatrix (real filesystem)', () => {
         expandScenarioConfigValues([{ $values: `file://${path.join(tmpDir, 'nope.yaml')}` }]),
       ).rejects.toThrow(/nope\.yaml/);
     });
+
+    it('prefers an existing literal matrix path over matching glob siblings', async () => {
+      const exactPath = write('configs [prod]/matrix.yaml', '- vars:\n    source: exact\n');
+      write('configs p/matrix.yaml', '- vars:\n    source: decoy\n');
+
+      await expect(
+        expandScenarioConfigValues([{ $values: `file://${exactPath}` }]),
+      ).resolves.toEqual([{ vars: { source: 'exact' } }]);
+    });
+
+    it('expands relative globs beneath a literal base directory with glob characters', async () => {
+      const weirdDir = path.join(tmpDir, 'configs [prod]');
+      write('configs [prod]/matrices/a.yaml', '- vars:\n    source: bracket-base\n');
+
+      await expect(
+        expandScenarioConfigValues([{ $values: 'file://matrices/*.yaml' }], weirdDir, {}),
+      ).resolves.toEqual([{ vars: { source: 'bracket-base' } }]);
+    });
+
+    it('expands absolute globs with existing literal magic in parent directories', async () => {
+      const weirdDir = path.join(tmpDir, 'configs [prod]');
+      write('configs [prod]/matrices/a.yaml', '- vars:\n    source: absolute-bracket-base\n');
+
+      await expect(
+        expandScenarioConfigValues(
+          [{ $values: `file://${path.join(weirdDir, 'matrices', '*.yaml')}` }],
+          tmpDir,
+          {},
+        ),
+      ).resolves.toEqual([{ vars: { source: 'absolute-bracket-base' } }]);
+    });
+
+    it('prefers a literal magic filename when both its base and child contain magic', async () => {
+      const weirdDir = path.join(tmpDir, 'configs [prod]');
+      write('configs [prod]/matrix[ab].yaml', '- vars:\n    source: exact-child\n');
+      write('configs [prod]/matrixa.yaml', '- vars:\n    source: decoy-child\n');
+
+      await expect(
+        expandScenarioConfigValues([{ $values: 'file://matrix[ab].yaml' }], weirdDir, {}),
+      ).resolves.toEqual([{ vars: { source: 'exact-child' } }]);
+    });
+
+    it.runIf(process.platform !== 'win32')(
+      'preserves existing POSIX filenames containing a backslash and glob character',
+      async () => {
+        const exactPath = write('matrix\\*.yaml', '- vars:\n    source: exact\n');
+        write('matrix/decoy.yaml', '- vars:\n    source: decoy\n');
+
+        await expect(
+          expandScenarioConfigValues([{ $values: `file://${exactPath}` }]),
+        ).resolves.toEqual([{ vars: { source: 'exact' } }]);
+      },
+    );
   });
 
   describe('loadScenarioConfigs', () => {
@@ -255,7 +452,9 @@ describe('scenarioMatrix (real filesystem)', () => {
     });
 
     it('resolves inline scenario $values refs against the base path', async () => {
-      const scenarios: Scenario[] = [{ config: [{ $values: 'file://matrix.yaml' }], tests: [{}] }];
+      const scenarios: ScenarioInput[] = [
+        { config: [{ $values: 'file://matrix.yaml' }], tests: [{}] },
+      ];
 
       const loaded = await loadScenarioConfigs(scenarios, tmpDir);
 
@@ -360,12 +559,39 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded?.[0].config).toEqual([{ vars: { a: '1' } }]);
     });
 
+    it('prefers an existing literal scenario path over matching glob siblings', async () => {
+      const exactPath = write(
+        'configs [prod]/scenario.yaml',
+        '- config:\n    - vars:\n        source: exact\n  tests:\n    - {}\n',
+      );
+      write(
+        'configs p/scenario.yaml',
+        '- config:\n    - vars:\n        source: decoy\n  tests:\n    - {}\n',
+      );
+
+      const loaded = await loadScenarioConfigs([`file://${exactPath}`], tmpDir);
+
+      expect(loaded?.[0].config).toEqual([{ vars: { source: 'exact' } }]);
+    });
+
+    it('expands scenario globs beneath literal base directories with glob characters', async () => {
+      const weirdDir = path.join(tmpDir, 'configs [prod]');
+      write(
+        'configs [prod]/scenarios/a.yaml',
+        '- config:\n    - vars:\n        source: bracket-base\n  tests:\n    - {}\n',
+      );
+
+      const loaded = await loadScenarioConfigs(['file://scenarios/*.yaml'], weirdDir, {});
+
+      expect(loaded?.[0].config).toEqual([{ vars: { source: 'bracket-base' } }]);
+    });
+
     it('rejects scenario files containing non-object entries', async () => {
       write('bad-scenario.yaml', '- just-a-string\n');
 
       await expect(
         loadScenarioConfigs([`file://${path.join(tmpDir, 'bad-scenario.yaml')}`], tmpDir),
-      ).rejects.toThrow(/must contain scenario objects.*just-a-string/);
+      ).rejects.toThrow(/must contain scenario objects.*string/);
     });
 
     it('throws a clear error when a scenario glob matches nothing', async () => {
@@ -373,11 +599,19 @@ describe('scenarioMatrix (real filesystem)', () => {
         loadScenarioConfigs([`file://${path.join(tmpDir, 'missing', '*.yaml')}`], tmpDir),
       ).rejects.toThrow(/No files found matching pattern/);
     });
+
+    it('rejects scenario files that contribute no scenarios', async () => {
+      const emptyPath = write('empty-scenarios.json', '[]');
+
+      await expect(loadScenarioConfigs([`file://${emptyPath}`], tmpDir, {})).rejects.toThrow(
+        /contributed no scenarios/,
+      );
+    });
   });
 
   describe('resolveScenarioConfigValuesRefs', () => {
     it('leaves plain rows untouched and resolves only $values rows', () => {
-      const scenario: Scenario = {
+      const scenario: ScenarioInput = {
         config: [{ vars: { a: '1' } }, { $values: 'file://matrix.yaml' }],
         tests: [{}],
       };

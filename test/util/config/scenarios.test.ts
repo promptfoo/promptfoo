@@ -19,6 +19,7 @@ import { createMockProvider } from '../../factories/provider';
 vi.mock('fs');
 vi.mock('fs/promises');
 vi.mock('glob', () => ({
+  escape: vi.fn((pattern: string) => pattern),
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -129,6 +130,8 @@ describe('Scenario loading with glob patterns', () => {
     // Check if maybeLoadFromExternalFile was called with the expected argument
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       expect.stringMatching(/^file:\/\/.*[\\/]scenarios[\\/]group\.yaml$/),
+      undefined,
+      {},
     );
 
     // Verify scenarios are flattened correctly

@@ -25,7 +25,7 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { ScenarioConfig, TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type { Scenario, ScenarioConfig, TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -954,6 +954,37 @@ describe('TestSuiteConfigSchema', () => {
       ).toEqual({
         $values: 'file://matrix.yaml',
       });
+    });
+
+    it('keeps resolved Scenario config rows backward-compatible', () => {
+      const scenario: Scenario = {
+        config: [{ vars: { topic: 'billing' } }],
+        tests: [{}],
+      };
+
+      expect(scenario.config[0].vars).toEqual({ topic: 'billing' });
+      expect(
+        TestSuiteSchema.safeParse({
+          providers: [createMockProvider({ id: 'provider1', response: {} })],
+          prompts: [{ raw: 'prompt1', label: 'prompt1' }],
+          scenarios: [scenario],
+        }).success,
+      ).toBe(true);
+    });
+
+    it('rejects unresolved refs in resolved test suites', () => {
+      expect(
+        TestSuiteSchema.safeParse({
+          providers: [createMockProvider({ id: 'provider1', response: {} })],
+          prompts: [{ raw: 'prompt1', label: 'prompt1' }],
+          scenarios: [
+            {
+              config: [{ $values: 'file://matrix.yaml' }],
+              tests: [{}],
+            },
+          ],
+        }).success,
+      ).toBe(false);
     });
 
     it('rejects scenario config expansion refs without file://', () => {

@@ -25,7 +25,7 @@ export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
 export { isTransformFunction } from './types/transform';
-export { ConfigResolutionError } from './util/config/errors';
+export { ConfigResolutionError } from './util/config/load';
 
 // Extension hook context types for users writing custom extensions
 export type {

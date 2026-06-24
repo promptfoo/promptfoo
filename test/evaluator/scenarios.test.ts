@@ -3,13 +3,28 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import { __buildTestsFromSuiteForTests, evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('materializes scenario test files above the JavaScript argument limit', () => {
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      scenarios: [
+        {
+          config: [{}],
+          tests: Array.from({ length: 150_000 }, () => ({})),
+        },
+      ],
+    } as TestSuite;
+
+    expect(__buildTestsFromSuiteForTests(testSuite)).toHaveLength(150_000);
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -79,7 +94,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       prompts: [toPrompt('Test prompt {{ language }}')],
       scenarios: [
         {
-          config: [{ $values: 'file://matrix.yaml' }],
+          config: [{ $values: 'file://matrix.yaml' } as never],
           tests: [{}],
         },
       ],
@@ -90,6 +105,29 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       /Unexpanded scenario config \$values reference/,
     );
     expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('does not serialize valid cyclic scenario provider state in invariant messages', async () => {
+    const client: { self?: unknown } = {};
+    client.self = client;
+    const scenarioProvider = {
+      id: () => 'cyclic-scenario-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+      client,
+    } as ApiProvider;
+    const testSuite: TestSuite = {
+      providers: [scenarioProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [{ config: [{ provider: scenarioProvider }], tests: [{}] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
   it('applies repeat from scenario config options', async () => {

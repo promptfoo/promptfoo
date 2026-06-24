@@ -11,6 +11,7 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { ConfigResolutionError } from './util/config/errors';
 import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
@@ -28,7 +29,6 @@ import type {
   GradingConfig,
   TestCase,
   TestSuite,
-  TestSuiteConfig,
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
@@ -88,18 +88,35 @@ async function readScenarioTests(tests: unknown): Promise<TestCase[] | undefined
     return undefined;
   }
 
-  if (typeof tests === 'string') {
-    return readTests(tests);
-  }
-
   const testsToRead = Array.isArray(tests) ? tests : [tests];
   const normalizedTests: TestCase[] = [];
   for (const test of testsToRead) {
-    if (isRecord(test) && Object.keys(test).length === 0) {
+    if (typeof test === 'string') {
+      let loadedTests: TestCase[];
+      try {
+        loadedTests = await readTests(test);
+      } catch (error) {
+        throw new ConfigResolutionError(
+          `Failed to load scenario test file ${test}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (loadedTests.length === 0) {
+        throw new ConfigResolutionError(`Scenario test file contributed no tests: ${test}`);
+      }
+      for (const loadedTest of loadedTests) {
+        normalizedTests.push(loadedTest);
+      }
+      continue;
+    }
+    if (isRecord(test)) {
+      // Scenario tests may intentionally rely on scenario/default fields for their
+      // runnable behavior (for example, prompt/provider filters or an empty output).
       normalizedTests.push(test as TestCase);
       continue;
     }
-    normalizedTests.push(...(await readTests([test] as TestSuiteConfig['tests'])));
+    throw new ConfigResolutionError(
+      `Scenario tests must be test case objects or file:// references; got ${typeof test}`,
+    );
   }
   return normalizedTests;
 }
@@ -247,7 +264,12 @@ async function createRuntimeTestSuite(
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
 
-  const loadedScenarios = await loadScenarioConfigs(testSuiteConfig.scenarios);
+  const scenarioEnv = testSuiteConfig.env ?? {};
+  const loadedScenarios = await loadScenarioConfigs(
+    testSuiteConfig.scenarios,
+    process.cwd(),
+    scenarioEnv,
+  );
   const scenarios = loadedScenarios
     ? await Promise.all(
         loadedScenarios.map(async (scenario) => {
@@ -255,7 +277,7 @@ async function createRuntimeTestSuite(
           return {
             ...scenario,
             ...(scenarioTests === undefined ? {} : { tests: scenarioTests }),
-            config: await expandScenarioConfigValues(scenario.config),
+            config: await expandScenarioConfigValues(scenario.config, process.cwd(), scenarioEnv),
           };
         }),
       )

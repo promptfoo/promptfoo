@@ -105,6 +105,21 @@ describe('config-schema.json', () => {
         ],
       }),
     ).toBe(false);
+
+    for (const invalidRow of [
+      { $values: 'matrix.yaml' },
+      { $values: 'file://matrix.yaml', description: 'oops' },
+      { $expand: 'file://matrix.yaml' },
+    ]) {
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          scenarios: [{ config: [invalidRow], tests: [{}] }],
+        }),
+        `Expected generated schema to reject ${JSON.stringify(invalidRow)}`,
+      ).toBe(false);
+    }
   });
 
   describe('redteam plugin enums', () => {

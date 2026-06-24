@@ -214,7 +214,7 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://scenarios/*.yaml');
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'scenarios/*.yaml'), {
-        windowsPathsNoEscape: true,
+        windowsPathsNoEscape: process.platform === 'win32',
       });
     });
 
@@ -305,6 +305,7 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://configs [prod]/list.yaml');
 
       expect(result).toEqual(['value1', 'value2']);
+      expect(globSync).not.toHaveBeenCalled();
     });
 
     it('should keep single-file shape for an object file loaded via the literal fallback', () => {
@@ -318,14 +319,15 @@ describe('file utilities', () => {
       expect(result).toEqual({ vars: { language: 'French' } });
     });
 
-    it('should not let a literal file shadow real glob matches', () => {
+    it('should expand a glob when no literal file exists', () => {
+      vi.mocked(fs.statSync).mockReturnValue(undefined as never);
       vi.mocked(globSync).mockReturnValue(['/mock/base/path/a.yaml']);
       vi.mocked(fs.readFileSync).mockReturnValue('- value1');
 
       const result = maybeLoadFromExternalFile('file://*.yaml');
 
       expect(result).toEqual(['value1']);
-      expect(fs.statSync).not.toHaveBeenCalled();
+      expect(fs.statSync).toHaveBeenCalled();
     });
 
     it('should throw error when file does not exist', () => {
@@ -764,7 +766,7 @@ describe('file utilities', () => {
       // Glob expansion should still work correctly
       expect(result).toEqual([mockData1, mockData2]);
       expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'test*.yaml'), {
-        windowsPathsNoEscape: true,
+        windowsPathsNoEscape: process.platform === 'win32',
       });
     });
   });

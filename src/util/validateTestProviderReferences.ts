@@ -1,4 +1,3 @@
-import { isScenarioConfigValuesRef } from '../types/index';
 import { doesProviderRefMatch, getProviderDescription } from './provider';
 
 import type { Scenario, TestCase } from '../types/index';
@@ -78,9 +77,6 @@ export function validateTestProviderReferences(
       // Validate scenario config items (partial test cases)
       if (scenario.config) {
         scenario.config.forEach((configItem, j) => {
-          if (isScenarioConfigValuesRef(configItem)) {
-            return;
-          }
           validateTestProviders(
             configItem,
             providers,

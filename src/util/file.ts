@@ -16,7 +16,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 
-import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
+import type { EnvOverrides, NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -44,18 +44,52 @@ export async function pathExists(filePath: string): Promise<boolean> {
  * Simple Nunjucks engine specifically for file paths
  * This function is separate from the main getNunjucksEngine to avoid circular dependencies
  */
-export function getNunjucksEngineForFilePath(): nunjucks.Environment {
+export function getNunjucksEngineForFilePath(envOverrides?: EnvOverrides): nunjucks.Environment {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return {
+      renderString: (template: string) => template,
+    } as unknown as nunjucks.Environment;
+  }
+
   const env = nunjucks.configure({
     autoescape: false,
   });
 
-  // Add environment variables as template globals
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+
+  // Explicit config/suite env wins and suppresses stale global config state.
+  // When no override is supplied, retain the existing generic-loader behavior.
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...(envOverrides ?? cliState.config?.env),
   });
 
   return env;
+}
+
+function parseGlobFile(matchedFile: string, contents: string): any[] {
+  if (matchedFile.endsWith('.json')) {
+    const parsed = JSON.parse(contents);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  }
+  if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+    const parsed = yaml.load(contents);
+    return parsed === null || parsed === undefined ? [] : Array.isArray(parsed) ? parsed : [parsed];
+  }
+  if (matchedFile.endsWith('.csv')) {
+    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
+    };
+    const records = csvParse<Record<string, string>>(contents, csvOptions);
+    // If single column, return array of values to match single file behavior.
+    return records.length > 0 && Object.keys(records[0]).length === 1
+      ? records.map((record) => Object.values(record)[0])
+      : records;
+  }
+  return [contents];
 }
 
 function combineGlobMatches(matchedFiles: string[]): any[] {
@@ -72,39 +106,10 @@ function combineGlobMatches(matchedFiles: string[]): any[] {
       }
       throw error;
     }
-    if (matchedFile.endsWith('.json')) {
-      const parsed = JSON.parse(contents);
-      if (Array.isArray(parsed)) {
-        allContents.push(...parsed);
-      } else {
-        allContents.push(parsed);
-      }
-    } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-      const parsed = yaml.load(contents);
-      if (parsed === null || parsed === undefined) {
-        continue; // Skip empty files
-      }
-      if (Array.isArray(parsed)) {
-        allContents.push(...parsed);
-      } else {
-        allContents.push(parsed);
-      }
-    } else if (matchedFile.endsWith('.csv')) {
-      const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-        columns: true as const,
-      };
-      const records = csvParse<Record<string, string>>(contents, csvOptions);
-      // If single column, return array of values to match single file behavior
-      if (records.length > 0 && Object.keys(records[0]).length === 1) {
-        allContents.push(...records.map((record) => Object.values(record)[0]));
-      } else {
-        allContents.push(...records);
-      }
-    } else {
-      allContents.push(contents);
+    for (const item of parseGlobFile(matchedFile, contents)) {
+      allContents.push(item);
     }
   }
-
   return allContents;
 }
 
@@ -116,6 +121,8 @@ function combineGlobMatches(matchedFiles: string[]): any[] {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
+ * @param envOverrides - Optional explicit template environment. Supplying this prevents
+ * stale cliState config env from affecting long-lived or programmatic callers.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -125,10 +132,11 @@ function combineGlobMatches(matchedFiles: string[]): any[] {
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   context?: 'assertion' | 'general' | 'vars',
+  envOverrides?: EnvOverrides,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context);
+      const content: any = maybeLoadFromExternalFile(path, context, envOverrides);
       return content;
     });
   }
@@ -141,7 +149,7 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = getNunjucksEngineForFilePath(envOverrides).renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -179,26 +187,19 @@ export function maybeLoadFromExternalFile(
 
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
-  // Check if the path contains glob patterns. windowsPathsNoEscape must match the
-  // globSync call below, else Windows backslash paths read as escape sequences and
-  // dodge detection.
-  if (hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
+  // An existing literal file always wins, even when its name contains glob magic.
+  // This prevents a sibling glob match from silently selecting the wrong file.
+  const literalFileExists = fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile() ?? false;
+  const globOptions = { windowsPathsNoEscape: process.platform === 'win32' };
+
+  if (!literalFileExists && hasMagic(pathToUse, globOptions)) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+    const matchedFiles = globSync(resolvedPath, globOptions);
 
     if (matchedFiles.length === 0) {
-      // A path can look like a glob yet name a real file, e.g. when a parent
-      // directory contains brackets. Fall through to the single-file branch so the
-      // result shape matches a non-glob load.
-      if (!fs.statSync(resolvedPath, { throwIfNoEntry: false })?.isFile()) {
-        throw new Error(`No files found matching pattern: ${resolvedPath}`);
-      }
-      logger.debug(`Glob pattern matched no files; loading literal file: ${resolvedPath}`);
-    } else {
-      return combineGlobMatches(matchedFiles);
+      throw new Error(`No files found matching pattern: ${resolvedPath}`);
     }
+    return combineGlobMatches(matchedFiles);
   }
 
   // Original single file logic

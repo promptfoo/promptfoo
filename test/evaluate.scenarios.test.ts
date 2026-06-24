@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import cliState from '../src/cliState';
 import { runDbMigrations } from '../src/migrate';
 import { evaluate } from '../src/node/evaluate';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -38,6 +39,7 @@ describe('programmatic scenario config expansion', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     for (const tmpDir of tmpDirs.splice(0)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -103,6 +105,22 @@ describe('programmatic scenario config expansion', () => {
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
   });
 
+  it('rejects empty programmatic scenario files instead of returning zero results', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioPath = path.join(tmpDir, 'empty-scenarios.json');
+    fs.writeFileSync(scenarioPath, '[]');
+    const provider = createMockProvider('empty-scenario-file-provider');
+
+    await expect(
+      evaluate({
+        prompts: ['Topic: {{topic}}'],
+        providers: [provider],
+        scenarios: [`file://${scenarioPath}`],
+      }),
+    ).rejects.toThrow(/contributed no scenarios/);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('loads scenario tests relative to programmatic scenario files', async () => {
     const tmpDir = makeTmpDir();
     fs.writeFileSync(
@@ -128,6 +146,49 @@ describe('programmatic scenario config expansion', () => {
     });
 
     expect(calledPrompts(provider)).toEqual(['Topic: billing Channel: email']);
+  });
+
+  it('preserves inline scenario tests that only filter prompts', async () => {
+    const provider = createMockProvider('scenario-inline-prompt-filter-provider');
+
+    await evaluate({
+      prompts: [
+        { raw: 'First prompt', label: 'first' },
+        { raw: 'Second prompt', label: 'second' },
+      ],
+      providers: [provider],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{ prompts: ['first'] }],
+        },
+      ],
+    });
+
+    expect(calledPrompts(provider)).toEqual(['First prompt']);
+  });
+
+  it('fails when a scenario test file contributes no tests', async () => {
+    const tmpDir = makeTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'scenario.json'),
+      JSON.stringify([
+        {
+          config: [{ vars: { topic: 'billing' } }],
+          tests: 'file://missing-tests.json',
+        },
+      ]),
+    );
+    const provider = createMockProvider('scenario-missing-tests-provider');
+
+    await expect(
+      evaluate({
+        prompts: ['Topic: {{topic}}'],
+        providers: [provider],
+        scenarios: [`file://${path.join(tmpDir, 'scenario.json')}`],
+      }),
+    ).rejects.toThrow(/Failed to load scenario test file/);
+    expect(provider.callApi).not.toHaveBeenCalled();
   });
 
   it('parses scenario tests files through the standard test reader', async () => {
@@ -197,6 +258,61 @@ describe('programmatic scenario config expansion', () => {
     });
 
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
+  });
+
+  it('resolves relative programmatic matrix refs from cwd instead of stale CLI state', async () => {
+    const intendedDir = makeTmpDir();
+    const staleDir = makeTmpDir();
+    fs.writeFileSync(
+      path.join(intendedDir, 'matrix.json'),
+      JSON.stringify([{ vars: { topic: 'intended' } }]),
+    );
+    fs.writeFileSync(
+      path.join(staleDir, 'matrix.json'),
+      JSON.stringify([{ vars: { topic: 'stale' } }]),
+    );
+    const originalCwd = process.cwd();
+    const originalBasePath = cliState.basePath;
+    const provider = createMockProvider('scenario-cwd-provider');
+
+    try {
+      process.chdir(intendedDir);
+      cliState.basePath = staleDir;
+      await evaluate({
+        prompts: ['Topic: {{topic}}'],
+        providers: [provider],
+        scenarios: [{ config: [{ $values: 'file://matrix.json' }], tests: [{}] }],
+      });
+    } finally {
+      process.chdir(originalCwd);
+      cliState.basePath = originalBasePath;
+    }
+
+    expect(calledPrompts(provider)).toEqual(['Topic: intended']);
+  });
+
+  it('uses request-local env for programmatic matrix refs', async () => {
+    const tmpDir = makeTmpDir();
+    const intendedPath = path.join(tmpDir, 'intended.json');
+    const decoyPath = path.join(tmpDir, 'decoy.json');
+    fs.writeFileSync(intendedPath, JSON.stringify([{ vars: { topic: 'intended' } }]));
+    fs.writeFileSync(decoyPath, JSON.stringify([{ vars: { topic: 'decoy' } }]));
+    vi.stubEnv('SCENARIO_MATRIX_PATH', decoyPath);
+    const provider = createMockProvider('scenario-env-provider');
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      env: { SCENARIO_MATRIX_PATH: intendedPath },
+      scenarios: [
+        {
+          config: [{ $values: 'file://{{ env.SCENARIO_MATRIX_PATH }}' }],
+          tests: [{}],
+        },
+      ],
+    });
+
+    expect(calledPrompts(provider)).toEqual(['Topic: intended']);
   });
 
   it('fails clearly when a matrix file is empty', async () => {

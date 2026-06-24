@@ -70,6 +70,7 @@ vi.mock('path', async () => {
 });
 
 vi.mock('glob', () => ({
+  escape: vi.fn((pattern: string) => pattern),
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -224,6 +225,7 @@ describe('combineConfigs', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.mocked(fs.statSync).mockReset();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     vi.mocked(globSync).mockImplementation((pathOrGlob) => {
       const filePart =
@@ -593,7 +595,7 @@ describe('combineConfigs', () => {
             scenarios: [
               {
                 config: [{ $values: 'file://matrix1.yaml' }],
-                tests: [{}],
+                tests: 'file://scenario-tests1.yaml',
               },
             ],
           });
@@ -603,7 +605,7 @@ describe('combineConfigs', () => {
             scenarios: [
               {
                 config: [{ $values: 'file://matrix2.yaml' }],
-                tests: [{}],
+                tests: 'file://scenario-tests2.yaml',
               },
             ],
           });
@@ -616,11 +618,11 @@ describe('combineConfigs', () => {
     expect(result.scenarios).toEqual([
       {
         config: [{ $values: `file://${path.resolve('a', 'matrix1.yaml')}` }],
-        tests: [{}],
+        tests: `file://${path.resolve('a', 'scenario-tests1.yaml')}`,
       },
       {
         config: [{ $values: `file://${path.resolve('b', 'matrix2.yaml')}` }],
-        tests: [{}],
+        tests: `file://${path.resolve('b', 'scenario-tests2.yaml')}`,
       },
     ]);
   });
@@ -647,7 +649,7 @@ describe('combineConfigs', () => {
             scenarios: [
               {
                 config: [{ $values: 'file://matrix-a.yaml' }],
-                tests: [{}],
+                tests: 'file://scenario-tests-a.yaml',
               },
             ],
           });
@@ -658,7 +660,7 @@ describe('combineConfigs', () => {
             scenarios: [
               {
                 config: [{ $values: 'file://matrix-b.yaml' }],
-                tests: [{}],
+                tests: 'file://scenario-tests-b.yaml',
               },
             ],
           });
@@ -672,11 +674,11 @@ describe('combineConfigs', () => {
     expect(result.scenarios).toEqual([
       {
         config: [{ $values: `file://${path.resolve('/mock/cwd', 'configs/a/matrix-a.yaml')}` }],
-        tests: [{}],
+        tests: `file://${path.resolve('/mock/cwd', 'configs/a/scenario-tests-a.yaml')}`,
       },
       {
         config: [{ $values: `file://${path.resolve('/mock/cwd', 'configs/b/matrix-b.yaml')}` }],
-        tests: [{}],
+        tests: `file://${path.resolve('/mock/cwd', 'configs/b/scenario-tests-b.yaml')}`,
       },
     ]);
     // String tests refs must resolve against each glob-matched config's directory too.
@@ -1642,6 +1644,7 @@ describe('resolveConfigs', () => {
     vi.restoreAllMocks();
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.statSync).mockReset();
     vi.mocked(globSync).mockReset();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     cliState.selectedProviderConfigs = undefined;
@@ -1742,6 +1745,8 @@ describe('resolveConfigs', () => {
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'scenarios.yaml')}`,
+      undefined,
+      {},
     );
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'tests.yaml')}`,
@@ -1822,12 +1827,18 @@ describe('resolveConfigs', () => {
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'matrix.yaml')}`,
+      undefined,
+      {},
     );
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'more-matrix.yaml')}`,
+      undefined,
+      {},
     );
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'single-matrix.yaml')}`,
+      undefined,
+      {},
     );
     expect(testSuite.scenarios?.[0].config).toEqual([
       ...matrixValues,
@@ -1872,9 +1883,13 @@ describe('resolveConfigs', () => {
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'scenarios/foo.yaml')}`,
+      undefined,
+      {},
     );
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'scenarios/matrix.yaml')}`,
+      undefined,
+      {},
     );
     expect(testSuite.scenarios?.[0].config).toEqual(matrixValues);
   });

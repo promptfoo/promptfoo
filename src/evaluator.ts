@@ -65,7 +65,6 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
-  type TestCase,
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
@@ -2133,11 +2132,18 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
     for (const data of scenario.config) {
-      tests.push(...buildScenarioTests(testSuite, scenario, data, scenarioIndex));
+      for (const test of scenario.tests || [{}]) {
+        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex));
+      }
       scenarioIndex++;
     }
   }
   return tests;
+}
+
+/** Test-only: materialize configured tests without executing providers. */
+export function __buildTestsFromSuiteForTests(testSuite: TestSuite): AtomicTestCase[] {
+  return buildTestsFromSuite(testSuite);
 }
 
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
@@ -2145,16 +2151,6 @@ function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
     return testSuite.tests as AtomicTestCase[];
   }
   return testSuite.scenarios ? [] : [{} as AtomicTestCase];
-}
-
-function buildScenarioTests(
-  testSuite: TestSuite,
-  scenario: NonNullable<TestSuite['scenarios']>[number],
-  data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
-  scenarioIndex: number,
-): AtomicTestCase[] {
-  const scenarioTests = scenario.tests || [{}];
-  return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
 }
 
 function mergeScenarioTest(
@@ -2168,9 +2164,9 @@ function mergeScenarioTest(
   // an unexpanded ref here would silently spread junk into the merged test case.
   invariant(
     !(data && typeof data === 'object' && ('$values' in data || '$expand' in data)),
-    `Unexpanded scenario config $values reference reached the evaluator: ${JSON.stringify(data)}`,
+    'Unexpanded scenario config $values reference reached the evaluator',
   );
-  const scenarioData = data as Partial<TestCase>;
+  const scenarioData = data;
   const mergedMetadata = {
     ...(defaultTest?.metadata || {}),
     ...scenarioData.metadata,
@@ -2189,7 +2185,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
-      ...data.options,
+      ...scenarioData.options,
       ...test.options,
     },
     assert: [...(scenarioData.assert || []), ...(test.assert || [])],

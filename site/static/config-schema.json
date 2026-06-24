@@ -26,46 +26,46 @@
           "$ref": "#/definitions/__schema29"
         },
         "defaultTest": {
-          "$ref": "#/definitions/__schema43"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema44"
-        },
-        "sharing": {
           "$ref": "#/definitions/__schema45"
         },
-        "nunjucksFilters": {
+        "outputPath": {
           "$ref": "#/definitions/__schema46"
         },
-        "env": {
+        "sharing": {
           "$ref": "#/definitions/__schema47"
         },
-        "derivedMetrics": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema48"
         },
-        "extensions": {
+        "env": {
           "$ref": "#/definitions/__schema49"
         },
-        "metadata": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema50"
         },
-        "redteam": {
+        "extensions": {
           "$ref": "#/definitions/__schema51"
         },
-        "writeLatestResults": {
+        "metadata": {
           "$ref": "#/definitions/__schema52"
         },
-        "tracing": {
+        "redteam": {
           "$ref": "#/definitions/__schema53"
         },
-        "evaluateOptions": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema54"
         },
-        "commandLineOptions": {
+        "tracing": {
+          "$ref": "#/definitions/__schema55"
+        },
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema56"
         },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema58"
+        },
         "targets": {
-          "$ref": "#/definitions/__schema57"
+          "$ref": "#/definitions/__schema59"
         }
       },
       "required": ["prompts"],
@@ -1315,10 +1315,16 @@
                         },
                         "metadata": {
                           "$ref": "#/definitions/__schema41"
+                        },
+                        "$values": {
+                          "$ref": "#/definitions/__schema42"
+                        },
+                        "$expand": {
+                          "$ref": "#/definitions/__schema43"
                         }
                       },
                       "additionalProperties": {
-                        "$ref": "#/definitions/__schema42"
+                        "$ref": "#/definitions/__schema44"
                       }
                     }
                   ]
@@ -1428,8 +1434,14 @@
         }
       ]
     },
-    "__schema42": {},
+    "__schema42": {
+      "not": {}
+    },
     "__schema43": {
+      "not": {}
+    },
+    "__schema44": {},
+    "__schema45": {
       "anyOf": [
         {
           "type": "string"
@@ -1472,7 +1484,7 @@
         }
       ]
     },
-    "__schema44": {
+    "__schema46": {
       "anyOf": [
         {
           "type": "string"
@@ -1485,7 +1497,7 @@
         }
       ]
     },
-    "__schema45": {
+    "__schema47": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1504,7 +1516,7 @@
         }
       ]
     },
-    "__schema46": {
+    "__schema48": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1513,7 +1525,7 @@
         "type": "string"
       }
     },
-    "__schema47": {
+    "__schema49": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1539,7 +1551,7 @@
         }
       ]
     },
-    "__schema48": {
+    "__schema50": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1560,7 +1572,7 @@
         "additionalProperties": false
       }
     },
-    "__schema49": {
+    "__schema51": {
       "anyOf": [
         {
           "type": "array",
@@ -1573,14 +1585,14 @@
         }
       ]
     },
-    "__schema50": {
+    "__schema52": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema51": {
+    "__schema53": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -3127,10 +3139,10 @@
         }
       }
     },
-    "__schema52": {
+    "__schema54": {
       "type": "boolean"
     },
-    "__schema53": {
+    "__schema55": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3233,7 +3245,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema54": {
+    "__schema56": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3276,15 +3288,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema55"
+          "$ref": "#/definitions/__schema57"
         }
       },
       "additionalProperties": false
     },
-    "__schema55": {
+    "__schema57": {
       "type": "string"
     },
-    "__schema56": {
+    "__schema58": {
       "type": "object",
       "properties": {
         "description": {
@@ -3412,7 +3424,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema55"
+              "$ref": "#/definitions/__schema57"
             }
           ]
         },
@@ -3486,7 +3498,7 @@
       },
       "additionalProperties": false
     },
-    "__schema57": {
+    "__schema59": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
