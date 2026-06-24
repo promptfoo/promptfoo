@@ -197,6 +197,7 @@ export const MinCharsPerMessageInput = ({
   updateConfig,
   readOnly,
   maxCharsPerMessage,
+  minCharsPerMessage,
 }: MaxCharsPerMessageInputProps) => {
   const parsedValue = Number(value);
   const error =
