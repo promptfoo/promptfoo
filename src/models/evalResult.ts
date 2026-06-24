@@ -33,7 +33,7 @@ import {
 import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
-type SubmitRatingAction = 'rate' | 'clear';
+type SubmitRatingAction = 'rate' | 'clear' | 'update';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -795,6 +795,23 @@ function normalizeRatingSubmission(
   return { gradingResult, clearingManualRating: false, hasManualRating: true };
 }
 
+function getRestorableManualRatingState(
+  previousHasManualRating: boolean,
+  existingState: ManualRatingState | undefined,
+  ratingAction: SubmitRatingAction | undefined,
+  matchesLegacyRepeatedClear: boolean,
+): ManualRatingState | undefined {
+  if (previousHasManualRating || !existingState) {
+    return undefined;
+  }
+  if (ratingAction === 'clear') {
+    return existingState;
+  }
+  return existingState.status === 'cleared' && matchesLegacyRepeatedClear
+    ? existingState
+    : undefined;
+}
+
 function resolveRatingTransition(
   result: RatingEvalResult,
   submittedGradingResult: GradingResult,
@@ -823,6 +840,12 @@ function resolveRatingTransition(
       (existingState !== undefined &&
         submittedGradingResult.pass === existingState.original.success &&
         submittedGradingResult.score === existingState.original.score));
+  const stateToRestore = getRestorableManualRatingState(
+    previousHasManualRating,
+    existingState,
+    ratingAction,
+    matchesLegacyRepeatedClear,
+  );
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
@@ -833,16 +856,44 @@ function resolveRatingTransition(
       : ResultFailureReason.ASSERT
     : normalizeFailureReason(result.failureReason);
 
-  if (
+  if (stateToRestore) {
+    gradingResult = restoreOriginalGradingResult(normalized.gradingResult, stateToRestore);
+    success = stateToRestore.original.success;
+    score = stateToRestore.original.score;
+    failureReason = stateToRestore.original.failureReason;
+    nextState =
+      stateToRestore.status === 'active'
+        ? {
+            ...stateToRestore,
+            status: 'cleared',
+            clearRequestHash: legacyClearRequestHash ?? stateToRestore.clearRequestHash,
+          }
+        : stateToRestore;
+  } else if (!previousHasManualRating && ratingAction === 'clear') {
+    // Deleting a missing rating is idempotent. Never apply caller-supplied outcome fields.
+    gradingResult = result.gradingResult;
+    success = result.success;
+    score = result.score;
+    failureReason = normalizeFailureReason(result.failureReason);
+    nextState = existingState;
+  } else if (
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
-    (ratingAction === 'clear' || matchesLegacyRepeatedClear)
+    !normalized.hasManualRating
   ) {
-    gradingResult = restoreOriginalGradingResult(normalized.gradingResult, existingState);
-    success = existingState.original.success;
-    score = existingState.original.score;
-    failureReason = existingState.original.failureReason;
-    nextState = existingState;
+    // A score/comment edit changes the restored automated baseline, but the tombstone must
+    // survive so a delayed retry of the old clear cannot be reinterpreted as a new rating.
+    nextState = {
+      ...captureManualRatingState({
+        ...result,
+        failureReason,
+        gradingResult,
+        score,
+        success,
+      }),
+      status: 'cleared',
+      clearRequestHash: existingState.clearRequestHash,
+    };
   } else if (!previousHasManualRating && normalized.hasManualRating) {
     nextState = captureManualRatingState(result);
   } else if (previousHasManualRating && normalized.hasManualRating) {

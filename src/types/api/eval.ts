@@ -294,7 +294,7 @@ export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
-    ratingAction: z.enum(['rate', 'clear']).optional(),
+    ratingAction: z.enum(['rate', 'clear', 'update']).optional(),
   })
   .passthrough()
   .refine((value) => !exceedsRatingRequestDepth(value), {

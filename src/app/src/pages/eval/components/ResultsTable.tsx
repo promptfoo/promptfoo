@@ -1039,6 +1039,13 @@ function applyPersistedRatingResult({
 
 class ConfirmedRatingPersistenceError extends Error {}
 
+function getSubmitRatingAction(isPass?: boolean | null): SubmitRatingAction {
+  if (isPass === null) {
+    return 'clear';
+  }
+  return typeof isPass === 'boolean' ? 'rate' : 'update';
+}
+
 async function saveManualRating({
   evalId,
   resultId,
@@ -1733,6 +1740,15 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+  const currentRatingQuery = {
+    pageIndex: pagination.pageIndex,
+    pageSize: pagination.pageSize,
+    filterMode,
+    searchText: debouncedSearchText,
+    filters: Object.values(filters.values).filter(isAppliedResultFilter),
+  };
+  const latestRatingQueryRef = useRef(currentRatingQuery);
+  latestRatingQueryRef.current = currentRatingQuery;
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
@@ -1812,17 +1828,13 @@ function ResultsTable({
           return;
         }
 
-        const appliedFilters = Object.values(filters.values).filter(isAppliedResultFilter);
         const refreshCurrentPage = async () => {
           if (!evalId || !isScopeActive()) {
             return;
           }
+          const query = latestRatingQueryRef.current;
           const refreshed = await fetchEvalData(evalId, {
-            pageIndex: pagination.pageIndex,
-            pageSize: pagination.pageSize,
-            filterMode,
-            searchText: debouncedSearchText,
-            filters: appliedFilters,
+            ...query,
             skipSettingEvalId: true,
             skipLoadingState: true,
           });
@@ -1844,9 +1856,10 @@ function ResultsTable({
             latestTableRef.current = reconciledTable;
             setTable(reconciledTable);
           }
+          const query = latestRatingQueryRef.current;
           if (
             persistedResult &&
-            (filterMode !== 'all' || Boolean(debouncedSearchText) || appliedFilters.length > 0)
+            (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
           ) {
             await refreshCurrentPage();
           }
@@ -1886,7 +1899,7 @@ function ResultsTable({
             resultId,
             version,
             gradingResult,
-            ratingAction: isPass === null ? 'clear' : 'rate',
+            ratingAction: getSubmitRatingAction(isPass),
             table: newTable,
           });
           await handlePersistedResult(persistedResult);
@@ -1908,19 +1921,7 @@ function ResultsTable({
         }
       }
     },
-    [
-      debouncedSearchText,
-      evalId,
-      fetchEvalData,
-      filterMode,
-      filters.values,
-      inComparisonMode,
-      pagination.pageIndex,
-      pagination.pageSize,
-      setTable,
-      showToast,
-      version,
-    ],
+    [evalId, fetchEvalData, inComparisonMode, setTable, showToast, version],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.

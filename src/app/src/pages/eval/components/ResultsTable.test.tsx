@@ -86,6 +86,9 @@ vi.mock('./EvalOutputCell', () => {
           >
             Clear rating
           </button>
+          <button onClick={() => onRating(undefined, 0.25, 'score comment')} tabIndex={-1}>
+            Update score
+          </button>
         </div>
       );
     },
@@ -4200,6 +4203,31 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
 
+  it('labels score-only persistence as an update rather than a new rating', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Update score' }));
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(1));
+
+    const [, request] = mockCallApi.mock.calls[0];
+    expect(JSON.parse(request.body).ratingAction).toBe('update');
+  });
+
   it('reconciles a cleared rating from the persisted server outcome', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
@@ -4611,6 +4639,51 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledWith('123', expect.any(Object)));
+  });
+
+  it('uses the latest filter when a pending rating triggers a refresh', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    const mockFetchEvalData = vi.fn().mockResolvedValue(null);
+    let resolveResponse!: (response: any) => void;
+    const response = new Promise<any>((resolve) => {
+      resolveResponse = resolve;
+    });
+    mockCallApi.mockReturnValueOnce(response);
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    const rendered = renderWithProviders(<ResultsTable {...defaultProps} filterMode="all" />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    rendered.rerender(<ResultsTable {...defaultProps} filterMode="user-rated" />);
+    resolveResponse({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'test-output-1',
+        success: false,
+        score: 0.35,
+        failureReason: 2,
+        gradingResult: { pass: false, score: 0.35 },
+      }),
+    });
+
+    await waitFor(() =>
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ filterMode: 'user-rated' }),
+      ),
+    );
   });
 
   it('rolls back the optimistic rating when persistence fails', async () => {

@@ -224,6 +224,31 @@ describe('eval routes', () => {
       expect(updatedEvalB.prompts[resultB.promptIdx].metrics).toEqual(originalEvalBMetrics);
     });
 
+    it('treats an explicit clear with no manual rating as an idempotent no-op', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const originalResult = {
+        failureReason: result.failureReason,
+        gradingResult: structuredClone(result.gradingResult),
+        score: result.score,
+        success: result.success,
+      };
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 1, ratingAction: 'clear' });
+
+      expect(res.status).toBe(200);
+      expect(await EvalResult.findById(result.id)).toMatchObject(originalResult);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
+    });
+
     it('rolls back the result and metrics and skips notification when eval persistence fails', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -333,6 +358,32 @@ describe('eval routes', () => {
       expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
       expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
       expect(updatedMetrics?.testErrorCount).toBe(originalMetrics.testErrorCount);
+    });
+
+    it('preserves an error category when updating only its comment', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      await markResultAsError(eval_, result);
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...result.gradingResult, comment: 'Investigating', ratingAction: 'update' });
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(updatedResult?.gradingResult?.comment).toBe('Investigating');
+      expect(updatedResult?.gradingResult?.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
     });
 
     it('should update prompt score if a failing result keeps fail status with a new score', async () => {
@@ -833,23 +884,31 @@ describe('eval routes', () => {
 
       const manuallyRatedResult = await EvalResult.findById(result.id);
       invariant(manuallyRatedResult, 'Manually rated result is required');
+      const legacyClearPayload = createClearManualRatingPayload(manuallyRatedResult);
       const clearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ pass: result.success, score: result.score, ratingAction: 'clear' });
+        .send({ ...legacyClearPayload, ratingAction: 'clear' });
       expect(clearResponse.status).toBe(200);
 
       const restoredResult = await EvalResult.findById(result.id);
       invariant(restoredResult, 'Restored result is required');
       const scoreResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ ...createScoreOnlyRatingPayload(restoredResult, 0.4), ratingAction: 'rate' });
+        .send({ ...createScoreOnlyRatingPayload(restoredResult, 0.4), ratingAction: 'update' });
 
       expect(scoreResponse.status).toBe(200);
       expect(scoreResponse.body.score).toBe(0.4);
       expect(scoreResponse.body.gradingResult?.score).toBe(0.4);
       expect(scoreResponse.body.gradingResult).not.toHaveProperty('ratingAction');
+      const delayedClearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(legacyClearPayload);
+      expect(delayedClearResponse.status).toBe(200);
       const persistedResult = await EvalResult.findById(result.id);
       expect(persistedResult?.score).toBe(0.4);
+      expect(persistedResult?.gradingResult?.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
       const persistedEval = await Eval.findById(eval_.id);
       expect(persistedEval?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(0.4);
     });

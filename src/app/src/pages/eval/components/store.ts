@@ -306,6 +306,7 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
+  tableRequestGeneration: number;
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -626,6 +627,7 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    tableRequestGeneration: 0,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -652,11 +654,25 @@ export const useTableStore = create<TableState>()(
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
+      const requestGeneration = currentState.tableRequestGeneration + 1;
+      const isCurrentRequest = () =>
+        get().tableRequestGeneration === requestGeneration &&
+        (!skipSettingEvalId || get().evalId === id);
+      const shouldIgnoreResponse = () => {
+        if (isCurrentRequest()) {
+          return false;
+        }
+        if (!skipLoadingState) {
+          set({ isFetching: false });
+        }
+        return true;
+      };
       if (currentState.currentMetadataKeysRequest) {
         currentState.currentMetadataKeysRequest.abort();
       }
 
       set({
+        tableRequestGeneration: requestGeneration,
         isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
@@ -712,7 +728,7 @@ export const useTableStore = create<TableState>()(
 
           // A background refresh for the previously active eval must not replace a newly
           // selected eval while its response was in flight.
-          if (skipSettingEvalId && get().evalId !== id) {
+          if (shouldIgnoreResponse()) {
             return null;
           }
 
@@ -721,6 +737,10 @@ export const useTableStore = create<TableState>()(
             buildRedteamFilterOptions(data.config, data.table),
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
+
+          if (shouldIgnoreResponse()) {
+            return null;
+          }
 
           set((prevState) => ({
             table: data.table,
@@ -759,6 +779,9 @@ export const useTableStore = create<TableState>()(
         }
         return null;
       } catch (error) {
+        if (shouldIgnoreResponse()) {
+          return null;
+        }
         console.error('Error fetching eval data:', error);
         set({
           isFetching: skipLoadingState ? get().isFetching : false,

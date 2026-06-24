@@ -1544,6 +1544,57 @@ describe('useTableStore', () => {
         expect(useTableStore.getState().shouldHighlightSearchText).toBe(false);
       });
 
+      it('ignores an older table response that finishes after a newer query', async () => {
+        const mockEvalId = 'test-eval-id';
+        let resolveFirst!: (response: any) => void;
+        let resolveSecond!: (response: any) => void;
+        const firstResponse = new Promise<any>((resolve) => {
+          resolveFirst = resolve;
+        });
+        const secondResponse = new Promise<any>((resolve) => {
+          resolveSecond = resolve;
+        });
+        vi.mocked(callApi).mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
+
+        const firstRequest = useTableStore
+          .getState()
+          .fetchEvalData(mockEvalId, { searchText: 'old query' });
+        const secondRequest = useTableStore
+          .getState()
+          .fetchEvalData(mockEvalId, { searchText: 'new query' });
+        resolveSecond({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ outputs: [{ text: 'new result' }], test: {}, vars: [] }],
+            },
+            totalCount: 1,
+            filteredCount: 1,
+            config: {},
+            version: 4,
+          }),
+        });
+        await secondRequest;
+        resolveFirst({
+          ok: true,
+          json: async () => ({
+            table: {
+              head: { prompts: [], vars: [] },
+              body: [{ outputs: [{ text: 'old result' }], test: {}, vars: [] }],
+            },
+            totalCount: 1,
+            filteredCount: 1,
+            config: {},
+            version: 4,
+          }),
+        });
+        await firstRequest;
+
+        expect(useTableStore.getState().table?.body[0].outputs[0]?.text).toBe('new result');
+        expect(useTableStore.getState().shouldHighlightSearchText).toBe(true);
+      });
+
       it('should update shouldHighlightSearchText from true to false when fetchEvalData is called with non-empty search text and then with empty search text', async () => {
         const mockEvalId = 'test-eval-id';
         (callApi as Mock).mockResolvedValue({

@@ -80,6 +80,9 @@ describe('Eval API schemas', () => {
       EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 1, ratingAction: 'rate' }),
     ).toMatchObject({ ratingAction: 'rate' });
     expect(
+      EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 0.5, ratingAction: 'update' }),
+    ).toMatchObject({ ratingAction: 'update' });
+    expect(
       EvalSchemas.SubmitRating.Request.safeParse({
         pass: true,
         score: 1,
