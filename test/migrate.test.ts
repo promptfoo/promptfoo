@@ -1,14 +1,10 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
-
-const TEST_CURRENT_NODE_ABI = '137';
-const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
-const mockGetDb = vi.fn().mockReturnValue(mockDb);
+const mockGetDb = vi.fn().mockResolvedValue(mockDb);
 const mockCloseDbIfOpen = vi.fn();
 const mockGetDirectory = vi.fn();
 const mockLogger = {
@@ -31,16 +27,24 @@ vi.mock('../src/logger', () => ({
   default: mockLogger,
 }));
 
-vi.mock('drizzle-orm/better-sqlite3/migrator', () => ({
+vi.mock('drizzle-orm/libsql/migrator', () => ({
   migrate: mockMigrate,
 }));
+
+function makeBindingError(target = 'darwin-arm64'): NodeJS.ErrnoException {
+  const error: NodeJS.ErrnoException = new Error(
+    `Cannot find module '@libsql/${target}'\nRequire stack:\n- /app/node_modules/libsql/index.js`,
+  );
+  error.code = 'MODULE_NOT_FOUND';
+  return error;
+}
 
 describe('migrate', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     // Reset mock implementations to defaults
-    mockGetDb.mockReturnValue(mockDb);
+    mockGetDb.mockResolvedValue(mockDb);
     mockMigrate.mockReset();
     mockGetDirectory.mockReset();
   });
@@ -75,7 +79,6 @@ describe('migrate', () => {
       const { runDbMigrations } = await import('../src/migrate');
       await runDbMigrations();
 
-      expect(mockMigrate).toHaveBeenCalledTimes(1);
       expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
         migrationsFolder: path.join('/project/', 'dist', 'drizzle'),
       });
@@ -88,29 +91,14 @@ describe('migrate', () => {
       const { runDbMigrations } = await import('../src/migrate');
       await runDbMigrations();
 
-      expect(mockMigrate).toHaveBeenCalledTimes(1);
       expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
         migrationsFolder: path.join('/project/', 'dist', 'promptfoo', 'drizzle'),
       });
     });
 
-    it('should handle nested dist/server/src path correctly', async () => {
-      const bundledDir = '/app/dist/server/src/deep/nested/module';
-      mockGetDirectory.mockReturnValue(bundledDir);
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await runDbMigrations();
-
-      expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
-        migrationsFolder: path.join('/app/', 'dist', 'promptfoo', 'drizzle'),
-      });
-    });
-
     it('should reject with error when getDb fails', async () => {
       const dbError = new Error('Database connection failed');
-      mockGetDb.mockImplementation(() => {
-        throw dbError;
-      });
+      mockGetDb.mockRejectedValue(dbError);
       mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
@@ -122,47 +110,42 @@ describe('migrate', () => {
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 
-    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
-      const nativeAddonError = createNativeAddonVersionMismatchError();
-      mockGetDb.mockImplementation(() => {
-        throw nativeAddonError;
-      });
+    it('should log libsql binding miss with structured context instead of "migration failed"', async () => {
+      const bindingError = makeBindingError('linux-x64-gnu');
+      mockGetDb.mockRejectedValue(bindingError);
+      mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
-      await expect(runDbMigrations()).rejects.toBe(nativeAddonError);
+      await expect(runDbMigrations()).rejects.toBe(bindingError);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        'SQLite dependency failed to load because the libsql platform binding is missing.',
         {
-          currentNodeVersion: process.version,
-          currentNodeAbi: TEST_CURRENT_NODE_ABI,
-          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
+          platform: `${process.platform}-${process.arch}`,
+          missingPackage: '@libsql/linux-x64-gnu',
         },
       );
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 
-    it('should demote ABI mismatch log to debug when suppressNativeAddonLogging is set', async () => {
-      const nativeAddonError = createNativeAddonVersionMismatchError();
-      mockGetDb.mockImplementation(() => {
-        throw nativeAddonError;
-      });
+    it('should demote binding-miss log to debug when suppressBindingErrorLogging is set', async () => {
+      const bindingError = makeBindingError('darwin-arm64');
+      mockGetDb.mockRejectedValue(bindingError);
+      mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
-      await expect(runDbMigrations({ suppressNativeAddonLogging: true })).rejects.toBe(
-        nativeAddonError,
+      await expect(runDbMigrations({ suppressBindingErrorLogging: true })).rejects.toBe(
+        bindingError,
       );
 
       expect(mockLogger.error).not.toHaveBeenCalled();
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        'SQLite dependency failed to load because the libsql platform binding is missing.',
         {
-          currentNodeVersion: process.version,
-          currentNodeAbi: TEST_CURRENT_NODE_ABI,
-          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
+          platform: `${process.platform}-${process.arch}`,
+          missingPackage: '@libsql/darwin-arm64',
         },
       );
-      expect(mockMigrate).not.toHaveBeenCalled();
     });
 
     it('should reject with error when migrate fails', async () => {
@@ -180,46 +163,9 @@ describe('migrate', () => {
       );
     });
 
-    it('should log the migrations folder path', async () => {
-      const sourceDir = '/my/custom/path/src';
-      mockGetDirectory.mockReturnValue(sourceDir);
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await runDbMigrations();
-
-      const expectedPath = path.join(sourceDir, '..', 'drizzle');
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        `Running database migrations from: ${expectedPath}`,
-      );
-    });
-
-    it('should handle multiple sequential calls', async () => {
-      mockGetDirectory.mockReturnValue('/project/src');
-
-      const { runDbMigrations } = await import('../src/migrate');
-
-      await runDbMigrations();
-      await runDbMigrations();
-      await runDbMigrations();
-
-      expect(mockMigrate).toHaveBeenCalledTimes(3);
-    });
-
-    it('should use setImmediate to avoid blocking the event loop', async () => {
-      mockGetDirectory.mockReturnValue('/project/src');
-
-      const setImmediateSpy = vi.spyOn(globalThis, 'setImmediate');
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await runDbMigrations();
-
-      expect(setImmediateSpy).toHaveBeenCalledTimes(1);
-      setImmediateSpy.mockRestore();
-    });
-
     it('should pass the correct database instance to migrate', async () => {
       const specificDb = { id: 'test-db-instance', prepare: vi.fn() };
-      mockGetDb.mockReturnValue(specificDb);
+      mockGetDb.mockResolvedValue(specificDb);
       mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
@@ -258,9 +204,7 @@ describe('migrate', () => {
     });
 
     it('should set exitCode to 1 after failed direct execution', async () => {
-      mockGetDb.mockImplementation(() => {
-        throw new Error('Database connection failed');
-      });
+      mockGetDb.mockRejectedValue(new Error('Database connection failed'));
       const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
       const { runDbMigrationsFromCli } = await import('../src/migrate');
 

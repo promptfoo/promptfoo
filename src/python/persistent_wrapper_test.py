@@ -473,7 +473,7 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["data"], 30)
 
     def test_invalid_format_writes_error(self) -> None:
-        """Tests that invalid command format writes error response."""
+        """Tests that invalid command format reports the error without emitting a bogus DONE marker."""
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
 
@@ -485,7 +485,9 @@ class TestHandleCall(unittest.TestCase):
                     "test_func",
                 )
 
-        self.assertIn("DONE", stdout_capture.getvalue())
+        # No response_file means no useful DONE| can be emitted; the stderr is
+        # the real signal and Node will resolve the call via timeout.
+        self.assertNotIn("DONE", stdout_capture.getvalue())
         self.assertIn("Invalid CALL command format", stderr_capture.getvalue())
 
     def test_function_execution_error(self) -> None:

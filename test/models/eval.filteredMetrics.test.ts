@@ -21,7 +21,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
 
   beforeEach(async () => {
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -159,7 +159,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
       });
 
       // Add metadata to some rows
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (1, 3, 5)`,
       );
@@ -192,7 +192,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (2, 4, 6)`,
       );
@@ -224,7 +224,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"strategyId":"jailbreak"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (1, 2, 3)`,
       );
@@ -256,7 +256,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (0, 5)`,
       );
@@ -319,7 +319,7 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
         searchableContent: 'searchable',
       });
 
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx IN (3, 6, 9)`,
       );

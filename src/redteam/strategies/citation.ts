@@ -8,9 +8,11 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -48,6 +50,7 @@ async function generateCitations(
         injectVar,
         topic: testCase.vars[injectVar],
         config,
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 
@@ -65,9 +68,7 @@ async function generateCitations(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),
