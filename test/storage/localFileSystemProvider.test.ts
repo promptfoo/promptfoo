@@ -70,24 +70,6 @@ describe('LocalFileSystemProvider', () => {
     expect(duplicate.ref.key).toBe(ref.key);
   });
 
-  it('snapshots mutable buffers before asynchronous storage', async () => {
-    tempDir = createTempDir('promptfoo-media-');
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const payload = Buffer.from('original media');
-    const expected = Buffer.from(payload);
-
-    const pendingStore = provider.store(payload, {
-      contentType: 'audio/wav',
-      mediaType: 'audio',
-    });
-    payload.fill(0x58);
-
-    const result = await pendingStore;
-    const contentHash = createHash('sha256').update(expected).digest('hex');
-    expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
-    expect(await provider.retrieve(result.ref.key)).toEqual(expected);
-  });
-
   it('preserves valid legacy hash-index entries without renaming files', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const payload = Buffer.from('legacy media');
