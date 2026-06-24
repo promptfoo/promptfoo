@@ -1301,9 +1301,7 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(toPrompt('{{ history.report }}'), vars, {});
 
-      expect(readFile).toHaveBeenCalledWith(
-        expect.stringContaining('reports.js:archive/report.txt'),
-      );
+      expect(readFile).toHaveBeenCalledWith(actualPathResolve('reports.js:archive/report.txt'));
       expect(renderedPrompt).toBe('archive body');
     });
 
