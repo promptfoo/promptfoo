@@ -2654,9 +2654,15 @@ function createRunEvalTest(
   evalId: string,
 ): AtomicTestCase {
   const globalGraderExamples = testSuite.redteam?.graderExamples;
-  const testOptions = globalGraderExamples
-    ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
-    : testCase.options;
+  const globalGraderLanguage = testSuite.redteam?.graderLanguage;
+  const testOptions =
+    globalGraderExamples || globalGraderLanguage
+      ? {
+          ...testCase.options,
+          ...(globalGraderExamples ? { redteamGraderExamples: globalGraderExamples } : {}),
+          ...(globalGraderLanguage ? { redteamGraderLanguage: globalGraderLanguage } : {}),
+        }
+      : testCase.options;
   const baseTest = {
     ...testCase,
     vars,
