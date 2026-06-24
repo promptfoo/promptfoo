@@ -176,6 +176,8 @@
         "src/python",
         "src/remoteGrading.ts",
         "src/remoteScoring.ts",
+        "src/runtimeCompatibility.ts",
+        "src/runtimeCompatibilityNotice.ts",
         "src/ruby",
         "src/suggestions.ts",
         "src/table.ts",
