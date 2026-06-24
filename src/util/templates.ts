@@ -483,6 +483,27 @@ export function analyzeTemplateReferences(
   };
 }
 
+const EXTERNAL_TEMPLATE_NODE_TYPES = new Set(['Extends', 'FromImport', 'Import', 'Include']);
+
+function astLoadsExternalTemplate(node: unknown): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => astLoadsExternalTemplate(child));
+  }
+  if (!isNunjucksAstNode(node)) {
+    return false;
+  }
+  if (EXTERNAL_TEMPLATE_NODE_TYPES.has(node.typename ?? '')) {
+    return true;
+  }
+  return (node.fields ?? []).some((field) => astLoadsExternalTemplate(node[field]));
+}
+
+/** Conservatively true when a template can load another template transitively. */
+export function templateLoadsExternalTemplate(template: string): boolean {
+  const parseResult = parseNunjucksTemplate(template);
+  return !parseResult.ok || astLoadsExternalTemplate(parseResult.ast);
+}
+
 /**
  * Check whether a Nunjucks template references a variable as a real expression
  * symbol (not a string literal, comment, object key, filter/test name, property

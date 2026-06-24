@@ -28,6 +28,7 @@ import {
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
+  type TestCaseWithVarsFile,
   type TestSuite,
   type TestSuiteConfig,
   TestSuiteConfigSchema,
@@ -54,6 +55,162 @@ import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
 const configDependencyPaths = new WeakMap<object, string[]>();
+
+function rebaseConfigFileReferenceToBase(
+  reference: string,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+): string {
+  const isFileUrl = reference.startsWith('file://');
+  if (!isFileUrl && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(reference)) {
+    return reference;
+  }
+  const parsedReference = isFileUrl ? parseFileUrl(reference) : undefined;
+  const referencedPath = parsedReference?.filePath ?? reference;
+  if (path.isAbsolute(referencedPath)) {
+    return reference;
+  }
+  const rebasedPath = path.relative(
+    path.resolve(resolutionBasePath || process.cwd()),
+    path.resolve(declaringBasePath, referencedPath),
+  );
+  const portablePath = toPosixPath(rebasedPath);
+  return isFileUrl
+    ? `file://${portablePath}${
+        parsedReference?.functionName === undefined ? '' : `:${parsedReference.functionName}`
+      }`
+    : portablePath;
+}
+
+function rebaseNestedFileUrlReferences(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  addDependency: (reference: string) => void,
+  visited: WeakSet<object>,
+): unknown {
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+    const rebasedReference = rebaseConfigFileReferenceToBase(
+      value,
+      declaringBasePath,
+      resolutionBasePath,
+    );
+    addDependency(rebasedReference);
+    return rebasedReference;
+  }
+  if (typeof value !== 'object' || value === null || visited.has(value)) {
+    return value;
+  }
+  visited.add(value);
+
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor)) {
+      continue;
+    }
+    const rebasedValue = rebaseNestedFileUrlReferences(
+      descriptor.value,
+      declaringBasePath,
+      resolutionBasePath,
+      addDependency,
+      visited,
+    );
+    if (descriptor.writable === true && rebasedValue !== descriptor.value) {
+      Object.defineProperty(value, key, { ...descriptor, value: rebasedValue });
+    }
+  }
+  return value;
+}
+
+function rebaseInlineTestCaseSource(
+  source: TestCaseWithVarsFile,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  addDependency: (reference: string) => void,
+  visited: WeakSet<object>,
+): TestCase {
+  if (typeof source.vars === 'string' || Array.isArray(source.vars)) {
+    const varsPaths = typeof source.vars === 'string' ? [source.vars] : source.vars;
+    const rebasedVars = varsPaths.map((varsPath) => {
+      const rebasedPath = rebaseConfigFileReferenceToBase(
+        varsPath,
+        declaringBasePath,
+        resolutionBasePath,
+      );
+      addDependency(rebasedPath);
+      return rebasedPath;
+    });
+    return {
+      ...source,
+      vars: (typeof source.vars === 'string'
+        ? rebasedVars[0]
+        : rebasedVars) as unknown as TestCase['vars'],
+    };
+  }
+  rebaseTestCaseVarFileReferences(
+    source as TestCase,
+    declaringBasePath,
+    resolutionBasePath,
+    visited,
+  );
+  return source as TestCase;
+}
+
+function rebaseScenarioTestSources(
+  sources: unknown[],
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  addDependency: (reference: string) => void,
+  visitedVars: WeakSet<object>,
+  visitedGeneratorConfigs: WeakSet<object>,
+): void {
+  for (const [sourceIndex, source] of sources.entries()) {
+    if (typeof source === 'string') {
+      const rebasedSource = rebaseConfigFileReferenceToBase(
+        source,
+        declaringBasePath,
+        resolutionBasePath,
+      );
+      sources[sourceIndex] = rebasedSource;
+      addDependency(rebasedSource);
+      continue;
+    }
+    if (typeof source !== 'object' || source === null) {
+      continue;
+    }
+    const pathSource = source as { path?: unknown };
+    if (typeof pathSource.path === 'string') {
+      const rebasedPath = rebaseConfigFileReferenceToBase(
+        pathSource.path,
+        declaringBasePath,
+        resolutionBasePath,
+      );
+      const rebasedSource = { ...source, path: rebasedPath } as Record<string, unknown>;
+      if ('config' in rebasedSource) {
+        rebasedSource.config = rebaseNestedFileUrlReferences(
+          rebasedSource.config,
+          declaringBasePath,
+          resolutionBasePath,
+          addDependency,
+          visitedGeneratorConfigs,
+        );
+      }
+      sources[sourceIndex] = rebasedSource;
+      addDependency(rebasedPath);
+      continue;
+    }
+    sources[sourceIndex] = rebaseInlineTestCaseSource(
+      source as TestCaseWithVarsFile,
+      declaringBasePath,
+      resolutionBasePath,
+      addDependency,
+      visitedVars,
+    );
+  }
+}
 
 export function getConfigDependencyPaths(config: object | undefined): string[] {
   return config ? [...(configDependencyPaths.get(config) ?? [])] : [];
@@ -524,27 +681,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const combinedBasePath = path.dirname(
     configSourcePaths[0] ?? path.resolve(process.cwd(), configPaths[0]),
   );
-  const rebaseConfigFileReference = (reference: string, sourceBasePath: string): string => {
-    const isFileUrl = reference.startsWith('file://');
-    if (!isFileUrl && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(reference)) {
-      return reference;
-    }
-    const parsedReference = isFileUrl ? parseFileUrl(reference) : undefined;
-    const referencedPath = parsedReference?.filePath ?? reference;
-    if (path.isAbsolute(referencedPath)) {
-      return reference;
-    }
-    const rebasedPath = path.relative(
-      combinedBasePath,
-      path.resolve(sourceBasePath, referencedPath),
-    );
-    const portablePath = toPosixPath(rebasedPath);
-    return isFileUrl
-      ? `file://${portablePath}${
-          parsedReference?.functionName === undefined ? '' : `:${parsedReference.functionName}`
-        }`
-      : portablePath;
-  };
+  const rebaseConfigFileReference = (reference: string, sourceBasePath: string): string =>
+    rebaseConfigFileReferenceToBase(reference, sourceBasePath, combinedBasePath);
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {
     const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
@@ -588,6 +726,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     const config = configs[i];
     const sourceBasePath = path.dirname(configSourcePaths[i]);
     const visitedConfigVars = new WeakSet<object>();
+    const visitedGeneratorConfigs = new WeakSet<object>();
     if (config.tests) {
       for (const test of Array.isArray(config.tests) ? config.tests : [config.tests]) {
         if (typeof test === 'string') {
@@ -597,31 +736,27 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
         } else if ('path' in test && typeof test.path === 'string') {
           const rebasedPath = rebaseConfigFileReference(test.path, sourceBasePath);
           addConfigDependency(rebasedPath);
-          tests.push({ ...test, path: rebasedPath });
-        } else {
-          const rawTest = test as TestCase & { vars?: TestCase['vars'] | string | string[] };
-          let rebasedTest: TestCase = rawTest;
-          if (typeof rawTest.vars === 'string' || Array.isArray(rawTest.vars)) {
-            const vars = [rawTest.vars].flat().map((varsPath) => {
-              const rebasedPath = rebaseConfigFileReference(varsPath, sourceBasePath);
-              addConfigDependency(rebasedPath);
-              return rebasedPath;
-            });
-            rebasedTest = {
-              ...rawTest,
-              vars: (typeof rawTest.vars === 'string'
-                ? vars[0]
-                : vars) as unknown as TestCase['vars'],
-            };
-          } else {
-            rebaseTestCaseVarFileReferences(
-              rawTest,
+          const rebasedTest = { ...test, path: rebasedPath };
+          if ('config' in rebasedTest) {
+            rebasedTest.config = rebaseNestedFileUrlReferences(
+              rebasedTest.config,
               sourceBasePath,
               combinedBasePath,
-              visitedConfigVars,
-            );
+              addConfigDependency,
+              visitedGeneratorConfigs,
+            ) as typeof rebasedTest.config;
           }
           tests.push(rebasedTest);
+        } else {
+          tests.push(
+            rebaseInlineTestCaseSource(
+              test as TestCaseWithVarsFile,
+              sourceBasePath,
+              combinedBasePath,
+              addConfigDependency,
+              visitedConfigVars,
+            ),
+          );
         }
       }
     }
@@ -664,14 +799,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
             sourceBasePath,
           );
         } else if (Array.isArray(scenarioTests)) {
-          for (const test of scenarioTests) {
-            rebaseTestCaseVarFileReferences(
-              test,
-              sourceBasePath,
-              combinedBasePath,
-              visitedConfigVars,
-            );
-          }
+          rebaseScenarioTestSources(
+            scenarioTests,
+            sourceBasePath,
+            combinedBasePath,
+            addConfigDependency,
+            visitedConfigVars,
+            visitedGeneratorConfigs,
+          );
         }
       }
     }
@@ -1102,31 +1237,35 @@ export async function resolveConfigs(
           : scenarioSource;
         const declaringBasePath = path.dirname(path.resolve(basePath, sourcePath));
         const visitedScenarioVars = new WeakSet<object>();
+        const visitedScenarioGeneratorConfigs = new WeakSet<object>();
         for (const loadedScenario of [loaded].flat(Number.POSITIVE_INFINITY) as Scenario[]) {
-          const scenarioTests = (loadedScenario as { tests?: string | TestCase[] }).tests;
-          if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
-            const referencedPath = parseFileUrl(scenarioTests).filePath;
-            if (!path.isAbsolute(referencedPath)) {
-              (loadedScenario as { tests: string | TestCase[] }).tests = `file://${toPosixPath(
-                path.relative(
-                  path.resolve(basePath || process.cwd()),
-                  path.resolve(declaringBasePath, referencedPath),
-                ),
-              )}`;
-            }
-            addResolvedConfigDependency(
-              (loadedScenario as { tests: string | TestCase[] }).tests as string,
+          const scenarioWithSources = loadedScenario as unknown as {
+            tests?: string | unknown[];
+          };
+          if (typeof scenarioWithSources.tests === 'string') {
+            scenarioWithSources.tests = rebaseConfigFileReferenceToBase(
+              scenarioWithSources.tests,
+              declaringBasePath,
+              basePath,
             );
+            addResolvedConfigDependency(scenarioWithSources.tests);
           }
-          for (const test of [
-            ...(loadedScenario.config ?? []),
-            ...(Array.isArray(loadedScenario.tests) ? loadedScenario.tests : []),
-          ]) {
+          for (const test of loadedScenario.config ?? []) {
             rebaseTestCaseVarFileReferences(
               test,
               declaringBasePath,
               basePath || process.cwd(),
               visitedScenarioVars,
+            );
+          }
+          if (Array.isArray(scenarioWithSources.tests)) {
+            rebaseScenarioTestSources(
+              scenarioWithSources.tests,
+              declaringBasePath,
+              basePath || process.cwd(),
+              addResolvedConfigDependency,
+              visitedScenarioVars,
+              visitedScenarioGeneratorConfigs,
             );
           }
           loadedScenarios.push(loadedScenario);

@@ -1102,6 +1102,29 @@ describe('evaluatorHelpers', () => {
       expect(tick).toHaveBeenCalledTimes(1);
     });
 
+    it('should not rescan pre-rendered helper output through a nested file target', async () => {
+      const emit = vi.fn(() => '{{ name | upper }}');
+      const vars: Record<string, any> = {
+        stored: 'secret',
+        name: 'Alice',
+        generated: '{{ "x" | emit }}',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ generated }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ generated }}|{{ context.message }}'),
+        vars,
+        { emit },
+        undefined,
+        undefined,
+        ['stored'],
+      );
+
+      expect(renderedPrompt).toBe('{{ name | upper }}|{{ name | upper }}');
+      expect(emit).toHaveBeenCalledTimes(1);
+    });
+
     it('should leave unrecognized binary nested files as literal references', async () => {
       const vars: Record<string, any> = {
         context: { payload: 'file:///path/to/payload.dat' },
@@ -1167,6 +1190,168 @@ describe('evaluatorHelpers', () => {
       );
 
       expect(renderedPrompt).toBe('BE CONCISE apple');
+    });
+
+    it('should render helpers over safe objects when protected vars are unrelated', async () => {
+      const vars: Record<string, any> = {
+        payload: 'opaque',
+        favoriteFruit: 'apple',
+        docs: ['a', 'b'],
+        context: { name: 'alice' },
+        count: '{{ docs | length }}',
+        serialized: '{{ context | dump }}',
+      };
+      const filters = { dump: (value: unknown) => JSON.stringify(value) };
+
+      const withSkippedVar = await renderPrompt(
+        toPrompt('{{ count }}|{{ serialized }}'),
+        vars,
+        filters,
+        undefined,
+        ['payload'],
+      );
+      const withRuntimeRegister = await renderPrompt(
+        toPrompt('{{ count }}|{{ serialized }}|{{ favoriteFruit }}'),
+        vars,
+        filters,
+        undefined,
+        undefined,
+        ['favoriteFruit'],
+      );
+
+      expect(withSkippedVar).toBe('2|{"name":"alice"}');
+      expect(withRuntimeRegister).toBe('2|{"name":"alice"}|apple');
+    });
+
+    it('should render nested safe helper chains before inserting runtime registers', async () => {
+      const vars: Record<string, any> = {
+        favoriteFruit: 'apple',
+        docs: { first: 'a', second: 'b' },
+        summary: '{{ docs | length }}',
+        message: '{{ summary }} {{ favoriteFruit }}',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ message }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['favoriteFruit'],
+      );
+
+      expect(renderedPrompt).toBe('2 apple');
+    });
+
+    it('should render multi-level constant helpers only once', async () => {
+      const upper = vi.fn((value: string) => value.toUpperCase());
+      const vars: Record<string, any> = {
+        favoriteFruit: 'apple',
+        leaf: '{{ "be concise" | upper }}',
+        middle: '{{ leaf | upper }}',
+        message: '{{ middle }} {{ favoriteFruit }}',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ message }}'),
+        vars,
+        { upper },
+        undefined,
+        undefined,
+        ['favoriteFruit'],
+      );
+
+      expect(renderedPrompt).toBe('BE CONCISE apple');
+      expect(upper).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not render unused helpers when runtime registers exist', async () => {
+      const fail = vi.fn(() => {
+        throw new Error('unused helper rendered');
+      });
+
+      await expect(
+        renderPrompt(
+          toPrompt('{{ message }}'),
+          {
+            stored: 'apple',
+            message: '{{ stored }}',
+            unused: '{{ "unused" | fail }}',
+          },
+          { fail },
+          undefined,
+          undefined,
+          ['stored'],
+        ),
+      ).resolves.toBe('apple');
+      expect(fail).not.toHaveBeenCalled();
+    });
+
+    it('should insert runtime registers without resolving cyclic ordinary helpers', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ message }}'),
+        {
+          favoriteFruit: 'apple',
+          a: '{{ b }}',
+          b: '{{ a }}',
+          message: '{{ a }} {{ favoriteFruit }}',
+        },
+        {},
+        undefined,
+        undefined,
+        ['favoriteFruit'],
+      );
+
+      expect(renderedPrompt).toBe('{{ a }} apple');
+    });
+
+    it('should fail closed when a reachable helper chain exceeds the depth bound', async () => {
+      const vars: Record<string, any> = {
+        stored: 'apple',
+        message: '{{ v0 }} {{ stored }}',
+      };
+      for (let index = 0; index < 150; index++) {
+        vars[`v${index}`] = index === 149 ? 'done' : `{{ v${index + 1} }}`;
+      }
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ message }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['stored'],
+      );
+
+      expect(renderedPrompt).toMatch(/^{{ v\d+ }} apple$/);
+    });
+
+    it.each([
+      ['include', '{% include "helper.njk" %}'],
+      ['import', '{% import "helper.njk" as helper %}'],
+      ['from', '{% from "helper.njk" import value %}'],
+      ['extends', '{% extends "helper.njk" %}'],
+      [
+        'include hidden by quoted raw markers',
+        '{{ "{% raw %}" }}{% include "helper.njk" %}{{ "{% endraw %}" }}',
+      ],
+    ])('should keep transitive %s helpers opaque with runtime registers', async (_tag, helper) => {
+      const vars: Record<string, any> = {
+        stored: 'secret',
+        helper,
+        message: '{{ helper }} {{ stored }}',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ message }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['stored'],
+      );
+
+      expect(renderedPrompt).toBe(`${helper} secret`);
     });
 
     it('should keep aliases of runtime register and conversation objects opaque', async () => {
@@ -2520,6 +2705,21 @@ describe('evaluatorHelpers', () => {
         suffix: "$'",
       });
       expect(resolvedFromProtected).toEqual(new Set(['message']));
+    });
+
+    it('should substitute protected values after an ordinary helper cycle reaches the pass limit', () => {
+      const variables = {
+        favoriteFruit: 'apple',
+        a: '{{ b }}',
+        b: '{{ a }}',
+        message: '{{ a }} {{ favoriteFruit }}',
+      };
+      const resolvedFromProtected = new Set<string>();
+
+      resolveVariables(variables, ['favoriteFruit'], resolvedFromProtected);
+
+      expect(variables.message).toBe('{{ a }} apple');
+      expect(resolvedFromProtected).toContain('message');
     });
 
     it('should preserve deep ordinary helper chains when protected vars are unrelated', () => {

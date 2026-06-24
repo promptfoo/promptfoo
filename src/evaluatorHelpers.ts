@@ -39,6 +39,7 @@ import {
   analyzeTemplateReferences,
   extractVariablesFromTemplate,
   getNunjucksEngine,
+  templateLoadsExternalTemplate,
   templateReferencesVariable,
 } from './util/templates';
 import { transform } from './util/transform';
@@ -68,6 +69,7 @@ export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
+  alreadyRenderedVars?: ReadonlySet<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
@@ -79,6 +81,7 @@ export function resolveVariables(
       if (
         skipResolveVars?.includes(key) ||
         varsResolvedFromSkipped?.has(key) ||
+        alreadyRenderedVars?.has(key) ||
         typeof variables[key] !== 'string'
       ) {
         continue;
@@ -133,6 +136,35 @@ export function resolveVariables(
     }
     iterations++;
   } while (!resolved && iterations < 5);
+
+  // A cyclic or otherwise unresolved ordinary helper must not starve direct
+  // stored-output substitution. This final pass replaces protected sources
+  // only, preserving every unresolved ordinary placeholder verbatim.
+  for (const key of Object.keys(variables)) {
+    if (
+      skipResolveVars?.includes(key) ||
+      varsResolvedFromSkipped?.has(key) ||
+      alreadyRenderedVars?.has(key) ||
+      typeof variables[key] !== 'string'
+    ) {
+      continue;
+    }
+    let replacedProtectedValue = false;
+    const nextValue = (variables[key] as string).replace(regex, (placeholder, varName: string) => {
+      if (
+        variables[varName] === undefined ||
+        (!skipResolveVars?.includes(varName) && !varsResolvedFromSkipped?.has(varName))
+      ) {
+        return placeholder;
+      }
+      replacedProtectedValue = true;
+      return String(variables[varName]);
+    });
+    if (replacedProtectedValue) {
+      variables[key] = nextValue;
+      varsResolvedFromSkipped?.add(key);
+    }
+  }
 
   return variables;
 }
@@ -542,6 +574,11 @@ function referencesProtectedAliasPath(
   if (!hasEvaluatedSyntax) {
     return false;
   }
+  // The outer template cannot prove what an included/imported template will
+  // reference, so keep transitive template loading outside the protected path.
+  if (templateLoadsExternalTemplate(template)) {
+    return true;
+  }
   const analysis = analyzeTemplateReferences(template, protectedPathRootNames);
   if (!analysis.parsed) {
     return hasEvaluatedSyntax;
@@ -583,7 +620,7 @@ function referencesProtectedAliasPath(
         protectedContainers,
         protectedPrimitiveValues,
       );
-      if (!inspection.complete || inspection.containsProtected || isObjectLike(resolved.value)) {
+      if (!inspection.complete || inspection.containsProtected) {
         return true;
       }
     }
@@ -959,6 +996,7 @@ function renderNestedFileRefTemplates(
   strictNunjucks: ReturnType<typeof getNunjucksEngine>,
   protectedDirectVarNames: ReadonlySet<string>,
   referencesProtectedTemplate: (template: string) => boolean,
+  alreadyRenderedTopLevelVars: ReadonlySet<string>,
 ): Map<string, VarValue> {
   const renderedTopLevelVars = new Map<string, VarValue>();
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
@@ -1120,6 +1158,12 @@ function renderNestedFileRefTemplates(
   function renderTopLevelStringWithDependencies(rootName: string): void {
     const state = topLevelStringStates.get(rootName);
     const value = vars[rootName];
+    if (alreadyRenderedTopLevelVars.has(rootName)) {
+      templateVars[rootName] = value;
+      renderedTopLevelVars.set(rootName, value);
+      topLevelStringStates.set(rootName, 'done');
+      return;
+    }
     if (
       state === 'done' ||
       state === 'visiting' ||
@@ -1183,6 +1227,87 @@ function renderNestedFileRefTemplates(
     }
   }
   return renderedTopLevelVars;
+}
+
+function renderReachableSafeHelperVars(
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  nunjucks: ReturnType<typeof getNunjucksEngine>,
+  protectedDirectVarNames: ReadonlySet<string>,
+  referencesProtectedTemplate: (template: string) => boolean,
+): Set<string> {
+  // Bound user-configured dependency graphs before recursive AST traversal can
+  // exhaust the stack. Deeper branches remain literal and fail closed.
+  const MAX_HELPER_DEPTH = 100;
+  const renderedVars = new Set<string>();
+  const states = new Map<string, 'visiting' | 'done'>();
+  const safeResults = new Map<string, boolean>();
+
+  const visitVar = (varName: string, depth = 0): boolean => {
+    if (depth >= MAX_HELPER_DEPTH) {
+      return false;
+    }
+    if (protectedDirectVarNames.has(varName)) {
+      return true;
+    }
+    const state = states.get(varName);
+    if (state === 'done') {
+      return safeResults.get(varName) ?? false;
+    }
+    if (state === 'visiting') {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(vars, varName);
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      descriptor.writable !== true ||
+      typeof descriptor.value !== 'string'
+    ) {
+      return true;
+    }
+
+    states.set(varName, 'visiting');
+    const template = descriptor.value;
+    const analysis = analyzeTemplateReferences(template, []);
+    let canRender = analysis.parsed;
+    if (analysis.parsed) {
+      for (const dependencyName of analysis.allReferenced) {
+        if (
+          dependencyName !== varName &&
+          Object.prototype.hasOwnProperty.call(vars, dependencyName)
+        ) {
+          canRender = visitVar(dependencyName, depth + 1) && canRender;
+        } else if (dependencyName === varName) {
+          canRender = false;
+        }
+      }
+    }
+
+    const safeToRender =
+      canRender &&
+      !templateLoadsExternalTemplate(template) &&
+      !referencesProtectedTemplate(template) &&
+      !referencesUndefinedVariables(template, vars);
+    if (safeToRender) {
+      const rendered = nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), vars);
+      Object.defineProperty(vars, varName, { ...descriptor, value: rendered });
+      renderedVars.add(varName);
+    }
+    safeResults.set(varName, safeToRender);
+    states.set(varName, 'done');
+    return safeToRender;
+  };
+
+  const promptAnalysis = analyzeTemplateReferences(basePrompt, []);
+  if (promptAnalysis.parsed) {
+    for (const varName of promptAnalysis.allReferenced) {
+      if (Object.prototype.hasOwnProperty.call(vars, varName)) {
+        visitVar(varName);
+      }
+    }
+  }
+  return renderedVars;
 }
 
 /**
@@ -1578,9 +1703,25 @@ export async function renderPrompt(
       }
     }
   }
+  const preRenderedHelperVars =
+    hasProtectedRoots && !preprocessingDisabled
+      ? renderReachableSafeHelperVars(
+          basePrompt,
+          vars,
+          nunjucks,
+          protectedDirectVarNames,
+          referencesProtectedTemplate,
+        )
+      : new Set<string>();
+
   // Resolve variable mappings
   if (!preprocessingDisabled) {
-    resolveVariables(vars, protectedTemplateVarNames, varsResolvedFromProtected);
+    resolveVariables(
+      vars,
+      protectedTemplateVarNames,
+      varsResolvedFromProtected,
+      preRenderedHelperVars,
+    );
   }
   const strictNunjucks = getNunjucksEngine(nunjucksFilters, true);
   const nestedRenderedTopLevelVars = renderNestedFileRefTemplates(
@@ -1591,6 +1732,7 @@ export async function renderPrompt(
     strictNunjucks,
     protectedDirectVarNames,
     referencesProtectedTemplate,
+    preRenderedHelperVars,
   );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
@@ -1692,12 +1834,16 @@ export async function renderPrompt(
           return [key, value];
         }
 
-        if (referencesUndefinedVariables(value, vars)) {
+        if (preRenderedHelperVars.has(key)) {
           return [key, value];
         }
 
         if (nestedRenderedTopLevelVars.has(key)) {
           return [key, nestedRenderedTopLevelVars.get(key)];
+        }
+
+        if (hasProtectedRoots || referencesUndefinedVariables(value, vars)) {
+          return [key, value];
         }
 
         return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];

@@ -681,6 +681,55 @@ describe('runEval', () => {
     expect(callApi).toHaveBeenCalledWith('BE CONCISE apple', expect.anything(), undefined);
   });
 
+  it('should render safe object helpers alongside runtime registers', async () => {
+    const registers = { favoriteFruit: 'apple' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ message }}', label: 'safe-object-register-helper' },
+      test: {
+        vars: {
+          docs: ['a', 'b'],
+          summary: '{{ docs | length }}',
+          message: '{{ summary }} {{ favoriteFruit }}',
+        },
+      },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith('2 apple', expect.anything(), undefined);
+  });
+
+  it('should keep transitive template-loading helpers opaque with runtime registers', async () => {
+    const registers = { stored: 'secret' };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+    const helper = '{% include "helper.njk" %}';
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{ helper }}', label: 'transitive-register-helper' },
+      test: { vars: { helper } },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(callApi).toHaveBeenCalledWith(helper, expect.anything(), undefined);
+  });
+
   it('should render protected helpers before reporting provider failures', async () => {
     const registers = { favoriteFruit: 'apple', reason: 'crisp' };
     const callApi = vi.fn(async () => {

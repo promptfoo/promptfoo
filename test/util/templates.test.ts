@@ -7,6 +7,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  templateLoadsExternalTemplate,
   templateReferencesVariable,
 } from '../../src/util/templates';
 import { mockProcessEnv } from './utils';
@@ -301,6 +302,27 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+});
+
+describe('templateLoadsExternalTemplate', () => {
+  it.each([
+    '{% include "helper.njk" %}',
+    '{%- import "helper.njk" as helper -%}',
+    '{% from "helper.njk" import value %}',
+    '{% if enabled %}{% extends "base.njk" %}{% endif %}',
+    '{% include',
+  ])('detects transitive template loading in %s', (template) => {
+    expect(templateLoadsExternalTemplate(template)).toBe(true);
+  });
+
+  it.each([
+    '{{ "{% include \\"helper.njk\\" %}" }}',
+    '{% raw %}{% include "helper.njk" %}{% endraw %}',
+    '{# {% include "helper.njk" %} #}',
+    '{{ "be concise" | upper }}',
+  ])('ignores inert external-tag text in %s', (template) => {
+    expect(templateLoadsExternalTemplate(template)).toBe(false);
   });
 });
 
