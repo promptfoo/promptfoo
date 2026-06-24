@@ -325,7 +325,7 @@ function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | numb
 
 function validateScopedCharsPerMessageLimits(
   scopes: ScopedPromptLimit[],
-  pathPrefix: ['plugins' | 'strategies', ...Array<string | number>],
+  pathPrefix: Array<string | number>,
   ctx: z.RefinementCtx,
 ): void {
   for (const [index, scope] of scopes.entries()) {
