@@ -128,10 +128,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       modelName: this.assistantConfig.modelName || deploymentName,
       providerType: 'azure',
       functionCallbackHandler: new FunctionCallbackHandler(),
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens); the Foundry
+      // usage object is Responses-shaped (input_tokens/output_tokens). Pass the token counts so
+      // cost is non-zero (previously `usage` was passed into the ignored config slot).
       costCalculator: (_modelName: string, usage: any, requestConfig?: any) =>
         calculateAzureCost(
           requestConfig?.model || this.assistantConfig.modelName || this.deploymentName,
-          usage,
+          requestConfig,
+          usage?.prompt_tokens ?? usage?.input_tokens,
+          usage?.completion_tokens ?? usage?.output_tokens,
         ) ?? 0,
     });
 

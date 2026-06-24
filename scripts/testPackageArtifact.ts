@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { shouldCopyDrizzlePath } from './postbuild';
 
@@ -17,6 +19,19 @@ type PackResult = {
   filename: string;
   name: string;
   version: string;
+};
+
+type ArtifactEvalOutput = {
+  results?: {
+    results?: Array<{
+      error?: string;
+      response?: {
+        error?: string;
+        output?: unknown;
+      };
+      success?: boolean;
+    }>;
+  };
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -99,6 +114,47 @@ function run(
     }
     throw error;
   }
+}
+
+async function runAsync(
+  command: string,
+  args: string[],
+  cwd: string,
+  envOverrides: NodeJS.ProcessEnv = {},
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      {
+        cwd,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          npm_config_audit: 'false',
+          npm_config_fund: 'false',
+          ...envOverrides,
+        },
+        maxBuffer: 128 * 1024 * 1024,
+        timeout: 60_000,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve(stdout);
+          return;
+        }
+
+        const details = [error.message];
+        if (stdout.length > 0) {
+          details.push(`stdout:\n${stdout}`);
+        }
+        if (stderr.length > 0 && !error.message.includes(stderr)) {
+          details.push(`stderr:\n${stderr}`);
+        }
+        reject(new Error(details.join('\n'), { cause: error }));
+      },
+    );
+  });
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
@@ -293,15 +349,18 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'import-contracts.ts'),
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
-      "import type { FunctionToolCallValidator, GetUserResponse, Prompt, TransformFunction } from 'promptfoo/contracts';",
+      "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
       "const user: GetUserResponse = { email: 'user@example.com' };",
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
+      "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
+      "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
+      'void response;',
       'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
       '}',
@@ -341,8 +400,11 @@ function writeConsumerScripts(consumerDir: string): void {
       "const prompt: contracts.Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       "const user: contracts.GetUserResponse = { email: 'user@example.com' };",
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
+      "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
+      "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
+      'void response;',
       'if (!contracts.hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected CommonJS TypeScript contracts export');",
       '}',
@@ -363,7 +425,143 @@ function writeConsumerScripts(consumerDir: string): void {
   );
 }
 
-function main(): void {
+async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
+  const expectedOutput = 'compressed response';
+  const requestedPaths: string[] = [];
+  const server = createServer((request, response) => {
+    const requestPath = request.url;
+    if (requestPath !== '/gzip' && requestPath !== '/br') {
+      response.writeHead(404).end();
+      return;
+    }
+
+    const encoding = requestPath === '/gzip' ? 'gzip' : 'br';
+    requestedPaths.push(requestPath);
+    const rawBody = Buffer.from(JSON.stringify({ output: expectedOutput }));
+    const body = encoding === 'gzip' ? gzipSync(rawBody) : brotliCompressSync(rawBody);
+    response.writeHead(200, {
+      'content-encoding': encoding,
+      'content-length': String(body.length),
+      'content-type': 'application/json',
+    });
+    response.end(body);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+
+    const address = server.address();
+    assert(address && typeof address !== 'string', 'Failed to bind compressed response server');
+
+    const configPath = path.join(consumerDir, 'promptfooconfig.json');
+    const outputPath = path.join(consumerDir, 'compression-results.json');
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          prompts: ['compression artifact test'],
+          providers: ['gzip', 'br'].map((encoding) => ({
+            id: `${baseUrl}/${encoding}`,
+            config: {
+              maxRetries: 0,
+              method: 'GET',
+              transformResponse: 'json.output',
+            },
+          })),
+          tests: [
+            {
+              assert: [{ type: 'equals', value: expectedOutput }],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const entrypointPath = path.join(
+      consumerDir,
+      'node_modules',
+      'promptfoo',
+      'dist',
+      'src',
+      'entrypoint.js',
+    );
+    assert(
+      fs.existsSync(entrypointPath),
+      `Missing installed promptfoo entrypoint: ${entrypointPath}`,
+    );
+
+    await runAsync(
+      process.execPath,
+      [
+        entrypointPath,
+        'eval',
+        '--config',
+        configPath,
+        '--output',
+        outputPath,
+        '--no-cache',
+        '--no-write',
+        '--no-table',
+        '--no-progress-bar',
+        '--max-concurrency',
+        '1',
+      ],
+      consumerDir,
+      {
+        ALL_PROXY: '',
+        HTTP_PROXY: '',
+        HTTPS_PROXY: '',
+        NO_PROXY: '127.0.0.1,localhost',
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+        all_proxy: '',
+        http_proxy: '',
+        https_proxy: '',
+        no_proxy: '127.0.0.1,localhost',
+      },
+    );
+
+    assert(fs.existsSync(outputPath), `Installed promptfoo did not write results: ${outputPath}`);
+    const evalOutput = JSON.parse(fs.readFileSync(outputPath, 'utf8')) as ArtifactEvalOutput;
+    const results = evalOutput.results?.results;
+    assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
+    assert.equal(results.length, 2, 'Expected one result for each compressed provider');
+    for (const result of results) {
+      assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
+      assert.equal(
+        result.error,
+        undefined,
+        `Compressed provider errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(
+        result.response?.error,
+        undefined,
+        `Compressed provider response errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(result.response?.output, expectedOutput);
+    }
+    assert.deepEqual(requestedPaths.sort(), ['/br', '/gzip']);
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+}
+
+async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
@@ -446,6 +644,7 @@ function main(): void {
         packResult.version,
       );
     }
+    await runInstalledCompressionEval(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {
@@ -453,4 +652,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
