@@ -614,14 +614,17 @@ describe('Eval', () => {
     });
 
     await act(async () => {
+      resolveForeground(null);
+      await foregroundLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(queryByText('Waiting for eval data')).toBeInTheDocument();
+
+    await act(async () => {
       currentTable = mockTable;
       resolveBackground(successfulLoad);
       await backgroundLoad;
       await socketWork;
-    });
-    await act(async () => {
-      resolveForeground(null);
-      await foregroundLoad;
     });
 
     vi.mocked(useTableStore).mockReturnValue({ ...tableStore, table: mockTable });
@@ -689,9 +692,47 @@ describe('Eval', () => {
 
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
+  });
+
+  it('retains the current root eval when a newer background eval fails', async () => {
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(null);
+    const tableStore = {
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    const { queryByTestId, queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('init')?.({ evalId: 'latest-eval' });
+    });
+
+    expect(fetchEvalDataMock).toHaveBeenCalledWith(
+      'latest-eval',
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
+    );
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
   });
 
   it('keeps a pinned eval visible when its initial background recents refresh fails', async () => {
@@ -803,10 +844,10 @@ describe('Eval', () => {
       await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
     });
 
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
   });
 
@@ -885,10 +926,10 @@ describe('Eval', () => {
     });
 
     // An empty id list is treated as "refresh to latest"; with survivors it must not clear.
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
@@ -946,10 +987,10 @@ describe('Eval', () => {
     });
 
     // Both events converge on the surviving eval; the view is never left cleared.
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('surviving-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('surviving-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'surviving-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
@@ -1108,10 +1149,10 @@ describe('Eval', () => {
       await mockSocketHandlers.get('init')?.({ evalId: 'latest-eval' });
     });
 
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
   });
 
