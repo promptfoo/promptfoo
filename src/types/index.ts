@@ -1114,6 +1114,10 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      serviceName: z.string().optional(),
+      endpoint: z.string().optional(),
+      localExport: z.boolean().optional(),
+      debug: z.boolean().optional(),
       failOnReceiverStartFailure: z.boolean().optional(),
       commandToolNames: z.array(z.string()).optional(),
       otlp: z
@@ -1259,6 +1263,10 @@ export const TestSuiteConfigSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean().prefault(false),
+      serviceName: z.string().optional(),
+      endpoint: z.string().optional(),
+      localExport: z.boolean().optional(),
+      debug: z.boolean().optional(),
 
       // When the OTLP receiver fails to start (e.g. port already in use),
       // throw and fail the eval instead of silently continuing without traces.

@@ -5,6 +5,7 @@ import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
+const SPAN_KIND_NAMES = ['internal', 'server', 'client', 'producer', 'consumer'] as const;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -125,6 +126,10 @@ export class LocalSpanExporter implements SpanExporter {
    */
   private convertSpan(span: ReadableSpan): SpanData {
     const spanContext = span.spanContext();
+    const attributes = this.convertAttributes(span.attributes);
+    const spanKindName: string = SPAN_KIND_NAMES[span.kind] ?? 'unspecified';
+    attributes['otel.span.kind'] = spanKindName;
+    attributes['otel.span.kind_code'] = spanKindName === 'unspecified' ? 0 : span.kind + 1;
 
     // Convert OTEL hrtime (seconds, nanoseconds) to milliseconds for consistency
     // with OTLPReceiver which also stores times in milliseconds
@@ -137,7 +142,7 @@ export class LocalSpanExporter implements SpanExporter {
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,
-      attributes: this.convertAttributes(span.attributes),
+      attributes,
       statusCode: span.status.code,
       statusMessage: span.status.message,
     };

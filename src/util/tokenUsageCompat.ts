@@ -125,8 +125,37 @@ export async function getTokenUsageFromEvaluation(evalId: string): Promise<Token
  */
 export function aggregateUsageFromSpans(spans: SpanData[]): TokenUsage {
   const result = createEmptyTokenUsage();
+  const spansById = new Map(spans.map((span) => [span.spanId, span]));
+  const nonTurnSpansWithUsage = new Set(
+    spans
+      .filter(
+        (span) =>
+          span.attributes?.['gen_ai.turn.index'] === undefined &&
+          extractUsageFromSpan(span) !== undefined,
+      )
+      .map((span) => span.spanId),
+  );
+
+  const hasUsageAncestor = (span: SpanData): boolean => {
+    const visited = new Set<string>();
+    let parentSpanId = span.parentSpanId;
+    while (parentSpanId && !visited.has(parentSpanId)) {
+      if (nonTurnSpansWithUsage.has(parentSpanId)) {
+        return true;
+      }
+      visited.add(parentSpanId);
+      parentSpanId = spansById.get(parentSpanId)?.parentSpanId;
+    }
+    return false;
+  };
 
   for (const span of spans) {
+    // Agent turn spans provide a diagnostic breakdown. When their parent call
+    // already reports the billable total, count the parent only. Retain turn
+    // usage for historical/imported traces whose parent has no usage data.
+    if (span.attributes?.['gen_ai.turn.index'] !== undefined && hasUsageAncestor(span)) {
+      continue;
+    }
     const usage = extractUsageFromSpan(span);
     if (usage) {
       accumulateTokenUsage(result, usage);
@@ -148,11 +177,28 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
     return undefined;
   }
 
+  const getNumericAttribute = (...keys: string[]): number | undefined => {
+    for (const key of keys) {
+      if (typeof attrs[key] === 'number') {
+        return attrs[key];
+      }
+    }
+    return undefined;
+  };
+
   // Check if this span has any GenAI usage attributes
   const hasUsageAttributes =
     attrs['gen_ai.usage.input_tokens'] !== undefined ||
     attrs['gen_ai.usage.output_tokens'] !== undefined ||
-    attrs['gen_ai.usage.total_tokens'] !== undefined;
+    attrs['gen_ai.usage.total_tokens'] !== undefined ||
+    attrs['gen_ai.usage.reasoning.output_tokens'] !== undefined ||
+    attrs['gen_ai.usage.reasoning_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_read.input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_read_input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_creation.input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_creation_input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.accepted_prediction_tokens'] !== undefined ||
+    attrs['gen_ai.usage.rejected_prediction_tokens'] !== undefined;
 
   if (!hasUsageAttributes) {
     return undefined;
@@ -178,17 +224,24 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
 
   // Extract completion details (custom attributes)
   const hasCompletionDetails =
+    attrs['gen_ai.usage.reasoning.output_tokens'] !== undefined ||
     attrs['gen_ai.usage.reasoning_tokens'] !== undefined ||
     attrs['gen_ai.usage.accepted_prediction_tokens'] !== undefined ||
     attrs['gen_ai.usage.rejected_prediction_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_read.input_tokens'] !== undefined ||
     attrs['gen_ai.usage.cache_read_input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_creation.input_tokens'] !== undefined ||
     attrs['gen_ai.usage.cache_creation_input_tokens'] !== undefined;
 
   if (hasCompletionDetails) {
     usage.completionDetails = {};
 
-    if (typeof attrs['gen_ai.usage.reasoning_tokens'] === 'number') {
-      usage.completionDetails.reasoning = attrs['gen_ai.usage.reasoning_tokens'];
+    const reasoning = getNumericAttribute(
+      'gen_ai.usage.reasoning.output_tokens',
+      'gen_ai.usage.reasoning_tokens',
+    );
+    if (reasoning !== undefined) {
+      usage.completionDetails.reasoning = reasoning;
     }
     if (typeof attrs['gen_ai.usage.accepted_prediction_tokens'] === 'number') {
       usage.completionDetails.acceptedPrediction = attrs['gen_ai.usage.accepted_prediction_tokens'];
@@ -196,12 +249,19 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
     if (typeof attrs['gen_ai.usage.rejected_prediction_tokens'] === 'number') {
       usage.completionDetails.rejectedPrediction = attrs['gen_ai.usage.rejected_prediction_tokens'];
     }
-    if (typeof attrs['gen_ai.usage.cache_read_input_tokens'] === 'number') {
-      usage.completionDetails.cacheReadInputTokens = attrs['gen_ai.usage.cache_read_input_tokens'];
+    const cacheRead = getNumericAttribute(
+      'gen_ai.usage.cache_read.input_tokens',
+      'gen_ai.usage.cache_read_input_tokens',
+    );
+    if (cacheRead !== undefined) {
+      usage.completionDetails.cacheReadInputTokens = cacheRead;
     }
-    if (typeof attrs['gen_ai.usage.cache_creation_input_tokens'] === 'number') {
-      usage.completionDetails.cacheCreationInputTokens =
-        attrs['gen_ai.usage.cache_creation_input_tokens'];
+    const cacheCreation = getNumericAttribute(
+      'gen_ai.usage.cache_creation.input_tokens',
+      'gen_ai.usage.cache_creation_input_tokens',
+    );
+    if (cacheCreation !== undefined) {
+      usage.completionDetails.cacheCreationInputTokens = cacheCreation;
     }
   }
 

@@ -266,7 +266,7 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it('should normalize legacy Gen AI attributes to new convention', async () => {
+    it('should preserve legacy Gen AI attributes in JSON traces', async () => {
       const otlpRequest = {
         resourceSpans: [
           {
@@ -306,10 +306,10 @@ describe('OTLPReceiver', () => {
       expect(spans).toHaveLength(1);
       expect(spans[0].attributes).toMatchObject({
         'gen_ai.system': 'openai',
-        'gen_ai.provider.name': 'openai',
-        'gen_ai.operation.name': 'text_completion',
+        'gen_ai.operation.name': 'completion',
         'gen_ai.request.model': 'text-davinci-003',
       });
+      expect(spans[0].attributes).not.toHaveProperty('gen_ai.provider.name');
     });
 
     it('should handle multiple spans in a single request', async () => {
@@ -589,7 +589,7 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it('should normalize legacy Gen AI attributes in protobuf traces', async () => {
+    it('should preserve legacy Gen AI attributes in protobuf traces', async () => {
       (receiver as any).traceStore = mockTraceStore;
 
       const traceIdBytes = new Uint8Array([
@@ -637,9 +637,9 @@ describe('OTLPReceiver', () => {
       expect(spans).toHaveLength(1);
       expect(spans[0].attributes).toMatchObject({
         'gen_ai.system': 'openai',
-        'gen_ai.provider.name': 'openai',
-        'gen_ai.operation.name': 'text_completion',
+        'gen_ai.operation.name': 'completion',
       });
+      expect(spans[0].attributes).not.toHaveProperty('gen_ai.provider.name');
     });
 
     it('should handle malformed JSON gracefully', async () => {

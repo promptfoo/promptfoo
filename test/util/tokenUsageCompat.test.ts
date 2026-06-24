@@ -191,6 +191,50 @@ describe('tokenUsageCompat', () => {
       });
     });
 
+    it('should extract current dotted usage detail attributes', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: {
+          'gen_ai.usage.reasoning.output_tokens': 20,
+          'gen_ai.usage.cache_read.input_tokens': 200,
+          'gen_ai.usage.cache_creation.input_tokens': 30,
+        },
+      };
+
+      expect(extractUsageFromSpan(span)).toEqual({
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 20,
+          cacheReadInputTokens: 200,
+          cacheCreationInputTokens: 30,
+        },
+      });
+    });
+
+    it('should prefer current dotted usage details when both spellings are present', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: {
+          'gen_ai.usage.reasoning.output_tokens': 20,
+          'gen_ai.usage.reasoning_tokens': 99,
+          'gen_ai.usage.cache_read.input_tokens': 30,
+          'gen_ai.usage.cache_read_input_tokens': 88,
+          'gen_ai.usage.cache_creation.input_tokens': 40,
+          'gen_ai.usage.cache_creation_input_tokens': 77,
+        },
+      };
+
+      expect(extractUsageFromSpan(span)?.completionDetails).toEqual({
+        reasoning: 20,
+        cacheReadInputTokens: 30,
+        cacheCreationInputTokens: 40,
+      });
+    });
+
     it('should ignore non-numeric attribute values', () => {
       const span: SpanData = {
         spanId: 'span-1',
@@ -331,6 +375,62 @@ describe('tokenUsageCompat', () => {
 
       const result = aggregateUsageFromSpans(spans);
       expect(result.completionDetails?.reasoning).toBe(50);
+    });
+
+    it('should not double-count usage copied onto turn marker spans', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent codex',
+          startTime: 0,
+          attributes: {
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'request-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.numRequests).toBe(1);
+    });
+
+    it('should retain turn usage when an imported trace has no billable parent usage', () => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'parent-span',
+          name: 'invoke_agent',
+          startTime: 0,
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'parent-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.numRequests).toBe(1);
     });
   });
 

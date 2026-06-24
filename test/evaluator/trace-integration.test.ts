@@ -122,6 +122,10 @@ describe('evaluator trace integration', () => {
       ],
       tracing: {
         enabled: true,
+        serviceName: 'trace-integration-test',
+        endpoint: 'http://collector:4318/v1/traces',
+        localExport: false,
+        debug: true,
         otlp: {
           http: {
             enabled: true,
@@ -153,6 +157,13 @@ describe('evaluator trace integration', () => {
     });
     expect(mockFlushOtel).toHaveBeenCalled();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
+    expect(mockInitializeOtel).toHaveBeenCalledWith({
+      enabled: true,
+      serviceName: 'trace-integration-test',
+      endpoint: 'http://collector:4318/v1/traces',
+      localExport: false,
+      debug: true,
+    });
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(

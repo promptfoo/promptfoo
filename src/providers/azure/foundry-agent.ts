@@ -530,7 +530,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'azure',
+      providerName: 'azure.ai.inference',
+      operationName: 'invoke_agent',
       model: this.deploymentName,
+      agentName: this.deploymentName,
       providerId: this.id(),
       prompt,
       context,
@@ -585,7 +588,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          system: 'azure',
+          providerName: 'azure.ai.inference',
+          attributes: { 'gen_ai.turn.index': turnCount },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });

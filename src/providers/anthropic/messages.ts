@@ -3,8 +3,8 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import {
+  extractProviderResponseAttributes,
   type GenAISpanContext,
-  type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
@@ -509,6 +509,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Optional request parameters
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
+      stream:
+        ((context?.prompt?.config as Partial<AnthropicMessageOptions> | undefined)?.stream ??
+          this.config.stream) === true,
       // Promptfoo context from test case if available
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
@@ -518,41 +521,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       requestBody: prompt,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-          cached: response.tokenUsage.cached,
-          completionDetails: response.tokenUsage.completionDetails,
-        };
-      }
-
-      // Extract finish reason if available
-      if (response.finishReason) {
-        result.finishReasons = [response.finishReason];
-      }
-
-      // Cache hit status
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Response body for debugging/observability
-      if (response.output !== undefined) {
-        result.responseBody =
-          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-      }
-
-      return result;
-    };
-
     // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context),
+      extractProviderResponseAttributes,
+    );
   }
 
   /**
@@ -864,6 +838,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             }),
             cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
             cached: true,
+            metadata: {
+              responseId: parsedCachedResponse.id,
+              model: parsedCachedResponse.model,
+            },
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -946,6 +924,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(finishReason && { finishReason }),
         ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
         cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+        metadata: {
+          responseId: resolvedMessage.id,
+          model: resolvedMessage.model,
+        },
       };
     } catch (err) {
       logger.error(

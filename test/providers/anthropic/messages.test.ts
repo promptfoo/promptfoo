@@ -795,6 +795,8 @@ describe('AnthropicMessagesProvider', () => {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-test-123',
+        model: 'claude-3-5-sonnet-20241022',
         content: [{ type: 'text', text: 'Test output' }],
         usage: { input_tokens: 50, output_tokens: 50, server_tool_use: null },
       } as Anthropic.Messages.Message);
@@ -804,6 +806,10 @@ describe('AnthropicMessagesProvider', () => {
         output: 'Test output',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
         cost: 1.5,
+        metadata: {
+          responseId: 'msg-test-123',
+          model: 'claude-3-5-sonnet-20241022',
+        },
       });
     });
 

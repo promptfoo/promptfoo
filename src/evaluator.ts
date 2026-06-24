@@ -4767,7 +4767,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
-        const otelConfig = getDefaultOtelConfig();
+        const otelConfig = getDefaultOtelConfig(
+          this.testSuite as unknown as Record<string, unknown>,
+        );
         initializeOtel(otelConfig);
         otelInitialized = true;
       }

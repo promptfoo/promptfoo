@@ -56,6 +56,10 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected override getGenAIProviderName(): string {
+    return 'aws.bedrock';
+  }
+
   /**
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from types import ModuleType
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -412,7 +413,7 @@ class TestMain(unittest.TestCase):
 class TestHandleCall(unittest.TestCase):
     """Tests for handle_call function."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.request_file = os.path.join(self.temp_dir, "request.json")
@@ -426,7 +427,7 @@ class TestHandleCall(unittest.TestCase):
     def _raise_error(self):
         raise ValueError("Test error")
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         """Clean up temp files."""
         import shutil
 
@@ -638,7 +639,7 @@ class TestTracedCall(unittest.TestCase):
     _traced_call resolve without the real package.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up mock tracer, fake OTEL modules, and enable tracing."""
         self.original_tracing = persistent_wrapper._tracing_enabled
         self.original_tracer = persistent_wrapper._tracer
@@ -676,7 +677,7 @@ class TestTracedCall(unittest.TestCase):
             self._saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = mod
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         persistent_wrapper._tracing_enabled = self.original_tracing
         persistent_wrapper._tracer = self.original_tracer
         if self.original_semconv_opt_in is None:
@@ -690,18 +691,18 @@ class TestTracedCall(unittest.TestCase):
             else:
                 sys.modules[mod_name] = original
 
-    def _make_context(self, traceparent="00-abcd1234-5678-01"):
+    def _make_context(self, traceparent: str = "00-abcd1234-5678-01") -> dict[str, str]:
         """Helper to build a context dict with traceparent."""
         return {"traceparent": traceparent}
 
-    def test_latest_opt_in_accepts_comma_separated_environment_value(self):
+    def test_latest_opt_in_accepts_comma_separated_environment_value(self) -> None:
         with patch.dict(
             os.environ,
             {"OTEL_SEMCONV_STABILITY_OPT_IN": "http, gen_ai_latest_experimental"},
         ):
             self.assertTrue(persistent_wrapper._use_gen_ai_latest_experimental())
 
-    def test_skips_tracing_when_disabled(self):
+    def test_skips_tracing_when_disabled(self) -> None:
         """When tracing is disabled, should call method directly."""
         persistent_wrapper._tracing_enabled = False
         func = MagicMock(return_value="result")
@@ -709,7 +710,7 @@ class TestTracedCall(unittest.TestCase):
         self.assertEqual(result, "result")
         self.mock_tracer.start_as_current_span.assert_not_called()
 
-    def test_skips_tracing_without_traceparent(self):
+    def test_skips_tracing_without_traceparent(self) -> None:
         """Without traceparent in args, should call method directly."""
         func = MagicMock(return_value="result")
         # Only 2 args = no context
@@ -720,7 +721,9 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_call_api_preserves_legacy_attributes(self, _mock_latest):
+    def test_call_api_preserves_legacy_attributes(
+        self, _mock_latest: MagicMock
+    ) -> None:
         """Default mode should retain the pre-migration Python span convention."""
         func = MagicMock(return_value={"output": "hi"})
         ctx = self._make_context()
@@ -741,7 +744,9 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_call_embedding_api_preserves_legacy_operation(self, _mock_latest):
+    def test_call_embedding_api_preserves_legacy_operation(
+        self, _mock_latest: MagicMock
+    ) -> None:
         """Default mode should retain legacy embedding function naming."""
         func = MagicMock(return_value={"output": [0.1, 0.2]})
         ctx = self._make_context()
@@ -754,7 +759,7 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
     )
-    def test_call_api_latest_maps_to_chat(self, _mock_latest):
+    def test_call_api_latest_maps_to_chat(self, _mock_latest: MagicMock) -> None:
         """Latest opt-in should emit spec attributes and span names."""
         func = MagicMock(return_value={"output": "hi"})
         ctx = self._make_context()
@@ -770,11 +775,14 @@ class TestTracedCall(unittest.TestCase):
         self.assertNotIn(
             call("gen_ai.system", "python"), self.mock_span.set_attribute.mock_calls
         )
+        self.mock_span.set_status.assert_not_called()
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
     )
-    def test_call_embedding_latest_maps_to_embeddings(self, _mock_latest):
+    def test_call_embedding_latest_maps_to_embeddings(
+        self, _mock_latest: MagicMock
+    ) -> None:
         """call_embedding_api with latest opt-in should map to 'embeddings'."""
         func = MagicMock(return_value={"output": [0.1]})
         ctx = self._make_context()
@@ -795,7 +803,7 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_error_dict_sets_error_type(self, _mock_latest):
+    def test_error_dict_sets_error_type(self, _mock_latest: MagicMock) -> None:
         """Error dict with 'code' key should set error.type attribute."""
         func = MagicMock(return_value={"error": {"code": "rate_limit_exceeded"}})
         ctx = self._make_context()
@@ -808,18 +816,18 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_error_string_sets_provider_error(self, _mock_latest):
-        """String error should set error.type to 'provider_error'."""
+    def test_error_string_sets_standard_fallback(self, _mock_latest: MagicMock) -> None:
+        """String error should set error.type to the standard fallback value."""
         func = MagicMock(return_value={"error": "something failed"})
         ctx = self._make_context()
         persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
 
-        self.mock_span.set_attribute.assert_any_call("error.type", "provider_error")
+        self.mock_span.set_attribute.assert_any_call("error.type", "_OTHER")
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_exception_sets_error_type(self, _mock_latest):
+    def test_exception_sets_error_type(self, _mock_latest: MagicMock) -> None:
         """Thrown exception should set error.type to exception class name."""
         func = MagicMock(side_effect=ValueError("boom"))
         ctx = self._make_context()
@@ -833,14 +841,14 @@ class TestTracedCall(unittest.TestCase):
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
     def test_tracing_error_after_provider_call_returns_result_without_retry(
-        self, _mock_latest
-    ):
+        self, _mock_latest: MagicMock
+    ) -> None:
         """Tracing failures after provider execution should not call the provider twice."""
         result = {"error": {"code": "rate_limit_exceeded"}}
         func = MagicMock(return_value=result)
         ctx = self._make_context()
 
-        def fail_on_error_type(key, _value):
+        def fail_on_error_type(key: str, _value: Any) -> None:
             if key == "error.type":
                 raise RuntimeError("span write failed")
 
@@ -850,6 +858,103 @@ class TestTracedCall(unittest.TestCase):
 
         self.assertEqual(actual, result)
         func.assert_called_once()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_latest_token_details_use_current_attribute_names(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "output": "ok",
+                "tokenUsage": {
+                    "cached": 7,
+                    "completionDetails": {
+                        "reasoning": 11,
+                        "acceptedPrediction": 3,
+                        "rejectedPrediction": 2,
+                        "cacheReadInputTokens": 5,
+                        "cacheCreationInputTokens": 4,
+                    },
+                },
+            }
+        )
+
+        persistent_wrapper._traced_call(
+            func, ["prompt", {}, self._make_context()], "call_api"
+        )
+
+        expected = [
+            call("gen_ai.usage.cached_tokens", 7),
+            call("gen_ai.usage.reasoning.output_tokens", 11),
+            call("gen_ai.usage.accepted_prediction_tokens", 3),
+            call("gen_ai.usage.rejected_prediction_tokens", 2),
+            call("gen_ai.usage.cache_read.input_tokens", 5),
+            call("gen_ai.usage.cache_creation.input_tokens", 4),
+        ]
+        for expected_call in expected:
+            self.assertIn(expected_call, self.mock_span.set_attribute.mock_calls)
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_legacy_token_details_keep_existing_attribute_names(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        func = MagicMock(
+            return_value={
+                "tokenUsage": {
+                    "completionDetails": {
+                        "reasoning": 11,
+                        "cacheReadInputTokens": 5,
+                        "cacheCreationInputTokens": 4,
+                    }
+                }
+            }
+        )
+
+        persistent_wrapper._traced_call(
+            func, ["prompt", {}, self._make_context()], "call_api"
+        )
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.reasoning_tokens", 11
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.cache_read_input_tokens", 5
+        )
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.usage.cache_creation_input_tokens", 4
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_traced_bodies_redact_common_credentials(
+        self, _mock_latest: MagicMock
+    ) -> None:
+        api_key = "sk-abcdefghijklmnopqrstuvwxyz123456"
+        bearer = "abcdefghijklmnopqrstuvwxyz1234567890"
+        func = MagicMock(return_value={"output": f"Authorization: Bearer {bearer}"})
+
+        persistent_wrapper._traced_call(
+            func,
+            [f'{{"api_key":"{api_key}"}}', {}, self._make_context()],
+            "call_api",
+        )
+
+        body_values = [
+            value
+            for key, value in (
+                entry.args for entry in self.mock_span.set_attribute.mock_calls
+            )
+            if key in {"promptfoo.request.body", "promptfoo.response.body"}
+        ]
+        self.assertEqual(len(body_values), 2)
+        self.assertTrue(all("<REDACTED" in value for value in body_values))
+        self.assertTrue(all(api_key not in value for value in body_values))
+        self.assertTrue(all(bearer not in value for value in body_values))
 
 
 if __name__ == "__main__":

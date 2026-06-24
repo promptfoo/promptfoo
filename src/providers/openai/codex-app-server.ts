@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -1186,7 +1186,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
+      operationName: 'invoke_agent',
       model: requestedModel ?? 'codex-app-server',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
@@ -1210,6 +1210,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
     if (response.sessionId) {
       result.responseId = response.sessionId;
+      result.conversationId = response.sessionId;
     }
     if (requestedModel) {
       result.responseModel = requestedModel;
@@ -3189,18 +3190,19 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     // Codex app-server typically delivers usage under `last`/`total`; reuse
     // the shared resolver so we honor both nested and flat shapes.
     const usage = this.resolveRawUsage(state.rawTokenUsage);
-    const attributes: Attributes = {};
-    if (usage) {
-      attributes['gen_ai.usage.input_tokens'] = usage.input;
-      attributes['gen_ai.usage.output_tokens'] = usage.output;
-      if (usage.cached) {
-        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
-      }
-      if (usage.reasoning) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
-      }
-    }
-    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
+    closeTurnSpan(state, {
+      eventTime,
+      tokenUsage: usage
+        ? {
+            prompt: usage.input,
+            completion: usage.output,
+            cached: usage.cached,
+            completionDetails: { reasoning: usage.reasoning },
+          }
+        : undefined,
+      errorMessage,
+      logLabel: 'CodexAppServer',
+    });
   }
 
   private applyItemCompletionAttributes(

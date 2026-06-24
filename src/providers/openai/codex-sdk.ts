@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -1339,26 +1339,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     usage?: any,
     errorMessage?: string,
   ): void {
-    const attributes: Attributes = {};
-    if (usage) {
-      const inputTokens = usage.input_tokens ?? usage.inputTokens;
-      const outputTokens = usage.output_tokens ?? usage.outputTokens;
-      const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
-      const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
-      if (typeof inputTokens === 'number') {
-        attributes['gen_ai.usage.input_tokens'] = inputTokens;
-      }
-      if (typeof outputTokens === 'number') {
-        attributes['gen_ai.usage.output_tokens'] = outputTokens;
-      }
-      if (typeof cachedTokens === 'number') {
-        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
-      }
-      if (typeof reasoningTokens === 'number') {
-        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
-      }
-    }
-    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
+    const inputTokens = usage?.input_tokens ?? usage?.inputTokens;
+    const outputTokens = usage?.output_tokens ?? usage?.outputTokens;
+    const cachedTokens = usage?.cached_input_tokens ?? usage?.cachedInputTokens;
+    const reasoningTokens = usage?.reasoning_output_tokens ?? usage?.reasoningOutputTokens;
+    closeTurnSpan(state, {
+      eventTime,
+      tokenUsage: usage
+        ? {
+            prompt: typeof inputTokens === 'number' ? inputTokens : undefined,
+            completion: typeof outputTokens === 'number' ? outputTokens : undefined,
+            cached: typeof cachedTokens === 'number' ? cachedTokens : undefined,
+            completionDetails: {
+              reasoning: typeof reasoningTokens === 'number' ? reasoningTokens : undefined,
+            },
+          }
+        : undefined,
+      errorMessage,
+      logLabel: 'CodexSDK',
+    });
   }
 
   private collectStreamingItemText(item: any, state: CodexStreamingState): void {
@@ -2014,7 +2013,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
+      operationName: 'invoke_agent',
       model: requestedModel ?? 'codex',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
@@ -2039,6 +2038,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
     if (response.sessionId) {
       result.responseId = response.sessionId;
+      result.conversationId = response.sessionId;
     }
     if (response.cached !== undefined) {
       result.cacheHit = response.cached;

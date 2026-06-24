@@ -20,8 +20,10 @@ import importlib.util
 import inspect
 import json
 import os
+import re
 import sys
 import traceback
+from typing import Any
 
 # ============================================================================
 # OpenTelemetry Tracing Support (Optional)
@@ -173,13 +175,13 @@ def call_method(method_callable, args):
         return method_callable(*args)
 
 
-def _use_gen_ai_latest_experimental():
+def _use_gen_ai_latest_experimental() -> bool:
     """Check if OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental."""
     val = os.getenv("OTEL_SEMCONV_STABILITY_OPT_IN", "")
     return "gen_ai_latest_experimental" in [s.strip() for s in val.split(",")]
 
 
-def _gen_ai_operation_name(function_name, use_latest):
+def _gen_ai_operation_name(function_name: str, use_latest: bool) -> str:
     """Return the operation name for the selected semantic convention version."""
     if not use_latest:
         return function_name
@@ -194,13 +196,50 @@ def _gen_ai_operation_name(function_name, use_latest):
     return latest_names.get(function_name, function_name)
 
 
-def _truncate_body(text, max_length=4096):
+_SENSITIVE_BODY_PATTERNS = [
+    (re.compile(r"\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}"), "<REDACTED_API_KEY>"),
+    (
+        re.compile(
+            r"\b(api[_-]?key[\"']?\s*[:=]\s*[\"']?)([a-zA-Z0-9_-]{16,})",
+            re.IGNORECASE,
+        ),
+        r"\1<REDACTED>",
+    ),
+    (
+        re.compile(
+            r"\b(secret|token|password)([\"']?\s*[:=]\s*[\"']?)([^\s\"',}{]+)",
+            re.IGNORECASE,
+        ),
+        r"\1\2<REDACTED>",
+    ),
+    (
+        re.compile(
+            r"(Authorization[\"']?\s*[:=]\s*[\"']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})",
+            re.IGNORECASE,
+        ),
+        r"\1\2<REDACTED>",
+    ),
+    (re.compile(r"\bAKIA[A-Z0-9]{16}\b"), "<REDACTED_AWS_KEY>"),
+    (re.compile(r"\b[a-f0-9]{64,}\b", re.IGNORECASE), "<REDACTED_HASH>"),
+]
+
+
+def _sanitize_body(text: str) -> str:
+    """Redact common credential shapes from traced request and response bodies."""
+    sanitized = text
+    for pattern, replacement in _SENSITIVE_BODY_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
+def _truncate_body(text: Any, max_length: int = 4096) -> str:
     """Truncate text to max_length, adding indicator if truncated."""
     if not isinstance(text, str):
         text = str(text)
-    if len(text) <= max_length:
-        return text
-    return text[: max_length - 13] + "... [truncated]"
+    sanitized = _sanitize_body(text)
+    if len(sanitized) <= max_length:
+        return sanitized
+    return sanitized[: max_length - 13] + "... [truncated]"
 
 
 def _traced_call(method_callable, args, function_name):
@@ -314,6 +353,48 @@ def _traced_call(method_callable, args, function_name):
                             span.set_attribute(
                                 "gen_ai.usage.output_tokens", usage["completion"]
                             )
+                        if "cached" in usage:
+                            span.set_attribute(
+                                "gen_ai.usage.cached_tokens", usage["cached"]
+                            )
+                        details = usage.get("completionDetails")
+                        if isinstance(details, dict):
+                            if "reasoning" in details:
+                                reasoning_key = (
+                                    "gen_ai.usage.reasoning.output_tokens"
+                                    if use_latest
+                                    else "gen_ai.usage.reasoning_tokens"
+                                )
+                                span.set_attribute(reasoning_key, details["reasoning"])
+                            if "acceptedPrediction" in details:
+                                span.set_attribute(
+                                    "gen_ai.usage.accepted_prediction_tokens",
+                                    details["acceptedPrediction"],
+                                )
+                            if "rejectedPrediction" in details:
+                                span.set_attribute(
+                                    "gen_ai.usage.rejected_prediction_tokens",
+                                    details["rejectedPrediction"],
+                                )
+                            if "cacheReadInputTokens" in details:
+                                cache_read_key = (
+                                    "gen_ai.usage.cache_read.input_tokens"
+                                    if use_latest
+                                    else "gen_ai.usage.cache_read_input_tokens"
+                                )
+                                span.set_attribute(
+                                    cache_read_key, details["cacheReadInputTokens"]
+                                )
+                            if "cacheCreationInputTokens" in details:
+                                cache_creation_key = (
+                                    "gen_ai.usage.cache_creation.input_tokens"
+                                    if use_latest
+                                    else "gen_ai.usage.cache_creation_input_tokens"
+                                )
+                                span.set_attribute(
+                                    cache_creation_key,
+                                    details["cacheCreationInputTokens"],
+                                )
 
                     # Cache hit
                     if "cached" in result:
@@ -335,16 +416,14 @@ def _traced_call(method_callable, args, function_name):
                             else:
                                 error_type = None
                             error_type_str = (
-                                str(error_type)
-                                if error_type is not None
-                                else "provider_error"
+                                str(error_type) if error_type is not None else "_OTHER"
                             )
                             span.set_attribute("error.type", error_type_str)
                         else:
-                            span.set_attribute("error.type", "provider_error")
-                    else:
+                            span.set_attribute("error.type", "_OTHER")
+                    elif not use_latest:
                         span.set_status(Status(StatusCode.OK))
-                else:
+                elif not use_latest:
                     span.set_status(Status(StatusCode.OK))
 
                 return result

@@ -555,6 +555,10 @@ export function getXAICostInUsd(usage?: { cost_in_usd_ticks?: number }): number 
 class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
+  protected override getGenAIProviderName(): string {
+    return 'x_ai';
+  }
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }

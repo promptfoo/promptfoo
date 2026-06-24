@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import logger from '../logger';
-import { getGenAIProviderName } from './genaiTracer';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -714,8 +713,6 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
-          this.normalizeGenAIAttributes(attributes);
-
           traces.push({
             traceId,
             span: {
@@ -895,8 +892,6 @@ export class OTLPReceiver {
       'otel.span.kind': spanKindName,
       'otel.span.kind_code': spanKindCode,
     };
-    this.normalizeGenAIAttributes(attributes);
-
     return {
       traceId,
       span: {
@@ -959,29 +954,6 @@ export class OTLPReceiver {
       return kvMap;
     }
     return undefined;
-  }
-
-  /**
-   * Normalize Gen AI attributes so we recognize both old and new convention keys.
-   * Ensures gen_ai.provider.name is set (from gen_ai.system if needed) and
-   * canonicalizes operation name to new spec values (text_completion, embeddings).
-   */
-  private normalizeGenAIAttributes(attributes: Record<string, any>): void {
-    if (!attributes) {
-      return;
-    }
-    if (
-      attributes['gen_ai.provider.name'] == null &&
-      typeof attributes['gen_ai.system'] === 'string'
-    ) {
-      attributes['gen_ai.provider.name'] = getGenAIProviderName(attributes['gen_ai.system']);
-    }
-    const op = attributes['gen_ai.operation.name'];
-    if (op === 'completion') {
-      attributes['gen_ai.operation.name'] = 'text_completion';
-    } else if (op === 'embedding') {
-      attributes['gen_ai.operation.name'] = 'embeddings';
-    }
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {

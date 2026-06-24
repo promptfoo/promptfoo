@@ -25,7 +25,7 @@ const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 
 // GenAI Semantic Convention attribute names (OTEL Gen AI spec)
-// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+// See: https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai
 export const GenAIAttributes = {
   // System identification (deprecated: use PROVIDER_NAME for spec compliance)
   SYSTEM: 'gen_ai.system',
@@ -42,8 +42,10 @@ export const GenAIAttributes = {
   REQUEST_STOP_SEQUENCES: 'gen_ai.request.stop_sequences',
   REQUEST_FREQUENCY_PENALTY: 'gen_ai.request.frequency_penalty',
   REQUEST_PRESENCE_PENALTY: 'gen_ai.request.presence_penalty',
+  REQUEST_STREAM: 'gen_ai.request.stream',
 
   // Response attributes
+  CONVERSATION_ID: 'gen_ai.conversation.id',
   RESPONSE_MODEL: 'gen_ai.response.model',
   RESPONSE_ID: 'gen_ai.response.id',
   RESPONSE_FINISH_REASONS: 'gen_ai.response.finish_reasons',
@@ -67,8 +69,13 @@ export const GenAIAttributes = {
   USAGE_CACHE_CREATION_INPUT_TOKENS_LATEST: 'gen_ai.usage.cache_creation.input_tokens',
 } as const;
 
-/** OTEL Gen AI operation names (spec well-known values) */
-export type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings';
+/** Current OTEL Gen AI operation names supported by Promptfoo instrumentation. */
+export type GenAIOperationName =
+  | 'chat'
+  | 'text_completion'
+  | 'embeddings'
+  | 'generate_content'
+  | 'invoke_agent';
 
 /** Legacy operation names accepted for backward compatibility */
 export type LegacyOperationName = 'completion' | 'embedding';
@@ -78,6 +85,8 @@ const LEGACY_OPERATION_NAMES: Record<GenAIOperationName, string> = {
   chat: 'chat',
   text_completion: 'completion',
   embeddings: 'embedding',
+  generate_content: 'chat',
+  invoke_agent: 'chat',
 };
 
 /** Map legacy operation names to their canonical spec equivalents */
@@ -107,7 +116,7 @@ const GEN_AI_LATEST_OPT_IN = 'gen_ai_latest_experimental';
  */
 export function useGenAILatestExperimental(): boolean {
   const val = getEnvString('OTEL_SEMCONV_STABILITY_OPT_IN');
-  if (!val || typeof val !== 'string') {
+  if (!val) {
     return false;
   }
   return val
@@ -138,26 +147,45 @@ export function getGenAIProviderName(system: string): string {
     aws_bedrock: 'aws.bedrock',
     bedrock: 'aws.bedrock',
     azure: 'azure.ai.openai',
+    azure_ai_inference: 'azure.ai.inference',
     azure_openai: 'azure.ai.openai',
     vertex: 'gcp.vertex_ai',
     gcp_vertex_ai: 'gcp.vertex_ai',
     google: 'gcp.gen_ai',
     gemini: 'gcp.gemini',
+    gcp_gemini: 'gcp.gemini',
+    gcp_gen_ai: 'gcp.gen_ai',
     cohere: 'cohere',
     mistral: 'mistral_ai',
     mistral_ai: 'mistral_ai',
+    moonshot: 'moonshot_ai',
+    moonshot_ai: 'moonshot_ai',
     ollama: 'ollama',
     openrouter: 'openrouter',
     watsonx: 'ibm.watsonx.ai',
     ibm_watsonx: 'ibm.watsonx.ai',
     groq: 'groq',
     deepseek: 'deepseek',
+    perplexity: 'perplexity',
+    x_ai: 'x_ai',
+    xai: 'x_ai',
     replicate: 'replicate',
     huggingface: 'huggingface',
     http: 'http',
   };
   const key = normalized.replace(/\s+/g, '_');
-  return mapping[key] ?? system;
+  return mapping[key] ?? baseSystem;
+}
+
+/** Build the mutually exclusive legacy/latest provider identity attributes. */
+export function getGenAIProviderAttributes(
+  system: string,
+  providerName?: string,
+  useLatest: boolean = useGenAILatestExperimental(),
+): Attributes {
+  return useLatest
+    ? { [GenAIAttributes.PROVIDER_NAME]: getGenAIProviderName(providerName ?? system) }
+    : { [GenAIAttributes.SYSTEM]: system };
 }
 
 // Promptfoo-specific attributes
@@ -220,12 +248,18 @@ const SENSITIVE_PATTERNS: Array<{
 export interface GenAISpanContext {
   /** The GenAI system (e.g., 'openai', 'anthropic', 'bedrock') */
   system: string;
+  /** Explicit latest-convention provider identity when it differs from the legacy system. */
+  providerName?: string;
   /** The operation type (OTEL spec: chat, text_completion, embeddings). Legacy names (completion, embedding) are also accepted and auto-normalized. */
   operationName: GenAIOperationName | LegacyOperationName;
   /** The requested model name */
   model: string;
   /** The promptfoo provider ID */
   providerId: string;
+  /** Human-readable agent name, used only for invoke_agent spans when available. */
+  agentName?: string;
+  /** Stable agent identifier, used only for invoke_agent spans when available. */
+  agentId?: string;
 
   // Optional request parameters
   maxTokens?: number;
@@ -235,6 +269,8 @@ export interface GenAISpanContext {
   stopSequences?: string[];
   frequencyPenalty?: number;
   presencePenalty?: number;
+  /** Whether the effective request is streaming. Only true is emitted in latest mode. */
+  stream?: boolean;
 
   // Promptfoo context
   evalId?: string;
@@ -256,6 +292,7 @@ export interface GenAISpanContext {
  */
 export interface GenAISpanResult {
   tokenUsage?: TokenUsage;
+  conversationId?: string;
   responseModel?: string;
   responseId?: string;
   finishReasons?: string[];
@@ -276,7 +313,7 @@ export function getGenAITracer(): Tracer {
 
 /**
  * Extract the error type string from a ProviderResponse-style error value.
- * Prefers provider code/type/status, then HTTP status (4xx/5xx), else 'provider_error'.
+ * Prefers provider code/type/status, then HTTP status (4xx/5xx), else `_OTHER`.
  */
 function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>): string {
   const errObj =
@@ -289,7 +326,7 @@ function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>)
   return (
     providerCode ??
     (typeof httpStatus === 'number' && httpStatus >= 400 ? String(httpStatus) : null) ??
-    'provider_error'
+    ERROR_TYPE_VALUE_OTHER
   );
 }
 
@@ -354,7 +391,12 @@ export async function withGenAISpan<T>(
   // Span name follows GenAI convention: "{operation} {model}"
   // Use emitted operation name (legacy vs latest per OTEL_SEMCONV_STABILITY_OPT_IN)
   const emittedOperation = getEmittedOperationName(canonicalOperation, useLatest);
-  const spanName = `${emittedOperation} ${ctx.model}`;
+  const spanName =
+    useLatest && canonicalOperation === 'invoke_agent'
+      ? ctx.agentName
+        ? `invoke_agent ${ctx.agentName}`
+        : 'invoke_agent'
+      : `${emittedOperation} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
@@ -391,7 +433,7 @@ export async function withGenAISpan<T>(
           ATTR_ERROR_TYPE,
           extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
         );
-      } else {
+      } else if (!useLatest) {
         span.setStatus({ code: SpanStatusCode.OK });
       }
       return value;
@@ -444,10 +486,13 @@ function buildRequestAttributes(
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
 
-  if (useLatest) {
-    attrs[GenAIAttributes.PROVIDER_NAME] = getGenAIProviderName(ctx.system);
-  } else {
-    attrs[GenAIAttributes.SYSTEM] = ctx.system;
+  Object.assign(attrs, getGenAIProviderAttributes(ctx.system, ctx.providerName, useLatest));
+
+  if (useLatest && ctx.agentName) {
+    attrs['gen_ai.agent.name'] = ctx.agentName;
+  }
+  if (useLatest && ctx.agentId) {
+    attrs['gen_ai.agent.id'] = ctx.agentId;
   }
 
   // Optional request parameters
@@ -471,6 +516,9 @@ function buildRequestAttributes(
   }
   if (ctx.presencePenalty !== undefined) {
     attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = ctx.presencePenalty;
+  }
+  if (useLatest && ctx.stream === true) {
+    attrs[GenAIAttributes.REQUEST_STREAM] = true;
   }
 
   // Promptfoo context
@@ -604,7 +652,10 @@ export function setGenAIResponseAttributes(
   if (result.responseModel) {
     span.setAttribute(GenAIAttributes.RESPONSE_MODEL, result.responseModel);
   }
-  if (result.responseId) {
+  if (useLatest && result.conversationId) {
+    span.setAttribute(GenAIAttributes.CONVERSATION_ID, result.conversationId);
+  }
+  if (result.responseId && (!useLatest || !result.conversationId)) {
     span.setAttribute(GenAIAttributes.RESPONSE_ID, result.responseId);
   }
   if (result.finishReasons && result.finishReasons.length > 0) {
@@ -683,17 +734,38 @@ export function getCurrentSpanId(): string | undefined {
  */
 export function buildChatSpanContext(args: {
   system: string;
+  providerName?: string;
+  operationName?: GenAIOperationName;
   model: string;
+  agentName?: string;
+  agentId?: string;
   providerId: string;
   prompt: string;
   context?: CallApiContextParams;
-  request?: Pick<GenAISpanContext, 'maxTokens' | 'temperature' | 'topP' | 'stopSequences'>;
+  request?: Pick<
+    GenAISpanContext,
+    'maxTokens' | 'temperature' | 'topP' | 'stopSequences' | 'stream'
+  >;
 }): GenAISpanContext {
-  const { system, model, providerId, prompt, context, request } = args;
+  const {
+    system,
+    providerName,
+    operationName = 'chat',
+    model,
+    agentName,
+    agentId,
+    providerId,
+    prompt,
+    context,
+    request,
+  } = args;
   return {
     system,
-    operationName: 'chat',
+    providerName,
+    operationName,
     model,
+    agentName,
+    agentId,
     providerId,
     evalId: context?.evaluationId || (context?.test?.metadata?.evaluationId as string | undefined),
     testIndex: context?.test?.vars?.__testIdx as number | undefined,
@@ -720,6 +792,12 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   }
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
+  }
+  if (typeof response.metadata?.model === 'string') {
+    result.responseModel = response.metadata.model;
+  }
+  if (typeof response.metadata?.responseId === 'string') {
+    result.responseId = response.metadata.responseId;
   }
   if (response.cached !== undefined) {
     result.cacheHit = response.cached;
@@ -757,6 +835,7 @@ export function openTurnSpan(
     tracer: Tracer;
     eventTime: number;
     system: string;
+    providerName?: string;
     attributes?: Attributes;
     logLabel?: string;
   },
@@ -767,6 +846,7 @@ export function openTurnSpan(
         code: SpanStatusCode.ERROR,
         message: 'Turn span not properly closed before next turn started',
       });
+      state.activeTurnSpan.setAttribute(ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER);
       state.activeTurnSpan.end(opts.eventTime);
     } catch {
       // ignore
@@ -783,7 +863,7 @@ export function openTurnSpan(
       startTime: opts.eventTime,
       attributes: {
         'gen_ai.turn.index': index,
-        'gen_ai.system': opts.system,
+        ...getGenAIProviderAttributes(opts.system, opts.providerName),
         ...opts.attributes,
       },
     });
@@ -798,13 +878,14 @@ export function openTurnSpan(
 
 /**
  * Close the active `gen_ai.turn` span on `state`, applying any provider-supplied
- * usage attributes and an OK/ERROR status. No-op when no turn span is open.
+ * usage attributes and convention-appropriate status. No-op when no turn span is open.
  */
 export function closeTurnSpan(
   state: TurnSpanState,
   opts: {
     eventTime?: number;
     attributes?: Attributes;
+    tokenUsage?: TokenUsage;
     errorMessage?: string;
     logLabel?: string;
   } = {},
@@ -821,11 +902,15 @@ export function closeTurnSpan(
         }
       }
     }
-    span.setStatus(
-      opts.errorMessage
-        ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
-        : { code: SpanStatusCode.OK },
-    );
+    if (opts.tokenUsage) {
+      setGenAITokenUsageAttributes(span, opts.tokenUsage, useGenAILatestExperimental());
+    }
+    if (opts.errorMessage) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: opts.errorMessage });
+      span.setAttribute(ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER);
+    } else if (!useGenAILatestExperimental()) {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
     span.end(opts.eventTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to end turn span: ${err}`);
@@ -836,15 +921,17 @@ export function closeTurnSpan(
 /**
  * Emit a fire-and-forget `gen_ai.turn N` marker span (created and ended at the
  * given timestamps). Used by providers whose agent loop has a natural turn
- * boundary but no streaming span to bracket. Caller builds the full attribute
- * set; status is OK unless `errorMessage` is provided.
+ * boundary but no streaming span to bracket. Status follows the selected
+ * convention and errors are always marked explicitly.
  */
 export function emitTurnMarkerSpan(opts: {
   tracer: Tracer;
   index: number;
   startTime: number;
   endTime: number;
-  attributes: Attributes;
+  system: string;
+  providerName?: string;
+  attributes?: Attributes;
   errorMessage?: string;
   logLabel?: string;
 }): void {
@@ -852,13 +939,17 @@ export function emitTurnMarkerSpan(opts: {
     const span = opts.tracer.startSpan(`gen_ai.turn ${opts.index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.startTime,
-      attributes: opts.attributes,
+      attributes: {
+        ...getGenAIProviderAttributes(opts.system, opts.providerName),
+        ...opts.attributes,
+      },
     });
-    span.setStatus(
-      opts.errorMessage
-        ? { code: SpanStatusCode.ERROR, message: opts.errorMessage }
-        : { code: SpanStatusCode.OK },
-    );
+    if (opts.errorMessage) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: opts.errorMessage });
+      span.setAttribute(ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER);
+    } else if (!useGenAILatestExperimental()) {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
     span.end(opts.endTime);
   } catch (err) {
     logger.warn(`[${opts.logLabel ?? 'TurnSpan'}] Failed to emit turn span: ${err}`);

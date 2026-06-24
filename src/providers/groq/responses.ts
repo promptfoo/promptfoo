@@ -25,6 +25,10 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
     return this.config?.apiKey;
   }
 
+  protected override getGenAIProviderName(): string {
+    return 'groq';
+  }
+
   protected isReasoningModel(): boolean {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }

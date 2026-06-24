@@ -131,6 +131,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-deep-research-2025-06-26',
   ];
 
+  /** Latest-convention provider identity; subclasses override for known backends. */
+  protected getGenAIProviderName(): string {
+    return 'openai';
+  }
+
   config: OpenAiCompletionOptions;
 
   constructor(
@@ -413,6 +418,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const spanContext = buildChatSpanContext({
       system: 'openai',
+      providerName: this.getGenAIProviderName(),
       model: this.modelName,
       providerId: this.id(),
       prompt,
@@ -422,6 +428,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         temperature: asNumber(effectiveBody.temperature),
         topP: asNumber(effectiveBody.top_p),
         stopSequences: Array.isArray(effectiveBody.stop) ? effectiveBody.stop : undefined,
+        stream: effectiveBody.stream === true,
       },
     });
 

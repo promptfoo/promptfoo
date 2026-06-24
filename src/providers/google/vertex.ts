@@ -219,12 +219,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system,
-      operationName: 'chat',
+      operationName: this.modelName.includes('gemini') ? 'generate_content' : 'chat',
       model: this.modelName,
       providerId: this.id(),
       temperature: this.config.temperature,
       topP: this.config.topP,
       maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      stream:
+        this.modelName.includes('gemini') &&
+        ((context?.prompt?.config as { streaming?: boolean } | undefined)?.streaming ??
+          this.config.streaming) === true,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace

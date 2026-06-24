@@ -47,6 +47,7 @@ vi.mock('@opentelemetry/api', async () => {
       CLIENT: 2,
     },
     SpanStatusCode: {
+      UNSET: 0,
       OK: 1,
       ERROR: 2,
     },
@@ -68,6 +69,8 @@ describe('genaiTracer', () => {
       expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
+      expect(GenAIAttributes.REQUEST_STREAM).toBe('gen_ai.request.stream');
+      expect(GenAIAttributes.CONVERSATION_ID).toBe('gen_ai.conversation.id');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
       expect(GenAIAttributes.USAGE_OUTPUT_TOKENS).toBe('gen_ai.usage.output_tokens');
       expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
@@ -180,9 +183,29 @@ describe('genaiTracer', () => {
     });
 
     it('should set OK status on success', async () => {
-      await withGenAISpan(baseContext, async () => ({ output: 'test' }));
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
 
-      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      try {
+        await withGenAISpan(baseContext, async () => ({ output: 'test' }));
+
+        expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should leave successful spans UNSET under the current conventions', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      try {
+        await withGenAISpan(baseContext, async () => ({ output: 'test' }));
+
+        expect(mockSpan.setStatus).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should end the span after execution', async () => {
@@ -355,6 +378,39 @@ describe('genaiTracer', () => {
       ]);
     });
 
+    it('should emit conversation identity without duplicating it as a response ID', () => {
+      const result: GenAISpanResult = {
+        responseId: 'thread-123',
+        conversationId: 'thread-123',
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result, true, true);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.CONVERSATION_ID,
+        'thread-123',
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.RESPONSE_ID,
+        expect.anything(),
+      );
+    });
+
+    it('should preserve response ID in legacy mode when a conversation ID is available', () => {
+      const result: GenAISpanResult = {
+        responseId: 'thread-123',
+        conversationId: 'thread-123',
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result, true, false);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'thread-123');
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.CONVERSATION_ID,
+        expect.anything(),
+      );
+    });
+
     it('should not set attributes for undefined values', () => {
       const result: GenAISpanResult = {
         tokenUsage: {
@@ -411,6 +467,8 @@ describe('genaiTracer', () => {
       expect(normalizeOperationName('chat')).toBe('chat');
       expect(normalizeOperationName('text_completion')).toBe('text_completion');
       expect(normalizeOperationName('embeddings')).toBe('embeddings');
+      expect(normalizeOperationName('generate_content')).toBe('generate_content');
+      expect(normalizeOperationName('invoke_agent')).toBe('invoke_agent');
     });
 
     it('should normalize legacy names in withGenAISpan', async () => {
@@ -460,6 +518,70 @@ describe('genaiTracer', () => {
         const options = mockTracer.startActiveSpan.mock.calls[0][1];
         expect(options.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('gcp.vertex_ai');
         expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should emit current agent, provider, and streaming attributes when opted in', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      try {
+        await withGenAISpan(
+          {
+            system: 'openai',
+            providerName: 'xai',
+            operationName: 'invoke_agent',
+            model: 'grok-code',
+            providerId: 'xai:grok-code',
+            agentName: 'reviewer',
+            agentId: 'agent-123',
+            stream: true,
+          },
+          async () => ({ output: 'test' }),
+        );
+
+        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+          'invoke_agent reviewer',
+          expect.any(Object),
+          expect.anything(),
+          expect.any(Function),
+        );
+        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+        expect(attributes).toMatchObject({
+          [GenAIAttributes.PROVIDER_NAME]: 'x_ai',
+          [GenAIAttributes.OPERATION_NAME]: 'invoke_agent',
+          [GenAIAttributes.REQUEST_STREAM]: true,
+          'gen_ai.agent.name': 'reviewer',
+          'gen_ai.agent.id': 'agent-123',
+        });
+        expect(attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should omit false streaming and preserve new operations as chat in legacy mode', async () => {
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+
+      try {
+        await withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'generate_content',
+            model: 'gemini-2.5-pro',
+            providerId: 'vertex:gemini-2.5-pro',
+            stream: false,
+          },
+          async () => ({ output: 'test' }),
+        );
+
+        const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+        expect(attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
+        expect(attributes).not.toHaveProperty(GenAIAttributes.REQUEST_STREAM);
+        expect(attributes[GenAIAttributes.SYSTEM]).toBe('openai');
       } finally {
         restoreEnv();
       }

@@ -1338,7 +1338,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       return await withGenAISpan(
         {
           system: 'anthropic',
-          operationName: 'chat',
+          operationName: 'invoke_agent',
           model: config.model || 'default',
           providerId: this.providerId,
           traceparent: context?.traceparent,
@@ -1402,7 +1402,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             turnCount = index;
             const attributes: Record<string, string | number | boolean> = {
               'gen_ai.turn.index': index,
-              'gen_ai.system': 'anthropic',
             };
             if (msg.parent_tool_use_id) {
               attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
@@ -1437,6 +1436,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               index,
               startTime: now,
               endTime: now,
+              system: 'anthropic',
               attributes,
               errorMessage: msg.error,
               logLabel: 'ClaudeAgentSDK',
@@ -1754,6 +1754,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             tokenUsage: response.tokenUsage,
             responseModel,
             responseId: response.sessionId,
+            conversationId: response.sessionId,
             finishReasons,
             cacheHit: response.cached,
             responseBody:

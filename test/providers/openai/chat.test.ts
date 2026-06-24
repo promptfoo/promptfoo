@@ -68,6 +68,8 @@ describe('OpenAI Provider', () => {
     it('should call API successfully', async () => {
       const mockResponse = {
         data: {
+          id: 'chatcmpl-test-123',
+          model: 'gpt-4o-mini-2026-01-01',
           choices: [{ message: { content: 'Test output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         },
@@ -88,6 +90,10 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+      expect(result.metadata).toMatchObject({
+        responseId: 'chatcmpl-test-123',
+        model: 'gpt-4o-mini-2026-01-01',
+      });
     });
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {

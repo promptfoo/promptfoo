@@ -47,6 +47,7 @@ describe('LocalSpanExporter', () => {
       endTime: [number, number];
       attributes: Record<string, unknown>;
       status: { code: number; message?: string };
+      kind: number;
     }> = {},
   ): ReadableSpan {
     const traceId = overrides.traceId ?? 'trace-id-123';
@@ -66,7 +67,7 @@ describe('LocalSpanExporter', () => {
       endTime: overrides.endTime ?? [1001, 200000000], // 1001.2 seconds
       attributes: overrides.attributes ?? { 'test.attr': 'value' },
       status: overrides.status ?? { code: 1 },
-      kind: 2, // CLIENT
+      kind: overrides.kind ?? 2, // CLIENT
       links: [],
       events: [],
       resource: { attributes: {} },
@@ -247,7 +248,29 @@ describe('LocalSpanExporter', () => {
               'gen_ai.system': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
+              'otel.span.kind': 'client',
+              'otel.span.kind_code': 3,
             },
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('should preserve the span kind for local receiver compatibility', async () => {
+      const span = createMockSpan({ kind: 1 }); // SERVER
+
+      const result = await exportSpans([span]);
+
+      expect(result.code).toBe(ExportResultCode.SUCCESS);
+      expect(mockAddSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'otel.span.kind': 'server',
+              'otel.span.kind_code': 2,
+            }),
           }),
         ],
         expect.any(Object),

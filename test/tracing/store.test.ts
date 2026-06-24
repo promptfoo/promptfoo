@@ -458,6 +458,58 @@ describe('TraceStore', () => {
       });
     });
 
+    it('should redact non-numeric values that use token counter attribute names', async () => {
+      const mockTrace = {
+        id: '1',
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-case-1',
+        metadata: null,
+      };
+      const mockSpans = [
+        {
+          id: '1',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          parentSpanId: null,
+          name: 'malformed telemetry',
+          startTime: 1000,
+          endTime: null,
+          attributes: {
+            'gen_ai.usage.input_tokens': 'sk-this-is-a-secret-not-a-counter',
+            'gen_ai.usage.output_tokens': { apiKey: 'nested-secret' },
+            'gen_ai.usage.reasoning.output_tokens': ['secret', 'payload'],
+            'gen_ai.usage.cache_read.input_tokens': Number.POSITIVE_INFINITY,
+          },
+          statusCode: null,
+          statusMessage: null,
+        },
+      ];
+
+      const tracesSelectChain = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve([mockTrace])),
+      };
+      const spanQuery = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve(mockSpans)),
+      };
+
+      vi.spyOn(mockDb, 'select')
+        .mockImplementation(() => ({}))
+        .mockReturnValueOnce(tracesSelectChain)
+        .mockReturnValueOnce(spanQuery);
+
+      const result = await traceStore.getTracesByEvaluation('eval-1');
+
+      expect(result[0].spans[0].attributes).toEqual({
+        'gen_ai.usage.input_tokens': '<redacted>',
+        'gen_ai.usage.output_tokens': '<redacted>',
+        'gen_ai.usage.reasoning.output_tokens': '<redacted>',
+        'gen_ai.usage.cache_read.input_tokens': '<redacted>',
+      });
+    });
+
     it('should allow callers to retrieve raw span attributes for an evaluation', async () => {
       const mockTrace = {
         id: '1',

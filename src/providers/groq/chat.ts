@@ -22,6 +22,10 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
+  protected override getGenAIProviderName(): string {
+    return 'groq';
+  }
+
   protected isReasoningModel(): boolean {
     return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
