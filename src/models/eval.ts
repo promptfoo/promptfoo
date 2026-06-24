@@ -456,7 +456,9 @@ function projectResultForRedteamReport(
     ? null
     : isRecord(result.gradingResult)
       ? projectGradingResultForRedteamReport(result.gradingResult)
-      : result.gradingResult;
+      : result.gradingResult === null
+        ? null
+        : undefined;
   const normalizedPrompt = normalizePromptForRedteamReport(result.prompt);
 
   return {

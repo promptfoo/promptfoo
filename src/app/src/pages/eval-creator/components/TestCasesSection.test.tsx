@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
-import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { testCaseFromCsvRow } from '@app/utils/csv';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as yaml from 'js-yaml';
@@ -19,7 +19,7 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 // Mock testCaseFromCsvRow
-vi.mock('@promptfoo/csv', () => ({
+vi.mock('@app/utils/csv', () => ({
   testCaseFromCsvRow: vi.fn(),
 }));
 

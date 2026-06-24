@@ -1744,6 +1744,23 @@ describe('evaluator', () => {
       expect(JSON.stringify(projected)).not.toContain('provider-config-should-not-appear');
     });
 
+    it('omits malformed legacy top-level grading results from compact projections', async () => {
+      const eval1 = new Eval({});
+      const legacyResult = createEvaluateResult();
+      legacyResult.gradingResult = [
+        {
+          reason: 'malformed grading result',
+          metadata: { apiKey: 'legacy-grading-secret-should-not-appear' },
+        },
+      ] as unknown as EvaluateResult['gradingResult'];
+      eval1.oldResults = createEvaluateSummaryV2({ results: [legacyResult] });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult).toBeUndefined();
+      expect(JSON.stringify(projected)).not.toContain('legacy-grading-secret-should-not-appear');
+    });
+
     it('preserves report-relevant JSON types in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addResult(

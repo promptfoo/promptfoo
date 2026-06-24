@@ -1,6 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
-import { escapeCsvFormula } from '../../csv';
 import { ResultFailureReason } from '../../types/index';
+import { escapeCsvFormula } from '../csv';
 
 import type Eval from '../../models/eval';
 import type {
