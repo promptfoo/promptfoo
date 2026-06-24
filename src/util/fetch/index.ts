@@ -339,6 +339,13 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+export function getEffectiveFetchSignal(
+  url: RequestInfo,
+  options: Pick<RequestInit, 'signal'>,
+): AbortSignal | null | undefined {
+  return options.signal === undefined && url instanceof Request ? url.signal : options.signal;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -351,12 +358,14 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
-  // Combine abort signals: incoming abortSignal parameter + any signal in options
+  // Explicit init.signal (including null) overrides a Request-carried signal, matching fetch.
+  // The separate abortSignal parameter is always composed with that effective signal.
+  const effectiveSignal = getEffectiveFetchSignal(url, options);
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? effectiveSignal
+      ? AbortSignal.any([effectiveSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : effectiveSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
@@ -458,10 +467,11 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
 
-    // Combine timeout signal with any incoming abort signal
+    // Combine timeout signal with the effective init/Request signal.
     // The composite signal will abort if EITHER signal aborts
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, timeoutController.signal])
+    const effectiveSignal = getEffectiveFetchSignal(url, options);
+    const signal = effectiveSignal
+      ? AbortSignal.any([effectiveSignal, timeoutController.signal])
       : timeoutController.signal;
 
     const timeoutId = setTimeout(() => {
@@ -795,8 +805,9 @@ export async function fetchWithRetries(
 ): Promise<Response> {
   const { retryOnStatusCodes: configuredRetryStatusCodes, ...requestOptions } = options;
   const retryOnStatusCodes = normalizeRetryOnStatusCodes(configuredRetryStatusCodes);
-  const signal = requestOptions.signal ?? (url instanceof Request ? url.signal : undefined);
-  const effectiveRequestOptions = signal ? { ...requestOptions, signal } : requestOptions;
+  const signal = getEffectiveFetchSignal(url, requestOptions);
+  const effectiveRequestOptions =
+    signal === undefined ? requestOptions : { ...requestOptions, signal };
   maxRetries = resolveFetchRetryMaxRetries(maxRetries);
   const hasReplayableBody = hasReplayableRequestBody(url, effectiveRequestOptions);
 

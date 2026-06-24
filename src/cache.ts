@@ -15,6 +15,7 @@ import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import {
   type FetchOptions,
   fetchWithRetries,
+  getEffectiveFetchSignal,
   getFetchWithProxyHeaders,
   normalizeRetryOnStatusCodes,
 } from './util/fetch/index';
@@ -665,7 +666,7 @@ function getInflightFetchCacheKey(
   maxRetries: number,
   deferCacheWrite: boolean,
 ) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal = getEffectiveFetchSignal(url, options);
   const retryStatusKey = options.retryOnStatusCodes?.join(',') ?? '';
   const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}:deferCacheWrite:${deferCacheWrite}`;
   return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;

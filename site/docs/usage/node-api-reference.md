@@ -548,8 +548,10 @@ On a cacheable miss, call the optional callback with `await result.commitToCache
 validation succeeds. The callback is absent for cache hits, bypassed caching, and responses that
 cannot be cached. If validation rejects an existing cached response, call
 `await result.deleteFromCache?.()` before retrying; deletion is conditional and will not remove a
-newer response written concurrently. If requests for the same cache key overlap, an older response
-does not replace a newer committed response, whether either write is deferred or immediate.
+newer response written concurrently by another call in the same process. For overlapping calls in
+one process, an older response does not replace a newer committed response while that newer cache
+entry remains, whether either write is deferred or immediate. Ordering is not coordinated across
+processes and resets when the cache entry expires or is evicted.
 
 **Example:**
 

@@ -977,6 +977,27 @@ describe('fetchWithProxy', () => {
         }),
       );
     });
+
+    it('should use a Request-carried signal to cancel transient retry backoff', async () => {
+      const abortController = new AbortController();
+      const abortReason = new DOMException('cancelled during backoff', 'AbortError');
+      const request = new Request('https://example.com/api', {
+        signal: abortController.signal,
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({ status: 503, statusText: 'Service Unavailable' }),
+      );
+      vi.mocked(sleepWithAbort).mockImplementationOnce(async (_ms, signal) => {
+        expect(signal).toBe(request.signal);
+        abortController.abort(abortReason);
+        throw abortReason;
+      });
+
+      await expect(fetchWithProxy(request)).rejects.toBe(abortReason);
+
+      expect(global.fetch).toHaveBeenCalledOnce();
+      expect(sleepWithAbort).toHaveBeenCalledOnce();
+    });
   });
 });
 
@@ -1026,6 +1047,42 @@ describe('fetchWithTimeout', () => {
         signal: expect.any(Object),
       }),
     );
+  });
+
+  it('should combine a Request-carried signal with the timeout signal', async () => {
+    const userAbortController = new AbortController();
+    const request = new Request('https://example.com', {
+      signal: userAbortController.signal,
+    });
+    const mockResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return mockResponse;
+    });
+
+    await expect(fetchWithTimeout(request, {}, 5000)).resolves.toBe(mockResponse);
+    expect(observedSignal?.aborted).toBe(false);
+
+    userAbortController.abort(new DOMException('cancelled', 'AbortError'));
+    expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it('should let an explicit null signal clear a Request-carried signal', async () => {
+    const userAbortController = new AbortController();
+    userAbortController.abort(new DOMException('inherited abort', 'AbortError'));
+    const request = new Request('https://example.com', {
+      signal: userAbortController.signal,
+    });
+    const mockResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return mockResponse;
+    });
+
+    await expect(fetchWithTimeout(request, { signal: null }, 5000)).resolves.toBe(mockResponse);
+    expect(observedSignal?.aborted).toBe(false);
   });
 });
 
@@ -1520,6 +1577,23 @@ describe('fetchWithRetries', () => {
     ).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('should let an explicit null signal clear a Request-carried signal during retries', async () => {
+    const controller = new AbortController();
+    controller.abort(new DOMException('inherited abort', 'AbortError'));
+    const request = new Request('https://example.com', { signal: controller.signal });
+    const successResponse = createMockResponse({ ok: true });
+    let observedSignal: AbortSignal | null | undefined;
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url, options) => {
+      observedSignal = options?.signal;
+      return successResponse;
+    });
+
+    await expect(fetchWithRetries(request, { signal: null }, 1000, 0)).resolves.toBe(
+      successResponse,
+    );
+    expect(observedSignal?.aborted).toBe(false);
   });
 
   it('should return the final recognized transient response after retries are exhausted', async () => {
