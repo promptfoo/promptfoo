@@ -2185,6 +2185,98 @@ describe('evaluator', () => {
       }
     });
 
+    it('sanitizes malformed grading fields across compact storage modes', async () => {
+      const markers = [
+        'PASS_SECRET',
+        'SCORE_SECRET',
+        'REASON_SECRET',
+        'TOP_SUGGESTION_SECRET',
+        'ACTION_SECRET',
+        'COMPONENT_PASS_SECRET',
+        'COMPONENT_SCORE_SECRET',
+        'COMPONENT_REASON_SECRET',
+        'COMPONENT_SUGGESTION_SECRET',
+      ];
+      const createMalformedGradingResult = () =>
+        createEvaluateResult({
+          gradingResult: {
+            pass: 'PASS_SECRET',
+            score: { secret: 'SCORE_SECRET' },
+            reason: { secret: 'REASON_SECRET' },
+            suggestions: [
+              {
+                type: 'top-note',
+                action: 'note',
+                value: 'safe top suggestion',
+                extra: { secret: 'TOP_SUGGESTION_SECRET' },
+              },
+              {
+                type: 'invalid-action',
+                action: { secret: 'ACTION_SECRET' },
+                value: 'invalid suggestion',
+              },
+            ],
+            componentResults: [
+              {
+                pass: ['COMPONENT_PASS_SECRET'],
+                score: { secret: 'COMPONENT_SCORE_SECRET' },
+                reason: { secret: 'COMPONENT_REASON_SECRET' },
+                suggestions: [
+                  {
+                    type: 'component-note',
+                    action: 'note',
+                    value: 'safe component suggestion',
+                    extra: { secret: 'COMPONENT_SUGGESTION_SECRET' },
+                  },
+                ],
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>);
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createMalformedGradingResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: [createMalformedGradingResult()],
+      });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createMalformedGradingResult());
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const compactJson = JSON.stringify(compactResult);
+        const fullJson = JSON.stringify(full.results.results[0]);
+
+        expect(compactResult.gradingResult).toEqual({
+          pass: false,
+          score: 0,
+          reason: '',
+          suggestions: [{ type: 'top-note', action: 'note', value: 'safe top suggestion' }],
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: '',
+              suggestions: [
+                {
+                  type: 'component-note',
+                  action: 'note',
+                  value: 'safe component suggestion',
+                },
+              ],
+            },
+          ],
+        });
+        for (const marker of markers) {
+          expect(compactJson).not.toContain(marker);
+          expect(fullJson).toContain(marker);
+        }
+      }
+    });
+
     it('validates result-level final prompt fallbacks across compact storage modes', async () => {
       const createFallbackResults = () => [
         createEvaluateResult({
@@ -2426,7 +2518,7 @@ describe('evaluator', () => {
                 outputAudio: { data: 'sensitive output audio', format: 'wav' },
                 outputImage: { data: 'sensitive output image', format: 'png' },
                 inputVars: { attackInput: 'sensitive input var' },
-                trace: { insights: ['TRACE_SECRET_PAYLOAD'] },
+                trace: { insights: ['TRACE_SECRET_PAYLOAD'.repeat(10_000)] },
                 traceSummary: 'TRACE_SUMMARY_SECRET_PAYLOAD',
                 metadata: {
                   inputMaterialization: {
@@ -2446,6 +2538,7 @@ describe('evaluator', () => {
                 id: 'node-1',
                 prompt: 'sensitive tree prompt',
                 output: 'sensitive tree output',
+                inputVars: { attackInput: 'TREE_INPUT_VARS_SECRET' },
                 trace: { payload: 'TREE_TRACE_SECRET_PAYLOAD' },
                 sessionId: 'TREE_SESSION_SECRET_PAYLOAD',
                 score: 1,
@@ -2460,6 +2553,27 @@ describe('evaluator', () => {
       const inMemoryEval = new Eval({});
       await inMemoryEval.addResult(createHistoryResult());
       const evals = [persistedEval, legacyEval, inMemoryEval];
+
+      const db = await getDb();
+      const originalExecute = db.$client.execute.bind(db.$client);
+      const projectedHistoryFragments: string[] = [];
+      const executeSpy = vi.spyOn(db.$client, 'execute').mockImplementation(async (statement) => {
+        const queryResult = await originalExecute(statement);
+        if (statement.includes('json_group_object')) {
+          projectedHistoryFragments.push(JSON.stringify(queryResult.rows));
+        }
+        return queryResult;
+      });
+      try {
+        await persistedEval.toResultsFile({ resultProjection: 'redteamReport' });
+      } finally {
+        executeSpy.mockRestore();
+      }
+      expect(projectedHistoryFragments.length).toBeGreaterThan(0);
+      expect(projectedHistoryFragments.join('')).not.toContain('TRACE_SECRET_PAYLOAD');
+      expect(projectedHistoryFragments.join('')).not.toContain('sensitive input var');
+      expect(projectedHistoryFragments.join('')).not.toContain('TREE_INPUT_VARS_SECRET');
+      expect(projectedHistoryFragments.join('').length).toBeLessThan(100_000);
 
       for (const eval_ of evals) {
         const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
@@ -2477,7 +2591,6 @@ describe('evaluator', () => {
             output: 'sensitive history output',
             outputAudio: { data: 'sensitive output audio', format: 'wav' },
             outputImage: { data: 'sensitive output image', format: 'png' },
-            inputVars: { attackInput: 'sensitive input var' },
             score: 1,
           },
         ]);
@@ -2498,6 +2611,8 @@ describe('evaluator', () => {
           'GUARDRAIL_SECRET_PAYLOAD',
           'IMPROVEMENT_SECRET_PAYLOAD',
           'SESSION_SECRET_PAYLOAD',
+          'sensitive input var',
+          'TREE_INPUT_VARS_SECRET',
           'TREE_TRACE_SECRET_PAYLOAD',
           'TREE_SESSION_SECRET_PAYLOAD',
         ]) {
@@ -2506,6 +2621,8 @@ describe('evaluator', () => {
         expect(JSON.stringify(compactResult).length).toBeLessThan(100_000);
         expect(fullResult.error).toBe(rawError);
         expect(JSON.stringify(fullResult.metadata)).toContain('TRACE_SECRET_PAYLOAD');
+        expect(JSON.stringify(fullResult.metadata)).toContain('sensitive input var');
+        expect(JSON.stringify(fullResult.metadata)).toContain('TREE_INPUT_VARS_SECRET');
         expect(JSON.stringify(fullResult.metadata)).toContain('TREE_TRACE_SECRET_PAYLOAD');
       }
       const restoreEnv = mockProcessEnv({

@@ -132,6 +132,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isResultSuggestionAction(
+  value: unknown,
+): value is NonNullable<GradingResult['suggestions']>[number]['action'] {
+  return (
+    value === 'replace-prompt' ||
+    value === 'pre-filter' ||
+    value === 'post-filter' ||
+    value === 'note'
+  );
+}
+
+function projectSuggestionsForRedteamReport(
+  suggestions: unknown,
+): GradingResult['suggestions'] | undefined {
+  if (!Array.isArray(suggestions)) {
+    return undefined;
+  }
+
+  return suggestions.flatMap((suggestion) => {
+    if (
+      !isRecord(suggestion) ||
+      typeof suggestion.type !== 'string' ||
+      !isResultSuggestionAction(suggestion.action) ||
+      typeof suggestion.value !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        type: suggestion.type,
+        action: suggestion.action,
+        value: suggestion.value,
+      },
+    ];
+  });
+}
+
 function projectAssertionForRedteamReport(
   assertion: unknown,
 ): GradingResult['assertion'] | undefined {
@@ -147,6 +184,7 @@ function projectAssertionForRedteamReport(
 
 function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
   const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
+  const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
 
   const componentResults = Array.isArray(gradingResult.componentResults)
     ? gradingResult.componentResults
@@ -157,11 +195,14 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
     : undefined;
 
   return {
-    pass: gradingResult.pass,
-    score: gradingResult.score,
-    reason: gradingResult.reason,
+    pass: typeof gradingResult.pass === 'boolean' ? gradingResult.pass : false,
+    score:
+      typeof gradingResult.score === 'number' && Number.isFinite(gradingResult.score)
+        ? gradingResult.score
+        : 0,
+    reason: typeof gradingResult.reason === 'string' ? gradingResult.reason : '',
     ...(assertion && { assertion }),
-    ...(gradingResult.suggestions !== undefined && { suggestions: gradingResult.suggestions }),
+    ...(suggestions !== undefined && { suggestions }),
     ...(componentResults !== undefined && { componentResults }),
   };
 }
@@ -206,6 +247,101 @@ function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
   return sql<
     string | null
   >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonBooleanOrNull(value: SQLWrapper, path: string): SQL<number | null> {
+  return sql<
+    number | null
+  >`CASE WHEN json_type(${value}, ${path}) IN ('true', 'false') THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonNumberOrNull(value: SQLWrapper, path: string): SQL<number | null> {
+  return sql<
+    number | null
+  >`CASE WHEN json_type(${value}, ${path}) IN ('integer', 'real') THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<string | null>`CASE
+    WHEN json_type(${value}, ${path}) = 'array'
+    THEN (
+      SELECT json_group_array(
+        json_object(
+          'type', json_extract(report_suggestion.value, '$.type'),
+          'action', json_extract(report_suggestion.value, '$.action'),
+          'value', json_extract(report_suggestion.value, '$.value')
+        )
+      )
+      FROM json_each(${value}, ${path}) AS report_suggestion
+      WHERE report_suggestion.type = 'object'
+        AND json_type(report_suggestion.value, '$.type') = 'text'
+        AND json_type(report_suggestion.value, '$.action') = 'text'
+        AND json_extract(report_suggestion.value, '$.action') IN (
+          'replace-prompt', 'pre-filter', 'post-filter', 'note'
+        )
+        AND json_type(report_suggestion.value, '$.value') = 'text'
+    )
+    ELSE NULL
+  END`;
+}
+
+function jsonHistoryForRedteamReport(
+  metadata: SQLWrapper,
+  path: string,
+  stripFlags: RedteamReportStripFlags,
+): SQL<string | null> {
+  if (stripFlags.shouldStripMetadata) {
+    return sql<string | null>`NULL`;
+  }
+
+  const allowedFields = [
+    'id',
+    'parentId',
+    'score',
+    'depth',
+    'wasSelected',
+    'graderPassed',
+    'role',
+    ...(stripFlags.shouldStripPromptText ? [] : ['prompt', 'promptAudio', 'promptImage']),
+    ...(stripFlags.shouldStripResponseOutput ? [] : ['output', 'outputAudio', 'outputImage']),
+  ];
+
+  return sql<string | null>`CASE
+    WHEN json_type(${metadata}, ${path}) = 'array'
+    THEN (
+      SELECT json_group_array(
+        json((
+          SELECT json_group_object(
+            history_field.key,
+            CASE
+              WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
+              WHEN history_field.type = 'true' THEN json('true')
+              WHEN history_field.type = 'false' THEN json('false')
+              ELSE history_field.value
+            END
+          )
+          FROM json_each(report_history.value) AS history_field
+          WHERE history_field.key IN (${sql.join(
+            allowedFields.map((field) => sql`${field}`),
+            sql`, `,
+          )})
+            AND CASE history_field.key
+              WHEN 'id' THEN history_field.type = 'text'
+              WHEN 'parentId' THEN history_field.type = 'text'
+              WHEN 'score' THEN history_field.type IN ('integer', 'real')
+              WHEN 'depth' THEN history_field.type IN ('integer', 'real')
+              WHEN 'wasSelected' THEN history_field.type IN ('true', 'false')
+              WHEN 'graderPassed' THEN history_field.type IN ('true', 'false')
+              WHEN 'role' THEN history_field.type = 'text'
+                AND history_field.value IN ('user', 'assistant', 'system')
+              ELSE 1
+            END
+        )))
+      FROM json_each(${metadata}, ${path}) AS report_history
+      WHERE report_history.type = 'object'
+    )
+    ELSE NULL
+  END`;
 }
 
 function projectPromptForRedteamReport<T extends Prompt>(
@@ -261,23 +397,21 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
   });
   const componentResults = parseJsonFragment<unknown[]>(row.gradingComponentResults)
     ?.filter(isRecord)
-    .map((componentResult) =>
-      projectGradingResultForRedteamReport({
-        ...componentResult,
-        pass: Boolean(componentResult.pass),
-      } as unknown as GradingResult),
-    );
+    .map((componentResult) => ({
+      ...componentResult,
+      pass: Boolean(componentResult.pass),
+    }));
 
-  return {
+  return projectGradingResultForRedteamReport({
     pass: Boolean(row.gradingPass),
-    score: row.gradingScore ?? 0,
-    reason: row.gradingReason ?? '',
+    score: row.gradingScore,
+    reason: row.gradingReason,
     ...(assertion && { assertion }),
     ...(row.gradingSuggestions !== null && {
-      suggestions: parseJsonFragment<GradingResult['suggestions']>(row.gradingSuggestions),
+      suggestions: parseJsonFragment(row.gradingSuggestions),
     }),
     ...(componentResults && { componentResults }),
-  };
+  } as unknown as GradingResult);
 }
 
 function createRedteamReportResponse(
@@ -2262,12 +2396,12 @@ export default class Eval {
         score: evalResultsTable.score,
         latencyMs: evalResultsTable.latencyMs,
         gradingResultExists: jsonIsObject(evalResultsTable.gradingResult),
-        gradingPass: sql<number | null>`json_extract(${validGradingResultJson}, '$.pass')`,
-        gradingScore: sql<number | null>`json_extract(${validGradingResultJson}, '$.score')`,
-        gradingReason: sql<string | null>`json_extract(${validGradingResultJson}, '$.reason')`,
+        gradingPass: jsonBooleanOrNull(validGradingResultJson, '$.pass'),
+        gradingScore: jsonNumberOrNull(validGradingResultJson, '$.score'),
+        gradingReason: jsonTextOrNull(validGradingResultJson, '$.reason'),
         gradingAssertionType: jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
         gradingAssertionMetric: jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
-        gradingSuggestions: sql<string | null>`${validGradingResultJson} -> '$.suggestions'`,
+        gradingSuggestions: jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
         gradingComponentResults: sql<string | null>`CASE
           WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN (
@@ -2275,9 +2409,9 @@ export default class Eval {
               json_patch(
                 json_patch(
                   json_object(
-                    'pass', json_extract(${validReportComponentJson}, '$.pass'),
-                    'score', json_extract(${validReportComponentJson}, '$.score'),
-                    'reason', json_extract(${validReportComponentJson}, '$.reason')
+                    'pass', ${jsonBooleanOrNull(validReportComponentJson, '$.pass')},
+                    'score', ${jsonNumberOrNull(validReportComponentJson, '$.score')},
+                    'reason', ${jsonTextOrNull(validReportComponentJson, '$.reason')}
                   ),
                   CASE
                     WHEN json_type(${validReportComponentJson}, '$.assertion') = 'object'
@@ -2291,12 +2425,12 @@ export default class Eval {
                     ELSE json('{}')
                   END
                 ),
-                CASE
-                  WHEN json_type(${validReportComponentJson}, '$.suggestions') = 'array'
-                  THEN json_object(
-                    'suggestions',
-                    json_extract(${validReportComponentJson}, '$.suggestions')
-                  )
+                  CASE
+                    WHEN json_type(${validReportComponentJson}, '$.suggestions') = 'array'
+                    THEN json_object(
+                      'suggestions',
+                      json(${jsonSuggestionsOrNull(validReportComponentJson, '$.suggestions')})
+                    )
                   ELSE json('{}')
                 END
               )
@@ -2311,10 +2445,16 @@ export default class Eval {
         metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
         metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
         metadataRedteamFinalPrompt: jsonTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
-        metadataRedteamHistory: sql<string | null>`${validMetadataJson} -> '$.redteamHistory'`,
-        metadataRedteamTreeHistory: sql<
-          string | null
-        >`${validMetadataJson} -> '$.redteamTreeHistory'`,
+        metadataRedteamHistory: jsonHistoryForRedteamReport(
+          validMetadataJson,
+          '$.redteamHistory',
+          stripFlags,
+        ),
+        metadataRedteamTreeHistory: jsonHistoryForRedteamReport(
+          validMetadataJson,
+          '$.redteamTreeHistory',
+          stripFlags,
+        ),
         testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
         testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
         testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),

@@ -103,7 +103,8 @@ function projectRedteamHistoryForOutput(
             ...(entry.outputAudio !== undefined && { outputAudio: entry.outputAudio }),
             ...(entry.outputImage !== undefined && { outputImage: entry.outputImage }),
           }),
-      ...(!stripFlags.shouldStripTestVars &&
+      ...(!forceProjection &&
+        !stripFlags.shouldStripTestVars &&
         entry.inputVars !== undefined && { inputVars: entry.inputVars }),
     };
   });
