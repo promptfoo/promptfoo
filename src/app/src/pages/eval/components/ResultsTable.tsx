@@ -1090,7 +1090,10 @@ async function saveManualRating({
       });
 
   if (!response.ok) {
-    throw new ConfirmedRatingPersistenceError('Network response was not ok');
+    if (response.status >= 400 && response.status < 500) {
+      throw new ConfirmedRatingPersistenceError('Network response was not ok');
+    }
+    throw new Error(`Ambiguous rating response status: ${response.status}`);
   }
 
   return isVersion4 && typeof response.json === 'function'
@@ -1794,6 +1797,7 @@ function ResultsTable({
         return scope.mounted && scope.generation === scopeGeneration && scope.evalId === evalId;
       };
       const queueKey = version && version >= 4 ? resultId : `legacy:${evalId ?? ''}`;
+      let currentRequest: Promise<void>;
       const runRating = async () => {
         if (!isScopeActive()) {
           return;
@@ -1829,6 +1833,8 @@ function ResultsTable({
           ratingUpdate,
           gradingResult,
         });
+        const optimisticOutput = newTable.body[currentRowIndex].outputs[currentPromptIndex];
+        invariant(optimisticOutput, 'Optimistic rating output is required');
 
         latestTableRef.current = newTable;
         setTable(newTable);
@@ -1868,6 +1874,7 @@ function ResultsTable({
           const query = latestRatingQueryRef.current;
           if (
             persistedResult &&
+            pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
             (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
           ) {
             await refreshCurrentPage();
@@ -1880,7 +1887,8 @@ function ResultsTable({
             return;
           }
           if (error instanceof ConfirmedRatingPersistenceError) {
-            if (findRatingOutput(latestTableRef.current, resultId)) {
+            const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+            if (latestLocation?.output === optimisticOutput) {
               const rolledBackTable = replaceRatingOutput(
                 latestTableRef.current,
                 resultId,
@@ -1888,6 +1896,23 @@ function ResultsTable({
               );
               latestTableRef.current = rolledBackTable;
               setTable(rolledBackTable);
+            } else {
+              await refreshCurrentPage().catch((refreshError) => {
+                console.error('Failed to refresh table after a rejected rating:', refreshError);
+              });
+            }
+            const query = latestRatingQueryRef.current;
+            if (
+              latestLocation?.output === optimisticOutput &&
+              pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
+              (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
+            ) {
+              await refreshCurrentPage().catch((refreshError) => {
+                console.error(
+                  'Failed to refresh filtered ratings after a rejection:',
+                  refreshError,
+                );
+              });
             }
             return;
           }
@@ -1919,9 +1944,7 @@ function ResultsTable({
       };
 
       const previousRequest = pendingRatingRequestsRef.current.get(queueKey);
-      const currentRequest = previousRequest
-        ? previousRequest.then(runRating, runRating)
-        : runRating();
+      currentRequest = previousRequest ? previousRequest.then(runRating, runRating) : runRating();
       pendingRatingRequestsRef.current.set(queueKey, currentRequest);
       try {
         await currentRequest;
