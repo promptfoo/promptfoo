@@ -238,7 +238,7 @@ describe('evaluator trace integration', () => {
 
   it('suppresses provider instrumentation when an evaluation has tracing disabled', async () => {
     const tracerProvider = new NodeTracerProvider();
-    tracerProvider.register();
+    tracerProvider.register({ propagator: null });
     let observedSuppression = false;
     const provider = createMockProvider({
       callApi: async () => {
