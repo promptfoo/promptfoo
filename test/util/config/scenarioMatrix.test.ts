@@ -356,6 +356,31 @@ describe('scenarioMatrix (real filesystem)', () => {
       }
     });
 
+    it('renders matrix provider and prompt filters with the source env', async () => {
+      const matrixPath = write(
+        'matrices/filters.yaml',
+        `- vars:
+    case: filters
+  providers:
+    - "{{ env.PROVIDER_LABEL }}"
+  prompts:
+    - "{{ env.PROMPT_ID }}"
+`,
+      );
+
+      const [expanded] = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+        { PROVIDER_LABEL: 'scenario-provider', PROMPT_ID: 'main-prompt' },
+      );
+
+      expect(expanded).toMatchObject({
+        vars: { case: 'filters' },
+        providers: ['scenario-provider'],
+        prompts: ['main-prompt'],
+      });
+    });
+
     it('preserves live provider identity while canonicalizing scenario rows', async () => {
       const liveProvider = {
         id: () => 'live-provider',

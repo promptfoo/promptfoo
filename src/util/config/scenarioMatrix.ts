@@ -11,6 +11,7 @@ import {
   maybeLoadFromExternalFile,
   renderEnvOnlyInStringForFilePath,
 } from '../file';
+import { isJavascriptFile } from '../fileExtensions';
 import { normalizeFilePath, parseFileUrl } from '../functions/loadFunction';
 import { ConfigResolutionError } from './errors';
 
@@ -148,6 +149,18 @@ export function resolveFileRefFromBase(
   const { filePath, functionName } = parseFileUrl(renderedFileRef);
   const resolvedPath = resolvePathFromBase(basePath, filePath);
   return `${FILE_REF_PREFIX}${resolvedPath}${functionName ? `:${functionName}` : ''}`;
+}
+
+function isBareLocalProviderPath(providerPath: string): boolean {
+  return (
+    !providerPath.startsWith(FILE_REF_PREFIX) &&
+    (path.isAbsolute(providerPath) || /^\.{1,2}[\\/]/.test(providerPath)) &&
+    isJavascriptFile(providerPath)
+  );
+}
+
+function resolveProviderPathFromBase(basePath: string, providerPath: string): string {
+  return path.isAbsolute(providerPath) ? providerPath : path.resolve(basePath, providerPath);
 }
 
 /**
@@ -374,11 +387,10 @@ function resolveScenarioProviderRef(
   envOverrides?: EnvOverrides,
 ): unknown {
   if (typeof provider === 'string') {
-    return resolveFileRefFromBase(
-      basePath,
-      renderSourceEnvTemplates(provider, envOverrides),
-      envOverrides,
-    );
+    const renderedProvider = renderSourceEnvTemplates(provider, envOverrides);
+    return isBareLocalProviderPath(renderedProvider)
+      ? resolveProviderPathFromBase(basePath, renderedProvider)
+      : resolveFileRefFromBase(basePath, renderedProvider, envOverrides);
   }
   if (!isPlainRecord(provider)) {
     return provider;
@@ -393,7 +405,18 @@ function resolveScenarioProviderRef(
   }
   if (typeof providerId === 'string') {
     const renderedRecord = renderSourceEnvTemplates(record, envOverrides);
-    return resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
+    const resolvedRecord = resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
+    if (
+      isPlainRecord(resolvedRecord) &&
+      typeof resolvedRecord.id === 'string' &&
+      isBareLocalProviderPath(resolvedRecord.id)
+    ) {
+      return {
+        ...resolvedRecord,
+        id: resolveProviderPathFromBase(basePath, resolvedRecord.id),
+      };
+    }
+    return resolvedRecord;
   }
 
   let resolved: Record<string, unknown> | undefined;
@@ -497,6 +520,16 @@ function resolveScenarioConfigRowProviders(
   const scoringFunction = hasScoringFunction
     ? resolveScenarioScoringFunctionRef(basePath, originalScoringFunction, envOverrides)
     : undefined;
+  const hasProvidersFilter = Object.prototype.hasOwnProperty.call(record, 'providers');
+  const originalProvidersFilter = hasProvidersFilter ? record.providers : undefined;
+  const providersFilter = hasProvidersFilter
+    ? renderSourceEnvTemplates(originalProvidersFilter, envOverrides)
+    : undefined;
+  const hasPromptsFilter = Object.prototype.hasOwnProperty.call(record, 'prompts');
+  const originalPromptsFilter = hasPromptsFilter ? record.prompts : undefined;
+  const promptsFilter = hasPromptsFilter
+    ? renderSourceEnvTemplates(originalPromptsFilter, envOverrides)
+    : undefined;
 
   const hasOptions = Object.prototype.hasOwnProperty.call(record, 'options');
   const options = hasOptions ? record.options : undefined;
@@ -521,6 +554,8 @@ function resolveScenarioConfigRowProviders(
   if (
     provider === originalProvider &&
     scoringFunction === originalScoringFunction &&
+    providersFilter === originalProvidersFilter &&
+    promptsFilter === originalPromptsFilter &&
     resolvedOptions === options &&
     assertions === originalAssertions
   ) {
@@ -532,6 +567,12 @@ function resolveScenarioConfigRowProviders(
   }
   if (scoringFunction !== originalScoringFunction) {
     resolved.assertScoringFunction = scoringFunction;
+  }
+  if (providersFilter !== originalProvidersFilter) {
+    resolved.providers = providersFilter;
+  }
+  if (promptsFilter !== originalPromptsFilter) {
+    resolved.prompts = promptsFilter;
   }
   if (resolvedOptions !== options) {
     resolved.options = resolvedOptions;

@@ -280,7 +280,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.results).toHaveLength(2);
   });
 
-  it('uses the first suite-provider slot that has an eligible prompt for a scenario override', async () => {
+  it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {
     const suiteProviderA: ApiProvider = {
       id: () => 'suite-a',
       callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
@@ -318,7 +318,7 @@ describeEvaluator('evaluator scenarios and conversations', () => {
 
     expect(originalProviders).toEqual(['suite-b']);
     expect(summary.results).toHaveLength(1);
-    expect(summary.results[0].provider.id).toBe('suite-b');
+    expect(summary.results[0].provider.id).toBe('scenario-override');
     expect(summary.results[0].response?.output).toBe('scenario-override');
   });
 

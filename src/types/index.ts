@@ -208,6 +208,7 @@ export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
   provider: ApiProvider;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   delay: number;
 

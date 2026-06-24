@@ -82,6 +82,7 @@ import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMe
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
+  getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
   isOpenAiProvider,
@@ -841,6 +842,7 @@ async function callProviderForRunEval({
   abortSignal,
   evalId,
   filters,
+  originalProvider,
   promptForRender,
   provider,
   rateLimitRegistry,
@@ -853,6 +855,7 @@ async function callProviderForRunEval({
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
+  | 'originalProvider'
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
@@ -877,6 +880,7 @@ async function callProviderForRunEval({
         abortSignal,
         evalId,
         filters,
+        originalProvider,
         promptForRender,
         provider,
         rateLimitRegistry,
@@ -900,6 +904,7 @@ async function callActiveProvider({
   abortSignal,
   evalId,
   filters,
+  originalProvider,
   promptForRender,
   provider,
   rateLimitRegistry,
@@ -910,7 +915,13 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  | 'abortSignal'
+  | 'evalId'
+  | 'originalProvider'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
@@ -918,9 +929,9 @@ async function callActiveProvider({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
-  const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
+  const providerForContext = maybeWrapMcpProviderForRedteam(originalProvider ?? provider, test);
   const activeProvider = maybeWrapMcpProviderForRedteam(
-    isApiProvider(test.provider) ? test.provider : originalProvider,
+    isApiProvider(test.provider) ? test.provider : providerForContext,
     test,
   );
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
@@ -928,7 +939,7 @@ async function callActiveProvider({
   const callApiContext = buildCallApiContext({
     evalId,
     filters,
-    originalProvider,
+    originalProvider: providerForContext,
     promptForRender,
     repeatIndex,
     test,
@@ -1410,6 +1421,7 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
 
 async function runEvalInternal({
   provider,
+  originalProvider,
   prompt, // raw prompt
   test,
   testSuite,
@@ -1483,6 +1495,7 @@ async function runEvalInternal({
       abortSignal,
       evalId,
       filters,
+      originalProvider,
       promptForRender: {
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
@@ -2036,32 +2049,104 @@ function buildExistingPromptsMap(store: EvaluationStore) {
   return existingPromptsMap;
 }
 
-function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): CompletedPrompt[] {
+function appendCompletedPromptForProvider({
+  existingPromptsMap,
+  prompt,
+  prompts,
+  providerKey,
+}: {
+  existingPromptsMap: Map<string, CompletedPrompt>;
+  prompt: Prompt;
+  prompts: CompletedPrompt[];
+  providerKey: string;
+}): string {
+  const promptId = generateIdFromPrompt(prompt);
+  const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
+  if (existingPrompt?.metrics) {
+    backfillNamedScoreWeights(existingPrompt.metrics);
+  }
+
+  prompts.push({
+    ...prompt,
+    id: promptId,
+    provider: providerKey,
+    label: prompt.label,
+    metrics: existingPrompt?.metrics || createDefaultPromptMetrics(),
+  });
+
+  return promptId;
+}
+
+function appendScenarioTargetOverridePrompts(
+  testSuite: TestSuite,
+  tests: AtomicTestCase[] | undefined,
+  prompts: CompletedPrompt[],
+  existingPromptsMap: Map<string, CompletedPrompt>,
+) {
+  if (!tests?.length) {
+    return;
+  }
+
+  const promptKeys = new Set(prompts.map((prompt) => `${prompt.provider}:${prompt.id}`));
+  for (const testCase of tests) {
+    if (!scenarioTargetOverrideTests.has(testCase) || !isApiProvider(testCase.provider)) {
+      continue;
+    }
+
+    const providerKey = getProviderIdentifier(testCase.provider);
+    const scenarioOverridePromptIndexes = new Set<number>();
+    for (const suiteProvider of testSuite.providers) {
+      const suiteProviderKey = getProviderIdentifier(suiteProvider);
+      for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
+        if (scenarioOverridePromptIndexes.has(promptIndex)) {
+          continue;
+        }
+        if (!shouldRunPromptForTest(prompt, suiteProviderKey, testCase, testSuite)) {
+          continue;
+        }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const promptKey = `${providerKey}:${promptId}`;
+        if (!promptKeys.has(promptKey)) {
+          appendCompletedPromptForProvider({
+            existingPromptsMap,
+            prompt,
+            prompts,
+            providerKey,
+          });
+          promptKeys.add(promptKey);
+        }
+        scenarioOverridePromptIndexes.add(promptIndex);
+      }
+    }
+  }
+}
+
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+  tests?: AtomicTestCase[],
+): CompletedPrompt[] {
   const prompts: CompletedPrompt[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
     for (const prompt of testSuite.prompts) {
-      const providerKey = provider.label || provider.id();
+      const providerKey = getProviderIdentifier(provider);
       if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
         continue;
       }
 
-      const promptId = generateIdFromPrompt(prompt);
-      const existingPrompt = existingPromptsMap.get(`${providerKey}:${promptId}`);
-      if (existingPrompt?.metrics) {
-        backfillNamedScoreWeights(existingPrompt.metrics);
-      }
-
-      prompts.push({
-        ...prompt,
-        id: promptId,
-        provider: providerKey,
-        label: prompt.label,
-        metrics: existingPrompt?.metrics || createDefaultPromptMetrics(),
+      appendCompletedPromptForProvider({
+        existingPromptsMap,
+        prompt,
+        prompts,
+        providerKey,
       });
     }
   }
+
+  appendScenarioTargetOverridePrompts(testSuite, tests, prompts, existingPromptsMap);
 
   return prompts;
 }
@@ -2614,7 +2699,12 @@ function appendRunEvalOptionsForProvider({
   vars: Vars | undefined;
   scenarioOverridePromptIndexes?: Set<number>;
 }) {
-  const providerKey = provider.label || provider.id();
+  const providerKey = getProviderIdentifier(provider);
+  const activeProvider =
+    scenarioOverridePromptIndexes && isApiProvider(testCase.provider)
+      ? testCase.provider
+      : provider;
+  const activeProviderKey = getProviderIdentifier(activeProvider);
   for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
     if (scenarioOverridePromptIndexes?.has(promptIndex)) {
       continue;
@@ -2623,10 +2713,10 @@ function appendRunEvalOptionsForProvider({
       continue;
     }
 
-    const promptIdx = promptIndexMap.get(`${providerKey}:${promptIdCache.get(prompt)!}`);
+    const promptIdx = promptIndexMap.get(`${activeProviderKey}:${promptIdCache.get(prompt)!}`);
     if (promptIdx === undefined) {
       logger.warn(
-        `Could not find prompt index for ${providerKey}:${promptIdCache.get(prompt)}, skipping`,
+        `Could not find prompt index for ${activeProviderKey}:${promptIdCache.get(prompt)}, skipping`,
       );
       continue;
     }
@@ -2641,7 +2731,8 @@ function appendRunEvalOptionsForProvider({
         promptIdx,
         promptPrefix,
         promptSuffix,
-        provider,
+        provider: activeProvider,
+        originalProvider: activeProvider === provider ? undefined : provider,
         providerAbortSignal,
         rateLimitRegistry,
         registers,
@@ -2673,6 +2764,7 @@ function createRunEvalOption({
   conversations,
   evalId,
   options,
+  originalProvider,
   prompt,
   promptIdx,
   promptPrefix,
@@ -2691,6 +2783,7 @@ function createRunEvalOption({
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
+  originalProvider?: ApiProvider;
   prompt: Prompt;
   promptIdx: number;
   promptPrefix: string;
@@ -2708,6 +2801,7 @@ function createRunEvalOption({
   return {
     delay: options.delay || 0,
     provider,
+    originalProvider,
     prompt: {
       ...prompt,
       raw: promptPrefix + prompt.raw + promptSuffix,
@@ -4631,13 +4725,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return this.store.evaluation;
     }
 
-    prompts.push(...buildCompletedPrompts(testSuite, this.store));
+    testSuite = await resolveScenarioTargetProviderReferences(testSuite);
+    let tests = buildTestsFromSuite(testSuite);
+
+    prompts.push(...buildCompletedPrompts(testSuite, this.store, tests));
     const promptIndexMap = buildPromptIndexMap(prompts);
 
     await this.store.appendPrompts(prompts);
 
-    testSuite = await resolveScenarioTargetProviderReferences(testSuite);
-    let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 

@@ -153,7 +153,7 @@ describe('programmatic scenario config expansion', () => {
             {
               vars: { source: 'config-row' },
               provider: {
-                id: 'file://provider.cjs',
+                id: './provider.cjs',
                 label: 'scenario-config-provider',
                 config: { payload: 'file://payload.txt' },
               },
@@ -213,7 +213,7 @@ describe('programmatic scenario config expansion', () => {
     );
     expect(fs.existsSync(path.join(tmpDir, 'calls.log'))).toBe(false);
     expect(configProvider).toMatchObject({
-      id: `file://${path.join(scenarioDir, 'provider.cjs')}`,
+      id: path.join(scenarioDir, 'provider.cjs'),
       config: { payload: `file://${path.join(scenarioDir, 'payload.txt')}` },
     });
     expect(testProvider).toMatchObject({
