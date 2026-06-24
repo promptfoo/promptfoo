@@ -299,7 +299,7 @@ const SCENARIO_CONFIG_CHILD_CONTEXTS: Partial<
 function isScriptAssertionValue(config: Record<string, unknown>, key: string): boolean {
   return (
     key === 'value' &&
-    Object.hasOwn(config, 'type') &&
+    Object.prototype.hasOwnProperty.call(config, 'type') &&
     typeof config.type === 'string' &&
     (config.type === 'python' || config.type === 'javascript')
   );
@@ -318,7 +318,9 @@ function getConfigFileChildContext(
   }
   const structuralContext = context ? SCENARIO_CONFIG_CHILD_CONTEXTS[context] : undefined;
   if (structuralContext) {
-    return Object.hasOwn(structuralContext, key) ? structuralContext[key] : undefined;
+    return Object.prototype.hasOwnProperty.call(structuralContext, key)
+      ? structuralContext[key]
+      : undefined;
   }
   return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
 }
