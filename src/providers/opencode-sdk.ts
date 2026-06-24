@@ -716,7 +716,8 @@ function openCodeMcpContainsCacheSensitiveData(
 ): boolean {
   return Object.values(config ?? {}).some((server) => {
     if (
-      (server.type === 'local' && Object.keys(server.environment ?? {}).length > 0) ||
+      (server.type === 'local' &&
+        (Object.keys(server.environment ?? {}).length > 0 || server.command.length > 1)) ||
       (server.type === 'remote' &&
         (Object.keys(server.headers ?? {}).length > 0 || server.oauth !== undefined))
     ) {

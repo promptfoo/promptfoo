@@ -981,6 +981,48 @@ function createAskUserQuestionCanUseTool(
   };
 }
 
+function buildClaudeHooks(config: ClaudeCodeOptions): ClaudeCodeOptions['hooks'] {
+  if (config.permission_mode !== 'dontAsk' || !config.ask_user_question) {
+    return config.hooks;
+  }
+
+  const questionHandler = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+  const askUserQuestionHook: HookCallbackMatcher = {
+    matcher: 'AskUserQuestion',
+    hooks: [
+      async (input, toolUseID, { signal }) => {
+        if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'AskUserQuestion') {
+          return {};
+        }
+        const result = await questionHandler(
+          input.tool_name,
+          input.tool_input as Record<string, unknown>,
+          { signal, toolUseID: toolUseID ?? input.tool_use_id },
+        );
+        return result.behavior === 'allow'
+          ? {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'allow' as const,
+                updatedInput: result.updatedInput,
+              },
+            }
+          : {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'deny' as const,
+                permissionDecisionReason: result.message,
+              },
+            };
+      },
+    ],
+  };
+  return {
+    ...config.hooks,
+    PreToolUse: [askUserQuestionHook, ...(config.hooks?.PreToolUse ?? [])],
+  };
+}
+
 function validateAskUserQuestionConfig(config: unknown): void {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('ask_user_question must be an object');
@@ -995,6 +1037,37 @@ function validateAskUserQuestionConfig(config: unknown): void {
   ) {
     throw new Error('ask_user_question.behavior must be first_option, random, or deny');
   }
+}
+
+const RESERVED_POLICY_EXTRA_ARGS = new Set([
+  'adddir',
+  'agent',
+  'agents',
+  'allowdangerouslyskippermissions',
+  'allowedtools',
+  'bare',
+  'brief',
+  'chrome',
+  'dangerouslyskippermissions',
+  'disallowedtools',
+  'ide',
+  'managedsettings',
+  'mcpconfig',
+  'permissionmode',
+  'permissionprompttool',
+  'plugindir',
+  'plugindirnomcp',
+  'pluginurl',
+  'remotecontrol',
+  'safemode',
+  'settings',
+  'settingsources',
+  'strictmcpconfig',
+  'tools',
+]);
+
+function normalizeClaudeCliArgumentName(name: string): string {
+  return name.split(/[=:]/, 1)[0].replace(/^--/, '').replace(/[-_]/g, '').toLowerCase();
 }
 
 function validateClaudeToolPolicyConfig(config: ClaudeCodeOptions): void {
@@ -1046,10 +1119,32 @@ function validateClaudeToolPolicyConfig(config: ClaudeCodeOptions): void {
       throw new Error('tools must be an array of tool-name strings or the claude_code preset');
     }
   }
+
+  if (
+    config.extra_args !== undefined &&
+    (!config.extra_args ||
+      typeof config.extra_args !== 'object' ||
+      Array.isArray(config.extra_args) ||
+      Object.values(config.extra_args).some((value) => value !== null && typeof value !== 'string'))
+  ) {
+    throw new Error('extra_args must be an object with string or null values');
+  }
+  const reservedExtraArg = Object.keys(config.extra_args ?? {}).find((name) =>
+    RESERVED_POLICY_EXTRA_ARGS.has(normalizeClaudeCliArgumentName(name)),
+  );
+  if (reservedExtraArg) {
+    throw new Error(
+      `extra_args cannot override Claude runtime policy (${reservedExtraArg}); use supported structured provider options instead`,
+    );
+  }
 }
 
 function mcpServerContainsCacheSensitiveData(server: MCPServerConfig): boolean {
-  if (server.auth || Object.keys(server.headers ?? {}).length > 0) {
+  if (
+    server.auth ||
+    Object.keys(server.headers ?? {}).length > 0 ||
+    (server.args?.length ?? 0) > 0
+  ) {
     return true;
   }
   if (!server.url) {
@@ -1069,30 +1164,6 @@ function mcpConfigContainsCacheSensitiveData(config: MCPConfig | undefined): boo
   }
   return [...(config.servers ?? []), ...(config.server ? [config.server] : [])].some(
     mcpServerContainsCacheSensitiveData,
-  );
-}
-
-function settingsContainEnvironment(settings: unknown): boolean {
-  return Boolean(
-    settings &&
-      typeof settings === 'object' &&
-      !Array.isArray(settings) &&
-      Object.keys((settings as { env?: Record<string, unknown> }).env ?? {}).length > 0,
-  );
-}
-
-function extraArgsContainSensitiveData(
-  extraArgs: Record<string, string | null> | undefined,
-): boolean {
-  return Object.keys(extraArgs ?? {}).some((key) =>
-    isSensitiveEnvironmentKey(key.replace(/-/g, '_')),
-  );
-}
-
-function isSensitiveEnvironmentKey(key: string): boolean {
-  const normalizedKey = key.replace(/[-\s=]/g, '_');
-  return /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credential(?:s)?|authorization|auth|bearer|cookie|session(?:_?id)?|private_?key|signing_?key|signature|passphrase|certificate(?:_?content)?|keystore(?:_?content)?|pfx(?:_?content)?|key_?content|cert_?content)(?:_|$)/i.test(
-    normalizedKey,
   );
 }
 
@@ -1176,10 +1247,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     return this.providerId;
   }
 
-  private getCredentialCacheScope(env: Record<string, string>): string | undefined {
-    return Object.keys(env).some(isSensitiveEnvironmentKey) ? this.credentialCacheScope : undefined;
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1230,10 +1297,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
-    const credentialCacheScope = this.getCredentialCacheScope(env);
-    const cacheSafeEnv = Object.fromEntries(
-      Object.entries(env).filter(([key]) => !isSensitiveEnvironmentKey(key)),
-    );
+    // Subprocess environment can contain credentials under arbitrary names and value formats.
+    // Keep it out of persistent key material and scope reuse to this provider instance instead.
+    const credentialCacheScope = this.credentialCacheScope;
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (
@@ -1335,7 +1401,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Create canUseTool callback for ask_user_question convenience option
-    // AskUserQuestion is handled via canUseTool per SDK documentation
     let canUseTool = config.can_use_tool;
     if (config.ask_user_question) {
       canUseTool = createAskUserQuestionCanUseTool(
@@ -1343,6 +1408,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         config.can_use_tool,
       );
     }
+
+    // AskUserQuestion is intrinsically interactive, so dontAsk denies it before canUseTool runs.
+    // A narrow PreToolUse hook can supply the automated answer while preserving the configured
+    // permission mode and the precedence of explicit deny rules and matching user-hook denials.
+    const hooks = buildClaudeHooks(config);
 
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
@@ -1425,7 +1495,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
       taskBudget: config.task_budget,
-      env: cacheSafeEnv,
+      env: {},
     };
 
     // Runtime callbacks can change tool or elicitation decisions in ways that aren't representable
@@ -1442,13 +1512,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         ? config.mcp
         : undefined;
     const sensitiveMcpBypassesCache = mcpConfigContainsCacheSensitiveData(activeMcpConfig);
-    const settingsEnvironmentBypassesCache =
-      settingsContainEnvironment(config.settings) ||
-      settingsContainEnvironment(config.managed_settings);
-    const sensitiveExtraArgsBypassCache = extraArgsContainSensitiveData(config.extra_args);
-    const promptCredentialOverrideBypassesCache =
-      config.env !== this.config.env &&
-      Object.keys(config.env ?? {}).some(isSensitiveEnvironmentKey);
+    const settingsConfigurationBypassesCache =
+      config.settings !== undefined || config.managed_settings !== undefined;
+    const extraArgsBypassCache = Object.keys(config.extra_args ?? {}).length > 0;
+    const promptEnvironmentOverrideBypassesCache = config.env !== this.config.env;
+    const statefulSessionBypassesCache = Boolean(
+      config.continue || config.resume || config.session_id,
+    );
     const externalCredentialProviderBypassesCache =
       config.apiKeyRequired === false ||
       Boolean(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX);
@@ -1461,16 +1531,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (credentialCacheScope) {
       logger.debug('[ClaudeCodeSDKProvider] Scoping cache to in-memory credential identity');
     }
-    if (settingsEnvironmentBypassesCache) {
-      logger.debug(
-        '[ClaudeCodeSDKProvider] Bypassing cache: SDK settings contain environment data',
-      );
+    if (settingsConfigurationBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: SDK settings are externally mutable');
     }
-    if (sensitiveExtraArgsBypassCache) {
-      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: extra_args contains secret-like keys');
+    if (extraArgsBypassCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: extra_args is open-ended');
     }
-    if (promptCredentialOverrideBypassesCache) {
-      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: prompt config overrides credentials');
+    if (promptEnvironmentOverrideBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: prompt config overrides environment');
+    }
+    if (statefulSessionBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: session history is mutable');
     }
     if (externalCredentialProviderBypassesCache) {
       logger.debug(
@@ -1480,9 +1551,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const cacheResult =
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
-      settingsEnvironmentBypassesCache ||
-      sensitiveExtraArgsBypassCache ||
-      promptCredentialOverrideBypassesCache ||
+      settingsConfigurationBypassesCache ||
+      extraArgsBypassCache ||
+      promptEnvironmentOverrideBypassesCache ||
+      statefulSessionBypassesCache ||
       externalCredentialProviderBypassesCache
         ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
         : await initializeAgenticCache(
@@ -1554,6 +1626,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
+      hooks,
       onElicitation: config.on_elicitation,
       // Session metadata — excluded from cache key so cosmetic changes don't
       // force cache misses. The SDK ignores `title` on resumed sessions
@@ -1596,9 +1669,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const active = getTraceparent();
           const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
           const traceparent = activeValid ?? context?.traceparent;
-          // Mutating env here is safe because initializeAgenticCache serialized
-          // cacheKeyQueryOptions (which shares this env reference) into a hash
-          // string earlier in callApi, so TRACEPARENT cannot affect the cache key.
+          // Runtime environment is intentionally excluded from persistent key material and
+          // replaced by the provider-instance scope, so trace propagation cannot affect the key.
           if (traceparent && !env.TRACEPARENT) {
             env.TRACEPARENT = traceparent;
           }

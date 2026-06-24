@@ -859,8 +859,11 @@ providers:
     config:
       extra_args:
         verbose: null # boolean flag (adds --verbose)
-        timeout: '30' # adds --timeout 30
+        name: 'promptfoo-eval' # adds --name promptfoo-eval
 ```
+
+Policy-changing Claude CLI flags are rejected in `extra_args`. Use supported structured provider
+options for those controls so Promptfoo can validate their combined behavior.
 
 ### Custom Executable Path
 
@@ -941,6 +944,10 @@ Available behaviors:
 The convenience callback fails closed for unrelated permission requests that are not already
 approved by SDK permission rules. Provide `can_use_tool` for explicit custom handling. Enabling
 `allow_all_tools` changes tool availability but does not make this callback approve unrelated tools.
+With `permission_mode: dontAsk`, Promptfoo answers enabled question automation through a narrow
+pre-tool hook while preserving the SDK's fail-closed mode for every other unmatched request. An
+explicit `tools` exclusion, `disallowed_tools` rule, or matching user-hook denial remains
+authoritative.
 
 ### Programmatic Usage
 
@@ -1174,24 +1181,24 @@ providers:
       cache_mcp: true
       mcp:
         servers:
-          - command: npx
-            args: ['-y', '@my/deterministic-mcp-server']
+          - command: my-deterministic-mcp-server
             name: my-server
 ```
 
-Authenticated MCP configurations, custom headers, URLs containing credentials, and signed/query
-URLs remain uncached even when `cache_mcp` is true. Promptfoo does not put those secrets into its
-persistent cache keys.
+Authenticated MCP configurations, custom headers, URLs containing credentials, signed/query URLs,
+and stdio servers with arguments remain uncached even when `cache_mcp` is true. Stdio arguments can
+contain positional credentials such as database URLs, so Promptfoo does not put them into persistent
+cache keys.
 
-Subprocess credentials are also excluded from persistent cache keys. Credential-backed calls use a
-non-secret, provider-instance scope, so repeated calls through one provider can reuse cache entries
-without storing, hashing, or correlating credentials across provider instances. Prompt-level
-credential overrides remain uncached. Runtime callbacks (`can_use_tool`,
+The subprocess environment is excluded from persistent cache keys and replaced with a non-secret,
+provider-instance scope. Repeated calls through one provider can reuse cache entries without
+storing, hashing, or correlating environment credentials across provider instances. Prompt-level
+environment overrides remain uncached. Runtime callbacks (`can_use_tool`,
 elicitation handlers, hooks, and custom process spawners) disable response caching because their
-behavior cannot be represented safely in a persistent key. Caching is also disabled when object-form
-SDK settings include environment data or `extra_args` uses a secret-like key. Local Claude login
-(`apiKeyRequired: false`) and Bedrock/Vertex credential-provider modes remain uncached because their
-external account identity can rotate without a stable secret in the request environment.
+behavior cannot be represented safely in a persistent key. Caching is also disabled for SDK
+settings, any `extra_args`, and mutable `continue`, `resume`, or `session_id` history. Local Claude
+login (`apiKeyRequired: false`) and Bedrock/Vertex credential-provider modes remain uncached because
+their external account identity can rotate without a stable secret in the request environment.
 
 To disable caching globally:
 

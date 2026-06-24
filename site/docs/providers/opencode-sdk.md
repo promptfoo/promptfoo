@@ -601,16 +601,17 @@ providers:
       mcp:
         my-server:
           type: local
-          command: ['node', 'my-deterministic-mcp-server.js']
+          command: ['my-deterministic-mcp-server']
 ```
 
-MCP configurations containing environment variables, custom headers, OAuth, URL credentials, or
-query strings remain uncached so secrets are not included in persistent cache keys. Response caching
-is also disabled for credential-bearing or signed `baseUrl` values, explicit permission rules,
-`session_id`, and `persist_sessions`. API credentials use a non-secret, process-local cache scope so
-different provider instances cannot share responses. Repeated calls through one locally started
-server retain a stable scope without storing or hashing its credentials or environment into the
-persistent cache key.
+MCP configurations containing environment variables, positional command arguments, custom headers,
+OAuth, URL credentials, or query strings remain uncached so secrets are not included in persistent
+cache keys. Positional command arguments can contain opaque credentials such as database URLs.
+Response caching is also disabled for credential-bearing or signed `baseUrl` values, explicit
+permission rules, `session_id`, and `persist_sessions`. API credentials use a non-secret,
+process-local cache scope so different provider instances cannot share responses. Repeated calls
+through one locally started server retain a stable scope without storing or hashing its credentials
+or environment into the persistent cache key.
 
 To disable caching:
 

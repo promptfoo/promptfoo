@@ -148,10 +148,34 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
     return;
   }
 
+  const isMalformedServer = (server: unknown) => {
+    if (!server || typeof server !== 'object' || Array.isArray(server)) {
+      return true;
+    }
+    const candidate = server as Record<string, unknown>;
+    if (
+      ['name', 'url', 'command', 'path'].some(
+        (field) => candidate[field] !== undefined && typeof candidate[field] !== 'string',
+      ) ||
+      (candidate.args !== undefined &&
+        (!Array.isArray(candidate.args) ||
+          candidate.args.some((argument) => typeof argument !== 'string'))) ||
+      (candidate.headers !== undefined &&
+        (!candidate.headers ||
+          typeof candidate.headers !== 'object' ||
+          Array.isArray(candidate.headers) ||
+          Object.values(candidate.headers).some((value) => typeof value !== 'string'))) ||
+      (candidate.auth !== undefined &&
+        (!candidate.auth || typeof candidate.auth !== 'object' || Array.isArray(candidate.auth)))
+    ) {
+      return true;
+    }
+    return false;
+  };
   if (
-    (config.server !== undefined &&
-      (!config.server || typeof config.server !== 'object' || Array.isArray(config.server))) ||
-    (config.servers !== undefined && !Array.isArray(config.servers))
+    (config.server !== undefined && isMalformedServer(config.server)) ||
+    (config.servers !== undefined &&
+      (!Array.isArray(config.servers) || config.servers.some(isMalformedServer)))
   ) {
     throw new Error('Claude Agent SDK MCP `server`/`servers` configuration is malformed');
   }

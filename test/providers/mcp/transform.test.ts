@@ -342,6 +342,13 @@ describe('transformMCPConfigToClaudeCode', () => {
     { enabled: 'false' },
     { enabled: true, server: [] },
     { enabled: true, servers: 'not-an-array' },
+    { enabled: true, servers: [null] },
+    { enabled: true, servers: [[]] },
+    { enabled: true, server: { url: 123 } },
+    { enabled: true, server: { path: 42 } },
+    { enabled: true, server: { command: 'mcp-server', args: 'not-an-array' } },
+    { enabled: true, server: { url: 'https://example.test', headers: 'not-an-object' } },
+    { enabled: true, server: { url: 'https://example.test', auth: [] } },
   ])('rejects malformed MCP config %#', async (config) => {
     await expect(transformMCPConfigToClaudeCode(config as any)).rejects.toThrow(
       /MCP.*(object|boolean|malformed)/,

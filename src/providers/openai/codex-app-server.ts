@@ -698,6 +698,13 @@ class JsonRpcError extends Error {
   }
 }
 
+class StaleExplicitThreadConnectionClosedError extends Error {
+  constructor() {
+    super('stale explicit-thread cleanup closed the current app-server connection');
+    this.name = 'StaleExplicitThreadConnectionClosedError';
+  }
+}
+
 function isMethodNotFoundError(error: unknown): boolean {
   return error instanceof JsonRpcError && error.code === -32601;
 }
@@ -746,6 +753,10 @@ class CodexAppServerConnection {
         );
       }
     });
+  }
+
+  isClosed(): boolean {
+    return this.closed;
   }
 
   async initialize(config: CodexAppServerConfig): Promise<void> {
@@ -1282,7 +1293,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       );
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
 
-      const connection = useReusableConnection
+      let connection = useReusableConnection
         ? await this.getOrCreateConnection(connectionKey, env, resolvedConfig)
         : await this.createConnection(connectionKey, env, resolvedConfig);
       if (!useReusableConnection) {
@@ -1294,14 +1305,33 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? `thread_id:${resolvedConfig.thread_id}`
         : undefined;
       const runThreadTurn = async (): Promise<ProviderResponse> => {
-        const threadHandle = await this.getOrCreateThread(
-          connection,
-          connectionKey,
-          promptCacheBasis,
-          resolvedConfig,
-          useReusableConnection,
-          callOptions,
-        );
+        if (useReusableConnection && connection.isClosed()) {
+          connection = await this.getOrCreateConnection(connectionKey, env, resolvedConfig);
+        }
+        let threadHandle: ThreadHandle;
+        try {
+          threadHandle = await this.getOrCreateThread(
+            connection,
+            connectionKey,
+            promptCacheBasis,
+            resolvedConfig,
+            useReusableConnection,
+            callOptions,
+          );
+        } catch (error) {
+          if (!(error instanceof StaleExplicitThreadConnectionClosedError)) {
+            throw error;
+          }
+          connection = await this.getOrCreateConnection(connectionKey, env, resolvedConfig);
+          threadHandle = await this.getOrCreateThread(
+            connection,
+            connectionKey,
+            promptCacheBasis,
+            resolvedConfig,
+            useReusableConnection,
+            callOptions,
+          );
+        }
         this.protectThread(threadHandle.threadId);
         let turnStarted = false;
         try {
@@ -1728,6 +1758,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
     for (const key of staleKeys) {
       const stale = this.threads.get(key);
+      this.threads.delete(key);
       if (!stale) {
         continue;
       }
@@ -1735,13 +1766,22 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         this.connections.get(stale.connectionKey) ??
         (stale.connectionKey === connectionKey ? connection : undefined);
       if (staleConnection) {
-        await staleConnection.request(
-          'thread/unsubscribe',
-          { threadId: stale.threadId },
-          { timeoutMs },
-        );
+        try {
+          await staleConnection.request(
+            'thread/unsubscribe',
+            { threadId: stale.threadId },
+            { timeoutMs },
+          );
+        } catch (error) {
+          logger.warn('[CodexAppServer] Failed to unsubscribe stale explicit thread variant', {
+            error,
+            threadId: stale.threadId,
+          });
+          if (staleConnection === connection && connection.isClosed()) {
+            throw new StaleExplicitThreadConnectionClosedError();
+          }
+        }
       }
-      this.threads.delete(key);
     }
   }
 
