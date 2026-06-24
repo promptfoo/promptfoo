@@ -158,20 +158,26 @@ export function useVersionCheck(): UseVersionCheckResult {
       return;
     }
 
+    let cancelled = false;
     let retryTimer: number | undefined;
     const refresh = async () => {
+      if (cancelled || !isMountedRef.current) {
+        return;
+      }
+
       // The refresh may fail without changing any request state. Advance this clock first so
       // consumers still re-evaluate time-based cutoff policy when the boundary is crossed.
       setRuntimePolicyUpdatedAt(Date.now());
       setRuntimeNoticeDismissed(isRuntimeNoticeSnoozed(notice));
       const succeeded = await checkVersion(true);
-      if (!succeeded && isMountedRef.current) {
+      if (!succeeded && !cancelled && isMountedRef.current) {
         retryTimer = window.setTimeout(refresh, REFRESH_RETRY_MS);
       }
     };
     const refreshTimer = window.setTimeout(refresh, delay);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(refreshTimer);
       if (retryTimer !== undefined) {
         window.clearTimeout(retryTimer);

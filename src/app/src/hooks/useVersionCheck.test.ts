@@ -316,6 +316,60 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimePolicyUpdatedAt).not.toBe(initialPolicyTime);
   });
 
+  it('should not schedule a retry after the refresh effect is replaced', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 7 as const,
+    };
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-06-15T12:01:00.000Z',
+    );
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice,
+    });
+    let rejectRefresh!: (reason?: unknown) => void;
+    vi.mocked(callApi).mockImplementationOnce(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectRefresh = reject;
+        }),
+    );
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+
+    await act(async () => {
+      rejectRefresh(new Error('Policy refresh failed'));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
   it('should only call the API once on mount and not refresh', async () => {
     const mockVersionInfo = {
       currentVersion: '1.0.0',
