@@ -21,6 +21,7 @@ import {
   isAudioFile,
   isImageFile,
   isJavascriptFile,
+  isPythonFile,
   isVideoFile,
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
@@ -93,6 +94,20 @@ describe('file utilities', () => {
       expect(isJavascriptFile('test.MJS')).toBe(true);
       expect(isJavascriptFile('test.CTS')).toBe(true);
       expect(isJavascriptFile('test.TXT')).toBe(false);
+    });
+  });
+
+  describe('isPythonFile', () => {
+    it('matches only Python source extensions case-insensitively', () => {
+      expect(isPythonFile('test.py')).toBe(true);
+      expect(isPythonFile('test.PY')).toBe(true);
+      expect(isPythonFile('test.Py')).toBe(true);
+      expect(isPythonFile('test.pyi')).toBe(false);
+      expect(isPythonFile('test.py.bak')).toBe(false);
+      expect(isPythonFile('test.py\n')).toBe(false);
+      expect(isPythonFile('test?loader=script.py')).toBe(false);
+      expect(isPythonFile('test#loader.py')).toBe(false);
+      expect(isPythonFile('test.txt')).toBe(false);
     });
   });
 

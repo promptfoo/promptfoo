@@ -35,7 +35,11 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
+import {
+  isJavascriptFile,
+  parseExecutableFileReference,
+  parsePythonFileReference,
+} from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -477,22 +481,16 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const fileReference = renderedValue.slice('file://'.length);
+      const pythonReference = parsePythonFileReference(fileReference);
+      const { filePath: referencedPath, functionName } =
+        pythonReference ?? parseExecutableFileReference(fileReference);
+      const filePath = path.resolve(basePath, referencedPath);
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
+      } else if (pythonReference) {
         try {
           const pythonScriptOutput = await runPython<ValueFromScriptType>(
             filePath,
