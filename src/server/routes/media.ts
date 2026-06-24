@@ -18,8 +18,22 @@ function getMediaApiUrl(req: Request, key: string): string {
   return `${baseUrl.replace(/\/$/, '')}/${key}`;
 }
 
+function isLocalFileUrl(url: string): boolean {
+  let schemeStart = 0;
+  while (
+    schemeStart < url.length &&
+    (url.charCodeAt(schemeStart) <= 0x20 || url.charAt(schemeStart).trim() === '')
+  ) {
+    schemeStart += 1;
+  }
+
+  // Match WHATWG preprocessing, plus Unicode whitespace, so malformed file URLs fail closed.
+  const normalizedUrl = url.slice(schemeStart).replace(/[\t\n\r]/g, '');
+  return /^file:/i.test(normalizedUrl);
+}
+
 function getBrowserSafeMediaUrl(storageUrl: string | null, apiUrl: string): string | null {
-  return storageUrl && /^file:/i.test(storageUrl.trimStart()) ? apiUrl : storageUrl;
+  return storageUrl && isLocalFileUrl(storageUrl) ? apiUrl : storageUrl;
 }
 
 /**
@@ -53,6 +67,8 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  res.setHeader('Cache-Control', 'private, no-store');
+
   const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
@@ -82,7 +98,6 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
       });
     }
 
-    res.setHeader('Cache-Control', 'private, no-store');
     res.json(
       MediaSchemas.Info.Response.parse({
         success: true,
@@ -108,6 +123,8 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  res.setHeader('Cache-Control', 'private, no-store');
+
   const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);

@@ -116,6 +116,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('type');
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it('should return 400 when path segments resolve to invalid type and filename', async () => {
@@ -152,12 +153,15 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Media not found',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
     it.each([
       'https://storage.example.com/audio/abcdef123456.mp3',
+      '//storage.example.com/audio/abcdef123456.mp3',
       '/media/audio/abcdef123456.mp3',
+      'media/audio/abcdef123456.mp3',
     ])('should preserve browser-safe provider URL %s', async (providerUrl) => {
       const mockStorage = {
         providerId: 'local-fs',
@@ -189,6 +193,17 @@ describe('Media Routes', () => {
       'FILE:///C:/Users/test-user/.promptfoo/media/audio/abcdef123456.mp3',
       'file://fileserver/promptfoo/audio/abcdef123456.mp3',
       '  file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\0file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\u00a0file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\ufefffile:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'f\tile:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'fi\nle:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'fil\re:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\0file://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\u00a0\0\ufefffile://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://[invalid/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://user:pass@/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
     ])('should replace local file URL %s with the API URL', async (providerUrl) => {
       const mockStorage = {
         providerId: 'local',
@@ -313,6 +328,7 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Failed to get media info',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it.each([
@@ -341,6 +357,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('type');
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it('should return 400 for invalid filename', async () => {
@@ -361,6 +378,7 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Media not found',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
@@ -426,6 +444,7 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Failed to serve media',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it.each([
