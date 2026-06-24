@@ -118,6 +118,7 @@ export async function addLayerTestCases(
           metadata: {
             ...testCase.metadata,
             strategyId,
+            ...(stepObj.config && { strategyConfig: stepObj.config }),
             originalText,
           },
         };

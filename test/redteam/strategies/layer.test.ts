@@ -454,6 +454,25 @@ describe('addLayerTestCases', () => {
   });
 
   describe('attack provider detection', () => {
+    it('should preserve attack provider step char limits for runtime enforcement', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'hello' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: [{ id: 'jailbreak:hydra', config: { minCharsPerMessage: 100 } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.strategyConfig).toEqual({ minCharsPerMessage: 100 });
+    });
+
     it('should detect hydra as attack provider and configure per-turn layers', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {
