@@ -297,7 +297,7 @@ describe('webSearchUtils', () => {
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
-      id: () => 'anthropic:messages:claude-opus-4-6',
+      id: () => 'anthropic:messages:claude-opus-4-8',
       config: {
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       },
@@ -345,7 +345,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-6',
+        'anthropic:messages:claude-opus-4-8',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({

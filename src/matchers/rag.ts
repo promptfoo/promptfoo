@@ -19,6 +19,7 @@ import {
   fail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
+  splitTextIntoSentences,
   tryParse,
 } from './shared';
 
@@ -262,26 +263,32 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Split context into units: use chunks if provided, otherwise split into sentences
+  // The context is segmented into "units": chunks if provided, otherwise — for a
+  // string — by line when it is already segmented (multiple non-empty lines) or by
+  // sentence when it is a single prose block. A retrieved context is typically a
+  // single paragraph with no newlines; splitting on newlines alone would yield one
+  // unit, forcing the score to ~1.0 regardless of relevance.
+  const contextIsPreSegmented =
+    Array.isArray(context) || context.split('\n').filter((line) => line.trim() !== '').length > 1;
   const contextUnits = Array.isArray(context)
     ? context.filter((chunk) => chunk.trim().length > 0)
-    : splitIntoSentences(context);
+    : splitTextIntoSentences(context);
   const totalContextUnits = contextUnits.length;
 
-  const extractedSentences = splitIntoSentences(resp.output);
-  const relevantSentences: string[] = [];
+  // Numerator (relevant units): segment the grader output into the SAME kind of
+  // units as the context so the two are comparable — by line when the context is
+  // pre-segmented (chunk array or multi-line), otherwise by sentence. The grader
+  // echoes relevant sentences verbatim; for a prose context that is continuous
+  // text with no newlines, so counting by line alone would treat a multi-sentence
+  // answer as one unit and undercount relevance (e.g. echoing the whole context
+  // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
-
-  let numerator = 0;
-  if (insufficientInformation) {
-    // If the entire response is "Insufficient Information", no sentences are relevant
-    numerator = 0;
-  } else {
-    // Count the extracted sentences as relevant
-    const uniqueRelevantSentences = [...new Set(extractedSentences)];
-    numerator = Math.min(uniqueRelevantSentences.length, totalContextUnits);
-    relevantSentences.push(...uniqueRelevantSentences);
-  }
+  const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
+  const relevantSentences = insufficientInformation
+    ? []
+    : [...new Set(segmentRelevant(resp.output))];
+  // Cap at the total so the score never exceeds 1.
+  const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
   // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
   const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
@@ -294,7 +301,7 @@ export async function matchesContextRelevance(
     extractedSentences: relevantSentences,
     totalContextUnits,
     totalContextSentences: totalContextUnits, // Backward compatibility
-    contextUnits: contextUnits,
+    contextUnits,
     relevantSentenceCount: numerator,
     insufficientInformation,
     score,
