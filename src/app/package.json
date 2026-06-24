@@ -51,7 +51,7 @@
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "csv-parse": "^6.2.0",
+    "csv-parse": "^7.0.0",
     "csv-stringify": "^6.7.0",
     "diff": "^9.0.0",
     "idb-keyval": "^6.2.2",
