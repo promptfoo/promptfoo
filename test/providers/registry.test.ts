@@ -277,6 +277,51 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle moonshot providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
+      expect(factory).toBeDefined();
+
+      const moonshotOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'moonshot-test-key' },
+      };
+      const provider = await factory!.create(
+        'moonshot:moonshot-v1-8k',
+        moonshotOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('moonshot:moonshot-v1-8k');
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('moonshot-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.moonshot.ai/v1');
+      expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
+    });
+
+    it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
+      const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'moonshot:chat:kimi-k2.6',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const defaultProvider = await factory!.create(
+        'moonshot:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+
+      expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      const { body } = await (chatProvider as any).getOpenAiBody('Hello');
+      expect(body.temperature).toBeUndefined();
+      expect(body.max_tokens).toBeUndefined();
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {
@@ -393,6 +438,15 @@ describe('Provider Registry', () => {
       expect(shorthandProvider).toBeDefined();
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
+      for (const model of ['claude-fable-5', 'claude-mythos-5']) {
+        const claude5Provider = await factory!.create(
+          `anthropic:${model}`,
+          anthropicOptions,
+          mockContext,
+        );
+        expect(claude5Provider.id()).toBe(`anthropic:${model}`);
+      }
+
       // Test error case with invalid model type
       await expect(
         factory!.create('anthropic:invalid:model', mockProviderOptions, mockContext),
@@ -435,6 +489,58 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(completionProvider).toBeDefined();
+
+      const imageProvider = await factory!.create(
+        'azure:image:mai-image-2-5',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(imageProvider).toBeDefined();
+      expect(imageProvider.toString()).toBe('[Azure Image Provider mai-image-2-5]');
+
+      await expect(
+        factory!.create('azure:image', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure image provider requires a deployment name/);
+      await expect(
+        factory!.create('azure:image:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure image provider requires a deployment name/);
+
+      // Model types without a default deployment must name one in the path. Cover both
+      // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
+      for (const prefix of ['azure:chat', 'azure:completion']) {
+        await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
+          /requires a deployment name/,
+        );
+        await expect(
+          factory!.create(`${prefix}:`, mockProviderOptions, mockContext),
+        ).rejects.toThrow(/requires a deployment name/);
+      }
+      await expect(
+        factory!.create('azure:assistant', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:assistant:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure assistant provider requires an assistant ID/);
+      await expect(
+        factory!.create('azure:foundry-agent', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+      await expect(
+        factory!.create('azure:foundry-agent:', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/Azure foundry-agent provider requires an agent ID/);
+
+      // Types with sensible defaults must still resolve without a deployment segment.
+      expect(
+        await factory!.create('azure:embedding', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(
+        await factory!.create('azure:responses', mockProviderOptions, mockContext),
+      ).toBeDefined();
+      expect(await factory!.create('azure:video', mockProviderOptions, mockContext)).toBeDefined();
+
+      // MAI image models are Foundry-only; the Azure OpenAI prefix must reject them.
+      await expect(
+        factory!.create('azureopenai:image:mai-image-2-5', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/azureopenai:image is not supported/);
 
       await expect(
         factory!.create('azure:invalid:model', mockProviderOptions, mockContext),
@@ -531,6 +637,20 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
+    });
+
+    it('should handle bedrock mantle chat providers correctly', async () => {
+      const path = 'bedrock:mantle:zai.glm-4.6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        { ...mockProviderOptions, config: { apiKey: 'bedrock-key' } },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
     });
 
     it('should handle bedrock-agent providers correctly', async () => {

@@ -6,6 +6,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getTargetResponse } from './shared';
 
 import type {
@@ -29,6 +30,7 @@ interface IndirectWebPwnConfig {
   maxFetchAttempts: number;
   stateful: boolean;
   scanId: string;
+  targetId?: string;
   useLlm: boolean;
   preferSmallModel: boolean;
   [key: string]: unknown;
@@ -83,6 +85,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts?: number;
       stateful?: boolean;
       scanId?: string;
+      targetId?: string;
       useLlm?: boolean;
       preferSmallModel?: boolean;
     } = {},
@@ -95,6 +98,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts: options.maxFetchAttempts ?? 3,
       stateful: options.stateful ?? false,
       scanId: options.scanId ?? randomUUID(),
+      targetId: options.targetId,
       useLlm: options.useLlm ?? true,
       preferSmallModel: options.preferSmallModel ?? true,
     };
@@ -105,6 +109,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       maxFetchAttempts: this.config.maxFetchAttempts,
       stateful: this.config.stateful,
       scanId: this.config.scanId,
+      targetId: this.config.targetId,
       useLlm: this.config.useLlm,
       preferSmallModel: this.config.preferSmallModel,
     });
@@ -147,6 +152,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
           email: getUserEmail(),
           useLlm: this.config.useLlm,
           preferSmallModel: this.config.preferSmallModel,
+          ...remoteGenerationContextPayload(this.config.targetId),
         }),
       },
       60000, // 60s timeout for LLM generation
@@ -177,6 +183,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
           uuid,
           evalId,
           email: getUserEmail(),
+          ...remoteGenerationContextPayload(this.config.targetId),
         }),
       },
       10000,

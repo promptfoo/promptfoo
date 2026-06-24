@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type Eval from '../../src/models/eval';
+import type EvalResult from '../../src/models/evalResult';
 import type { EvaluateOptions, TestSuite } from '../../src/types/index';
 
 // Mock dependencies
@@ -166,9 +168,9 @@ describe('evaluator trace integration', () => {
       write: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
     };
-    const runtime: EvaluatorRuntime = {
+    const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      createEvaluationStore: nodeEvaluatorRuntime.createEvaluationStore,
       createResultWriters: vi.fn().mockReturnValue([writer]),
-      persistResult: vi.fn(),
     };
     mockInitializeOtel.mockImplementationOnce(() => {
       throw new Error('otel unavailable');
