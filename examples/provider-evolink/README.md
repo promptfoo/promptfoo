@@ -5,7 +5,7 @@ OpenAI-compatible chat provider.
 
 ## Setup
 
-1. Create an EvoLink API key.
+1. Create an [EvoLink API key](https://evolink.ai/dashboard/keys).
 2. Export it locally:
 
    ```bash
@@ -22,7 +22,7 @@ OpenAI-compatible chat provider.
 
 ## What this example covers
 
-- Connecting `openai:chat:evolink/auto` to EvoLink's `/v1` API root
+- Pinning `openai:chat:evolink/auto` to EvoLink's chat API host
 - Reading the EvoLink token from `EVOLINK_API_KEY` without reusing OpenAI credentials
 - Checking a smart-routed response with a deterministic assertion
 

@@ -9,8 +9,8 @@ providers:
   - id: openai:chat:evolink/auto
     label: EvoLink Auto
     config:
-      apiBaseUrl: https://direct.evolink.ai/v1
-      apiKey: '{{env.EVOLINK_API_KEY}}'
+      apiHost: direct.evolink.ai
+      apiKey: "{{ env.EVOLINK_API_KEY | default('__EVOLINK_API_KEY_REQUIRED__', true) }}"
       temperature: 0.2
 
 tests:
