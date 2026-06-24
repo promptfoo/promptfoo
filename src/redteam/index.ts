@@ -1285,7 +1285,7 @@ export async function synthesize({
     const healthUrl = getRemoteHealthUrl();
     if (healthUrl) {
       logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
-      const healthResult = await checkRemoteHealth(healthUrl);
+      const healthResult = await checkRemoteHealth(healthUrl, abortSignal);
       if (healthResult.status !== 'OK') {
         throw new Error(
           `Unable to proceed with test generation: ${healthResult.message}\n` +
@@ -1295,6 +1295,7 @@ export async function synthesize({
       logger.debug('API health check passed');
     }
   }
+  checkAbort();
 
   // Start the progress bar
   let progressBar: cliProgress.SingleBar | null = null;
@@ -1435,6 +1436,7 @@ export async function synthesize({
       });
 
       const languageResults = await Promise.allSettled(languagePromises);
+      checkAbort();
 
       for (const [index, result] of languageResults.entries()) {
         if (result.status === 'fulfilled') {
@@ -1654,6 +1656,8 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
     }
   });
+
+  checkAbort();
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;

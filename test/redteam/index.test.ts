@@ -237,6 +237,37 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    it('should not apply the retry strategy after plugin generation is aborted', async () => {
+      const controller = new AbortController();
+      const pluginAction = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+        controller.abort();
+        abortSignal?.throwIfAborted();
+        return [];
+      });
+      const retryAction = vi.fn().mockReturnValue([]);
+
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: pluginAction, key: 'test-plugin' });
+      vi.spyOn(Strategies, 'find').mockReturnValue({ action: retryAction, id: 'retry' });
+
+      await expect(
+        synthesize({
+          abortSignal: controller.signal,
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [{ id: 'retry' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('Operation cancelled');
+
+      expect(pluginAction).toHaveBeenCalledTimes(1);
+      expect(retryAction).not.toHaveBeenCalled();
+    });
+
     it('should generate test cases for each plugin', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
@@ -1792,7 +1823,32 @@ describe('synthesize', () => {
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
       expect(getRemoteHealthUrl).toHaveBeenCalledWith();
-      expect(checkRemoteHealth).toHaveBeenCalledWith('https://api.test/health');
+      expect(checkRemoteHealth).toHaveBeenCalledWith('https://api.test/health', undefined);
+    });
+
+    it('should propagate cancellation to the API health check', async () => {
+      const controller = new AbortController();
+      vi.mocked(checkRemoteHealth).mockImplementation(async (_url, signal) => {
+        controller.abort();
+        signal?.throwIfAborted();
+        return { status: 'OK', message: 'Cloud API is healthy' };
+      });
+
+      await expect(
+        synthesize({
+          abortSignal: controller.signal,
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(checkRemoteHealth).toHaveBeenCalledWith('https://api.test/health', controller.signal);
+      expect(extractSystemPurpose).not.toHaveBeenCalled();
+      expect(extractEntities).not.toHaveBeenCalled();
     });
 
     it('should skip health check when remote generation is disabled', async () => {
