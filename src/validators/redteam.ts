@@ -301,10 +301,8 @@ type PromptLimitConfig = {
   strategies?: ScopedPromptLimit[];
 };
 
-function isDisabledBasicStrategy(strategy: ScopedPromptLimit): boolean {
-  return (
-    typeof strategy !== 'string' && strategy.id === 'basic' && strategy.config?.enabled === false
-  );
+function isBasicStrategy(strategy: ScopedPromptLimit): boolean {
+  return (typeof strategy === 'string' ? strategy : strategy.id) === 'basic';
 }
 
 function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | number)[]): void {
@@ -353,7 +351,7 @@ function validateEffectiveCharsPerMessageRanges(
     plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
   }));
   const strategyConfigs = (data.strategies ?? [])
-    .filter((strategy) => !isDisabledBasicStrategy(strategy))
+    .filter((strategy) => !isBasicStrategy(strategy))
     .map((strategy, index) => ({
       index,
       strategy: typeof strategy === 'string' ? { id: strategy } : strategy,

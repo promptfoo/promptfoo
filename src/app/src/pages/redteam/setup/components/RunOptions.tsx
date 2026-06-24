@@ -178,6 +178,7 @@ export const MaxCharsPerMessageInput = ({
           return;
         }
         if (minCharsPerMessage !== undefined && parsed < minCharsPerMessage) {
+          setValue(maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage));
           return;
         }
         updateConfig('maxCharsPerMessage', parsed);
@@ -231,6 +232,7 @@ export const MinCharsPerMessageInput = ({
           return;
         }
         if (maxCharsPerMessage !== undefined && parsed > maxCharsPerMessage) {
+          setValue(minCharsPerMessage === undefined ? '' : String(minCharsPerMessage));
           return;
         }
         updateConfig('minCharsPerMessage', parsed);
