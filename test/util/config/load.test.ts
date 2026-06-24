@@ -78,7 +78,7 @@ vi.mock('glob', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+    return /[*?[\]{}]|[+@!](?=\()/.test(p);
   }),
 }));
 
@@ -473,6 +473,83 @@ describe('combineConfigs', () => {
     );
     expect(result.defaultTest).toBe('file://../b/defaults/default.json');
     expect(result.scenarios).toContain('file://../b/scenarios/scenario.yaml');
+  });
+
+  it('normalizes canonical Windows URLs in combined config dependencies', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    const isAbsoluteSpy = vi
+      .spyOn(path, 'isAbsolute')
+      .mockImplementation((input) => path.win32.isAbsolute(input));
+    const relativeSpy = vi
+      .spyOn(path, 'relative')
+      .mockImplementation((from, to) => path.win32.relative(from, to));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const config = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: ['file:///C:/suite/tests.yaml', { path: 'file:///C:/suite/tests-object.yaml' }],
+      defaultTest: 'file:///C:/suite/default.yaml',
+      scenarios: [
+        'file:///C:/suite/scenarios.yaml',
+        { tests: 'file:///C:/suite/scenario-tests.yaml' },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    try {
+      const result = await combineConfigs(['D:\\repo\\promptfooconfig.json']);
+      const dependencies = getConfigDependencyPaths(result);
+
+      expect(dependencies).toEqual(
+        expect.arrayContaining([
+          'C:\\suite\\tests.yaml',
+          'C:\\suite\\tests-object.yaml',
+          'C:\\suite\\default.yaml',
+          'C:\\suite\\scenarios.yaml',
+          'C:\\suite\\scenario-tests.yaml',
+        ]),
+      );
+      expect(dependencies).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^D:\\C:\\/)]),
+      );
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      isAbsoluteSpy.mockRestore();
+      relativeSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
+  });
+
+  it('expands extglob config dependencies before watch registration', async () => {
+    const config = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: ['file://cases/@(alpha|beta).yaml'],
+    };
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input).includes('@(')
+        ? ['/suite/cases/alpha.yaml', '/suite/cases/beta.yaml']
+        : [String(input)],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['/suite/promptfooconfig.json']);
+    const dependencies = getConfigDependencyPaths(result);
+
+    expect(dependencies).toEqual(
+      expect.arrayContaining(['/suite/cases/alpha.yaml', '/suite/cases/beta.yaml']),
+    );
+    expect(dependencies).not.toContain('/suite/cases/@(alpha|beta).yaml');
   });
 
   it('preserves raw inline tests and their vars-file dependency when combining configs', async () => {
@@ -2709,6 +2786,52 @@ describe('resolveConfigs with external defaultTest', () => {
         value: originalPlatform,
         configurable: true,
       });
+    }
+  });
+
+  it('uses a canonical Windows scenario URL as the nested vars declaring base', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    const isAbsoluteSpy = vi
+      .spyOn(path, 'isAbsolute')
+      .mockImplementation((input) => path.win32.isAbsolute(input));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const scenarioTest = { vars: { context: { report: 'file://data/report.txt' } } };
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce([{ tests: [scenarioTest] }]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    try {
+      await resolveConfigs(
+        {},
+        {
+          prompts: ['prompt'],
+          providers: ['echo'],
+          scenarios: 'file:///C:/suite/scenarios.yaml' as unknown as Scenario[],
+        },
+        undefined,
+        'D:\\decoy',
+      );
+
+      expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
+        scenarioTest,
+        'C:\\suite',
+        'D:\\decoy',
+        expect.any(WeakSet),
+      );
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      isAbsoluteSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
     }
   });
 

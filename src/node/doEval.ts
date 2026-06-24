@@ -4,7 +4,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -208,10 +208,10 @@ function collectVarFilePaths(
 function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: string): string[] {
   const paths: string[] = [];
   const addLocalPath = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? reference.slice('file://'.length) : reference;
+    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
     if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       const resolvedPath = path.resolve(basePath, rawPath);
-      const matches = /[*?\[\]{}]/.test(rawPath)
+      const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
         ? globSync(resolvedPath, { windowsPathsNoEscape: true })
         : [];
       paths.push(...(matches.length > 0 ? matches : [resolvedPath]));
@@ -1197,7 +1197,7 @@ export async function doEval(
           ? config.tests
               .flatMap((t) => {
                 if (typeof t === 'string' && t.startsWith('file://')) {
-                  return path.resolve(basePath, t.slice('file://'.length));
+                  return collectConfigSourcePaths({ tests: [t] }, basePath);
                 } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
                   return collectVarFilePaths(t.vars, basePath);
                 }

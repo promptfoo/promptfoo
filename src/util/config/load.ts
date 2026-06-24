@@ -5,7 +5,7 @@ import process from 'process';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
@@ -529,7 +529,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     if (!isFileUrl && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(reference)) {
       return reference;
     }
-    const referencedPath = isFileUrl ? reference.slice('file://'.length) : reference;
+    const referencedPath = isFileUrl ? parseFileUrl(reference).filePath : reference;
     if (path.isAbsolute(referencedPath)) {
       return reference;
     }
@@ -542,10 +542,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   };
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? reference.slice('file://'.length) : reference;
+    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
     if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       const resolvedPath = path.resolve(combinedBasePath, rawPath);
-      const matches = /[*?\[\]{}]/.test(rawPath)
+      const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
         ? globSync(resolvedPath, { windowsPathsNoEscape: true })
         : [];
       for (const dependencyPath of matches.length > 0 ? matches : [resolvedPath]) {
@@ -961,12 +961,12 @@ export async function resolveConfigs(
   configDependencyPaths.set(config, getConfigDependencyPaths(fileConfig));
   const resolvedConfigDependencies = new Set(getConfigDependencyPaths(config));
   const addResolvedConfigDependency = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? reference.slice('file://'.length) : reference;
+    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
     if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       return;
     }
     const resolvedPath = path.resolve(basePath || process.cwd(), rawPath);
-    const matches = /[*?\[\]{}]/.test(rawPath)
+    const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
       ? globSync(resolvedPath, { windowsPathsNoEscape: true })
       : [];
     for (const dependencyPath of matches.length > 0 ? matches : [resolvedPath]) {
@@ -1077,9 +1077,12 @@ export async function resolveConfigs(
       }
 
       const scenarioPath = scenario.startsWith('file://')
-        ? scenario.slice('file://'.length)
+        ? parseFileUrl(scenario).filePath
         : scenario;
-      const scenarioSources = /[*?\[\]{}]/.test(path.dirname(scenarioPath))
+      const scenarioSources = hasMagic(path.dirname(scenarioPath), {
+        magicalBraces: true,
+        windowsPathsNoEscape: true,
+      })
         ? globSync(path.resolve(basePath, scenarioPath), { windowsPathsNoEscape: true }).map(
             (matchedPath) => `file://${matchedPath}`,
           )
@@ -1087,14 +1090,14 @@ export async function resolveConfigs(
       for (const scenarioSource of scenarioSources.length > 0 ? scenarioSources : [scenario]) {
         const loaded = await maybeLoadFromExternalFile([scenarioSource]);
         const sourcePath = scenarioSource.startsWith('file://')
-          ? scenarioSource.slice('file://'.length)
+          ? parseFileUrl(scenarioSource).filePath
           : scenarioSource;
         const declaringBasePath = path.dirname(path.resolve(basePath, sourcePath));
         const visitedScenarioVars = new WeakSet<object>();
         for (const loadedScenario of [loaded].flat(Number.POSITIVE_INFINITY) as Scenario[]) {
           const scenarioTests = (loadedScenario as { tests?: string | TestCase[] }).tests;
           if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
-            const referencedPath = scenarioTests.slice('file://'.length);
+            const referencedPath = parseFileUrl(scenarioTests).filePath;
             if (!path.isAbsolute(referencedPath)) {
               (loadedScenario as { tests: string | TestCase[] }).tests = `file://${toPosixPath(
                 path.relative(

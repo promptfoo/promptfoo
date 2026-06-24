@@ -103,7 +103,7 @@ const chokidarMocks = vi.hoisted(() => {
   return {
     handlers,
     watcher,
-    watch: vi.fn(() => watcher),
+    watch: vi.fn((_paths: string | string[]) => watcher),
   };
 });
 
@@ -1348,6 +1348,65 @@ describe('evalCommand', () => {
 
     loggerInfoSpy.mockRestore();
     loggerErrorSpy.mockRestore();
+  });
+
+  it('should normalize canonical Windows file URLs for direct watch sources', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    const dirnameSpy = vi
+      .spyOn(path, 'dirname')
+      .mockImplementation((input) => path.win32.dirname(input));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    const config = {
+      tests: ['file:///C:/suite/tests.yaml', { path: 'file:///C:/suite/tests-object.yaml' }],
+      defaultTest: 'file:///C:/suite/default.yaml',
+      scenarios: [
+        'file:///C:/suite/scenarios.yaml',
+        { tests: 'file:///C:/suite/scenario-tests.yaml' },
+      ],
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: 'D:\\repo',
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    try {
+      await doEval(
+        {
+          watch: true,
+          config: ['D:\\repo\\promptfooconfig.yaml'],
+          write: false,
+        },
+        config,
+        undefined,
+        {},
+      );
+
+      const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+      expect(watchPaths).toEqual(
+        expect.arrayContaining([
+          'C:\\suite\\tests.yaml',
+          'C:\\suite\\tests-object.yaml',
+          'C:\\suite\\default.yaml',
+          'C:\\suite\\scenarios.yaml',
+          'C:\\suite\\scenario-tests.yaml',
+        ]),
+      );
+      expect(watchPaths).not.toEqual(expect.arrayContaining([expect.stringMatching(/^D:\\C:\\/)]));
+    } finally {
+      resolveSpy.mockRestore();
+      dirnameSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
   });
 
   it('should resume an existing eval with persisted prompts', async () => {

@@ -1325,6 +1325,25 @@ export async function renderPrompt(
       }
     }
   }
+  let templateReferenceVars = vars;
+  if (
+    hasProtectedRoots &&
+    typeof nunjucks.getGlobal === 'function' &&
+    !Object.prototype.hasOwnProperty.call(vars, 'env')
+  ) {
+    const envGlobal = nunjucks.getGlobal('env');
+    if (envGlobal !== undefined) {
+      templateReferenceVars = Object.create(null) as Record<string, VarValue>;
+      Object.defineProperties(templateReferenceVars, Object.getOwnPropertyDescriptors(vars));
+      Object.defineProperty(templateReferenceVars, 'env', {
+        configurable: true,
+        enumerable: true,
+        value: envGlobal,
+        writable: true,
+      });
+      protectedPathRootNames.add('env');
+    }
+  }
   const protectedDirectVarNames = new Set([...protectedVarNames, ...protectedAliasRootNames]);
   const protectedTemplateVarNames = Array.from(protectedDirectVarNames);
   const varsResolvedFromProtected = new Set<string>();
@@ -1332,7 +1351,7 @@ export async function renderPrompt(
     referencesSkippedVariables(template, protectedVarNames, varsResolvedFromProtected) ||
     referencesProtectedAliasPath(
       template,
-      vars,
+      templateReferenceVars,
       protectedPathRootNames,
       protectedNestedContainers,
       protectedPrimitiveValues,

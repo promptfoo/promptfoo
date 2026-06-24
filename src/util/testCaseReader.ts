@@ -19,7 +19,7 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
-import { isJavascriptFile, isSupportedNestedTextFile } from './fileExtensions';
+import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { toPosixPath } from './pathUtils';
 import { parseXlsxFile } from './xlsx';
@@ -69,7 +69,7 @@ function resolveVarFileReferences(
       nestedValue.startsWith('file://')
     ) {
       const { filePath, functionName } = parseFileUrl(nestedValue);
-      if (!path.isAbsolute(filePath) && isSupportedNestedTextFile(filePath)) {
+      if (!path.isAbsolute(filePath)) {
         const rebasedPath = path.relative(
           path.resolve(resolutionBasePath),
           path.resolve(declaringBasePath, filePath),
@@ -126,7 +126,11 @@ function loadTopLevelVarsFileReferences(
       continue;
     }
 
-    const { filePath, functionName } = parseFileUrl(descriptor.value);
+    const renderedReference = maybeLoadConfigFromExternalFile(descriptor.value, 'vars');
+    if (typeof renderedReference !== 'string' || !renderedReference.startsWith('file://')) {
+      continue;
+    }
+    const { filePath, functionName } = parseFileUrl(renderedReference);
     const absolutePath = path.isAbsolute(filePath)
       ? filePath
       : path.resolve(declaringBasePath, filePath);
@@ -611,7 +615,7 @@ export async function loadTestsFromGlob(
   }
 
   if (loadTestsGlob.startsWith('file://')) {
-    loadTestsGlob = loadTestsGlob.slice('file://'.length);
+    loadTestsGlob = parseFileUrl(loadTestsGlob).filePath;
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 

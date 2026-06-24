@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 
 describe('renderPrompt with skipRenderVars', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should skip rendering variables in skipRenderVars array', async () => {
     const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
     const vars = {
@@ -81,6 +85,32 @@ describe('renderPrompt with skipRenderVars', () => {
     const result = await renderPrompt(prompt, vars, {}, undefined, ['payload']);
 
     expect(result).toBe('Hello ALICE');
+  });
+
+  it('should render unrelated environment helpers when another var is skipped', async () => {
+    vi.stubEnv('PROMPTFOO_SKIP_RENDER_SYSTEM', 'SAFE-HELPER');
+    const prompt = { raw: '{{system}}', label: 'test' };
+    const vars = {
+      payload: 'attack',
+      system: '{{ env.PROMPTFOO_SKIP_RENDER_SYSTEM }}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['payload']);
+
+    expect(result).toBe('SAFE-HELPER');
+  });
+
+  it('should preserve environment helpers that equal a skipped value', async () => {
+    vi.stubEnv('PROMPTFOO_SKIP_RENDER_SYSTEM', 'attack');
+    const prompt = { raw: '{{system}}', label: 'test' };
+    const vars = {
+      payload: 'attack',
+      system: '{{ env.PROMPTFOO_SKIP_RENDER_SYSTEM }}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['payload']);
+
+    expect(result).toBe('{{ env.PROMPTFOO_SKIP_RENDER_SYSTEM }}');
   });
 
   it('should not resolve nested variable references inside skipRenderVars values', async () => {
