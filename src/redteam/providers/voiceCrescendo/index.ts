@@ -22,6 +22,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
 import {
@@ -147,6 +148,7 @@ interface VoiceCrescendoResponse extends ProviderResponse {
  */
 export interface VoiceCrescendoConfig {
   injectVar: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   redteamProvider?: string;
@@ -266,6 +268,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -285,6 +288,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           task: 'voice-crescendo-eval',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
