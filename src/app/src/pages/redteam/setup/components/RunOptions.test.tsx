@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Config } from '../types';
@@ -219,12 +219,14 @@ describe('RunOptionsContent', () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', 120);
     });
 
-    it('should not persist fractional minCharsPerMessage', () => {
+    it('should not persist fractional minCharsPerMessage', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
 
-      fireEvent.change(minCharsPerMessageInput, { target: { value: '1.5' } });
-      fireEvent.blur(minCharsPerMessageInput);
+      await user.clear(minCharsPerMessageInput);
+      await user.type(minCharsPerMessageInput, '1.5');
+      await user.tab();
 
       expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 1.5);
     });
