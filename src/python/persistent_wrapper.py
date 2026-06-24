@@ -24,6 +24,7 @@ import re
 import sys
 import traceback
 from typing import Any
+from urllib.parse import quote, unquote_plus
 
 # ============================================================================
 # OpenTelemetry Tracing Support (Optional)
@@ -37,6 +38,19 @@ from typing import Any
 
 _tracer = None
 _tracing_enabled = False
+
+
+def _get_otlp_traces_endpoint():
+    """Resolve the standard OTLP/HTTP traces endpoint from the environment."""
+    traces_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+    if traces_endpoint:
+        return traces_endpoint
+
+    base_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or "http://localhost:4318"
+    normalized_endpoint = base_endpoint.rstrip("/")
+    if normalized_endpoint.endswith("/v1/traces"):
+        return normalized_endpoint
+    return f"{normalized_endpoint}/v1/traces"
 
 
 def _init_tracing():
@@ -54,14 +68,8 @@ def _init_tracing():
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
-        # Get endpoint from environment or use default Promptfoo OTLP receiver
-        base_endpoint = os.getenv(
-            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
-        )
-        endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
-
         provider = TracerProvider()
-        exporter = OTLPSpanExporter(endpoint=endpoint)
+        exporter = OTLPSpanExporter(endpoint=_get_otlp_traces_endpoint())
         provider.add_span_processor(SimpleSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
 
@@ -196,38 +204,171 @@ def _gen_ai_operation_name(function_name: str, use_latest: bool) -> str:
     return latest_names.get(function_name, function_name)
 
 
-_SENSITIVE_BODY_PATTERNS = [
-    (re.compile(r"\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}"), "<REDACTED_API_KEY>"),
+_REDACTED_BODY_VALUE = "<REDACTED>"
+_SENSITIVE_BODY_FIELD_NAMES = {
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "secrets",
+    "secretkey",
+    "credentials",
+    "apikey",
+    "apisecret",
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "idtoken",
+    "bearertoken",
+    "authtoken",
+    "clientsecret",
+    "webhooksecret",
+    "anthropicapikey",
+    "awsbearertokenbedrock",
+    "authorization",
+    "auth",
+    "bearer",
+    "apikeyenvar",
+    "xapikey",
+    "xauthtoken",
+    "xaccesstoken",
+    "xauth",
+    "xsecret",
+    "xcsrftoken",
+    "xsessiondata",
+    "csrftoken",
+    "sessionid",
+    "session",
+    "cookie",
+    "setcookie",
+    "certificatepassword",
+    "keystorepassword",
+    "pfxpassword",
+    "privatekey",
+    "certkey",
+    "encryptionkey",
+    "signingkey",
+    "signature",
+    "sig",
+    "passphrase",
+    "certificatecontent",
+    "keystorecontent",
+    "pfx",
+    "pfxcontent",
+    "keycontent",
+    "certcontent",
+}
+_API_KEY_VALUE_PATTERN = re.compile(r"\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}")
+_AWS_ACCESS_KEY_PATTERN = re.compile(r"\bAKIA[A-Z0-9]{16}\b")
+_SENSITIVE_BODY_VALUE_PATTERNS = [
+    (_API_KEY_VALUE_PATTERN, "<REDACTED_API_KEY>"),
+    (_AWS_ACCESS_KEY_PATTERN, "<REDACTED_AWS_KEY>"),
     (
         re.compile(
-            r"\b(api[_-]?key[\"']?\s*[:=]\s*[\"']?)([a-zA-Z0-9_-]{16,})",
-            re.IGNORECASE,
+            r"-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?"
+            r"-----END [^-\r\n]*PRIVATE KEY-----"
         ),
-        r"\1<REDACTED>",
+        "<REDACTED_PRIVATE_KEY>",
     ),
-    (
-        re.compile(
-            r"\b(secret|token|password)([\"']?\s*[:=]\s*[\"']?)([^\s\"',}{]+)",
-            re.IGNORECASE,
-        ),
-        r"\1\2<REDACTED>",
-    ),
-    (
-        re.compile(
-            r"(Authorization[\"']?\s*[:=]\s*[\"']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})",
-            re.IGNORECASE,
-        ),
-        r"\1\2<REDACTED>",
-    ),
-    (re.compile(r"\bAKIA[A-Z0-9]{16}\b"), "<REDACTED_AWS_KEY>"),
-    (re.compile(r"\b[a-f0-9]{64,}\b", re.IGNORECASE), "<REDACTED_HASH>"),
 ]
+_BODY_ASSIGNMENT_PATTERN = re.compile(
+    r"(^|[^A-Za-z0-9_-])([\"']?)([A-Za-z][A-Za-z0-9_.\-]{0,64})\2"
+    r"(\s*[:=]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^,}\r\n]+)",
+    re.MULTILINE,
+)
+_FORM_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$")
+_FORM_PAIR_PATTERN = re.compile(r"(^|[&;])([^=&;]+)=([^&;]*)")
+
+
+def _normalize_body_field_name(field_name: str) -> str:
+    return re.sub(r"[-_\s=]", "", field_name.lower())
+
+
+def _is_sensitive_body_field(field_name: str) -> bool:
+    return any(
+        _normalize_body_field_name(part) in _SENSITIVE_BODY_FIELD_NAMES
+        for part in re.split(r"[.\[\]]+", field_name)
+        if part
+    )
+
+
+def _body_redaction_marker(value: Any) -> str:
+    if isinstance(value, str):
+        if _API_KEY_VALUE_PATTERN.search(value):
+            return "<REDACTED_API_KEY>"
+        if _AWS_ACCESS_KEY_PATTERN.search(value):
+            return "<REDACTED_AWS_KEY>"
+    return _REDACTED_BODY_VALUE
+
+
+def _sanitize_json_body(text: str) -> str:
+    stripped = text.strip()
+    if not stripped or len(text) > 4096 * 4 or stripped[0] not in ("{", "["):
+        return text
+    changed = False
+
+    def sanitize_pairs(pairs):
+        nonlocal changed
+        sanitized = {}
+        for key, value in pairs:
+            if _is_sensitive_body_field(str(key)):
+                sanitized[key] = _body_redaction_marker(value)
+                changed = True
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    try:
+        parsed = json.loads(text, object_pairs_hook=sanitize_pairs)
+    except (TypeError, ValueError):
+        return text
+    if not isinstance(parsed, (dict, list)):
+        return text
+    return json.dumps(parsed, separators=(",", ":")) if changed else text
+
+
+def _sanitize_form_body(text: str) -> str:
+    if "=" not in text or any(char in text for char in "\r\n\t"):
+        return text
+    segments = [segment for segment in re.split(r"[&;]", text) if segment]
+    if not segments or not all(
+        _FORM_SEGMENT_PATTERN.fullmatch(item) for item in segments
+    ):
+        return text
+
+    def replace_pair(match):
+        separator, raw_key, raw_value = match.groups()
+        if not raw_value:
+            return match.group(0)
+        decoded_key = unquote_plus(raw_key)
+        if not _is_sensitive_body_field(decoded_key):
+            return match.group(0)
+        return f"{separator}{raw_key}={quote(_REDACTED_BODY_VALUE, safe='')}"
+
+    return _FORM_PAIR_PATTERN.sub(replace_pair, text)
+
+
+def _sanitize_body_assignments(text: str) -> str:
+    def replace_assignment(match):
+        prefix, key_quote, key, separator, value = match.groups()
+        if not _is_sensitive_body_field(key):
+            return match.group(0)
+        return (
+            f"{prefix}{key_quote}{key}{key_quote}{separator}"
+            f"{_body_redaction_marker(value)}"
+        )
+
+    return _BODY_ASSIGNMENT_PATTERN.sub(replace_assignment, text)
 
 
 def _sanitize_body(text: str) -> str:
     """Redact common credential shapes from traced request and response bodies."""
-    sanitized = text
-    for pattern, replacement in _SENSITIVE_BODY_PATTERNS:
+    sanitized = _sanitize_json_body(text)
+    if sanitized == text:
+        sanitized = _sanitize_form_body(text)
+        if sanitized == text:
+            sanitized = _sanitize_body_assignments(text)
+    for pattern, replacement in _SENSITIVE_BODY_VALUE_PATTERNS:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
 

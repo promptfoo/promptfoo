@@ -12,6 +12,7 @@ import {
 import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { isSecretField } from '../util/sanitizer';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -202,44 +203,102 @@ export const PromptfooAttributes = {
 /** Maximum length for request/response body attributes (characters) */
 const MAX_BODY_LENGTH = 4096;
 
-/**
- * Patterns to redact from request/response bodies for security.
- * These patterns match common API key and secret formats.
- */
-const SENSITIVE_PATTERNS: Array<{
+const REDACTED_BODY_VALUE = '<REDACTED>';
+const API_KEY_VALUE_PATTERN = /\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}/;
+const AWS_ACCESS_KEY_PATTERN = /\bAKIA[A-Z0-9]{16}\b/;
+
+/** Conservative credential-value fallbacks for non-structured body text. */
+const SENSITIVE_VALUE_PATTERNS: Array<{
   pattern: RegExp;
-  replacement: string | ((match: string) => string);
+  replacement: string;
 }> = [
-  // API keys with common prefixes (allow hyphens/underscores for keys like sk-proj-...)
-  { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
-  { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   {
-    pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi,
-    replacement: '$1<REDACTED>',
+    pattern: /\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}/g,
+    replacement: '<REDACTED_API_KEY>',
   },
-  { pattern: /\b(secret["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
-  { pattern: /\b(token["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
-  { pattern: /\b(password["']?\s*[:=]\s*["']?)([^\s"',}{]+)/gi, replacement: '$1<REDACTED>' },
-  // Authorization headers
   {
-    pattern: /(Authorization["']?\s*[:=]\s*["']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})/gi,
-    replacement: '$1$2<REDACTED>',
+    pattern: /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/g,
+    replacement: '<REDACTED_PRIVATE_KEY>',
   },
-  // AWS credentials
   { pattern: /\b(AKIA[A-Z0-9]{16})/g, replacement: '<REDACTED_AWS_KEY>' },
-  {
-    pattern: /\b([a-zA-Z0-9/+=]{40})/g,
-    replacement: (match) => {
-      // Only redact if it looks like a base64-encoded secret (not normal text)
-      if (/^[A-Za-z0-9+/=]{40}$/.test(match) && match.includes('/')) {
-        return '<REDACTED_SECRET>';
-      }
-      return match;
-    },
-  },
-  // Generic long alphanumeric strings that look like secrets (64+ chars)
-  { pattern: /\b[a-f0-9]{64,}\b/gi, replacement: '<REDACTED_HASH>' },
 ];
+
+const BODY_ASSIGNMENT_PATTERN =
+  /(^|[^A-Za-z0-9_-])(["']?)([A-Za-z][A-Za-z0-9_.\-]{0,64})\2(\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,}\r\n]+)/gm;
+const FORM_SEGMENT_PATTERN = /^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$/;
+const FORM_PAIR_PATTERN = /(^|[&;])([^=&;]+)=([^&;]*)/g;
+
+function getBodyRedactionMarker(value: unknown): string {
+  if (typeof value === 'string') {
+    if (API_KEY_VALUE_PATTERN.test(value)) {
+      return '<REDACTED_API_KEY>';
+    }
+    if (AWS_ACCESS_KEY_PATTERN.test(value)) {
+      return '<REDACTED_AWS_KEY>';
+    }
+  }
+  return REDACTED_BODY_VALUE;
+}
+
+function isSensitiveBodyField(fieldName: string): boolean {
+  return fieldName.split(/[.\[\]]+/).some(isSecretField);
+}
+
+function sanitizeJsonBody(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed || body.length > MAX_BODY_LENGTH * 4 || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+    return body;
+  }
+  try {
+    let changed = false;
+    const parsed = JSON.parse(body, (key, value) => {
+      if (key && isSensitiveBodyField(key)) {
+        changed = true;
+        return getBodyRedactionMarker(value);
+      }
+      return value;
+    });
+    if (!parsed || typeof parsed !== 'object') {
+      return body;
+    }
+    return changed ? JSON.stringify(parsed) : body;
+  } catch {
+    return body;
+  }
+}
+
+function sanitizeFormBody(body: string): string {
+  if (!body.includes('=') || /[\r\n\t]/.test(body)) {
+    return body;
+  }
+  const segments = body.split(/[&;]/).filter(Boolean);
+  if (segments.length === 0 || !segments.every((segment) => FORM_SEGMENT_PATTERN.test(segment))) {
+    return body;
+  }
+
+  return body.replace(FORM_PAIR_PATTERN, (match, separator, rawKey, rawValue) => {
+    if (!rawValue) {
+      return match;
+    }
+    let decodedKey: string;
+    try {
+      decodedKey = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+    } catch {
+      return match;
+    }
+    return isSensitiveBodyField(decodedKey)
+      ? `${separator}${rawKey}=${encodeURIComponent(REDACTED_BODY_VALUE)}`
+      : match;
+  });
+}
+
+function sanitizeBodyAssignments(body: string): string {
+  return body.replace(BODY_ASSIGNMENT_PATTERN, (match, prefix, quote, key, separator, value) =>
+    isSensitiveBodyField(key)
+      ? `${prefix}${quote}${key}${quote}${separator}${getBodyRedactionMarker(value)}`
+      : match,
+  );
+}
 
 /**
  * Context for creating a GenAI span.
@@ -250,7 +309,7 @@ export interface GenAISpanContext {
   system: string;
   /** Explicit latest-convention provider identity when it differs from the legacy system. */
   providerName?: string;
-  /** The operation type (OTEL spec: chat, text_completion, embeddings). Legacy names (completion, embedding) are also accepted and auto-normalized. */
+  /** The operation type (chat, text_completion, embeddings, generate_content, or invoke_agent). Legacy names (completion, embedding) are also accepted and auto-normalized. */
   operationName: GenAIOperationName | LegacyOperationName;
   /** The requested model name */
   model: string;
@@ -409,6 +468,12 @@ export async function withGenAISpan<T>(
 
   // Create the span within the parent context
   const spanCallback = async (span: Span): Promise<T> => {
+    // Preserve the historical explicit OK status unless the callback or wrapper
+    // later marks the call as an error. Current conventions leave success UNSET.
+    if (!useLatest) {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
+
     try {
       const value = await fn(span);
 
@@ -434,8 +499,6 @@ export async function withGenAISpan<T>(
           ATTR_ERROR_TYPE,
           extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
         );
-      } else if (!useLatest) {
-        span.setStatus({ code: SpanStatusCode.OK });
       }
       return value;
     } catch (error) {
@@ -546,13 +609,15 @@ function buildRequestAttributes(
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
 export function sanitizeBody(body: string): string {
-  let sanitized = body;
-  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
-    if (typeof replacement === 'function') {
-      sanitized = sanitized.replace(pattern, replacement);
-    } else {
-      sanitized = sanitized.replace(pattern, replacement);
+  let sanitized = sanitizeJsonBody(body);
+  if (sanitized === body) {
+    sanitized = sanitizeFormBody(body);
+    if (sanitized === body) {
+      sanitized = sanitizeBodyAssignments(body);
     }
+  }
+  for (const { pattern, replacement } of SENSITIVE_VALUE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
   }
   return sanitized;
 }

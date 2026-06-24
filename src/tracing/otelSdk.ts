@@ -5,6 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
+import { sanitizeUrl } from '../util/sanitizer';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -60,9 +61,10 @@ export function initializeOtel(config: OtelConfig): void {
     return;
   }
 
+  const safeEndpoint = config.endpoint ? sanitizeUrl(config.endpoint) : undefined;
   logger.debug('[OtelSdk] Initializing OpenTelemetry SDK', {
     serviceName: config.serviceName,
-    endpoint: config.endpoint,
+    endpoint: safeEndpoint,
     localExport: config.localExport,
   });
 
@@ -97,7 +99,7 @@ export function initializeOtel(config: OtelConfig): void {
       url: config.endpoint,
     });
     spanProcessors.push(new BatchSpanProcessor(otlpExporter));
-    logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
+    logger.debug('[OtelSdk] Added OTLP exporter', { endpoint: safeEndpoint });
   }
 
   // Create trace provider with resource and span processors

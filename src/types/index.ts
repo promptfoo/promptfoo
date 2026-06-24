@@ -1310,14 +1310,16 @@ export const TestSuiteConfigSchema = z.object({
         })
         .optional(),
 
-      // Optional: Forward traces to another collector
-      // Accepted for configuration compatibility only; the built-in receiver does not relay spans.
+      // Deprecated compatibility shape; the built-in receiver does not relay spans.
       forwarding: z
         .object({
           enabled: z.boolean().prefault(false),
           endpoint: z.string(),
           headers: z.record(z.string(), z.string()).optional(),
         })
+        .describe(
+          'Accepted for configuration compatibility only; the built-in receiver does not relay spans.',
+        )
         .optional(),
     })
     .optional(),

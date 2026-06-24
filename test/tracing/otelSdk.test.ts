@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
@@ -181,6 +182,20 @@ describe('otelSdk', () => {
       // Both local and OTLP exporters - now passed via constructor
       const constructorArg = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
       expect(constructorArg.spanProcessors?.length).toBe(2);
+    });
+
+    it('should redact exporter endpoint credentials from logs without changing the exporter URL', () => {
+      const endpoint =
+        'https://collector-user:collector-password@example.com/v1/traces?api_key=sk-proj-abcdefghijklmnopqrstuvwxyz';
+
+      initializeOtel({ ...defaultConfig, endpoint });
+
+      expect(otlpExporterCalls[0]).toEqual({ url: endpoint });
+      const renderedLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(renderedLogs).not.toContain('collector-user');
+      expect(renderedLogs).not.toContain('collector-password');
+      expect(renderedLogs).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz');
+      expect(renderedLogs).toContain('REDACTED');
     });
 
     it('should skip local export when localExport is false', () => {

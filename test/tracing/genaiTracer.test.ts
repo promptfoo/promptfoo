@@ -9,6 +9,7 @@ import {
   getTraceparent,
   normalizeOperationName,
   PromptfooAttributes,
+  sanitizeBody,
   setGenAIResponseAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
@@ -189,6 +190,45 @@ describe('genaiTracer', () => {
         await withGenAISpan(baseContext, async () => ({ output: 'test' }));
 
         expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not overwrite a provider-set error status in legacy mode', async () => {
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
+
+      try {
+        await withGenAISpan(baseContext, async (span) => {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'aborted' });
+          return { output: 'partial result' };
+        });
+
+        expect(mockSpan.setStatus.mock.calls).toEqual([
+          [{ code: SpanStatusCode.OK }],
+          [{ code: SpanStatusCode.ERROR, message: 'aborted' }],
+        ]);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should preserve a provider-set error status under the current conventions', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      try {
+        await withGenAISpan(baseContext, async (span) => {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'aborted' });
+          return { output: 'partial result' };
+        });
+
+        expect(mockSpan.setStatus).toHaveBeenCalledTimes(1);
+        expect(mockSpan.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+          message: 'aborted',
+        });
       } finally {
         restoreEnv();
       }
@@ -679,7 +719,8 @@ describe('genaiTracer', () => {
 
     it('should redact response body sensitive data', async () => {
       const resultExtractor = vi.fn(() => ({
-        responseBody: '{"token": "secret-token-value-12345678901234567890"}',
+        responseBody:
+          '{"client_secret":"client.secret+with/slash=","refresh_token":"1//refresh+value="}',
       }));
 
       await withGenAISpan(baseContext, async () => 'result', resultExtractor);
@@ -689,7 +730,65 @@ describe('genaiTracer', () => {
       );
       expect(responseBodyCall).toBeDefined();
       expect(responseBodyCall![1]).toContain('<REDACTED>');
-      expect(responseBodyCall![1]).not.toContain('secret-token-value-12345678901234567890');
+      expect(responseBodyCall![1]).not.toContain('client.secret+with/slash=');
+      expect(responseBodyCall![1]).not.toContain('1//refresh+value=');
+    });
+
+    it('should recursively redact exact sensitive JSON fields without rewriting benign fields', () => {
+      const body = JSON.stringify({
+        access_token: 'ya29.access/token+value=',
+        nested: [{ 'x-api-key': 'key.with/slash+padding=' }, { session: 'session=value' }],
+        privateKey: '-----BEGIN PRIVATE KEY-----\nmaterial\n-----END PRIVATE KEY-----',
+        token_count: 42,
+        session_summary: 'safe summary',
+      });
+
+      const sanitized = JSON.parse(sanitizeBody(body));
+
+      expect(sanitized.access_token).toBe('<REDACTED>');
+      expect(sanitized.nested[0]['x-api-key']).toBe('<REDACTED>');
+      expect(sanitized.nested[1].session).toBe('<REDACTED>');
+      expect(sanitized.privateKey).toBe('<REDACTED>');
+      expect(sanitized.token_count).toBe(42);
+      expect(sanitized.session_summary).toBe('safe summary');
+    });
+
+    it('should redact form, header, and PEM credentials without partial suffixes', () => {
+      const form = sanitizeBody(
+        'message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D&client_secret=short%2F%2B%3D',
+      );
+      expect(form).toContain('message=keep');
+      expect(form).not.toContain('ya29');
+      expect(form).not.toContain('short');
+
+      const headers = sanitizeBody(
+        'response text Authorization: Basic dXNlcjpwYXNzLys=\nCookie: session=abc/+=; other=value',
+      );
+      expect(headers).not.toContain('dXNlcjpwYXNzLys=');
+      expect(headers).not.toContain('session=abc/+');
+
+      const privateKey = sanitizeBody(
+        '-----BEGIN RSA PRIVATE KEY-----\nsecret material\n-----END RSA PRIVATE KEY-----',
+      );
+      expect(privateKey).toBe('<REDACTED_PRIVATE_KEY>');
+    });
+
+    it('should preserve benign hashes, slash text, and JSON formatting', () => {
+      const hash = 'a'.repeat(64);
+      const body = `{ "token_count": 4, "session_summary": "safe", "message": "${hash}/text" }`;
+
+      expect(sanitizeBody(body)).toBe(body);
+    });
+
+    it('should preserve bodies verbatim when sanitization is disabled', async () => {
+      const requestBody = '{"access_token":"plain-secret"}';
+      await withGenAISpan(
+        { ...baseContext, requestBody, sanitizeBodies: false },
+        async () => 'result',
+      );
+
+      const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+      expect(attributes[PromptfooAttributes.REQUEST_BODY]).toBe(requestBody);
     });
   });
 });

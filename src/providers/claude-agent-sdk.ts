@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -1589,10 +1590,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             logger.warn(
               `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
             );
-            otelTrace.getActiveSpan()?.setStatus({
+            const activeSpan = otelTrace.getActiveSpan();
+            activeSpan?.setStatus({
               code: SpanStatusCode.ERROR,
               message: 'stream closed without terminal_reason after multiple result messages',
             });
+            activeSpan?.setAttribute(ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER);
           }
           const raw = JSON.stringify(finalMsg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
@@ -1620,10 +1623,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               ? finalMsg.terminal_reason
               : undefined;
           if (abortedTerminalReason) {
-            otelTrace.getActiveSpan()?.setStatus({
+            const activeSpan = otelTrace.getActiveSpan();
+            activeSpan?.setStatus({
               code: SpanStatusCode.ERROR,
               message: `aborted: ${abortedTerminalReason}`,
             });
+            activeSpan?.setAttribute(ATTR_ERROR_TYPE, abortedTerminalReason);
           }
 
           // Only SDKResultSuccess carries `api_error_status` per the SDK types;

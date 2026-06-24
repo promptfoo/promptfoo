@@ -75,6 +75,11 @@ export async function getTokenUsage(query: TokenUsageQuery): Promise<TokenUsage>
  * - `gen_ai.usage.total_tokens` -> total tokens
  * - `gen_ai.usage.cached_tokens` -> cached tokens
  * - `gen_ai.usage.reasoning_tokens` -> reasoning tokens
+ * - `gen_ai.usage.reasoning.output_tokens` -> reasoning tokens (current)
+ * - `gen_ai.usage.cache_read_input_tokens` -> cache-read input tokens (legacy)
+ * - `gen_ai.usage.cache_read.input_tokens` -> cache-read input tokens (current)
+ * - `gen_ai.usage.cache_creation_input_tokens` -> cache-creation input tokens (legacy)
+ * - `gen_ai.usage.cache_creation.input_tokens` -> cache-creation input tokens (current)
  * - `gen_ai.usage.accepted_prediction_tokens` -> accepted prediction tokens
  * - `gen_ai.usage.rejected_prediction_tokens` -> rejected prediction tokens
  *

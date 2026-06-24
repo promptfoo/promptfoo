@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from types import ModuleType
-from typing import Any
+from typing import Any, Dict
 from unittest.mock import MagicMock, call, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -205,6 +205,51 @@ class TestInitTracing(unittest.TestCase):
     def tearDown(self) -> None:
         persistent_wrapper._tracer = self.original_tracer
         persistent_wrapper._tracing_enabled = self.original_tracing_enabled
+
+    def test_resolves_default_otlp_traces_endpoint(self) -> None:
+        for environment in ({}, {"OTEL_EXPORTER_OTLP_ENDPOINT": ""}):
+            with self.subTest(environment=environment):
+                with patch.dict(os.environ, environment, clear=True):
+                    self.assertEqual(
+                        persistent_wrapper._get_otlp_traces_endpoint(),
+                        "http://localhost:4318/v1/traces",
+                    )
+
+    def test_appends_traces_path_to_generic_otlp_endpoint(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318/base/"},
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://collector:4318/base/v1/traces",
+            )
+
+    def test_preserves_compatibility_endpoint_with_traces_path(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318/v1/traces/"},
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://collector:4318/v1/traces",
+            )
+
+    def test_prefers_exact_signal_specific_otlp_traces_endpoint(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://base:4318",
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://traces:4318/custom",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                persistent_wrapper._get_otlp_traces_endpoint(),
+                "http://traces:4318/custom",
+            )
 
     def test_successful_init_does_not_write_to_stderr(self) -> None:
         """Tests that successful tracing initialization stays quiet."""
@@ -691,7 +736,7 @@ class TestTracedCall(unittest.TestCase):
             else:
                 sys.modules[mod_name] = original
 
-    def _make_context(self, traceparent: str = "00-abcd1234-5678-01") -> dict[str, str]:
+    def _make_context(self, traceparent: str = "00-abcd1234-5678-01") -> Dict[str, str]:
         """Helper to build a context dict with traceparent."""
         return {"traceparent": traceparent}
 
@@ -927,6 +972,65 @@ class TestTracedCall(unittest.TestCase):
         self.mock_span.set_attribute.assert_any_call(
             "gen_ai.usage.cache_creation_input_tokens", 4
         )
+
+    def test_body_sanitizer_recursively_redacts_exact_sensitive_json_fields(
+        self,
+    ) -> None:
+        body = json.dumps(
+            {
+                "access_token": "ya29.access/token+value=",
+                "nested": [
+                    {"x-api-key": "key.with/slash+padding="},
+                    {"session": "session=value"},
+                ],
+                "privateKey": (
+                    "-----BEGIN PRIVATE KEY-----\nmaterial\n-----END PRIVATE KEY-----"
+                ),
+                "token_count": 42,
+                "session_summary": "safe summary",
+            }
+        )
+
+        sanitized = json.loads(persistent_wrapper._sanitize_body(body))
+
+        self.assertEqual(sanitized["access_token"], "<REDACTED>")
+        self.assertEqual(sanitized["nested"][0]["x-api-key"], "<REDACTED>")
+        self.assertEqual(sanitized["nested"][1]["session"], "<REDACTED>")
+        self.assertEqual(sanitized["privateKey"], "<REDACTED>")
+        self.assertEqual(sanitized["token_count"], 42)
+        self.assertEqual(sanitized["session_summary"], "safe summary")
+
+    def test_body_sanitizer_redacts_form_headers_and_private_keys(self) -> None:
+        form = persistent_wrapper._sanitize_body(
+            "message=keep&access_token=ya29.access%2Ftoken%2Bvalue%3D"
+            "&client_secret=short%2F%2B%3D"
+        )
+        self.assertIn("message=keep", form)
+        self.assertNotIn("ya29", form)
+        self.assertNotIn("short", form)
+
+        headers = persistent_wrapper._sanitize_body(
+            "response text Authorization: Basic dXNlcjpwYXNzLys=\n"
+            "Cookie: session=abc/+=; other=value"
+        )
+        self.assertNotIn("dXNlcjpwYXNzLys=", headers)
+        self.assertNotIn("session=abc/+", headers)
+
+        private_key = persistent_wrapper._sanitize_body(
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            "secret material\n"
+            "-----END RSA PRIVATE KEY-----"
+        )
+        self.assertEqual(private_key, "<REDACTED_PRIVATE_KEY>")
+
+    def test_body_sanitizer_preserves_benign_values_and_formatting(self) -> None:
+        body = (
+            '{ "token_count": 4, "session_summary": "safe", "message": "'
+            + ("a" * 64)
+            + '/text" }'
+        )
+
+        self.assertEqual(persistent_wrapper._sanitize_body(body), body)
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False

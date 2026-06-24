@@ -745,9 +745,10 @@ describe('ClaudeCodeSDKProvider', () => {
         // the OTEL span ERROR so this isn't graded silently.
         const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
         const setStatusSpy = vi.fn();
+        const setAttributeSpy = vi.fn();
         vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
           setStatus: setStatusSpy,
-          setAttribute: vi.fn(),
+          setAttribute: setAttributeSpy,
           setAttributes: vi.fn(),
           addEvent: vi.fn(),
           recordException: vi.fn(),
@@ -806,6 +807,7 @@ describe('ClaudeCodeSDKProvider', () => {
             code: SpanStatusCode.ERROR,
             message: expect.stringContaining('terminal_reason'),
           });
+          expect(setAttributeSpy).toHaveBeenCalledWith('error.type', '_OTHER');
         } finally {
           warnSpy.mockRestore();
         }
@@ -4852,8 +4854,10 @@ describe('ClaudeCodeSDKProvider', () => {
 
       it('marks the active provider span as ERROR when the SDK stops via hook_stopped', async () => {
         const setStatus = vi.fn();
+        const setAttribute = vi.fn();
         vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
           setStatus,
+          setAttribute,
           spanContext: () => ({
             traceId: '0af7651916cd43dd8448eb211c80319c',
             spanId: 'b7ad6b7169203331',
@@ -4893,6 +4897,7 @@ describe('ClaudeCodeSDKProvider', () => {
           code: SpanStatusCode.ERROR,
           message: 'aborted: hook_stopped',
         });
+        expect(setAttribute).toHaveBeenCalledWith('error.type', 'hook_stopped');
       });
 
       it('propagates tool.parent_id for sub-agent tool calls', async () => {
