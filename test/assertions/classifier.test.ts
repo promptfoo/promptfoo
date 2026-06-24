@@ -57,7 +57,12 @@ describe('handleClassifier', () => {
   });
 
   it('passes rendered values, thresholds, and test options to the classifier matcher', async () => {
-    const params = createParams();
+    const providerCallContext = {
+      prompt: { raw: 'model output', label: 'classifier' },
+      vars: {},
+      traceparent: '00-00000000000000000000000000000001-0000000000000001-01',
+    };
+    const params = createParams({ providerCallContext });
 
     await expect(handleClassifier(params)).resolves.toEqual({
       assertion: params.assertion,
@@ -71,6 +76,7 @@ describe('handleClassifier', () => {
       'model output',
       0.7,
       params.test.options,
+      providerCallContext,
     );
   });
 
@@ -101,6 +107,7 @@ describe('handleClassifier', () => {
       'model output',
       1,
       params.test.options,
+      undefined,
     );
   });
 
