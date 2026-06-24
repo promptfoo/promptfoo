@@ -97,6 +97,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # OpenTelemetry trace data (when tracing is enabled)
     trace: Optional[TraceData]
+
+    # Optional shortcut to providerResponse.metadata
+    metadata: Optional[Dict[str, Any]]
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:

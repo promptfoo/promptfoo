@@ -614,7 +614,14 @@ describe('addLayerTestCases', () => {
         testCases,
         'input',
         {
-          steps: [{ id: 'jailbreak:hydra', config: { maxTurns: 5, stateful: true } }, 'audio'],
+          targetId: 'cloud-target-123',
+          steps: [
+            {
+              id: 'jailbreak:hydra',
+              config: { maxTurns: 5, stateful: true, targetId: 'stale-target' },
+            },
+            'audio',
+          ],
         },
         mockStrategies,
         mockLoadStrategy,
@@ -628,6 +635,7 @@ describe('addLayerTestCases', () => {
           expect.objectContaining({
             maxTurns: 5,
             stateful: true,
+            targetId: 'cloud-target-123',
             _perTurnLayers: ['audio'],
           }),
         );

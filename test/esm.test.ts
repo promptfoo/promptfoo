@@ -99,6 +99,56 @@ describe('ESM utilities', () => {
       expect(result.testFunction()).toBe('ts default test result');
     });
 
+    it.each([
+      { extension: 'JS', source: "module.exports = { value: 'js' };", value: 'js' },
+      { extension: 'MJS', source: "export const value = 'mjs';", value: 'mjs' },
+      { extension: 'CJS', source: "module.exports = { value: 'cjs' };", value: 'cjs' },
+      { extension: 'TS', source: "export const value = 'ts';", value: 'ts' },
+      { extension: 'MTS', source: "export const value = 'mts';", value: 'mts' },
+      { extension: 'CTS', source: "export const value = 'cts';", value: 'cts' },
+    ])('imports modules referenced with an uppercase .$extension extension', async ({
+      extension,
+      source,
+      value,
+    }) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
+      const lowerCasePath = path.join(tempDir, `provider.${extension.toLowerCase()}`);
+      const upperCasePath = path.join(tempDir, `provider.${extension}`);
+      fs.writeFileSync(lowerCasePath, source);
+
+      try {
+        const result = await importModule(upperCasePath);
+        expect(result.value).toBe(value);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('does not substitute a different module on case-sensitive file systems', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
+      const lowerCasePath = path.join(tempDir, 'provider.js');
+      const upperCasePath = path.join(tempDir, 'provider.JS');
+      fs.writeFileSync(lowerCasePath, "module.exports = { value: 'lower' };");
+
+      try {
+        if (fs.existsSync(upperCasePath)) {
+          expect(fs.statSync(upperCasePath).ino).toBe(fs.statSync(lowerCasePath).ino);
+          return;
+        }
+
+        fs.writeFileSync(upperCasePath, "module.exports = { value: 'upper' };");
+        expect(fs.statSync(upperCasePath).ino).not.toBe(fs.statSync(lowerCasePath).ino);
+        try {
+          const result = await importModule(upperCasePath);
+          expect(result).toEqual({ value: 'upper' });
+        } catch (error) {
+          expect(error).toMatchObject({ code: 'ERR_UNKNOWN_FILE_EXTENSION' });
+        }
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     it('imports TypeScript modules with transitive TypeScript dependencies', async () => {
       const modulePath = path.resolve(testDir, '__fixtures__/testModuleWithTransitiveTsImport.ts');
 

@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -117,7 +118,7 @@ export async function checkExfilTracking(
       url,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRemoteGenerationHeaders(),
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
@@ -219,6 +220,7 @@ async function createWebPage(
   purpose?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<CreateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
@@ -236,7 +238,7 @@ async function createWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'create-web-page',
         testCaseId,
@@ -247,6 +249,7 @@ async function createWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000, // 60s timeout for LLM generation
@@ -274,6 +277,7 @@ async function updateWebPage(
   evalId?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<UpdateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
@@ -289,7 +293,7 @@ async function updateWebPage(
     url,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         task: 'update-web-page',
         uuid,
@@ -299,6 +303,7 @@ async function updateWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000,
@@ -416,6 +421,7 @@ async function transformForPerTurnLayer(
   const useLlmCreate = (config.useLlm as boolean) ?? true;
   const useLlmUpdate = (config.useLlm as boolean) ?? true;
   const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
+  const targetId = typeof config.targetId === 'string' ? config.targetId : undefined;
 
   const results: TestCase[] = [];
 
@@ -471,6 +477,7 @@ async function transformForPerTurnLayer(
           evalId,
           useLlmUpdate,
           preferSmallModel,
+          targetId,
         );
 
         // Update state with new embedding location and fetch prompt
@@ -519,6 +526,7 @@ async function transformForPerTurnLayer(
           purpose,
           useLlmCreate,
           preferSmallModel,
+          targetId,
         );
 
         // Clean up expired entries before adding new ones

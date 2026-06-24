@@ -10,8 +10,8 @@ import * as path from 'path';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import { prepareComments } from '../../src/codeScan/util/github';
-import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -23,7 +23,7 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
+import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
 
 interface ActionInputs {
   apiHost: string;
@@ -49,14 +49,47 @@ interface PullRequestForkPayload {
   } | null;
 }
 
+const FORK_PR_AUTH_SKIP_REASON =
+  'Fork PR scanning requires maintainer approval. See PR comment for options.';
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const DEFAULT_MINIMUM_SEVERITY = 'medium';
+
+/**
+ * Resolve the effective minimum severity from the two supported inputs.
+ *
+ * The two inputs do NOT carry defaults in `action.yml`. That keeps
+ * `core.getInput()` returning `''` when a workflow has not set the input,
+ * which is what lets a workflow that only sets the alias (`minimum-severity`)
+ * actually take effect. Precedence is:
+ *
+ *   1. `min-severity` if set
+ *   2. `minimum-severity` if set
+ *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
+ *
+ * If both are set to different values, `min-severity` wins and a warning is
+ * emitted so the workflow author can collapse the inputs.
+ */
+function resolveMinimumSeverityInput(): string {
+  const primary = core.getInput('min-severity').trim();
+  const alias = core.getInput('minimum-severity').trim();
+
+  if (primary && alias && primary !== alias) {
+    core.warning(
+      `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
+    );
+  }
+
+  return primary || alias || DEFAULT_MINIMUM_SEVERITY;
 }
 
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
-    minimumSeverity: core.getInput('min-severity') || core.getInput('minimum-severity'),
+    minimumSeverity: resolveMinimumSeverityInput(),
     configPath: core.getInput('config-path'),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
@@ -284,7 +317,7 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
@@ -315,10 +348,14 @@ async function runPromptfooScan(
     return parseScanOutput(scanOutput);
   }
 
-  // Fork PR auth rejection is expected - server posts helpful comment to PR
-  if (scanOutput.includes('Fork PR scanning not authorized')) {
-    core.info('🔀 Fork PR detected - see PR comment for scan options');
-    return undefined;
+  // Keep compatibility with CLI releases that reported an authorized fork skip as text
+  // while the action and CLI roll out independently.
+  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+    return {
+      success: true,
+      comments: [],
+      skipReason: FORK_PR_AUTH_SKIP_REASON,
+    };
   }
 
   core.error(`CLI exited with code ${exitCode}`);
@@ -326,10 +363,7 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
@@ -350,13 +384,33 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildGeneralCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+  const location =
+    comment.file && comment.line
+      ? comment.startLine && comment.startLine !== comment.line
+        ? `${comment.file}:${comment.startLine}-${comment.line}`
+        : `${comment.file}:${comment.line}`
+      : comment.file;
+  return location ? `**${location}**\n\n${body}` : body;
+}
+
 function toReviewComment(comment: Comment) {
+  // GitHub's createReview API requires start_line < line for multi-line comments and
+  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
+  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
   return {
     path: comment.file!,
     line: comment.line || undefined,
-    start_line: comment.startLine || undefined,
+    start_line: startLine,
     side: 'RIGHT' as const,
-    start_side: comment.startLine ? ('RIGHT' as const) : undefined,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
     body: buildCommentBody(comment),
   };
 }
@@ -403,7 +457,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildGeneralCommentBody(comment),
     });
   }
 
@@ -421,14 +475,19 @@ async function postFallbackComments(
 
   try {
     const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
+    const {
+      lineComments: preparedLineComments,
+      generalComments,
+      reviewBody,
+    } = prepareComments(comments, review, minimumSeverity);
+    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
     );
 
     await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, generalComments);
+    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
 
     core.info('✅ All comments posted to PR by action');
   } catch (error) {
@@ -577,12 +636,36 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review } = scanResponse;
+  const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const hasPrFindings = hasPrPostableFindings(comments);
+
+  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
+  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
+  // responses still need processing when a finding can be surfaced through SARIF or PR
+  // comments, because those output channels intentionally support different locations.
+  if (skipReason && !hasSarifFindings && !hasPrFindings) {
+    core.info(`🔀 Scan skipped: ${skipReason}`);
+    return;
+  }
+
+  if (skipReason) {
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  emitConfiguredSarifOutput(scanResponse, inputs);
+  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
+  if (!skipReason || hasSarifFindings) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  }
 
-  if ((comments.length > 0 || review) && commentsPosted === false) {
+  if ((hasPrFindings || review) && commentsPosted === false) {
     await postFallbackComments(
       inputs.githubToken,
       context,
@@ -666,10 +749,6 @@ async function runCodeScan(): Promise<void> {
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken);
-
-    if (!scanResponse) {
-      return;
-    }
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);

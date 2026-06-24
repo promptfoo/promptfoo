@@ -1637,4 +1637,100 @@ return s >= 0.5 && s <= 0.75;`,
       }
     });
   });
+
+  describe('Metadata access in JavaScript assertions', () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+    async function runMetadataAssertion(
+      value: string,
+      metadata?: Record<string, any>,
+    ): Promise<GradingResult> {
+      return runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: { type: 'javascript', value },
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output: 'Expected output',
+          ...(metadata === undefined ? {} : { metadata }),
+        },
+      });
+    }
+
+    it('should access metadata via context.metadata shortcut', async () => {
+      const result = await runMetadataAssertion('context.metadata?.toolCalls <= 10', {
+        toolCalls: 5,
+        toolNames: ['get_weather', 'search'],
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should access metadata via context.providerResponse.metadata (full path)', async () => {
+      const result = await runMetadataAssertion(
+        'context.providerResponse?.metadata?.toolCalls <= 10',
+        {
+          toolCalls: 5,
+        },
+      );
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail assertion when metadata check fails', async () => {
+      const result = await runMetadataAssertion('context.metadata?.toolCalls <= 3', {
+        toolCalls: 10,
+      });
+
+      expect(result.pass).toBe(false);
+    });
+
+    it('should handle missing metadata gracefully with nullish coalescing', async () => {
+      const result = await runMetadataAssertion('(context.metadata?.toolCalls ?? 0) <= 10');
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle empty metadata object gracefully', async () => {
+      const result = await runMetadataAssertion('(context.metadata?.toolCalls ?? 0) <= 10', {});
+
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      {
+        name: 'HTTP metadata',
+        value: 'context.metadata?.http?.status === 200',
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json' },
+          },
+        },
+      },
+      {
+        name: 'array metadata',
+        value: 'context.metadata?.toolNames?.includes("get_weather")',
+        metadata: {
+          toolNames: ['get_weather', 'search', 'calculate'],
+        },
+      },
+      {
+        name: 'complex metadata assertions with variables',
+        value:
+          'const meta = context.metadata; meta && meta.toolCalls <= 10 && meta.toolNames?.length <= 5',
+        metadata: {
+          toolCalls: 5,
+          toolNames: ['get_weather', 'search'],
+        },
+      },
+    ])('should access $name', async ({ value, metadata }) => {
+      const result = await runMetadataAssertion(value, metadata);
+
+      expect(result).toMatchObject({ pass: true });
+    });
+  });
 });
