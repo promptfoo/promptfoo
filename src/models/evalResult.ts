@@ -34,6 +34,7 @@ import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutati
 import { clearCountCache } from './evalPerformance';
 
 type SubmitRatingAction = 'rate' | 'clear' | 'update';
+type SubmitRatingUpdate = 'score' | 'comment';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -700,6 +701,26 @@ function getExplicitHumanRating(
   };
 }
 
+function applyExplicitRatingUpdate(
+  previous: GradingResult | null,
+  submitted: GradingResult,
+  previousSuccess: boolean,
+  previousScore: number,
+  ratingUpdate: SubmitRatingUpdate,
+): GradingResult {
+  const updated = { ...(previous ?? submitted) } as GradingResult;
+  updated.pass = previousSuccess;
+  updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
+  if (ratingUpdate === 'comment') {
+    if (hasOwn(submitted, 'comment')) {
+      updated.comment = submitted.comment;
+    } else {
+      delete updated.comment;
+    }
+  }
+  return updated;
+}
+
 function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
@@ -727,7 +748,10 @@ function normalizeRatingSubmission(
   const clearingManualRating =
     previousHasManualRating &&
     (ratingAction === 'clear' ||
-      (submittedHasComponents && !explicitHumanComponent && !explicitTopLevelHuman));
+      (ratingAction === undefined &&
+        submittedHasComponents &&
+        !explicitHumanComponent &&
+        !explicitTopLevelHuman));
   const outcomeChanged = previousSuccess !== submitted.pass;
   const submittedKeys = Object.keys(submitted);
   const exactMinimalNoopRating =
@@ -744,7 +768,7 @@ function normalizeRatingSubmission(
       explicitTopLevelHuman ||
       previousHasManualRating ||
       outcomeChanged ||
-      exactMinimalNoopRating);
+      (ratingAction === undefined && exactMinimalNoopRating));
   const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
 
   if (!shouldHaveManualRating) {
@@ -799,23 +823,41 @@ function getRestorableManualRatingState(
   previousHasManualRating: boolean,
   existingState: ManualRatingState | undefined,
   ratingAction: SubmitRatingAction | undefined,
-  matchesLegacyRepeatedClear: boolean,
 ): ManualRatingState | undefined {
-  if (previousHasManualRating || !existingState) {
-    return undefined;
-  }
-  if (ratingAction === 'clear') {
-    return existingState;
-  }
-  return existingState.status === 'cleared' && matchesLegacyRepeatedClear
+  return !previousHasManualRating && existingState?.status === 'active' && ratingAction === 'clear'
     ? existingState
     : undefined;
+}
+
+function matchesLegacyRepeatedClear(
+  submittedGradingResult: GradingResult,
+  existingState: ManualRatingState | undefined,
+  legacyClearRequestHash: string | undefined,
+  ratingAction: SubmitRatingAction | undefined,
+): boolean {
+  return (
+    ratingAction === undefined &&
+    legacyClearRequestHash !== undefined &&
+    (existingState?.clearRequestHash === legacyClearRequestHash ||
+      (existingState !== undefined &&
+        submittedGradingResult.pass === existingState.original.success &&
+        submittedGradingResult.score === existingState.original.score))
+  );
+}
+
+function shouldRefreshClearedManualRatingState(
+  previousHasManualRating: boolean,
+  existingState: ManualRatingState | undefined,
+  nextHasManualRating: boolean,
+): existingState is ManualRatingState & { status: 'cleared' } {
+  return !previousHasManualRating && existingState?.status === 'cleared' && !nextHasManualRating;
 }
 
 function resolveRatingTransition(
   result: RatingEvalResult,
   submittedGradingResult: GradingResult,
   ratingAction?: SubmitRatingAction,
+  ratingUpdate?: SubmitRatingUpdate,
 ): {
   gradingResult: GradingResult | null;
   success: boolean;
@@ -824,28 +866,40 @@ function resolveRatingTransition(
   metadata: PersistedEvalResult['metadata'];
 } {
   const previousHasManualRating = hasManualRating(result.gradingResult);
+  const effectiveSubmission =
+    ratingAction === 'update'
+      ? applyExplicitRatingUpdate(
+          result.gradingResult,
+          submittedGradingResult,
+          result.success,
+          result.score,
+          ratingUpdate ?? 'comment',
+        )
+      : submittedGradingResult;
   const normalized = normalizeRatingSubmission(
     result.gradingResult,
-    submittedGradingResult,
+    effectiveSubmission,
     result.success,
     result.score,
     ratingAction,
   );
   const existingState = getManualRatingState(result.metadata);
   const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
-  const matchesLegacyRepeatedClear =
-    ratingAction === undefined &&
-    legacyClearRequestHash !== undefined &&
-    (existingState?.clearRequestHash === legacyClearRequestHash ||
-      (existingState !== undefined &&
-        submittedGradingResult.pass === existingState.original.success &&
-        submittedGradingResult.score === existingState.original.score));
+  const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
+    submittedGradingResult,
+    existingState,
+    legacyClearRequestHash,
+    ratingAction,
+  );
   const stateToRestore = getRestorableManualRatingState(
     previousHasManualRating,
     existingState,
     ratingAction,
-    matchesLegacyRepeatedClear,
   );
+  const isRepeatedClear =
+    !previousHasManualRating &&
+    existingState?.status === 'cleared' &&
+    (ratingAction === 'clear' || isLegacyRepeatedClear);
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
@@ -856,7 +910,15 @@ function resolveRatingTransition(
       : ResultFailureReason.ASSERT
     : normalizeFailureReason(result.failureReason);
 
-  if (stateToRestore) {
+  if (isRepeatedClear) {
+    // The rating is already absent. Keep the authoritative current baseline rather than
+    // rebuilding it from a stale retry payload, which may contain obsolete comments.
+    gradingResult = result.gradingResult;
+    success = result.success;
+    score = result.score;
+    failureReason = normalizeFailureReason(result.failureReason);
+    nextState = existingState;
+  } else if (stateToRestore) {
     gradingResult = restoreOriginalGradingResult(normalized.gradingResult, stateToRestore);
     success = stateToRestore.original.success;
     score = stateToRestore.original.score;
@@ -877,9 +939,11 @@ function resolveRatingTransition(
     failureReason = normalizeFailureReason(result.failureReason);
     nextState = existingState;
   } else if (
-    !previousHasManualRating &&
-    existingState?.status === 'cleared' &&
-    !normalized.hasManualRating
+    shouldRefreshClearedManualRatingState(
+      previousHasManualRating,
+      existingState,
+      normalized.hasManualRating,
+    )
   ) {
     // A score/comment edit changes the restored automated baseline, but the tombstone must
     // survive so a delayed retry of the old clear cannot be reinterpreted as a new rating.
@@ -1000,18 +1064,12 @@ async function submitEvalResultRating(
   id: string,
   submittedGradingResult: GradingResult,
   ratingAction?: SubmitRatingAction,
+  ratingUpdate?: SubmitRatingUpdate,
 ) {
   const db = await getDb();
   const transactionResult = await db.transaction(async (tx) => {
     const result = await tx
-      .select({
-        failureReason: evalResultsTable.failureReason,
-        gradingResult: evalResultsTable.gradingResult,
-        metadata: evalResultsTable.metadata,
-        promptIdx: evalResultsTable.promptIdx,
-        score: evalResultsTable.score,
-        success: evalResultsTable.success,
-      })
+      .select()
       .from(evalResultsTable)
       .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
       .get();
@@ -1028,6 +1086,22 @@ async function submitEvalResultRating(
       return { status: 'eval-not-found' as const };
     }
 
+    const transition = resolveRatingTransition(
+      result,
+      submittedGradingResult,
+      ratingAction,
+      ratingUpdate,
+    );
+    const transitionChanged =
+      result.success !== transition.success ||
+      result.score !== transition.score ||
+      normalizeFailureReason(result.failureReason) !== transition.failureReason ||
+      !isDeepStrictEqual(result.gradingResult, transition.gradingResult) ||
+      !isDeepStrictEqual(result.metadata, transition.metadata);
+    if (!transitionChanged) {
+      return { status: 'unchanged' as const, result };
+    }
+
     const prompts = evalRow.prompts ?? [];
     const prompt = prompts[result.promptIdx];
     if (!prompt) {
@@ -1042,7 +1116,6 @@ async function submitEvalResultRating(
 
     const previousCategory = getResultMetricCategory(result.success, result.failureReason);
     const previousAssertions = countGradingAssertions(result.gradingResult);
-    const transition = resolveRatingTransition(result, submittedGradingResult, ratingAction);
     const nextAssertions = countGradingAssertions(transition.gradingResult);
     const nextCategory = getResultMetricCategory(transition.success, transition.failureReason);
 
@@ -1344,9 +1417,16 @@ export default class EvalResult {
     id: string,
     gradingResult: GradingResult,
     ratingAction?: SubmitRatingAction,
+    ratingUpdate?: SubmitRatingUpdate,
   ) {
-    const result = await submitEvalResultRating(evalId, id, gradingResult, ratingAction);
-    return result.status === 'updated'
+    const result = await submitEvalResultRating(
+      evalId,
+      id,
+      gradingResult,
+      ratingAction,
+      ratingUpdate,
+    );
+    return result.status === 'updated' || result.status === 'unchanged'
       ? { ...result, result: new EvalResult({ ...result.result, persisted: true }) }
       : result;
   }

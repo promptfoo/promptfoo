@@ -307,6 +307,7 @@ interface TableState {
   stats: EvaluateStats | null;
 
   tableRequestGeneration: number;
+  tableLoadingRequestGeneration: number | null;
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -628,6 +629,7 @@ export const useTableStore = create<TableState>()(
 
     stats: null,
     tableRequestGeneration: 0,
+    tableLoadingRequestGeneration: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -658,14 +660,18 @@ export const useTableStore = create<TableState>()(
       const isCurrentRequest = () =>
         get().tableRequestGeneration === requestGeneration &&
         (!skipSettingEvalId || get().evalId === id);
-      const shouldIgnoreResponse = () => {
-        if (isCurrentRequest()) {
-          return false;
+      const shouldIgnoreResponse = () => !isCurrentRequest();
+      const finishCurrentRequest = () => {
+        if (!isCurrentRequest()) {
+          return;
         }
-        if (!skipLoadingState) {
-          set({ isFetching: false });
-        }
-        return true;
+        set((prevState) => {
+          const shouldClearLoading =
+            !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
+          return shouldClearLoading
+            ? { isFetching: false, tableLoadingRequestGeneration: null }
+            : {};
+        });
       };
       if (currentState.currentMetadataKeysRequest) {
         currentState.currentMetadataKeysRequest.abort();
@@ -673,7 +679,10 @@ export const useTableStore = create<TableState>()(
 
       set({
         tableRequestGeneration: requestGeneration,
-        isFetching: skipLoadingState ? get().isFetching : true,
+        tableLoadingRequestGeneration: skipLoadingState
+          ? currentState.tableLoadingRequestGeneration
+          : requestGeneration,
+        isFetching: skipLoadingState ? currentState.isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -742,49 +751,57 @@ export const useTableStore = create<TableState>()(
             return null;
           }
 
-          set((prevState) => ({
-            table: data.table,
-            filteredResultsCount: data.filteredCount,
-            totalResultsCount: data.totalCount,
-            highlightedResultsCount: computeHighlightCount(data.table),
-            userRatedResultsCount: computeUserRatedCount(data.table),
-            config: data.config,
-            version: data.version,
-            author: data.author,
-            evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
-            shouldHighlightSearchText: searchText !== '',
-            // Store filtered metrics from backend (null when no filters or feature disabled)
-            filteredMetrics: data.filteredMetrics || null,
-            // Store evaluation-level stats including durationMs
-            stats: data.stats || null,
-            filters: {
-              ...prevState.filters,
-              options: {
-                metric: computeAvailableMetrics(data.table),
-                metadata: [],
-                ...redteamOptions,
+          set((prevState) => {
+            const shouldClearLoading =
+              !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
+            return {
+              table: data.table,
+              filteredResultsCount: data.filteredCount,
+              totalResultsCount: data.totalCount,
+              highlightedResultsCount: computeHighlightCount(data.table),
+              userRatedResultsCount: computeUserRatedCount(data.table),
+              config: data.config,
+              version: data.version,
+              author: data.author,
+              evalId: skipSettingEvalId ? get().evalId : id,
+              isFetching: shouldClearLoading ? false : prevState.isFetching,
+              tableLoadingRequestGeneration: shouldClearLoading
+                ? null
+                : prevState.tableLoadingRequestGeneration,
+              shouldHighlightSearchText: searchText !== '',
+              // Store filtered metrics from backend (null when no filters or feature disabled)
+              filteredMetrics: data.filteredMetrics || null,
+              // Store evaluation-level stats including durationMs
+              stats: data.stats || null,
+              filters: {
+                ...prevState.filters,
+                options: {
+                  metric: computeAvailableMetrics(data.table),
+                  metadata: [],
+                  ...redteamOptions,
+                },
+                policyIdToNameMap,
               },
-              policyIdToNameMap,
-            },
-          }));
+            };
+          });
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
           return data;
         }
 
-        if (!skipLoadingState) {
-          set({ isFetching: false });
+        if (shouldIgnoreResponse()) {
+          return null;
         }
+        finishCurrentRequest();
         return null;
       } catch (error) {
         if (shouldIgnoreResponse()) {
           return null;
         }
         console.error('Error fetching eval data:', error);
+        finishCurrentRequest();
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,

@@ -4225,7 +4225,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(1));
 
     const [, request] = mockCallApi.mock.calls[0];
-    expect(JSON.parse(request.body).ratingAction).toBe('update');
+    expect(JSON.parse(request.body)).toMatchObject({
+      ratingAction: 'update',
+      ratingUpdate: 'score',
+    });
   });
 
   it('reconciles a cleared rating from the persisted server outcome', async () => {

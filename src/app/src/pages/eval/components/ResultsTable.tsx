@@ -34,6 +34,7 @@ import {
   type SubmitRatingAction,
   type SubmitRatingResponse,
   SubmitRatingResponseSchema,
+  type SubmitRatingUpdate,
 } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
@@ -1039,11 +1040,17 @@ function applyPersistedRatingResult({
 
 class ConfirmedRatingPersistenceError extends Error {}
 
-function getSubmitRatingAction(isPass?: boolean | null): SubmitRatingAction {
+function getSubmitRatingIntent(
+  isPass?: boolean | null,
+  score?: number,
+): { ratingAction: SubmitRatingAction; ratingUpdate?: SubmitRatingUpdate } {
   if (isPass === null) {
-    return 'clear';
+    return { ratingAction: 'clear' };
   }
-  return typeof isPass === 'boolean' ? 'rate' : 'update';
+  if (typeof isPass === 'boolean') {
+    return { ratingAction: 'rate' };
+  }
+  return { ratingAction: 'update', ratingUpdate: score === undefined ? 'comment' : 'score' };
 }
 
 async function saveManualRating({
@@ -1052,6 +1059,7 @@ async function saveManualRating({
   version,
   gradingResult,
   ratingAction,
+  ratingUpdate,
   table,
 }: {
   evalId: string | null;
@@ -1059,6 +1067,7 @@ async function saveManualRating({
   version: number | null | undefined;
   gradingResult: GradingResult;
   ratingAction: SubmitRatingAction;
+  ratingUpdate?: SubmitRatingUpdate;
   table: EvaluateTable;
 }): Promise<PersistedRatingResult | undefined> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
@@ -1070,7 +1079,7 @@ async function saveManualRating({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ...gradingResult, ratingAction }),
+        body: JSON.stringify({ ...gradingResult, ratingAction, ratingUpdate }),
       })
     : await callApi(EVAL_ROUTES.DETAIL(evalId), {
         method: 'PATCH',
@@ -1894,12 +1903,13 @@ function ResultsTable({
         };
 
         try {
+          const ratingIntent = getSubmitRatingIntent(isPass, score);
           const persistedResult = await saveManualRating({
             evalId,
             resultId,
             version,
             gradingResult,
-            ratingAction: getSubmitRatingAction(isPass),
+            ...ratingIntent,
             table: newTable,
           });
           await handlePersistedResult(persistedResult);

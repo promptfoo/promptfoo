@@ -709,7 +709,7 @@ evalRouter.post(
 
     try {
       const { evalId, id } = paramsResult.data;
-      const { ratingAction, ...gradingResultPayload } = bodyResult.data;
+      const { ratingAction, ratingUpdate, ...gradingResultPayload } = bodyResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const submittedGradingResult = gradingResultPayload as unknown as GradingResult;
       const ratingResult = await EvalResult.submitRating(
@@ -717,6 +717,7 @@ evalRouter.post(
         id,
         submittedGradingResult,
         ratingAction,
+        ratingUpdate,
       );
 
       if (ratingResult.status === 'result-not-found') {

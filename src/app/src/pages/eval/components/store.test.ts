@@ -1119,6 +1119,81 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('keeps loading active when a stale foreground request fails before the latest request', async () => {
+      let resolveFirst!: (response: Response) => void;
+      let resolveSecond!: (response: Response) => void;
+      const firstResponse = new Promise<Response>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondResponse = new Promise<Response>((resolve) => {
+        resolveSecond = resolve;
+      });
+      vi.mocked(callApi).mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
+
+      let firstFetch!: Promise<EvalTableDTO | null>;
+      let secondFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        firstFetch = useTableStore.getState().fetchEvalData('eval-id');
+        secondFetch = useTableStore.getState().fetchEvalData('eval-id');
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveFirst({ ok: false } as Response);
+      await act(async () => {
+        await firstFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveSecond({ ok: false } as Response);
+      await act(async () => {
+        await secondFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
+    it('clears superseded foreground loading when the latest background refresh completes', async () => {
+      let resolveForeground!: (response: Response) => void;
+      let resolveBackground!: (response: Response) => void;
+      const foregroundResponse = new Promise<Response>((resolve) => {
+        resolveForeground = resolve;
+      });
+      const backgroundResponse = new Promise<Response>((resolve) => {
+        resolveBackground = resolve;
+      });
+      vi.mocked(callApi)
+        .mockReturnValueOnce(foregroundResponse)
+        .mockReturnValueOnce(backgroundResponse);
+
+      let foregroundFetch!: Promise<EvalTableDTO | null>;
+      let backgroundFetch!: Promise<EvalTableDTO | null>;
+      act(() => {
+        foregroundFetch = useTableStore.getState().fetchEvalData('eval-id');
+        backgroundFetch = useTableStore
+          .getState()
+          .fetchEvalData('eval-id', { skipLoadingState: true });
+      });
+      expect(useTableStore.getState().isFetching).toBe(true);
+
+      resolveBackground({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      } as Response);
+      await act(async () => {
+        await backgroundFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+
+      resolveForeground({ ok: false } as Response);
+      await act(async () => {
+        await foregroundFetch;
+      });
+      expect(useTableStore.getState().isFetching).toBe(false);
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';

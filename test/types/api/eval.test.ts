@@ -80,8 +80,28 @@ describe('Eval API schemas', () => {
       EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 1, ratingAction: 'rate' }),
     ).toMatchObject({ ratingAction: 'rate' });
     expect(
-      EvalSchemas.SubmitRating.Request.parse({ pass: true, score: 0.5, ratingAction: 'update' }),
-    ).toMatchObject({ ratingAction: 'update' });
+      EvalSchemas.SubmitRating.Request.parse({
+        pass: true,
+        score: 0.5,
+        ratingAction: 'update',
+        ratingUpdate: 'score',
+      }),
+    ).toMatchObject({ ratingAction: 'update', ratingUpdate: 'score' });
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 0.5,
+        ratingAction: 'update',
+      }).success,
+    ).toBe(false);
+    expect(
+      EvalSchemas.SubmitRating.Request.safeParse({
+        pass: true,
+        score: 1,
+        ratingAction: 'rate',
+        ratingUpdate: 'score',
+      }).success,
+    ).toBe(false);
     expect(
       EvalSchemas.SubmitRating.Request.safeParse({
         pass: true,

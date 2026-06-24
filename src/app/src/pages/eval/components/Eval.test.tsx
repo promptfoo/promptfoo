@@ -416,6 +416,58 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
+  it('ignores a failed load after a newer eval load has started', async () => {
+    const successfulLoad = {
+      table: mockTable,
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+    let resolveFirst!: (value: null) => void;
+    let resolveSecond!: (value: typeof successfulLoad) => void;
+    const firstLoad = new Promise<null>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondLoad = new Promise<typeof successfulLoad>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(firstLoad)
+      .mockReturnValueOnce(secondLoad);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { queryByText, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveFirst(null);
+      await firstLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond(successfulLoad);
+      await secondLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+  });
+
   it('reloads the scoped eval from a socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,

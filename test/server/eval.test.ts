@@ -1,10 +1,11 @@
 import type { Server } from 'node:http';
 
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database';
 import { updateSignalFile } from '../../src/database/signal';
+import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -237,6 +238,17 @@ describe('eval routes', () => {
         success: result.success,
       };
       const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      const db = await getDb();
+      await db
+        .update(evalResultsTable)
+        .set({ updatedAt: 1 })
+        .where(eq(evalResultsTable.id, result.id));
+      const originalUpdatedAt = await db
+        .select({ updatedAt: evalResultsTable.updatedAt })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      vi.mocked(updateSignalFile).mockClear();
 
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
@@ -244,9 +256,17 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(200);
       expect(await EvalResult.findById(result.id)).toMatchObject(originalResult);
+      expect(
+        await db
+          .select({ updatedAt: evalResultsTable.updatedAt })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, result.id))
+          .get(),
+      ).toEqual(originalUpdatedAt);
       expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
         originalMetrics,
       );
+      expect(updateSignalFile).not.toHaveBeenCalled();
     });
 
     it('rolls back the result and metrics and skips notification when eval persistence fails', async () => {
@@ -370,9 +390,12 @@ describe('eval routes', () => {
       await markResultAsError(eval_, result);
       const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
 
-      const res = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ ...result.gradingResult, comment: 'Investigating', ratingAction: 'update' });
+      const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+        ...result.gradingResult,
+        comment: 'Investigating',
+        ratingAction: 'update',
+        ratingUpdate: 'comment',
+      });
 
       expect(res.status).toBe(200);
       const updatedResult = await EvalResult.findById(result.id);
@@ -381,9 +404,54 @@ describe('eval routes', () => {
       expect(updatedResult?.gradingResult?.componentResults).not.toContainEqual(
         expect.objectContaining({ assertion: { type: 'human' } }),
       );
+      const noOpResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          pass: false,
+          score: 0,
+          comment: 'Investigating',
+          ratingAction: 'update',
+          ratingUpdate: 'comment',
+        });
+      expect(noOpResponse.status).toBe(200);
+      expect(
+        (await EvalResult.findById(result.id))?.gradingResult?.componentResults,
+      ).not.toContainEqual(expect.objectContaining({ assertion: { type: 'human' } }));
       expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
         originalMetrics,
       );
+    });
+
+    it('does not clear a newer manual rating with a stale comment update', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const staleAutomatedPayload = structuredClone(result.gradingResult);
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...createManualRatingPayload(result, false), ratingAction: 'rate' });
+      expect(rateResponse.status).toBe(200);
+      const ratedMetrics = structuredClone((await Eval.findById(eval_.id))?.prompts[0].metrics);
+
+      const updateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          ...staleAutomatedPayload,
+          comment: 'Comment from a stale tab',
+          ratingAction: 'update',
+          ratingUpdate: 'comment',
+        });
+
+      expect(updateResponse.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(false);
+      expect(updatedResult?.score).toBe(0);
+      expect(updatedResult?.gradingResult?.componentResults).toContainEqual(
+        expect.objectContaining({ pass: false, assertion: { type: 'human' } }),
+      );
+      expect(updatedResult?.gradingResult?.comment).toBe('Comment from a stale tab');
+      expect((await Eval.findById(eval_.id))?.prompts[0].metrics).toEqual(ratedMetrics);
     });
 
     it('should update prompt score if a failing result keeps fail status with a new score', async () => {
@@ -885,6 +953,7 @@ describe('eval routes', () => {
       const manuallyRatedResult = await EvalResult.findById(result.id);
       invariant(manuallyRatedResult, 'Manually rated result is required');
       const legacyClearPayload = createClearManualRatingPayload(manuallyRatedResult);
+      legacyClearPayload.comment = 'Stale clear comment';
       const clearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send({ ...legacyClearPayload, ratingAction: 'clear' });
@@ -894,12 +963,28 @@ describe('eval routes', () => {
       invariant(restoredResult, 'Restored result is required');
       const scoreResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ ...createScoreOnlyRatingPayload(restoredResult, 0.4), ratingAction: 'update' });
+        .send({
+          ...createScoreOnlyRatingPayload(restoredResult, 0.4),
+          ratingAction: 'update',
+          ratingUpdate: 'score',
+        });
 
       expect(scoreResponse.status).toBe(200);
       expect(scoreResponse.body.score).toBe(0.4);
       expect(scoreResponse.body.gradingResult?.score).toBe(0.4);
       expect(scoreResponse.body.gradingResult).not.toHaveProperty('ratingAction');
+      expect(scoreResponse.body.gradingResult).not.toHaveProperty('ratingUpdate');
+      const scoreUpdatedResult = await EvalResult.findById(result.id);
+      invariant(scoreUpdatedResult, 'Score-updated result is required');
+      const commentResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          ...scoreUpdatedResult.gradingResult,
+          comment: 'Newer baseline comment',
+          ratingAction: 'update',
+          ratingUpdate: 'comment',
+        });
+      expect(commentResponse.status).toBe(200);
       const delayedClearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(legacyClearPayload);
@@ -909,6 +994,7 @@ describe('eval routes', () => {
       expect(persistedResult?.gradingResult?.componentResults).not.toContainEqual(
         expect.objectContaining({ assertion: { type: 'human' } }),
       );
+      expect(persistedResult?.gradingResult?.comment).toBe('Newer baseline comment');
       const persistedEval = await Eval.findById(eval_.id);
       expect(persistedEval?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(0.4);
     });

@@ -295,8 +295,19 @@ export const SubmitRatingRequestSchema = z
     pass: z.boolean(),
     score: z.number(),
     ratingAction: z.enum(['rate', 'clear', 'update']).optional(),
+    ratingUpdate: z.enum(['score', 'comment']).optional(),
   })
   .passthrough()
+  .refine(
+    (value) =>
+      value.ratingAction === 'update'
+        ? value.ratingUpdate !== undefined
+        : value.ratingUpdate === undefined,
+    {
+      message: 'ratingUpdate is required only when ratingAction is update',
+      path: ['ratingUpdate'],
+    },
+  )
   .refine((value) => !exceedsRatingRequestDepth(value), {
     message: `Rating payload must not exceed ${MAX_RATING_REQUEST_DEPTH} nested levels`,
   });
@@ -323,6 +334,7 @@ export const SubmitRatingResponseSchema = z
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingAction = NonNullable<SubmitRatingRequest['ratingAction']>;
+export type SubmitRatingUpdate = NonNullable<SubmitRatingRequest['ratingUpdate']>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
 // POST /api/eval (save eval to database)

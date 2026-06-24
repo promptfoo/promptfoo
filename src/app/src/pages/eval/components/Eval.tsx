@@ -90,6 +90,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
+  const loadEvalGenerationRef = useRef(0);
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -123,6 +124,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
+      const loadGeneration = ++loadEvalGenerationRef.current;
+      const isCurrentLoad = () => loadEvalGenerationRef.current === loadGeneration;
       try {
         setEvalId(id);
 
@@ -140,13 +143,20 @@ export default function Eval({ fetchId }: EvalOptions) {
         });
 
         if (!data) {
-          setFailed(true);
+          if (isCurrentLoad() && !isBackgroundUpdate) {
+            setFailed(true);
+          }
           return false;
+        }
+        if (isCurrentLoad()) {
+          setFailed(false);
         }
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
+        if (isCurrentLoad() && !isBackgroundUpdate) {
+          setFailed(true);
+        }
         return false;
       }
     },
@@ -168,6 +178,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * down and reopen the connection when this handler's dependencies (e.g. filterMode via
    * loadEvalById, or fetchId on navigation) change.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing routing distinguishes pinned, latest, scoped, and deletion signals
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
       logger.debug('[Eval] No eval data available', {});
