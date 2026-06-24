@@ -660,8 +660,10 @@ export const useTableStore = create<TableState>()(
         return null;
       }
       const requestGeneration = currentState.tableRequestGeneration + 1;
+      const ownsLoadingRequest = () =>
+        !skipLoadingState && get().tableLoadingRequestGeneration === requestGeneration;
       const isCurrentRequest = () =>
-        get().tableRequestGeneration === requestGeneration &&
+        (get().tableRequestGeneration === requestGeneration || ownsLoadingRequest()) &&
         (!skipSettingEvalId || get().evalId === id);
       const shouldIgnoreResponse = () => !isCurrentRequest();
       const finishCurrentRequest = () => {
@@ -669,11 +671,8 @@ export const useTableStore = create<TableState>()(
           return;
         }
         set((prevState) => {
-          const shouldClearLoading =
-            !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
-          return shouldClearLoading
-            ? { isFetching: false, tableLoadingRequestGeneration: null }
-            : {};
+          const ownsLoading = prevState.tableLoadingRequestGeneration === requestGeneration;
+          return ownsLoading ? { isFetching: false, tableLoadingRequestGeneration: null } : {};
         });
       };
       if (currentState.currentMetadataKeysRequest) {
