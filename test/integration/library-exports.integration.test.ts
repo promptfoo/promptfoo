@@ -27,7 +27,46 @@ const contractsRuntimeBudgetBytes = {
   'contracts.js': 60_000,
   'contracts.cjs': 70_000,
 } as const;
-const contractsDeclarationBudgetBytes = 75_000;
+const contractsDeclarationClosureBudgetBytes = 95_000;
+
+function resolveLocalModule(importerPath: string, specifier: string): string {
+  const resolvedPath = path.resolve(path.dirname(importerPath), specifier);
+  const candidates = [resolvedPath];
+  const declarationExtension = importerPath.endsWith('.d.cts')
+    ? '.d.cts'
+    : importerPath.endsWith('.d.mts')
+      ? '.d.mts'
+      : importerPath.endsWith('.d.ts')
+        ? '.d.ts'
+        : undefined;
+
+  if (declarationExtension) {
+    const emittedMapping = (
+      [
+        ['.cjs', '.d.cts'],
+        ['.mjs', '.d.mts'],
+        ['.js', '.d.ts'],
+      ] as const
+    ).find(([emittedExtension]) => resolvedPath.endsWith(emittedExtension));
+    if (emittedMapping) {
+      const [emittedExtension, emittedDeclarationExtension] = emittedMapping;
+      candidates.push(
+        `${resolvedPath.slice(0, -emittedExtension.length)}${emittedDeclarationExtension}`,
+      );
+    } else if (path.extname(specifier) === '') {
+      candidates.push(`${resolvedPath}${declarationExtension}`);
+      candidates.push(path.join(resolvedPath, `index${declarationExtension}`));
+    }
+  }
+
+  const existingPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!existingPath) {
+    throw new Error(
+      `Unable to resolve local import ${specifier} from ${importerPath}; tried ${candidates.join(', ')}`,
+    );
+  }
+  return existingPath;
+}
 
 /**
  * Follows the relative chunk imports out of a built entry file and returns the byte size of the
@@ -53,7 +92,7 @@ function readModuleClosure(entryPath: string): { totalBytes: number; bareSpecifi
     for (const match of source.matchAll(/(?:from|require|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
       const specifier = match[1];
       if (specifier.startsWith('.')) {
-        stack.push(path.resolve(path.dirname(filePath), specifier));
+        stack.push(resolveLocalModule(filePath, specifier));
       } else {
         bareSpecifiers.add(specifier.replace(/^node:/, '').split('/')[0]);
       }
@@ -98,7 +137,10 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(contractsDeclarationBudgetBytes);
+        const { totalBytes, bareSpecifiers } = readModuleClosure(declarationPath);
+        // The entry and its generated transform declaration chunk total ~80KB in either format.
+        expect(totalBytes).toBeLessThan(contractsDeclarationClosureBudgetBytes);
+        expect([...bareSpecifiers].sort()).toEqual(['zod']);
       }
     });
 
