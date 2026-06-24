@@ -55,6 +55,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
 const configDependencyPaths = new WeakMap<object, string[]>();
+const combinedConfigBasePaths = new WeakMap<object, string>();
 
 function rebaseConfigFileReferenceToBase(
   reference: string,
@@ -997,6 +998,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   }
   configDependencyPaths.set(combinedConfig, [...dependencyPaths]);
+  combinedConfigBasePaths.set(combinedConfig, combinedBasePath);
 
   return combinedConfig;
 }
@@ -1059,7 +1061,11 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : defaultConfigBasePath;
+  const configuredBasePath = configPaths ? path.dirname(configPaths[0]) : defaultConfigBasePath;
+  const basePath =
+    configPaths && hasMagic(configuredBasePath, { magicalBraces: true, windowsPathsNoEscape: true })
+      ? (combinedConfigBasePaths.get(fileConfig) ?? configuredBasePath)
+      : configuredBasePath;
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',

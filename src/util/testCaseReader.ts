@@ -708,19 +708,46 @@ function loadExternalDefaultTestAssertionValues(assertions: TestCase['assert']):
   if (!Array.isArray(assertions)) {
     return;
   }
-  const pending: unknown[] = [...assertions];
+  const pending: Array<{
+    assertions: unknown[];
+    index: number;
+    loadStringEntries: boolean;
+  }> = assertions.map((_, index) => ({
+    assertions: assertions as unknown[],
+    index,
+    loadStringEntries: true,
+  }));
   const visited = new WeakSet<object>();
   while (pending.length > 0) {
-    const assertion = pending.pop();
+    const { assertions: assertionList, index, loadStringEntries } = pending.pop()!;
+    let assertion = assertionList[index];
+    const loadedFromString = typeof assertion === 'string';
+    if (typeof assertion === 'string') {
+      if (!loadStringEntries) {
+        continue;
+      }
+      assertion = maybeLoadConfigFromExternalFile(assertion, 'assertion');
+      assertionList[index] = assertion;
+    }
     if (typeof assertion !== 'object' || assertion === null || visited.has(assertion)) {
       continue;
     }
     visited.add(assertion);
     const record = assertion as Record<string, unknown>;
     if (record.type === 'assert-set' && Array.isArray(record.assert)) {
-      pending.push(...record.assert);
+      pending.push(
+        ...record.assert.map((_, childIndex) => ({
+          assertions: record.assert as unknown[],
+          index: childIndex,
+          loadStringEntries: !loadedFromString && loadStringEntries,
+        })),
+      );
     }
-    if (Object.prototype.hasOwnProperty.call(record, 'value')) {
+    if (
+      !loadedFromString &&
+      loadStringEntries &&
+      Object.prototype.hasOwnProperty.call(record, 'value')
+    ) {
       record.value = maybeLoadConfigFromExternalFile(record.value, 'assertion');
     }
   }

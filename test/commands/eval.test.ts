@@ -1377,6 +1377,85 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should watch scenario test-array sources from the default config', async () => {
+    const defaultConfig = {
+      scenarios: [
+        {
+          tests: [
+            'file://scenarios/cases.yaml',
+            { path: 'file://scenarios/generated.py:build_cases' },
+            { vars: { inline: true } },
+            null,
+          ],
+        },
+      ],
+    } as unknown as UnifiedConfig;
+    const config = { prompts: [], providers: [], tests: [] } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        path.resolve('/suite/scenarios/cases.yaml'),
+        path.resolve('/suite/scenarios/generated.py'),
+      ]),
+      { ignored: /^\./, persistent: true },
+    );
+  });
+
+  it('should use the resolved config base for directory-glob watch sources', async () => {
+    const defaultConfig = {
+      scenarios: [{ tests: ['file://scenarios/cases.yaml'] }],
+    } as unknown as UnifiedConfig;
+    const config = {
+      prompts: ['file://prompts/main.txt'],
+      providers: [],
+      tests: [],
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite/a'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      { watch: true, config: ['/suite/*/promptfooconfig.yaml'], write: false },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+    expect(watchPaths).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/a/prompts/main.txt'),
+        path.resolve('/suite/a/scenarios/cases.yaml'),
+      ]),
+    );
+    expect(watchPaths).not.toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/*/prompts/main.txt'),
+        path.resolve('/suite/*/scenarios/cases.yaml'),
+      ]),
+    );
+  });
+
   it('should normalize canonical Windows file URLs for direct watch sources', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const resolveSpy = vi

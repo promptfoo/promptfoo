@@ -1126,6 +1126,103 @@ describe('readTest', () => {
     expect(result.options).toEqual(defaultTestInput.options);
   });
 
+  it('loads assertion-file entries in an external defaultTest', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({ assert: ['file://assertion.yaml'] }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) => {
+      if (config === 'file://assertion.yaml') {
+        return {
+          type: 'assert-set',
+          assert: [{ type: 'equals', value: 'EXPECTED' }],
+        };
+      }
+      return config;
+    });
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual([
+      {
+        type: 'assert-set',
+        assert: [{ type: 'equals', value: 'EXPECTED' }],
+      },
+    ]);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://assertion.yaml',
+      'assertion',
+    );
+  });
+
+  it('loads assertion-file entries nested in the original external defaultTest', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({
+        assert: [{ type: 'assert-set', assert: ['file://child.yaml'] }],
+      }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) =>
+      config === 'file://child.yaml' ? { type: 'equals', value: 'EXPECTED' } : config,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual([
+      {
+        type: 'assert-set',
+        assert: [{ type: 'equals', value: 'EXPECTED' }],
+      },
+    ]);
+  });
+
+  it('does not recursively load assertion entries discovered inside an assertion file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump({ assert: ['file://cycle.yaml'] }));
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) =>
+      config === 'file://cycle.yaml'
+        ? { type: 'assert-set', assert: ['file://cycle.yaml'] }
+        : config,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual([{ type: 'assert-set', assert: ['file://cycle.yaml'] }]);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves cyclic values discovered inside an assertion file without reloading them', async () => {
+    const cyclicValue: Record<string, unknown> = {};
+    cyclicValue.self = cyclicValue;
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({ assert: ['file://assertion.yaml'] }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) =>
+      config === 'file://assertion.yaml' ? { type: 'equals', value: cyclicValue } : config,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect((result.assert?.[0] as { type: string }).type).toBe('equals');
+    expect((result.assert?.[0] as { value: unknown }).value).toBe(cyclicValue);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves assertion-file arrays and executable entries for established validation', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({
+        assert: ['file://assertions.yaml', 'file://check.js:validate'],
+      }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) =>
+      config === 'file://assertions.yaml' ? [{ type: 'equals', value: 'EXPECTED' }] : config,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual([
+      [{ type: 'equals', value: 'EXPECTED' }],
+      'file://check.js:validate',
+    ]);
+  });
+
   it('leaves malformed external defaultTest assertions for established validation', async () => {
     const malformedAssert = { type: 'equals', value: 'file://raw.txt' };
     vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump({ assert: malformedAssert }));

@@ -221,7 +221,12 @@ function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: stri
     for (const test of Array.isArray(tests) ? tests : tests ? [tests] : []) {
       if (typeof test === 'string') {
         addLocalPath(test);
-      } else if ('path' in test && typeof test.path === 'string') {
+      } else if (
+        typeof test === 'object' &&
+        test !== null &&
+        'path' in test &&
+        typeof test.path === 'string'
+      ) {
         addLocalPath(test.path);
       }
     }
@@ -235,8 +240,8 @@ function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: stri
   for (const scenario of Array.isArray(scenarios) ? scenarios : scenarios ? [scenarios] : []) {
     if (typeof scenario === 'string') {
       addLocalPath(scenario);
-    } else if (typeof scenario.tests === 'string') {
-      addLocalPath(scenario.tests);
+    } else {
+      addTestSources(scenario.tests as UnifiedConfig['tests']);
     }
   }
   return paths;
@@ -1172,7 +1177,7 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = path.dirname(configPaths[0]);
+        const basePath = _basePath ?? path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
           ? (config.prompts
               .map((p) => {

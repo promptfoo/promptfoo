@@ -1863,6 +1863,32 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('uses the first matched config directory as the base for directory globs', async () => {
+    const configGlob = path.resolve('/suite/*/config.json');
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input) === configGlob
+        ? [path.resolve('/suite/a/config.json'), path.resolve('/suite/b/config.json')]
+        : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      JSON.stringify({
+        prompts: ['prompt'],
+        providers: ['echo'],
+        tests: ['file://cases.yaml'],
+        metadata: { source: path.basename(path.dirname(String(filePath))) },
+      }),
+    );
+
+    const result = await resolveConfigs({ config: [configGlob] }, {});
+
+    expect(result.basePath).toBe(path.resolve('/suite/a'));
+    expect(cliState.basePath).toBe(path.resolve('/suite/a'));
+    expect(readTests).toHaveBeenCalledWith(
+      ['file://cases.yaml', 'file://../b/cases.yaml'],
+      path.resolve('/suite/a'),
+    );
+  });
+
   it('should return the provider configs selected by a target filter', async () => {
     const providers = [
       { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
