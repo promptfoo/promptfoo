@@ -794,6 +794,7 @@ export const handleTrajectoryGoalSuccess = async (
           abortSignal: outerExecutionContext?.abortSignal
             ? AbortSignal.any([outerExecutionContext.abortSignal, timeoutController.signal])
             : timeoutController.signal,
+          queuedCallAbortSignal: timeoutController.signal,
         },
         runJudge,
       )
