@@ -9,7 +9,7 @@ import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
-import { isApiProvider } from './types/providers';
+import { isApiProvider, isProviderOptions } from './types/providers';
 import { isTransformFunction } from './types/transform';
 import {
   expandScenarioConfigValues,
@@ -23,6 +23,7 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
+import { sanitizeObject } from './util/sanitizer';
 import { readScenarioTests, readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -65,6 +66,12 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
 function toSerializableProviderRef(provider: unknown, ancestors = new Set<object>()): unknown {
   if (isApiProvider(provider)) {
     return sanitizeProvider(provider);
+  }
+  if (isProviderOptions(provider)) {
+    return sanitizeObject(provider, {
+      context: 'provider options',
+      maxDepth: Number.POSITIVE_INFINITY,
+    });
   }
   if (Array.isArray(provider)) {
     if (ancestors.has(provider)) {

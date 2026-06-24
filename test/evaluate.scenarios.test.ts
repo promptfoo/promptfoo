@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { runDbMigrations } from '../src/migrate';
 import { evaluate } from '../src/node/evaluate';
+import { REDACTED } from '../src/util/sanitizer';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
 import type { ApiProvider, ProviderOptions } from '../src/types';
@@ -76,6 +77,19 @@ describe('programmatic scenario config expansion', () => {
 
     expect(provider.callApi).toHaveBeenCalledTimes(1);
     expect(calledPrompts(provider)).toEqual(['Default prompt']);
+  });
+
+  it('runs scenario config rows when programmatic evals omit scenario tests', async () => {
+    const provider = createMockProvider('omitted-scenario-tests-provider');
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      scenarios: [{ config: [{ vars: { topic: 'billing' } }] } as never],
+    });
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(calledPrompts(provider)).toEqual(['Topic: billing']);
   });
 
   it('resolves scenario config refs relative to programmatic scenario files', async () => {
@@ -486,7 +500,7 @@ describe('programmatic scenario config expansion', () => {
     const providerOptions: ProviderOptions = {
       id: 'echo',
       label: 'Scenario echo',
-      config: { custom: 'keep' },
+      config: { custom: 'keep', apiKey: 'SCENARIO_PROVIDER_SECRET_SENTINEL' },
       delay: 0,
       env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' },
       inputs: { staticInput: 'keep' },
@@ -503,7 +517,11 @@ describe('programmatic scenario config expansion', () => {
 
     const scenario = record.config.scenarios?.[0];
     const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
-    expect(row && !('$values' in row) ? row.provider : undefined).toEqual(providerOptions);
+    expect(JSON.stringify(record.config)).not.toContain('SCENARIO_PROVIDER_SECRET_SENTINEL');
+    expect(row && !('$values' in row) ? row.provider : undefined).toEqual({
+      ...providerOptions,
+      config: { custom: 'keep', apiKey: REDACTED },
+    });
   });
 
   it('fails before provider execution when a scenario generator returns no tests', async () => {

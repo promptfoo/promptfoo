@@ -2168,7 +2168,9 @@ async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Pr
   const resolvedScenarios = [];
   for (const scenario of testSuite.scenarios) {
     const resolvedConfig = await resolveScenarioProviderRows(scenario.config, testSuite.env);
-    const resolvedTests = await resolveScenarioProviderRows(scenario.tests, testSuite.env);
+    const resolvedTests = scenario.tests
+      ? await resolveScenarioProviderRows(scenario.tests, testSuite.env)
+      : scenario.tests;
     if (resolvedConfig !== scenario.config || resolvedTests !== scenario.tests) {
       scenariosChanged = true;
       resolvedScenarios.push({ ...scenario, config: resolvedConfig, tests: resolvedTests });
