@@ -109,12 +109,21 @@ export const handleTraceSpanDuration = ({
     return buildNoMatchingSpansResult({ assertion, inverse, pattern, requirePresence });
   }
 
+  if (
+    matchingSpans.some(
+      (span) =>
+        !Number.isFinite(span.startTime) ||
+        !Number.isFinite(span.endTime) ||
+        span.endTime! < span.startTime,
+    )
+  ) {
+    throw new Error('trace-span-duration assertion encountered a span with invalid timing data');
+  }
+
   const spanDurations = matchingSpans.map((span) => {
     return {
       name: span.name,
-      // Clamp to 0: a clock-skewed span (endTime < startTime) would otherwise yield a negative
-      // duration that sorts as "fast" and renders a nonsensical negative-ms reason.
-      duration: Math.max(0, span.endTime! - span.startTime),
+      duration: span.endTime! - span.startTime,
     };
   });
 
