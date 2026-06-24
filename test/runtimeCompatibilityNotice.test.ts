@@ -217,4 +217,14 @@ describe('runStartupRuntimeAndUpdateChecks', () => {
 
     expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: false });
   });
+
+  it('defaults to the real runtime-notice check when runtimeNoticeApplies is not injected', async () => {
+    const checkForUpdates = vi.fn().mockResolvedValue(true);
+
+    // Exercise the default runtimeNoticeApplies (getRuntimeCompatibilityNotice). warnAboutRuntime
+    // is injected so the outcome is deterministic regardless of the host Node.js version.
+    await runStartupRuntimeAndUpdateChecks({ checkForUpdates, warnAboutRuntime: () => true });
+
+    expect(checkForUpdates).not.toHaveBeenCalled();
+  });
 });
