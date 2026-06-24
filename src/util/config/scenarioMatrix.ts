@@ -138,7 +138,7 @@ export function resolveFileRefFromBase(
   fileRef: string,
   envOverrides?: EnvOverrides,
 ): string {
-  if (!fileRef.startsWith(FILE_REF_PREFIX)) {
+  if (typeof fileRef !== 'string' || !fileRef.startsWith(FILE_REF_PREFIX)) {
     return fileRef;
   }
 
