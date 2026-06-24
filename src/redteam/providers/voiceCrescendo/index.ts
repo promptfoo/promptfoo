@@ -22,6 +22,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
+  accumulateTokenUsage,
   createEmptyTokenUsage,
   getErrorTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -580,6 +581,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
           audioPrompt = await this.textToAudio(voicePrompt);
           audioGenerated = true;
         } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw error;
+          }
           logger.warn(`[VoiceCrescendo] Audio generation failed, using text: ${error}`);
           audioPrompt = voicePrompt;
         }
@@ -682,6 +686,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
           await sleep(this.delayBetweenTurns);
         }
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          const abortTokenUsage = createEmptyTokenUsage();
+          accumulateTokenUsage(abortTokenUsage, totalTokenUsage);
+          accumulateResponseTokenUsage(
+            abortTokenUsage,
+            { tokenUsage: getErrorTokenUsage(error) },
+            { countAsRequest: false },
+          );
+          throw Object.assign(error, { tokenUsage: abortTokenUsage });
+        }
         logger.error(`[VoiceCrescendo] Error in turn ${currentTurn}: ${error}`);
         if (backtrackCount < this.maxBacktracks) {
           backtrackCount++;
