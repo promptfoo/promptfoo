@@ -135,8 +135,10 @@ PROMPTFOO_REQUEST_BACKOFF_MS=10000 PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
 The scheduler's retry handles most rate limiting automatically. The HTTP-level retry also
-handles network issues and recognized transient 502, 503, 504, and 524 responses. Set
-`PROMPTFOO_RETRY_5XX=true` only when every 5xx response from your provider is safe to retry.
+handles network issues and recognized transient 502, 503, 504, and 524 responses for idempotent
+requests. Endpoint-specific callers can explicitly opt non-idempotent requests into selected
+status retries. Set `PROMPTFOO_RETRY_5XX=true` only when every 5xx response from your provider is
+safe to retry.
 
 ## Provider-Specific Notes
 

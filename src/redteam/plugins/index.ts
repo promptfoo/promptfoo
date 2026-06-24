@@ -406,12 +406,13 @@ async function fetchRemoteTestCases(
         signal: abortSignal,
         // The cloud task API uses 500 for transient task failures. Gateway statuses use
         // fetchWithRetries' shared transient classifier.
-        retryOnStatusCodes: [500],
+        retryOnStatusCodes: [500, 502, 503, 504, 524],
       },
       getRequestTimeoutMs(),
       'text',
     );
     if (status !== 200) {
+      await deleteFromCache?.();
       logger.error(`Error generating test cases for ${key}`, { status, statusText });
       return [];
     }

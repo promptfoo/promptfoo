@@ -59,8 +59,13 @@ function getRetryDelayMs(attempt: number, configuredBackoffMs: number): number {
     Number.isFinite(configuredBackoffMs) && configuredBackoffMs >= 0
       ? Math.min(configuredBackoffMs, MAX_RETRY_DELAY_MS)
       : DEFAULT_REQUEST_BACKOFF_MS;
-  const delayMs = Math.pow(2, attempt) * (backoffMs + 1000 * Math.random());
-  return Number.isFinite(delayMs) ? Math.min(delayMs, MAX_RETRY_DELAY_MS) : MAX_RETRY_DELAY_MS;
+  const random = Math.random();
+  const delayMs = Math.pow(2, attempt) * (backoffMs + 1000 * random);
+  if (Number.isFinite(delayMs) && delayMs <= MAX_RETRY_DELAY_MS) {
+    return delayMs;
+  }
+  // Apply downward jitter at the cap so concurrent callers do not re-synchronize.
+  return MAX_RETRY_DELAY_MS - 1000 * random;
 }
 
 async function discardResponseBody(response: Response): Promise<void> {
@@ -75,10 +80,11 @@ function shouldRetryHttpResponse(
   response: Response,
   disableTransientRetries: boolean | undefined,
   retryOnStatusCodes: readonly number[],
+  isIdempotent: boolean,
 ): boolean {
   return (
     disableTransientRetries !== true &&
-    (isTransientError(response) || retryOnStatusCodes.includes(response.status))
+    (retryOnStatusCodes.includes(response.status) || (isIdempotent && isTransientError(response)))
   );
 }
 
@@ -693,6 +699,10 @@ export async function fetchWithRetries(
   const { retryOnStatusCodes = [], ...requestOptions } = options;
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  const method = (
+    requestOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
@@ -707,10 +717,22 @@ export async function fetchWithRetries(
         timeout,
       );
 
+      if (isRateLimited(response)) {
+        await handleRateLimitedResponse(
+          response,
+          url,
+          i,
+          maxRetries,
+          requestOptions.signal ?? undefined,
+        );
+        continue;
+      }
+
       const isRetryableStatus = shouldRetryHttpResponse(
         response,
         options.disableTransientRetries,
         retryOnStatusCodes,
+        isIdempotent,
       );
       if (isRetryableStatus && i < maxRetries) {
         const waitTime = getRetryDelayMs(i, backoff);
@@ -729,17 +751,6 @@ export async function fetchWithRetries(
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
-      }
-
-      if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(
-          response,
-          url,
-          i,
-          maxRetries,
-          requestOptions.signal ?? undefined,
-        );
-        continue;
       }
 
       return response;

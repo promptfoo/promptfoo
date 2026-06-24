@@ -16,6 +16,7 @@ export interface FetchOptions extends RequestInit {
   /**
    * Additional HTTP status codes to retry through fetchWithRetries.
    * Callers should use this only for endpoint-specific transient contracts.
+   * Explicit codes are eligible for retries even when the request method is non-idempotent.
    */
   retryOnStatusCodes?: readonly number[];
 }

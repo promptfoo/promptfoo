@@ -1442,7 +1442,7 @@ describe('fetchWithRetries', () => {
 
     const result = await fetchWithRetries(
       'https://example.com',
-      { retryOnStatusCodes: [500] },
+      { method: 'POST', retryOnStatusCodes: [500] },
       1000,
       2,
     );
@@ -1467,6 +1467,52 @@ describe('fetchWithRetries', () => {
     expect(finalResponse).toBe(notImplemented);
   });
 
+  it('should not automatically retry recognized transient responses for non-idempotent methods', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
+
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { method: 'POST', body: '{}' },
+      1000,
+      2,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
+  });
+
+  it('should honor rate-limit headers before transient status retry policy', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({
+        'Retry-After': '2',
+        'X-RateLimit-Remaining': '0',
+      }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(rateLimitedResponse)
+      .mockResolvedValueOnce(successResponse);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    try {
+      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(sleep).toHaveBeenCalledWith(2000);
+      expect(result).toBe(successResponse);
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it('should cap retry delays and reject invalid backoff values safely', async () => {
     const transientResponse = createMockResponse({
       status: 503,
@@ -1482,6 +1528,17 @@ describe('fetchWithRetries', () => {
         .mockResolvedValueOnce(successResponse);
       await fetchWithRetries('https://example.com', {}, 1000, 1);
       expect(sleep).toHaveBeenLastCalledWith(60_000);
+
+      vi.mocked(sleep).mockClear();
+      randomSpy.mockReturnValue(0.5);
+      vi.mocked(getEnvInt).mockReturnValueOnce(Number.MAX_SAFE_INTEGER);
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(transientResponse)
+        .mockResolvedValueOnce(successResponse);
+      await fetchWithRetries('https://example.com', {}, 1000, 1);
+      expect(sleep).toHaveBeenLastCalledWith(59_500);
+
+      randomSpy.mockReturnValue(0);
 
       vi.mocked(sleep).mockClear();
       vi.mocked(getEnvInt).mockReturnValueOnce(Number.POSITIVE_INFINITY);

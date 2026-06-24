@@ -312,7 +312,7 @@ describe('Plugins', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          retryOnStatusCodes: [500],
+          retryOnStatusCodes: [500, 502, 503, 504, 524],
           signal: abortController.signal,
           body: JSON.stringify({
             config: {},
@@ -657,6 +657,31 @@ describe('Plugins', () => {
         statusText: 'Bad Request',
       });
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
+    });
+
+    it('should evict unexpected successful statuses from the response cache', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: '',
+        cached: false,
+        deleteFromCache,
+        status: 204,
+        statusText: 'No Content',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('should not include malformed successful response bodies in logs', async () => {
