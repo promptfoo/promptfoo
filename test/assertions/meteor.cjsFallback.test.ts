@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('natural', async () => {
   const actual = await vi.importActual<typeof import('natural')>('natural');
-  const natural = actual.default ?? actual;
+  const natural = (actual as typeof actual & { default?: typeof actual }).default ?? actual;
   return { ...natural, default: undefined };
 });
 
