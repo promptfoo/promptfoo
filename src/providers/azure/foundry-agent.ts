@@ -598,8 +598,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
       // The Responses API can resolve with a failed/errored response object
       // instead of throwing. Surface that on the turn marker so a failed model
-      // round is not reported as OK (the parent chat span is already marked
-      // failed downstream via processResponse).
+      // round is not reported as OK (the parent span is already marked failed
+      // downstream via processResponse).
       const responseFailureMessage = (resp: any): string | undefined => {
         if (resp?.error) {
           return typeof resp.error === 'string'

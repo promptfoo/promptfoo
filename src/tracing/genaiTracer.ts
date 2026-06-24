@@ -388,8 +388,9 @@ export async function withGenAISpan<T>(
   const canonicalOperation = normalizeOperationName(ctx.operationName);
   const useLatest = useGenAILatestExperimental();
 
-  // Span name follows GenAI convention: "{operation} {model}"
-  // Use emitted operation name (legacy vs latest per OTEL_SEMCONV_STABILITY_OPT_IN)
+  // Inference spans use "{operation} {model}". Latest-mode agent spans use
+  // "invoke_agent {agent}" (or bare "invoke_agent" when the agent is unknown).
+  // Use the operation name emitted for the selected convention mode.
   const emittedOperation = getEmittedOperationName(canonicalOperation, useLatest);
   const spanName =
     useLatest && canonicalOperation === 'invoke_agent'
@@ -726,7 +727,7 @@ export function getCurrentSpanId(): string | undefined {
 }
 
 /**
- * Build a `chat` GenAISpanContext from the fields every provider shares.
+ * Build a GenAISpanContext from the fields every provider shares.
  *
  * The promptfoo context fields (eval id, test index, prompt label, traceparent)
  * and the request body are derived identically across providers; per-provider
