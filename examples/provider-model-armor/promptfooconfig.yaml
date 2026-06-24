@@ -34,7 +34,7 @@ providers:
       body:
         userPromptData:
           text: '{{prompt}}'
-      transformResponse: file://transforms/sanitize-response.js
+      transformResponse: file://transforms/sanitize-response.mjs
 
 tests:
   # Benign prompts - should not produce a policy match

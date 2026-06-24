@@ -99,7 +99,7 @@ This example:
 
 - `promptfooconfig.yaml` - Direct Model Armor API testing (recommended for detailed filter results)
 - `promptfooconfig.vertex.yaml` - Vertex AI integration with Model Armor (recommended for production-like testing)
-- `transforms/sanitize-response.js` - Response transformer for the sanitization API
+- `transforms/sanitize-response.mjs` - Response transformer for the sanitization API
 - `datasets/model-armor-test.csv` - Test dataset with prompts for each filter type
 
 ### Using the Dataset

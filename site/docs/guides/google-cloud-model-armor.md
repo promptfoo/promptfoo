@@ -291,10 +291,10 @@ providers:
       body:
         userPromptData:
           text: '{{prompt}}'
-      transformResponse: file://transforms/sanitize-response.js
+      transformResponse: file://transforms/sanitize-response.mjs
 ```
 
-The response transformer maps Model Armor's filter results to Promptfoo's guardrails format. See [`examples/provider-model-armor/transforms/sanitize-response.js`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-model-armor/transforms/sanitize-response.js) for the implementation.
+The response transformer maps Model Armor's filter results to Promptfoo's guardrails format. See [`examples/provider-model-armor/transforms/sanitize-response.mjs`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-model-armor/transforms/sanitize-response.mjs) for the implementation.
 
 ### Response Format
 

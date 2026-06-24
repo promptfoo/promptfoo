@@ -20,7 +20,7 @@ type ModelArmorTransform = (
 
 const transformPath = path.resolve(
   process.cwd(),
-  'examples/provider-model-armor/transforms/sanitize-response.js',
+  'examples/provider-model-armor/transforms/sanitize-response.mjs',
 );
 
 let transform: ModelArmorTransform;
