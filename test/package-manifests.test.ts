@@ -18,7 +18,7 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.34.5';
+const EXPECTED_SHARP_VERSION = '^0.35.1';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 

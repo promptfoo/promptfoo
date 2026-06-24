@@ -15,6 +15,7 @@ import {
   getRemoteGenerationUrl,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -132,6 +133,7 @@ async function processRemoteChunk(
     testCases,
     injectVar,
     config,
+    ...remoteGenerationContextPayload(config.targetId),
     email: getUserEmail(),
   };
 
