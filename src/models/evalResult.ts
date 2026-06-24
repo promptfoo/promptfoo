@@ -569,7 +569,12 @@ function getLegacyClearRequestHash(gradingResult: GradingResult): string | undef
   ) {
     return undefined;
   }
-  return JSON.stringify([gradingResult.pass, gradingResult.score]);
+  return JSON.stringify([
+    gradingResult.pass,
+    gradingResult.score,
+    hasOwn(gradingResult, 'comment'),
+    gradingResult.comment,
+  ]);
 }
 
 function parseManualRatingState(value: unknown): ManualRatingState | undefined {
@@ -813,13 +818,15 @@ function matchesLegacyRepeatedClear(
   legacyClearRequestHash: string | undefined,
   ratingAction: SubmitRatingAction | undefined,
 ): boolean {
+  const storedClearRequestHash = existingState?.clearRequestHash;
   return (
     ratingAction === undefined &&
     legacyClearRequestHash !== undefined &&
-    (existingState?.clearRequestHash === legacyClearRequestHash ||
-      (existingState !== undefined &&
+    (storedClearRequestHash === undefined
+      ? existingState !== undefined &&
         submittedGradingResult.pass === existingState.original.success &&
-        submittedGradingResult.score === existingState.original.score))
+        submittedGradingResult.score === existingState.original.score
+      : storedClearRequestHash === legacyClearRequestHash)
   );
 }
 
@@ -877,7 +884,7 @@ function resolveClearingManualRating(
   result: RatingEvalResult,
   existingState: ManualRatingState | undefined,
   clearRestoreBase: GradingResult,
-  explicitClearGradingResult: GradingResult,
+  clearedGradingResult: GradingResult,
   legacyClearRequestHash: string | undefined,
 ) {
   if (existingState?.status === 'active') {
@@ -893,14 +900,17 @@ function resolveClearingManualRating(
       },
     };
   }
+  const success = clearedGradingResult.pass;
+  const score = clearedGradingResult.score;
+  const failureReason =
+    existingState?.status === 'legacy-active'
+      ? existingState.original.failureReason
+      : normalizeFailureReason(result.failureReason);
   return {
-    gradingResult: explicitClearGradingResult,
-    success: explicitClearGradingResult.pass,
-    score: explicitClearGradingResult.score,
-    failureReason:
-      existingState?.status === 'legacy-active'
-        ? existingState.original.failureReason
-        : normalizeFailureReason(result.failureReason),
+    gradingResult: clearedGradingResult,
+    success,
+    score,
+    failureReason,
     nextState:
       existingState?.status === 'legacy-active'
         ? {
@@ -908,7 +918,17 @@ function resolveClearingManualRating(
             status: 'cleared' as const,
             clearRequestHash: legacyClearRequestHash,
           }
-        : undefined,
+        : {
+            ...captureManualRatingState({
+              ...result,
+              failureReason,
+              gradingResult: clearedGradingResult,
+              score,
+              success,
+            }),
+            status: 'cleared' as const,
+            clearRequestHash: legacyClearRequestHash,
+          },
   };
 }
 

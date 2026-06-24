@@ -1245,6 +1245,64 @@ describe('eval routes', () => {
         success: false,
         failureReason: ResultFailureReason.ERROR,
       });
+      const db = await getDb();
+      const firstClearState = await db
+        .select({
+          manualRatingState: evalResultsTable.manualRatingState,
+          updatedAt: evalResultsTable.updatedAt,
+        })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(firstClearState?.manualRatingState).toMatchObject({ status: 'cleared' });
+      vi.mocked(updateSignalFile).mockClear();
+
+      const retryResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(clearPayload);
+
+      expect(retryResponse.status).toBe(200);
+      expect(retryResponse.body.gradingResult).toMatchObject({
+        comment: 'Server-current comment',
+        metadata: { source: 'server' },
+        reason: 'Server-current manual reason',
+        tokensUsed: { total: 7 },
+      });
+      expect(retryResponse.body.gradingResult?.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+      expect(retryResponse.body).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      });
+      expect(
+        await db
+          .select({
+            manualRatingState: evalResultsTable.manualRatingState,
+            updatedAt: evalResultsTable.updatedAt,
+          })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, result.id))
+          .get(),
+      ).toEqual(firstClearState);
+      expect(updateSignalFile).not.toHaveBeenCalled();
+
+      const legacyCommentResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          ...retryResponse.body.gradingResult,
+          comment: 'Updated by a legacy client',
+        });
+      expect(legacyCommentResponse.status).toBe(200);
+      expect(legacyCommentResponse.body.gradingResult?.comment).toBe('Updated by a legacy client');
+
+      vi.mocked(updateSignalFile).mockClear();
+      const delayedClearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(clearPayload);
+      expect(delayedClearResponse.status).toBe(200);
+      expect(delayedClearResponse.body.gradingResult?.comment).toBe('Updated by a legacy client');
+      expect(updateSignalFile).not.toHaveBeenCalled();
     });
 
     it('restores server-owned automated components when a clear payload mutates them', async () => {
