@@ -44,8 +44,11 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    abortSignal,
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
@@ -119,7 +122,7 @@ export function wrapProviderWithRateLimiting(
           queuedCallAbortSignal?.throwIfAborted();
           return originalCallApi(prompt, context, options);
         },
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(queuedCallAbortSignal),
       );
     },
   };

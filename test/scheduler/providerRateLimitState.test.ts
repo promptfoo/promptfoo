@@ -430,6 +430,33 @@ describe('ProviderRateLimitState', () => {
       const metrics = state.getMetrics();
       expect(metrics.retriedRequests).toBe(2);
     });
+
+    it('should stop retry backoff when the scheduled call is aborted', async () => {
+      const abortController = new AbortController();
+      let calls = 0;
+      const promise = state.executeWithRetry(
+        'cancelled-retry',
+        async () => {
+          calls++;
+          return { status: 429 };
+        },
+        {
+          abortSignal: abortController.signal,
+          isRateLimited: (result) => result?.status === 429,
+          getRetryAfter: () => 1000,
+        },
+      );
+      const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1);
+
+      abortController.abort();
+      await rejection;
+      state.dispose();
+
+      expect(calls).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   describe('Header parsing and updates', () => {
