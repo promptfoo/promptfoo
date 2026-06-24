@@ -8,7 +8,7 @@ import { runDbMigrations } from '../src/migrate';
 import { evaluate } from '../src/node/evaluate';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
-import type { ApiProvider } from '../src/types';
+import type { ApiProvider, ProviderOptions } from '../src/types';
 
 function createMockProvider(id: string): ApiProvider {
   return {
@@ -213,6 +213,122 @@ describe('programmatic scenario config expansion', () => {
     });
 
     expect(calledPrompts(provider)).toEqual(['Topic: billing Channel: email']);
+  });
+
+  it('executes scenario test generators and persists their materialized cases', async () => {
+    const tmpDir = makeTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'scenario.json'),
+      JSON.stringify([
+        {
+          config: [{ vars: { topic: 'billing' } }],
+          tests: [{ path: 'file://generate.cjs', config: { prefix: 'generated' } }],
+        },
+      ]),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'generate.cjs'),
+      'module.exports = ({ prefix }) => [{ vars: { channel: `${prefix}-one` } }, { vars: { channel: `${prefix}-two` } }];\n',
+    );
+    const provider = createMockProvider('scenario-generator-provider');
+
+    const record = await evaluate({
+      prompts: ['Topic: {{topic}} Channel: {{channel}}'],
+      providers: [provider],
+      scenarios: [`file://${path.join(tmpDir, 'scenario.json')}`],
+      writeLatestResults: false,
+    });
+
+    expect(calledPrompts(provider)).toEqual([
+      'Topic: billing Channel: generated-one',
+      'Topic: billing Channel: generated-two',
+    ]);
+    expect(
+      typeof record.config.scenarios?.[0] === 'object'
+        ? record.config.scenarios[0].tests
+        : undefined,
+    ).toEqual([
+      expect.objectContaining({ vars: { channel: 'generated-one' } }),
+      expect.objectContaining({ vars: { channel: 'generated-two' } }),
+    ]);
+  });
+
+  it('serializes live providers in scenario config rows without cyclic runtime state', async () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-live-provider',
+      label: 'Scenario live provider',
+      config: { cyclic },
+      callApi: vi.fn().mockResolvedValue({
+        output: 'live-provider-output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [{ config: [{ provider: scenarioProvider }], tests: [{}] }],
+      writeLatestResults: false,
+    });
+
+    expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(() => JSON.stringify(record.config)).not.toThrow();
+    const scenario = record.config.scenarios?.[0];
+    const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
+    expect(row && !('$values' in row) ? row.provider : undefined).toEqual(
+      expect.objectContaining({
+        id: 'scenario-live-provider',
+        label: 'Scenario live provider',
+        config: expect.any(Object),
+      }),
+    );
+  });
+
+  it('preserves raw provider option fields in serialized scenario rows', async () => {
+    const providerOptions: ProviderOptions = {
+      id: 'echo',
+      label: 'Scenario echo',
+      config: { custom: 'keep' },
+      delay: 0,
+      env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' },
+      inputs: { staticInput: 'keep' },
+      prompts: ['Prompt'],
+      transform: 'output',
+    };
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [{ config: [{ provider: providerOptions }], tests: [{}] }],
+      writeLatestResults: false,
+    });
+
+    const scenario = record.config.scenarios?.[0];
+    const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
+    expect(row && !('$values' in row) ? row.provider : undefined).toEqual(providerOptions);
+  });
+
+  it('fails before provider execution when a scenario generator returns no tests', async () => {
+    const tmpDir = makeTmpDir();
+    const generatorPath = path.join(tmpDir, 'empty.cjs');
+    fs.writeFileSync(generatorPath, 'module.exports = () => [];\n');
+    const provider = createMockProvider('empty-scenario-generator-provider');
+
+    await expect(
+      evaluate({
+        prompts: ['Topic: {{topic}}'],
+        providers: [provider],
+        scenarios: [
+          {
+            config: [{ vars: { topic: 'billing' } }],
+            tests: [{ path: `file://${generatorPath}` }],
+          },
+        ],
+      }),
+    ).rejects.toThrow(/contributed no tests/);
+    expect(provider.callApi).not.toHaveBeenCalled();
   });
 
   it('resolves scenario config refs relative to each programmatic scenario glob match', async () => {

@@ -130,6 +130,83 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(scenarioProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves string and options-object provider overrides from scenario rows', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('{{case}}')],
+      scenarios: [
+        {
+          config: [
+            { vars: { case: 'string' }, provider: 'echo' },
+            {
+              vars: { case: 'object' },
+              provider: { id: 'echo', label: 'scenario-echo' },
+            },
+            { vars: { case: 'suite' } },
+          ],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results.map((result) => result.response?.output)).toEqual([
+      'string',
+      'object',
+      'suite',
+    ]);
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed scenario provider overrides before executing providers', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('Test prompt')],
+      scenarios: [
+        {
+          config: [{ provider: { config: { marker: 'missing-id' } } as never }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Provider object must have an 'id' field/,
+    );
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('does not execute raw provider refs from unnormalized top-level test data', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('Prompt')],
+      tests: [{ provider: 'echo' }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results[0].response?.output).toBe('suite');
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('applies repeat from scenario config options', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

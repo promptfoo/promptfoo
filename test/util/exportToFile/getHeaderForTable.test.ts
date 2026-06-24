@@ -175,4 +175,19 @@ describe('getHeaderForTable', () => {
     expect(header.vars).toContain('test1Var');
     expect(header.vars).toContain('test2Var');
   });
+
+  it('skips unresolved scenario test sources while collecting inline vars', () => {
+    mockEval.config.scenarios = [
+      { config: [{ vars: { fromConfig: 'value' } }], tests: 'file://tests.csv' },
+      {
+        config: [{}],
+        tests: { path: 'file://generate.js', config: { count: 2 } },
+      },
+      { config: [{}], tests: [{ vars: { fromInlineTest: 'value' } }] },
+    ];
+
+    const header = getHeaderForTable(mockEval);
+
+    expect(header.vars).toEqual(['fromConfig', 'fromInlineTest']);
+  });
 });

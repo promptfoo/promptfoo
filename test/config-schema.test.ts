@@ -78,6 +78,28 @@ describe('config-schema.json', () => {
       }),
     ).toBe(true);
 
+    for (const tests of [
+      'file://tests.csv',
+      ['file://tests.csv'],
+      [{ path: 'file://generate-tests.js', config: { count: 2 } }],
+    ]) {
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          scenarios: [{ config: [{}], tests }],
+        }),
+      ).toBe(true);
+    }
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
+        scenarios: [{ config: [{}], tests: [{ path: 42 }] }],
+      }),
+    ).toBe(false);
+
     // Plain rows stay lenient: unknown keys are allowed so existing configs keep validating.
     expect(
       validate({

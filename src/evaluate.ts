@@ -11,7 +11,6 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
-import { ConfigResolutionError } from './util/config/errors';
 import { expandScenarioConfigValues, loadScenarioConfigs } from './util/config/scenarioMatrix';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
@@ -20,7 +19,7 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
-import { readTests } from './util/testCaseReader';
+import { readScenarioTests, readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
@@ -74,51 +73,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
+  if (!Object.prototype.hasOwnProperty.call(record, 'provider')) {
+    return record;
+  }
+  const provider = toSerializableProviderRef(record.provider);
+  if (provider === record.provider) {
     return record;
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider,
   };
-}
-
-async function readScenarioTests(tests: unknown): Promise<TestCase[] | undefined> {
-  if (tests === undefined || tests === null) {
-    return undefined;
-  }
-
-  const testsToRead = Array.isArray(tests) ? tests : [tests];
-  const normalizedTests: TestCase[] = [];
-  for (const test of testsToRead) {
-    if (typeof test === 'string') {
-      let loadedTests: TestCase[];
-      try {
-        loadedTests = await readTests(test);
-      } catch (error) {
-        throw new ConfigResolutionError(
-          `Failed to load scenario test file ${test}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      if (loadedTests.length === 0) {
-        throw new ConfigResolutionError(`Scenario test file contributed no tests: ${test}`);
-      }
-      for (const loadedTest of loadedTests) {
-        normalizedTests.push(loadedTest);
-      }
-      continue;
-    }
-    if (isRecord(test)) {
-      // Scenario tests may intentionally rely on scenario/default fields for their
-      // runnable behavior (for example, prompt/provider filters or an empty output).
-      normalizedTests.push(test as TestCase);
-      continue;
-    }
-    throw new ConfigResolutionError(
-      `Scenario tests must be test case objects or file:// references; got ${typeof test}`,
-    );
-  }
-  return normalizedTests;
 }
 
 /**
@@ -202,13 +167,14 @@ function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean 
     return scenario;
   }
 
-  if (!Array.isArray(scenario.tests)) {
-    return scenario;
-  }
-
   return {
     ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    ...(Array.isArray(scenario.config)
+      ? { config: scenario.config.map((row) => toSerializableTestCase(row, droppedRef)) }
+      : {}),
+    ...(Array.isArray(scenario.tests)
+      ? { tests: scenario.tests.map((test) => toSerializableTestCase(test, droppedRef)) }
+      : {}),
   };
 }
 

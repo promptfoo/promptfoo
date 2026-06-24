@@ -1035,12 +1035,6 @@ export const ScenarioSchema = z.object({
 
 export type Scenario = z.infer<typeof ScenarioSchema>;
 
-// Raw config accepts matrix-file references. ScenarioSchema remains the resolved
-// runtime contract so existing consumers can access scenario.config rows directly.
-const ScenarioInputSchema = ScenarioSchema.extend({
-  config: z.array(ScenarioConfigSchema),
-});
-
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: VarsSchema.optional(),
@@ -1093,6 +1087,22 @@ export const TestGeneratorConfigSchema = z.object({
 });
 
 export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
+
+const ScenarioInlineTestInputSchema = TestCaseWithVarsFileSchema.extend({
+  path: z.never().optional(),
+  config: z.never().optional(),
+});
+
+// Raw config accepts matrix-file references and test generators. ScenarioSchema
+// remains the resolved runtime contract for consumers of materialized suites.
+const ScenarioInputSchema = ScenarioSchema.extend({
+  config: z.array(ScenarioConfigSchema),
+  tests: z.union([
+    z.string(),
+    z.array(z.union([z.string(), TestGeneratorConfigSchema, ScenarioInlineTestInputSchema])),
+    TestGeneratorConfigSchema,
+  ]),
+});
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric

@@ -17,7 +17,8 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
+import { ConfigResolutionError } from './config/errors';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -344,11 +345,8 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 
 function parseJsonTestCases(fileContent: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as any;
-  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  const testCases: unknown[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+  return testCases.map((item, idx) => normalizeParsedTestCase(item, idx, 'JSON'));
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -360,24 +358,23 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
   return fileContent
     .split('\n')
     .filter((line) => line.trim())
-    .map((line, idx) => {
-      const row = JSON.parse(line);
-      return {
-        ...row,
-        description: row.description || `Row #${idx + 1}`,
-      };
-    });
+    .map((line, idx) => normalizeParsedTestCase(JSON.parse(line), idx, 'JSONL'));
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
   const rawContent = yaml.load(fileContent);
-  const testCases: TestCase[] = Array.isArray(rawContent)
-    ? (rawContent as TestCase[])
-    : [rawContent as TestCase];
-  return testCases.map((item, idx) => ({
+  const testCases: unknown[] = Array.isArray(rawContent) ? rawContent : [rawContent];
+  return testCases.map((item, idx) => normalizeParsedTestCase(item, idx, 'YAML'));
+}
+
+function normalizeParsedTestCase(item: unknown, index: number, source: string): TestCase {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    throw new Error(`Test case ${index + 1} in ${source} test file must be an object`);
+  }
+  return {
     ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+    description: (item as TestCase).description || `Row #${index + 1}`,
+  };
 }
 
 async function loadTestWithVars(
@@ -456,6 +453,7 @@ export async function readTest(
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
+  allowPartialTests = false,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -520,6 +518,7 @@ export async function loadTestsFromGlob(
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
@@ -528,30 +527,56 @@ export async function loadTestsFromGlob(
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
 
-    if (testCases) {
-      if (!Array.isArray(testCases) && typeof testCases === 'object') {
-        testCases = [testCases];
-      }
-      for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
-      }
-    }
+    await appendLoadedTestCases(ret, testCases, testFile, allowPartialTests);
   }
   return ret;
+}
+
+async function appendLoadedTestCases(
+  destination: TestCase[],
+  loaded: TestCase[] | undefined,
+  testFile: string,
+  allowPartialTests: boolean,
+): Promise<void> {
+  if (!loaded) {
+    return;
+  }
+  const testCases = Array.isArray(loaded) ? loaded : [loaded];
+  for (const [index, testCase] of testCases.entries()) {
+    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
+      throw new Error(`Test case ${index + 1} in ${testFile} must be an object`);
+    }
+    destination.push(await readTest(testCase, path.dirname(testFile), allowPartialTests));
+  }
+}
+
+function assertLoadedTestCaseShapes(loaded: unknown, testFile: string): void {
+  if (loaded === null || loaded === undefined) {
+    return;
+  }
+  const testCases = Array.isArray(loaded) ? loaded : [loaded];
+  for (const [index, testCase] of testCases.entries()) {
+    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
+      throw new Error(`Test case ${index + 1} in ${testFile} must be an object`);
+    }
+  }
 }
 
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
+  allowPartialTests = false,
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
@@ -561,7 +586,7 @@ export async function readTests(
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath);
+      return loadTestsFromGlob(tests, basePath, allowPartialTests);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return readStandaloneTestsFile(tests, basePath);
@@ -593,13 +618,13 @@ export async function readTests(
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
         } else {
           // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath)));
+          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, allowPartialTests)));
         }
       } else if ('path' in globOrTest) {
         ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
       } else {
         // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath));
+        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, allowPartialTests));
       }
     }
   } else if (tests !== undefined && tests !== null) {
@@ -633,4 +658,119 @@ export async function readTests(
   }
 
   return ret;
+}
+
+/**
+ * Materialize external scenario test sources while preserving ordinary inline
+ * tests that may rely on scenario/default fields for their runnable behavior.
+ */
+export async function readScenarioTests(
+  tests: unknown,
+  basePath = '',
+): Promise<TestCase[] | undefined> {
+  if (tests === undefined || tests === null) {
+    return undefined;
+  }
+
+  const normalizedTests: TestCase[] = [];
+  for (const test of Array.isArray(tests) ? tests : [tests]) {
+    if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
+      normalizedTests.push(await readTest(test as TestCaseWithVarsFile, basePath, true));
+      continue;
+    }
+    for (const loadedTest of await loadScenarioTestSource(test, basePath)) {
+      normalizedTests.push(loadedTest);
+    }
+  }
+
+  return normalizedTests;
+}
+
+function isScenarioTestRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isGeneratorLikeScenarioTest(value: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'path') ||
+    Object.prototype.hasOwnProperty.call(value, 'config')
+  );
+}
+
+async function loadScenarioTestSource(test: unknown, basePath: string): Promise<TestCase[]> {
+  const isGenerator = isScenarioTestRecord(test) && isGeneratorLikeScenarioTest(test);
+  if (isGenerator && typeof test.path !== 'string') {
+    throw new ConfigResolutionError('Scenario test generator must have a string path');
+  }
+  if (typeof test !== 'string' && !isGenerator) {
+    throw new ConfigResolutionError(
+      `Scenario tests must be test case objects or file:// references; got ${typeof test}`,
+    );
+  }
+
+  const sourceType = typeof test === 'string' ? 'file' : 'generator';
+  const sourcePath = typeof test === 'string' ? test : (test.path as string);
+  const safeSourcePath = sourcePath.startsWith('az://')
+    ? sanitizeAzureBlobUriForError(sourcePath)
+    : sourcePath;
+  let normalizedTests: TestCase[];
+  try {
+    const loaded = (await readTests(test as TestSuiteConfig['tests'], basePath, true)) as unknown;
+    if (!Array.isArray(loaded)) {
+      throw new Error(`expected an array of test cases, got ${typeof loaded}`);
+    }
+    normalizedTests = await normalizeLoadedScenarioTests(loaded, sourcePath, basePath);
+  } catch (error) {
+    throw new ConfigResolutionError(
+      `Failed to load scenario test ${sourceType} ${safeSourcePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (normalizedTests.length === 0) {
+    throw new ConfigResolutionError(
+      `Scenario test ${sourceType} contributed no tests: ${safeSourcePath}`,
+    );
+  }
+  return normalizedTests;
+}
+
+async function normalizeLoadedScenarioTests(
+  loadedTests: unknown[],
+  sourcePath: string,
+  fallbackBasePath: string,
+): Promise<TestCase[]> {
+  const normalizedTests: TestCase[] = [];
+  const sourceBasePath = getScenarioTestSourceBasePath(sourcePath, fallbackBasePath);
+  const shouldNormalize = isLocalScenarioTestSource(sourcePath);
+  for (const [index, loadedTest] of loadedTests.entries()) {
+    if (!isScenarioTestRecord(loadedTest)) {
+      throw new Error(`test case ${index + 1} must be a plain object`);
+    }
+    normalizedTests.push(
+      shouldNormalize
+        ? await readTest(loadedTest as TestCaseWithVarsFile, sourceBasePath, true)
+        : (loadedTest as TestCase),
+    );
+  }
+  return normalizedTests;
+}
+
+function getScenarioTestSourceBasePath(sourcePath: string, fallbackBasePath: string): string {
+  if (!isLocalScenarioTestSource(sourcePath)) {
+    return fallbackBasePath;
+  }
+  return path.dirname(
+    getStandaloneTestsFileMetadata(sourcePath, fallbackBasePath).pathWithoutFunction,
+  );
+}
+
+function isLocalScenarioTestSource(sourcePath: string): boolean {
+  return (
+    !sourcePath.startsWith('az://') &&
+    !sourcePath.startsWith('huggingface://') &&
+    !/^https?:\/\//i.test(sourcePath)
+  );
 }

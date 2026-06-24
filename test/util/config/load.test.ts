@@ -142,9 +142,8 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn().mockImplementation(async (tests) => {
+vi.mock('../../../src/util/testCaseReader', () => {
+  const readTests = vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
     }
@@ -152,8 +151,32 @@ vi.mock('../../../src/util/testCaseReader', () => ({
       return tests;
     }
     return [];
-  }),
-}));
+  });
+  return {
+    readTest: vi.fn().mockImplementation(async (test) => test),
+    readTests,
+    readScenarioTests: vi.fn().mockImplementation(async (tests, basePath) => {
+      if (tests === undefined || tests === null) {
+        return undefined;
+      }
+      const normalized = [];
+      for (const test of Array.isArray(tests) ? tests : [tests]) {
+        if (
+          test &&
+          typeof test === 'object' &&
+          !Array.isArray(test) &&
+          !('path' in test) &&
+          !('config' in test)
+        ) {
+          normalized.push(test);
+        } else {
+          normalized.push(...(await readTests(test, basePath)));
+        }
+      }
+      return normalized;
+    }),
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =
@@ -1717,9 +1740,7 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1748,8 +1769,9 @@ describe('resolveConfigs', () => {
       undefined,
       {},
     );
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+    expect(readTests).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd', 'tests.yaml')}`,
+      path.dirname('config.json'),
     );
 
     expect(testSuite).toMatchObject({

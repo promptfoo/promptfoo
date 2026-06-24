@@ -13,7 +13,7 @@ import { type TestCase } from '../../../src/types/index';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readFilters } from '../../../src/util/index';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readScenarioTests, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
@@ -65,6 +65,9 @@ describe('Scenario loading with glob patterns', () => {
     ]);
     vi.mocked(readTests).mockImplementation(async (tests) =>
       Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readScenarioTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : readTests(tests as never),
     );
     vi.mocked(readFilters).mockResolvedValue({});
     vi.mocked(validateAssertions).mockImplementation(() => {});

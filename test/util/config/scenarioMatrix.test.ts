@@ -12,6 +12,7 @@ import {
   resolveFileRefFromBase,
   resolveScenarioConfigValuesRefs,
 } from '../../../src/util/config/scenarioMatrix';
+import { readScenarioTests } from '../../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../../src/types/index';
 
@@ -199,6 +200,93 @@ describe('scenarioMatrix (real filesystem)', () => {
       const expanded = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
 
       expect(expanded).toEqual([{ vars: { topic: 'billing' } }]);
+    });
+
+    it('canonicalizes inline scenario provider file refs against the config base', async () => {
+      const expanded = await expandScenarioConfigValues(
+        [
+          { provider: 'file://providers/string.cjs' },
+          {
+            provider: {
+              id: 'file://providers/options.cjs',
+              label: 'options',
+              config: { payload: 'file://payloads/options.txt' },
+            },
+          },
+          {
+            provider: {
+              'file://providers/map.cjs': {
+                label: 'map',
+                config: { payload: 'file://payloads/map.txt' },
+              },
+            },
+          },
+        ],
+        tmpDir,
+      );
+
+      expect(expanded).toEqual([
+        { provider: `file://${path.join(tmpDir, 'providers/string.cjs')}` },
+        {
+          provider: {
+            id: `file://${path.join(tmpDir, 'providers/options.cjs')}`,
+            label: 'options',
+            config: { payload: `file://${path.join(tmpDir, 'payloads/options.txt')}` },
+          },
+        },
+        {
+          provider: {
+            [`file://${path.join(tmpDir, 'providers/map.cjs')}`]: {
+              label: 'map',
+              config: { payload: `file://${path.join(tmpDir, 'payloads/map.txt')}` },
+            },
+          },
+        },
+      ]);
+    });
+
+    it('canonicalizes matrix provider file refs against the config base', async () => {
+      const matrixPath = write(
+        'matrices/providers.yaml',
+        '- vars:\n    case: matrix\n  provider: file://providers/matrix.cjs\n',
+      );
+
+      const expanded = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+      );
+
+      expect(expanded).toEqual([
+        {
+          vars: { case: 'matrix' },
+          provider: `file://${path.join(tmpDir, 'providers/matrix.cjs')}`,
+        },
+      ]);
+    });
+
+    it('preserves live provider identity while canonicalizing scenario rows', async () => {
+      const liveProvider = {
+        id: () => 'live-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'same instance' }),
+        config: { nested: { value: 'unchanged' } },
+      };
+
+      const expanded = await expandScenarioConfigValues([{ provider: liveProvider }], tmpDir);
+
+      expect(expanded[0].provider).toBe(liveProvider);
+    });
+
+    it('preserves __proto__ as provider-map data without changing the prototype', async () => {
+      const provider = JSON.parse('{"__proto__":{"id":"echo","polluted":"yes"}}');
+
+      const expanded = await expandScenarioConfigValues([{ provider }], tmpDir);
+      const resolvedProvider = expanded[0].provider as Record<string, unknown>;
+
+      expect(Object.getPrototypeOf(resolvedProvider)).toBe(Object.prototype);
+      expect(Object.keys(resolvedProvider)).toEqual(['__proto__']);
+      expect(Object.prototype.hasOwnProperty.call(resolvedProvider, 'id')).toBe(false);
+      expect(resolvedProvider.id).toBeUndefined();
+      expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
     });
 
     it('expands glob $values refs across files', async () => {
@@ -446,6 +534,113 @@ describe('scenarioMatrix (real filesystem)', () => {
     );
   });
 
+  describe('readScenarioTests', () => {
+    it('parses scalar CSV refs through the standard test reader', async () => {
+      const csvPath = write('tests.csv', 'question,__expected\nfirst,first\nsecond,second\n');
+
+      const tests = await readScenarioTests(`file://${csvPath}`, tmpDir);
+
+      expect(tests).toHaveLength(2);
+      expect(tests?.map((test) => test.vars?.question)).toEqual(['first', 'second']);
+      expect(tests?.map((test) => test.assert?.[0])).toEqual([
+        { type: 'equals', value: 'first' },
+        { type: 'equals', value: 'second' },
+      ]);
+    });
+
+    it('executes generator objects with their config', async () => {
+      const generatorPath = write(
+        'generate.cjs',
+        'module.exports = ({ prefix }) => [{ vars: { name: `${prefix}-one` } }, { vars: { name: `${prefix}-two` } }];\n',
+      );
+
+      const tests = await readScenarioTests({
+        path: `file://${generatorPath}`,
+        config: { prefix: 'generated' },
+      });
+
+      expect(tests?.map((test) => test.vars?.name)).toEqual(['generated-one', 'generated-two']);
+    });
+
+    it('rejects malformed or empty generator contributions', async () => {
+      const emptyGeneratorPath = write('empty.cjs', 'module.exports = () => [];\n');
+      const objectGeneratorPath = write(
+        'object.cjs',
+        'module.exports = () => ({ vars: { invalid: true } });\n',
+      );
+      const nonPlainGeneratorPath = write(
+        'non-plain.cjs',
+        'module.exports = () => [new Date(0)];\n',
+      );
+
+      await expect(readScenarioTests({ path: 42 })).rejects.toThrow(
+        /generator must have a string path/,
+      );
+      await expect(readScenarioTests({ config: { prefix: 'missing-path' } })).rejects.toThrow(
+        /generator must have a string path/,
+      );
+      await expect(readScenarioTests({ path: `file://${emptyGeneratorPath}` })).rejects.toThrow(
+        /contributed no tests/,
+      );
+      await expect(readScenarioTests({ path: `file://${objectGeneratorPath}` })).rejects.toThrow(
+        /expected an array of test cases/,
+      );
+      await expect(readScenarioTests({ path: `file://${nonPlainGeneratorPath}` })).rejects.toThrow(
+        /test case 1 must be a plain object/,
+      );
+    });
+
+    it('normalizes relative vars files from local JSON scenario tests', async () => {
+      const testsPath = write('nested/tests.json', JSON.stringify([{ vars: 'vars.yaml' }]));
+      write('nested/vars.yaml', 'loaded: from-json-vars-file\n');
+
+      await expect(readScenarioTests(`file://${testsPath}`, tmpDir)).resolves.toEqual([
+        expect.objectContaining({ vars: { loaded: 'from-json-vars-file' } }),
+      ]);
+    });
+
+    it('preserves partial tests from local YAML scenario files', async () => {
+      const testsPath = write('partial-tests.yaml', '- prompts:\n    - only-this-prompt\n- {}\n');
+
+      await expect(readScenarioTests(`file://${testsPath}`, tmpDir)).resolves.toEqual([
+        expect.objectContaining({ prompts: ['only-this-prompt'] }),
+        expect.objectContaining({}),
+      ]);
+    });
+
+    it.each([
+      ['JSON', 'primitive-tests.json', JSON.stringify([42])],
+      ['JSONL', 'primitive-tests.jsonl', '42\n'],
+      ['YAML', 'primitive-tests.yaml', '- 42\n'],
+      ['scalar YAML', 'primitive-scalar.yaml', '42\n'],
+    ])('rejects primitive rows from local %s scenario tests', async (_format, file, contents) => {
+      const testsPath = write(file, contents);
+
+      await expect(readScenarioTests(`file://${testsPath}`, tmpDir)).rejects.toThrow(
+        ConfigResolutionError,
+      );
+    });
+
+    it('preserves ordinary inline tests that rely on scenario defaults', async () => {
+      const inline = { prompts: ['only-this-prompt'], providerOutput: '' };
+
+      await expect(readScenarioTests([inline])).resolves.toEqual([expect.objectContaining(inline)]);
+    });
+
+    it('preserves CLI compatibility for inline scenario tests with vars files', async () => {
+      write('vars.yaml', 'loaded: from-file\n');
+
+      await expect(
+        readScenarioTests([{ vars: 'vars.yaml', prompts: ['only-this-prompt'] }], tmpDir),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          vars: { loaded: 'from-file' },
+          prompts: ['only-this-prompt'],
+        }),
+      ]);
+    });
+  });
+
   describe('loadScenarioConfigs', () => {
     it('returns undefined for missing scenarios', async () => {
       await expect(loadScenarioConfigs(undefined)).resolves.toBeUndefined();
@@ -477,6 +672,80 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded?.[0].config[0]).toEqual({
         $values: `file://${path.join(tmpDir, 'scenarios', 'matrix.yaml')}`,
       });
+    });
+
+    it('resolves generator paths and nested config refs against the declaring scenario file', async () => {
+      write(
+        'scenarios/scenario.yaml',
+        '- config:\n    - vars:\n        topic: billing\n  tests:\n    - path: file://generate.cjs\n      config:\n        prefix: nested\n',
+      );
+
+      const loaded = await loadScenarioConfigs(
+        [`file://${path.join(tmpDir, 'scenarios', 'scenario.yaml')}`],
+        tmpDir,
+      );
+
+      const tests = loaded?.[0].tests;
+      expect(Array.isArray(tests) ? tests[0] : undefined).toEqual({
+        path: `file://${path.join(tmpDir, 'scenarios', 'generate.cjs')}`,
+        config: { prefix: 'nested' },
+      });
+    });
+
+    it('resolves file refs nested in generator config against the scenario file', async () => {
+      write(
+        'scenarios/scenario.yaml',
+        '- config:\n    - {}\n  tests:\n    - path: file://generate.cjs\n      config:\n        data: file://data.json\n',
+      );
+
+      const loaded = await loadScenarioConfigs(
+        [`file://${path.join(tmpDir, 'scenarios', 'scenario.yaml')}`],
+        tmpDir,
+      );
+
+      const tests = loaded?.[0].tests;
+      expect(Array.isArray(tests) ? tests[0] : undefined).toEqual({
+        path: `file://${path.join(tmpDir, 'scenarios', 'generate.cjs')}`,
+        config: { data: `file://${path.join(tmpDir, 'scenarios', 'data.json')}` },
+      });
+    });
+
+    it('resolves inline test vars files against the declaring scenario file', async () => {
+      write(
+        'scenarios/scenario.yaml',
+        '- config:\n    - {}\n  tests:\n    - vars: vars.yaml\n    - vars: file://vars.yaml\n',
+      );
+      write('scenarios/vars.yaml', 'source: nested-scenario\n');
+
+      const loaded = await loadScenarioConfigs(
+        [`file://${path.join(tmpDir, 'scenarios', 'scenario.yaml')}`],
+        tmpDir,
+      );
+      const tests = await readScenarioTests(loaded?.[0].tests, tmpDir);
+
+      expect(tests).toEqual([
+        expect.objectContaining({ vars: { source: 'nested-scenario' } }),
+        expect.objectContaining({ vars: { source: 'nested-scenario' } }),
+      ]);
+    });
+
+    it('preserves non-plain values in programmatic generator config', async () => {
+      const when = new Date('2020-01-01T00:00:00.000Z');
+      const loaded = await loadScenarioConfigs(
+        [
+          {
+            config: [{}],
+            tests: { path: 'file://generate.cjs', config: { when } },
+          } as ScenarioInput,
+        ],
+        tmpDir,
+      );
+
+      const tests = loaded?.[0].tests;
+      const config = Array.isArray(tests)
+        ? (tests[0] as { config?: { when?: unknown } }).config
+        : (tests as { config?: { when?: unknown } } | undefined)?.config;
+      expect(config?.when).toBe(when);
     });
 
     it('renders templated scenario file refs before loading them', async () => {

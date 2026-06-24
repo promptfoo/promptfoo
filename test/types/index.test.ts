@@ -937,6 +937,92 @@ describe('TestSuiteConfigSchema', () => {
       });
     });
 
+    it('preserves scenario test generator objects in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [
+              {
+                path: 'file://generate.js',
+                config: { prefix: 'api' },
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      const tests =
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined;
+      expect(Array.isArray(tests) ? tests[0] : undefined).toEqual({
+        path: 'file://generate.js',
+        config: { prefix: 'api' },
+      });
+    });
+
+    it('preserves scalar scenario test file refs in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: 'file://tests.csv' }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toBe('file://tests.csv');
+    });
+
+    it('preserves scenario test file refs in arrays', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: ['file://tests.csv'] }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toEqual(['file://tests.csv']);
+    });
+
+    it('preserves inline scenario vars file refs in raw suite configs', () => {
+      const result = TestSuiteConfigSchema.safeParse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        scenarios: [{ config: [{}], tests: [{ vars: 'vars.yaml' }] }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(
+        result.success && typeof result.data.scenarios?.[0] === 'object'
+          ? result.data.scenarios[0].tests
+          : undefined,
+      ).toEqual([{ vars: 'vars.yaml' }]);
+    });
+
+    it.each([
+      { path: 42 },
+      { config: { prefix: 'missing-path' } },
+    ])('rejects malformed scenario test generators: %j', (generator) => {
+      expect(
+        TestSuiteConfigSchema.safeParse({
+          providers: ['provider1'],
+          prompts: ['prompt1'],
+          scenarios: [{ config: [{}], tests: [generator] }],
+        }).success,
+      ).toBe(false);
+    });
+
     it('allows scenario config expansion refs in exported config types', () => {
       const config: TestSuiteConfig = {
         providers: ['provider1'],

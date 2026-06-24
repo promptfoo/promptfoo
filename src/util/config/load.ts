@@ -44,7 +44,7 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
-import { readTest, readTests } from '../testCaseReader';
+import { readScenarioTests, readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { failConfigResolution } from './errors';
@@ -961,15 +961,8 @@ export async function resolveConfigs(
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
-      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
-        );
-        scenario.tests = parsedScenarioTests;
+      if (typeof scenario === 'object' && scenario.tests !== undefined) {
+        scenario.tests = (await readScenarioTests(scenario.tests, basePath)) ?? [];
       }
       if (typeof scenario === 'object' && scenario.config !== undefined) {
         scenario.config = await expandScenarioConfigValues(
@@ -979,9 +972,10 @@ export async function resolveConfigs(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+      const resolvedScenario = scenario as Scenario;
       const filteredTests = await filterTests(
         {
-          ...(scenario ?? {}),
+          ...resolvedScenario,
           providers: parsedProviders,
           prompts: parsedPrompts,
         },
@@ -997,7 +991,7 @@ export async function resolveConfigs(
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
-      scenario.tests = filteredTests;
+      resolvedScenario.tests = filteredTests;
     }
   }
 
@@ -1044,6 +1038,7 @@ export async function resolveConfigs(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
+    env: config.env,
   };
 
   // Validate assertions in tests and defaultTest using Zod schema

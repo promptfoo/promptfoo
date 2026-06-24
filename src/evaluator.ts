@@ -2118,6 +2118,57 @@ function resolveRuntimeGradingProviderReferences(
   }
 }
 
+function loadProviderModule() {
+  return import('./providers');
+}
+
+async function resolveRuntimeTargetProviderReference(
+  provider: AtomicTestCase['provider'],
+  env?: EnvOverrides,
+): Promise<AtomicTestCase['provider']> {
+  if (!provider || isApiProvider(provider)) {
+    return provider;
+  }
+
+  const { resolveProvider } = await loadProviderModule();
+  // Target overrides follow readTest() semantics: a raw string/options object
+  // creates its own provider instead of inheriting options from a suite provider
+  // that happens to use the same ID.
+  return resolveProvider(provider, Object.create(null), {
+    env,
+    basePath: cliState.basePath,
+  });
+}
+
+async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Promise<TestSuite> {
+  if (!testSuite.scenarios) {
+    return testSuite;
+  }
+
+  let scenariosChanged = false;
+  const resolvedScenarios = [];
+  for (const scenario of testSuite.scenarios) {
+    let configChanged = false;
+    const resolvedConfig = [];
+    for (const row of scenario.config) {
+      if (!row.provider || isApiProvider(row.provider)) {
+        resolvedConfig.push(row);
+        continue;
+      }
+      const provider = await resolveRuntimeTargetProviderReference(row.provider, testSuite.env);
+      configChanged ||= provider !== row.provider;
+      resolvedConfig.push(provider === row.provider ? row : { ...row, provider });
+    }
+    if (configChanged) {
+      scenariosChanged = true;
+      resolvedScenarios.push({ ...scenario, config: resolvedConfig });
+    } else {
+      resolvedScenarios.push(scenario);
+    }
+  }
+  return scenariosChanged ? { ...testSuite, scenarios: resolvedScenarios } : testSuite;
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2356,7 +2407,7 @@ async function resolveDefaultTestProvider(
     return defaultProvider;
   }
   if (typeof defaultProvider === 'object' && defaultProvider.id) {
-    const { loadApiProvider } = await import('./providers');
+    const { loadApiProvider } = await loadProviderModule();
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
     return loadApiProvider(providerId, {
@@ -4557,6 +4608,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     await this.store.appendPrompts(prompts);
 
+    testSuite = await resolveScenarioTargetProviderReferences(testSuite);
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);

@@ -150,23 +150,174 @@ function resolveScenarioTestsRefs(
   envOverrides?: EnvOverrides,
 ): ScenarioInput {
   const tests = (scenario as { tests?: unknown }).tests;
-  if (typeof tests === 'string') {
-    return {
-      ...scenario,
-      tests: resolveFileRefFromBase(basePath, tests, envOverrides),
-    } as unknown as ScenarioInput;
-  }
-  if (!Array.isArray(tests)) {
+  const resolveTestRef = (test: unknown): unknown => {
+    if (typeof test === 'string') {
+      return resolveFileRefFromBase(basePath, test, envOverrides);
+    }
+    if (
+      test &&
+      typeof test === 'object' &&
+      !Array.isArray(test) &&
+      typeof (test as { path?: unknown }).path === 'string'
+    ) {
+      const generatorConfig = (test as { config?: unknown }).config;
+      return {
+        ...test,
+        path: resolveFileRefFromBase(basePath, (test as { path: string }).path, envOverrides),
+        ...(generatorConfig === undefined
+          ? {}
+          : { config: resolveNestedFileRefs(basePath, generatorConfig, envOverrides) }),
+      };
+    }
+    if (test && typeof test === 'object' && !Array.isArray(test)) {
+      const vars = (test as { vars?: unknown }).vars;
+      if (typeof vars === 'string' || Array.isArray(vars)) {
+        return {
+          ...test,
+          vars: Array.isArray(vars)
+            ? vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
+            : resolveScenarioVarsRef(basePath, vars, envOverrides),
+        };
+      }
+    }
+    return test;
+  };
+
+  if (tests === undefined || tests === null) {
     return scenario;
   }
 
-  const resolvedTests = tests.map((test) =>
-    typeof test === 'string' ? resolveFileRefFromBase(basePath, test, envOverrides) : test,
-  );
   return {
     ...scenario,
-    tests: resolvedTests,
+    tests: Array.isArray(tests) ? tests.map(resolveTestRef) : resolveTestRef(tests),
   } as unknown as ScenarioInput;
+}
+
+function resolveScenarioVarsRef(
+  basePath: string,
+  varsRef: unknown,
+  envOverrides?: EnvOverrides,
+): unknown {
+  if (typeof varsRef !== 'string') {
+    return varsRef;
+  }
+  const hasFilePrefix = varsRef.startsWith(FILE_REF_PREFIX);
+  const resolved = resolveFileRefFromBase(
+    basePath,
+    hasFilePrefix ? varsRef : `${FILE_REF_PREFIX}${varsRef}`,
+    envOverrides,
+  );
+  return resolved.slice(FILE_REF_PREFIX.length);
+}
+
+function resolveNestedFileRefs(
+  basePath: string,
+  value: unknown,
+  envOverrides?: EnvOverrides,
+  seen = new WeakMap<object, unknown>(),
+): unknown {
+  if (typeof value === 'string') {
+    return resolveFileRefFromBase(basePath, value, envOverrides);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const cached = seen.get(value);
+  if (cached !== undefined) {
+    return cached;
+  }
+  if (Array.isArray(value)) {
+    const resolved: unknown[] = [];
+    seen.set(value, resolved);
+    for (const item of value) {
+      resolved.push(resolveNestedFileRefs(basePath, item, envOverrides, seen));
+    }
+    return resolved;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+
+  const resolved: Record<string, unknown> = {};
+  seen.set(value, resolved);
+  for (const [key, nested] of Object.entries(value)) {
+    const resolvedValue = resolveNestedFileRefs(basePath, nested, envOverrides, seen);
+    defineRecordProperty(resolved, key, resolvedValue);
+  }
+  return resolved;
+}
+
+function defineRecordProperty(record: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === '__proto__') {
+    Object.defineProperty(record, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    return;
+  }
+  record[key] = value;
+}
+
+function resolveScenarioProviderRef(
+  basePath: string,
+  provider: unknown,
+  envOverrides?: EnvOverrides,
+): unknown {
+  if (typeof provider === 'string') {
+    return resolveFileRefFromBase(basePath, provider, envOverrides);
+  }
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    return provider;
+  }
+
+  const prototype = Object.getPrototypeOf(provider);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return provider;
+  }
+
+  const record = provider as Record<string, unknown>;
+  if (typeof record.id === 'function' && typeof record.callApi === 'function') {
+    return provider;
+  }
+  if (typeof record.id === 'string') {
+    return resolveNestedFileRefs(basePath, record, envOverrides);
+  }
+
+  let resolved: Record<string, unknown> | undefined;
+  for (const [key, value] of Object.entries(record)) {
+    const resolvedKey = resolveFileRefFromBase(basePath, key, envOverrides);
+    const resolvedValue = resolveNestedFileRefs(basePath, value, envOverrides);
+    if (resolvedKey !== key || resolvedValue !== value) {
+      resolved ??= { ...record };
+      delete resolved[key];
+      defineRecordProperty(resolved, resolvedKey, resolvedValue);
+    }
+  }
+  return resolved ?? provider;
+}
+
+function resolveScenarioConfigRowProvider(
+  basePath: string,
+  row: unknown,
+  envOverrides?: EnvOverrides,
+): Scenario['config'][number] {
+  if (
+    !row ||
+    typeof row !== 'object' ||
+    Array.isArray(row) ||
+    !Object.prototype.hasOwnProperty.call(row, 'provider')
+  ) {
+    return row as Scenario['config'][number];
+  }
+  const record = row as Record<string, unknown>;
+  const provider = resolveScenarioProviderRef(basePath, record.provider, envOverrides);
+  return (
+    provider === record.provider ? row : { ...record, provider }
+  ) as Scenario['config'][number];
 }
 
 export function resolveScenarioFileRefs(
@@ -386,7 +537,7 @@ export async function expandScenarioConfigValues(
       !Array.isArray(entry) &&
       ('$values' in entry || '$expand' in entry);
     if (!isRefLike) {
-      expandedConfig.push(entry as Scenario['config'][number]);
+      expandedConfig.push(resolveScenarioConfigRowProvider(basePath, entry, envOverrides));
       continue;
     }
 
@@ -407,7 +558,7 @@ export async function expandScenarioConfigValues(
     }
     validateMatrixRows(rows, valuesRef);
     for (const row of rows) {
-      expandedConfig.push(row as Scenario['config'][number]);
+      expandedConfig.push(resolveScenarioConfigRowProvider(basePath, row, envOverrides));
     }
   }
 
