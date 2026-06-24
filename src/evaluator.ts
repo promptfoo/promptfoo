@@ -1101,6 +1101,19 @@ function createEvaluateResult({
   return ret;
 }
 
+function getProviderMetricsForErrorResponse(
+  response: ProviderResponse | undefined,
+): ProviderResponse | undefined {
+  if (!response) {
+    return undefined;
+  }
+
+  // A response transform may be responsible for sanitizing provider output. If it throws,
+  // retain accounting and session context without persisting the untransformed payload.
+  const { cached, cost, latencyMs, metadata, sessionId, tokenUsage } = response;
+  return { cached, cost, latencyMs, metadata, sessionId, tokenUsage };
+}
+
 function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   if (!response.tokenUsage) {
     return;
@@ -1596,7 +1609,7 @@ async function runEvalInternal({
         failureReason: ResultFailureReason.ERROR,
         score: 0,
         namedScores: {},
-        latencyMs,
+        latencyMs: ret?.latencyMs ?? latencyMs,
         promptIdx: promptIndex,
         testIdx: testIndex,
         testCase: test,
@@ -1609,7 +1622,7 @@ async function runEvalInternal({
           : metadata,
         cost: ret?.cost,
         tokenUsage: ret?.tokenUsage,
-        response: ret?.response,
+        response: getProviderMetricsForErrorResponse(ret?.response),
         ...getTraceLinkage(traceContext, evalId),
       },
     ];

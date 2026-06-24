@@ -728,9 +728,13 @@ describeEvaluator('evaluator execution control', () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform-error-metrics'),
       callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
+        output: 'Untransformed provider output',
+        raw: 'Sensitive raw provider response',
+        cached: true,
         cost: 0.05,
-        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 0, numRequests: 1 },
+        latencyMs: 321,
+        sessionId: 'provider-response-session',
+        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 7, numRequests: 1 },
         metadata: {
           numTurns: 5,
           sessionId: 'provider-session',
@@ -761,13 +765,37 @@ describeEvaluator('evaluator execution control', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.stats.tokenUsage).toEqual(
-      expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+    expect(summary.stats).toEqual(
+      expect.objectContaining({
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        tokenUsage: expect.objectContaining({
+          total: 100,
+          prompt: 80,
+          completion: 20,
+          cached: 7,
+          numRequests: 1,
+        }),
+      }),
     );
-    expect(summary.results[0]).toEqual(
+    const result = summary.results[0];
+    expect(result).toEqual(
       expect.objectContaining({
         error: expect.stringContaining('transform failed'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        score: 0,
+        namedScores: {},
+        latencyMs: 321,
         cost: 0.05,
+        tokenUsage: expect.objectContaining({
+          total: 100,
+          prompt: 80,
+          completion: 20,
+          cached: 7,
+          numRequests: 1,
+        }),
         metadata: expect.objectContaining({
           numTurns: 5,
           sessionId: 'provider-session',
@@ -777,9 +805,17 @@ describeEvaluator('evaluator execution control', () => {
           }),
         }),
         response: expect.objectContaining({
-          output: 'Test output',
+          cached: true,
           cost: 0.05,
-          tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+          latencyMs: 321,
+          sessionId: 'provider-response-session',
+          tokenUsage: expect.objectContaining({
+            total: 100,
+            prompt: 80,
+            completion: 20,
+            cached: 7,
+            numRequests: 1,
+          }),
           metadata: expect.objectContaining({
             numTurns: 5,
             sessionId: 'provider-session',
@@ -787,6 +823,28 @@ describeEvaluator('evaluator execution control', () => {
           }),
         }),
       }),
+    );
+    expect(result.response).not.toHaveProperty('output');
+    expect(result.response).not.toHaveProperty('raw');
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 1,
+            totalLatencyMs: 321,
+            cost: 0.05,
+            tokenUsage: expect.objectContaining({
+              total: 100,
+              prompt: 80,
+              completion: 20,
+              cached: 7,
+              numRequests: 1,
+            }),
+          }),
+        }),
+      ]),
     );
   });
 
