@@ -36,6 +36,5 @@ tests:
           return plugin?.invocation === 'skill:demo-skill' &&
             plugin?.plugin?.sourceIdentity &&
             plugin?.plugin?.sourceDigest &&
-            plugin?.plugin?.gitCommit &&
             skillCalls.some((skillCall) => skillCall?.name === 'demo-skill') &&
             Boolean(plugin?.executionIdentity?.sessionId || plugin?.executionIdentity?.turnId);

@@ -864,6 +864,7 @@ function withoutPluginConfig(
   return {
     ...codexConfig,
     working_dir: runtime.workspace,
+    additional_directories: [...(codexConfig.additional_directories ?? []), runtime.artifactDir],
     cli_env: {
       ...(codexConfig.cli_env ?? {}),
       HOME: runtime.home,
@@ -970,9 +971,10 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       await withAbort(fs.promises.mkdir(path.dirname(installedRoot), { recursive: true }), signal);
       await copyTree(source.root, installedRoot, signal);
 
+      const installedSourcePath = `./${path.relative(codexHome, installedRoot).split(path.sep).join('/')}`;
       writeJson(path.join(codexHome, '.agents', 'plugins', 'marketplace.json'), {
         name: CODEX_PLUGIN_MARKETPLACE,
-        plugins: [{ name: manifest.name, source: { source: 'local', path: installedRoot } }],
+        plugins: [{ name: manifest.name, source: { source: 'local', path: installedSourcePath } }],
       });
       fs.writeFileSync(
         path.join(codexHome, 'config.toml'),

@@ -91,6 +91,9 @@ describe('OpenAICodexPluginProvider', () => {
     expect(sdkConfig.working_dir).toBe(workspace);
     expect(sdkConfig.inherit_process_env).toBe(false);
     expect(sdkConfig.output_schema).toEqual({ type: 'object' });
+    expect(sdkConfig.additional_directories).toEqual([
+      sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR,
+    ]);
     expect(sdkConfig.cli_env.CODEX_HOME).toContain('promptfoo-codex-plugin-');
     expect(fs.existsSync(sdkConfig.cli_env.CODEX_HOME)).toBe(false);
     expect(result.latencyMs).toEqual(expect.any(Number));
@@ -146,6 +149,14 @@ describe('OpenAICodexPluginProvider', () => {
     const exportedArtifacts = path.join(root, 'exported-artifacts');
     mocks.callApi.mockImplementationOnce(async () => {
       const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
+      const marketplace = JSON.parse(
+        fs.readFileSync(
+          path.join(sdkConfig.cli_env.CODEX_HOME, '.agents', 'plugins', 'marketplace.json'),
+          'utf8',
+        ),
+      );
+      expect(marketplace.plugins[0].source.path).toMatch(/^\.\//);
+      expect(path.isAbsolute(marketplace.plugins[0].source.path)).toBe(false);
       const artifactPath = path.join(
         sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR,
         'scan.json',
