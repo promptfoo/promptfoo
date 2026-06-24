@@ -40,7 +40,10 @@ Promptfoo automatically retries requests that fail with transient server errors:
 | 504         | Gateway Timeout     | Status text contains "gateway timeout"               |
 | 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare-specific) |
 
-These errors are retried up to 3 times with exponential backoff (1s, 2s, 4s). The status text check ensures that permanent failures (like authentication errors that happen to use 502) are not retried.
+Direct `fetchWithProxy` calls retry these errors up to 3 times with fixed exponential backoff
+(1s, 2s, 4s). Requests routed through `fetchWithRetries` use the shared HTTP retry budget and
+jittered backoff described below. The status text check ensures that permanent failures (like
+authentication errors that happen to use 502) are not retried.
 
 ### How Adaptive Concurrency Works
 

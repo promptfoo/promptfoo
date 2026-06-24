@@ -450,6 +450,25 @@ describe('fetchWithCache', () => {
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('should refetch a text response after the caller evicts it', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['recovered'] })),
+        );
+
+      const firstResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      await firstResult.deleteFromCache?.();
+      const secondResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult).toMatchObject({ cached: false, data: 'not-json' });
+      expect(secondResult).toMatchObject({
+        cached: false,
+        data: JSON.stringify({ result: ['recovered'] }),
+      });
+    });
+
     it('should return cached false to all concurrent callers on a cache miss', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValue(mockResponse);

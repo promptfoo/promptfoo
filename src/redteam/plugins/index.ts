@@ -387,12 +387,14 @@ async function fetchRemoteTestCases(
   });
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
+    error?: unknown;
     result?: TestCase[];
   }
 
   try {
     const {
       data: responseText,
+      deleteFromCache,
       status,
       statusText,
     } = await fetchWithCache<string>(
@@ -418,6 +420,7 @@ async function fetchRemoteTestCases(
     try {
       data = JSON.parse(responseText) as PluginGenerationResponse;
     } catch {
+      await deleteFromCache?.();
       logger.error(`Error generating test cases for ${key}`, {
         status,
         statusText,
@@ -426,7 +429,8 @@ async function fetchRemoteTestCases(
       return [];
     }
 
-    if (!data.result || !Array.isArray(data.result)) {
+    if (!data || !Array.isArray(data.result)) {
+      await deleteFromCache?.();
       logger.error(`Error generating test cases for ${key}`, {
         status,
         statusText,
@@ -434,8 +438,16 @@ async function fetchRemoteTestCases(
       });
       return [];
     }
+    if (data.error) {
+      await deleteFromCache?.();
+    }
     if (requiresRemoteMaterialization(config?.inputs)) {
-      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+      try {
+        assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+      } catch (error) {
+        await deleteFromCache?.();
+        throw error;
+      }
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);

@@ -661,9 +661,11 @@ describe('Plugins', () => {
 
     it('should not include malformed successful response bodies in logs', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: 'must-not-appear',
         cached: false,
+        deleteFromCache,
         status: 200,
         statusText: 'OK',
       });
@@ -685,7 +687,33 @@ describe('Plugins', () => {
         statusText: 'OK',
         responseFormat: 'invalid-json',
       });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
+    });
+
+    it('should evict successful error envelopes from the response cache', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: JSON.stringify({ error: 'temporary failure' }),
+        cached: false,
+        deleteFromCache,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
