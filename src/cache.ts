@@ -592,28 +592,6 @@ async function withFetchCacheMutation<T>(
   }
 }
 
-function addFetchCacheOrderMetadata(
-  preparedResponse: PreparedFetchResponse,
-  requestOrder: number,
-): PreparedFetchResponse {
-  if (!preparedResponse.cacheable) {
-    return { ...preparedResponse, requestOrder };
-  }
-
-  const responseEnvelope = JSON.parse(preparedResponse.response);
-  return {
-    ...preparedResponse,
-    requestOrder,
-    response: JSON.stringify({
-      ...responseEnvelope,
-      [FETCH_CACHE_ORDER_METADATA_KEY]: {
-        processId: fetchCacheProcessId,
-        requestOrder,
-      },
-    }),
-  };
-}
-
 function getFetchCacheOrderMetadata(response: SerializedFetchResponse | undefined):
   | {
       processId: string;
@@ -678,6 +656,7 @@ function serializeFetchResponse(
   statusText: string,
   headers: Record<string, string>,
   latencyMs: number | undefined,
+  requestOrder?: number,
 ): SerializedFetchResponse {
   return JSON.stringify({
     data,
@@ -685,6 +664,14 @@ function serializeFetchResponse(
     statusText,
     headers,
     latencyMs,
+    ...(requestOrder === undefined
+      ? {}
+      : {
+          [FETCH_CACHE_ORDER_METADATA_KEY]: {
+            processId: fetchCacheProcessId,
+            requestOrder,
+          },
+        }),
   });
 }
 
@@ -777,6 +764,7 @@ async function prepareFetchResponse(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   format: 'json' | 'text',
+  requestOrder: number,
 ): Promise<PreparedFetchResponse> {
   const sanitizedUrl = sanitizeUrl(getRequestUrlString(url));
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
@@ -787,14 +775,6 @@ async function prepareFetchResponse(
 
   try {
     const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-    const serializedResponse = serializeFetchResponse(
-      parsedData,
-      response.status,
-      response.statusText,
-      headers,
-      fetchLatencyMs,
-    );
-
     if (!response.ok) {
       return {
         response:
@@ -806,7 +786,13 @@ async function prepareFetchResponse(
                 headers,
                 fetchLatencyMs,
               )
-            : serializedResponse,
+            : serializeFetchResponse(
+                parsedData,
+                response.status,
+                response.statusText,
+                headers,
+                fetchLatencyMs,
+              ),
         cacheable: false,
       };
     }
@@ -816,14 +802,28 @@ async function prepareFetchResponse(
         url: sanitizedUrl,
       });
       return {
-        response: serializedResponse,
+        response: serializeFetchResponse(
+          parsedData,
+          response.status,
+          response.statusText,
+          headers,
+          fetchLatencyMs,
+        ),
         cacheable: false,
       };
     }
 
     return {
-      response: serializedResponse,
+      response: serializeFetchResponse(
+        parsedData,
+        response.status,
+        response.statusText,
+        headers,
+        fetchLatencyMs,
+        requestOrder,
+      ),
       cacheable: true,
+      requestOrder,
     };
   } catch (err) {
     throw new Error(
@@ -949,8 +949,13 @@ export async function fetchWithCache<T = unknown>(
   if (!inflightResponse) {
     const requestOrder = ++nextFetchRequestOrder;
     inflightResponse = (async () => {
-      const preparedResponse = addFetchCacheOrderMetadata(
-        await prepareFetchResponse(url, requestOptions, timeout, maxRetries, isIdempotent, format),
+      const preparedResponse = await prepareFetchResponse(
+        url,
+        requestOptions,
+        timeout,
+        maxRetries,
+        isIdempotent,
+        format,
         requestOrder,
       );
       if (preparedResponse.cacheable && !deferCacheWrite) {

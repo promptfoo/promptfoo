@@ -51,7 +51,8 @@ budget. Network errors, HTTP 500 task failures, and gateway 502, 503, 504, and 5
 with jittered waits. A valid `Retry-After` value on a retryable response sets the wait up to the
 60-second transient-delay cap; otherwise Promptfoo uses exponential backoff. Rate limits use
 server-provided timing when available, otherwise a default wait, with jitter. By default, other 4xx
-and 5xx responses and malformed successful responses fail immediately;
+responses besides rate limits, unselected 5xx responses, and malformed successful responses fail
+immediately;
 `PROMPTFOO_RETRY_5XX=true` opts into retries for every 5xx response. See
 [Rate Limits and Concurrency](/docs/configuration/rate-limits/) for retry defaults and backoff
 configuration.
