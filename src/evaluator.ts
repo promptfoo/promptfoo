@@ -811,20 +811,16 @@ async function renderRunEvalPrompt({
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
     : [];
   // Register-sourced vars (from `options.storeOutputAs`) hold a prior test's model output, which is
-  // runtime data, not a template. Re-rendering it through Nunjucks double-processes that output:
-  // any `{{ ... }}`/`{% ... %}`-like sequences a model legitimately emits get mangled, and
-  // `throwOnUndefined` makes such outputs throw instead of being reused verbatim. Treat stored
-  // output as data by skipping template rendering for register keys, merged with (not clobbering)
-  // the redteam inject-var skip behavior.
-  const registerSkipVars = registers ? Object.keys(registers) : [];
-  const combinedSkipVars = [...redteamSkipVars, ...registerSkipVars];
-  const skipRenderVars = combinedSkipVars.length > 0 ? combinedSkipVars : undefined;
+  // runtime data, not a template. Prevent recursive template evaluation while retaining the
+  // established file/package loading and trailing-newline normalization applied to regular vars.
+  const registerVarNames = registers ? Object.keys(registers) : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
-    skipRenderVars,
+    redteamSkipVars.length > 0 ? redteamSkipVars : undefined,
+    registerVarNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
