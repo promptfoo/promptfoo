@@ -89,15 +89,17 @@ export class SlotQueue {
         reject: wrappedReject,
         queuedAt,
       };
-      const removeAndReject = (error: unknown) => {
+      const removeAndReject = (error: unknown, clearIdleResetTimer = false) => {
         const index = this.waiting.indexOf(request);
         if (index !== -1) {
           this.waiting.splice(index, 1);
-          this.clearResetTimerWhenIdle();
+          if (clearIdleResetTimer) {
+            this.clearResetTimerWhenIdle();
+          }
           request.reject(error);
         }
       };
-      const onAbort = () => removeAndReject(abortSignal?.reason);
+      const onAbort = () => removeAndReject(abortSignal?.reason, true);
 
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(
