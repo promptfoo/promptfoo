@@ -5,6 +5,9 @@ import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
@@ -119,9 +122,11 @@ vi.mock('fs', async (importOriginal) => {
 
 // Mock sleep to avoid actual delays in tests
 vi.mock('../../../src/util/time', async (importOriginal) => {
+  const sleep = vi.fn().mockResolvedValue(undefined);
   return {
     ...(await importOriginal()),
-    sleep: vi.fn().mockResolvedValue(undefined),
+    sleep,
+    sleepWithAbort: vi.fn((ms: number) => sleep(ms)),
   };
 });
 
@@ -154,6 +159,11 @@ describe('Google Gemini provider retry logic', () => {
     vi.mocked(cache.fetchWithCache).mockReset();
     vi.mocked(fetchUtil.fetchWithProxy).mockReset();
     vi.mocked(timeUtil.sleep).mockReset().mockResolvedValue(undefined);
+    vi.mocked(timeUtil.sleepWithAbort)
+      .mockReset()
+      .mockImplementation(async (ms: number) => {
+        await timeUtil.sleep(ms);
+      });
     mockGoogleClientRequest();
     mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input: any) => input);
     mockMaybeLoadFromExternalFile.mockReset().mockImplementation((input: any) => input);
@@ -199,6 +209,37 @@ describe('Google Gemini provider retry logic', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
       expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
       expect(vi.mocked(cache.fetchWithCache).mock.calls[0][5]).toBe(0);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][1]).not.toHaveProperty('signal');
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][2]).toBeGreaterThan(0);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][2]).toBeLessThanOrEqual(300_000);
+    });
+
+    it('should return HTTP metadata when returned 503 responses exhaust retries', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 0 },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { error: { code: 503, message: 'temporarily unavailable' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: new Headers({ 'retry-after': '0', 'set-cookie': 'secret=value' }),
+        deleteFromCache,
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('503 Service Unavailable');
+      expect(result.metadata).toEqual({
+        http: {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'retry-after': '0' },
+        },
+      });
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('should retry empty candidates and evict the invalid cached response', async () => {
@@ -223,6 +264,164 @@ describe('Google Gemini provider retry logic', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
       expect(deleteFromCache).toHaveBeenCalledOnce();
       expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('should aggregate request, token, and cost accounting across responses', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          maxRetries: 1,
+          baseRetryDelay: 0,
+          inputCost: 0.01,
+          outputCost: 0.02,
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            candidates: [],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 11 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any)
+        .mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'accounted' }] }, finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('accounted');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 3,
+        total: 23,
+        numRequests: 2,
+      });
+      expect(result.cost).toBeCloseTo(0.26);
+    });
+
+    it('should honor Retry-After from structured rate-limit errors', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 1 },
+      });
+      const rateLimitError = new HttpRateLimitError({
+        status: 429,
+        retryAfterMs: 2500,
+      });
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(rateLimitError)
+        .mockResolvedValueOnce(successResponse as any);
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('test response');
+      expect(timeUtil.sleep).toHaveBeenCalledWith(2500);
+      random.mockRestore();
+    });
+
+    it('should fail fast on structured hard quota errors', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 3, baseRetryDelay: 0 },
+      });
+      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          code: 'insufficient_quota',
+          retryAfterMs: 1000,
+        }),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledOnce();
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+    });
+
+    it('should fail fast on Google daily quota details', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 3, baseRetryDelay: 0 },
+      });
+      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          body: {
+            error: {
+              details: [
+                {
+                  violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }],
+                },
+              ],
+            },
+          },
+        }),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledOnce();
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+    });
+
+    it('should stop before a second request when cancelled during backoff', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 1000 },
+      });
+      const controller = new AbortController();
+      const error503 = Object.assign(new Error('Service Unavailable'), {
+        response: { status: 503 },
+      });
+      vi.mocked(cache.fetchWithCache).mockRejectedValue(error503);
+      vi.mocked(timeUtil.sleepWithAbort).mockImplementationOnce(
+        (_ms: number, signal: AbortSignal) =>
+          new Promise((_, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
+      );
+
+      const pending = provider.callApi('test prompt', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(cache.fetchWithCache).toHaveBeenCalledOnce());
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][1]).toEqual(
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      controller.abort(new DOMException('cancelled', 'AbortError'));
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(cache.fetchWithCache).toHaveBeenCalledOnce();
+    });
+
+    it('should not multiply provider retries through the scheduler', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 0 },
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const rateLimitError = new HttpRateLimitError({ status: 429, retryAfterMs: 0 });
+      vi.mocked(cache.fetchWithCache).mockRejectedValue(rateLimitError);
+
+      const result = await registry.execute(
+        provider,
+        () => provider.callApi('test prompt'),
+        createProviderRateLimitOptions(),
+      );
+
+      expect(result.error).toContain('429');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+      expect(Object.values(registry.getMetrics())[0]?.rateLimitHits).toBe(1);
+      registry.dispose();
     });
 
     it('should retry candidates that contain no output', async () => {
@@ -396,6 +595,42 @@ describe('Google Gemini provider retry logic', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
     });
 
+    it('should retry the wrapped Undici connect-timeout error form', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(
+          new Error(
+            'Request failed after 0 retries: TypeError: fetch failed (Cause: ConnectTimeoutError: Connect Timeout Error)',
+          ),
+        )
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return a provider error when the total AI Studio deadline expires', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1 },
+      });
+      const now = vi
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValue(300_000);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('TimeoutError');
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+      now.mockRestore();
+    });
+
     it('should retry wrapped fetchWithCache 500 errors', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
@@ -535,7 +770,7 @@ describe('Google Gemini provider retry logic', () => {
       expect(timeUtil.sleep).not.toHaveBeenCalled();
     });
 
-    it('should safely clamp negative maxRetries to no retries', async () => {
+    it('should use the safe default for invalid negative maxRetries', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: -1 },
       });
@@ -543,13 +778,17 @@ describe('Google Gemini provider retry logic', () => {
       const error503 = new Error('Service Unavailable');
       (error503 as any).response = { status: 503 };
 
-      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(error503);
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(error503)
+        .mockRejectedValueOnce(error503)
+        .mockRejectedValueOnce(error503)
+        .mockRejectedValueOnce(error503);
 
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('API call error');
-      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
-      expect(timeUtil.sleep).not.toHaveBeenCalled();
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(4);
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(3);
     });
 
     it('should default to 3 retries when maxRetries is not specified', async () => {
@@ -709,6 +948,7 @@ describe('Google Gemini provider retry logic', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('API call error');
+      expect(result.error).toContain('invalid request');
       expect(fetchUtil.fetchWithProxy).toHaveBeenCalledTimes(1);
       expect(timeUtil.sleep).not.toHaveBeenCalled();
     });
@@ -754,6 +994,129 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('oauth retry success');
       expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          retry: false,
+          retryConfig: { retry: 0 },
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      expect(mockRequest.mock.calls[1][0].signal).toBe(mockRequest.mock.calls[0][0].signal);
+    });
+
+    it('should return a provider error when the total OAuth deadline expires', async () => {
+      const mockRequest = vi.fn();
+      mockGoogleClientRequest(mockRequest);
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { vertexai: true, projectId: 'test-project', maxRetries: 1 },
+      });
+      const now = vi
+        .spyOn(Date, 'now')
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(0)
+        .mockReturnValue(300_000);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('TimeoutError');
+      expect(mockRequest).not.toHaveBeenCalled();
+      now.mockRestore();
+    });
+
+    it('should stop before dispatch when cancelled during OAuth setup', async () => {
+      const request = vi.fn();
+      let resolveClient!: (value: unknown) => void;
+      vi.mocked(util.getGoogleClient).mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveClient = resolve;
+        }) as any,
+      );
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { vertexai: true, projectId: 'test-project', maxRetries: 1 },
+      });
+      const controller = new AbortController();
+
+      const pending = provider.callApi('test prompt', undefined, {
+        abortSignal: controller.signal,
+      });
+      await vi.waitFor(() => expect(util.getGoogleClient).toHaveBeenCalledOnce());
+      controller.abort(new DOMException('cancelled', 'AbortError'));
+      resolveClient({ client: { request }, credentials: {} });
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('should fail fast on array-wrapped OAuth daily quota errors', async () => {
+      const quotaError = Object.assign(new Error('daily quota exceeded'), {
+        response: {
+          status: 429,
+          statusText: 'Too Many Requests',
+          data: [
+            {
+              error: {
+                code: 429,
+                status: 'RESOURCE_EXHAUSTED',
+                message: 'daily quota exceeded',
+                details: [
+                  {
+                    violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      });
+      const mockRequest = vi.fn().mockRejectedValue(quotaError);
+      mockGoogleClientRequest(mockRequest);
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { vertexai: true, projectId: 'test-project', maxRetries: 3 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(mockRequest).toHaveBeenCalledOnce();
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+    });
+
+    it('should retain known usage and cost when a later OAuth attempt fails', async () => {
+      const terminalError = Object.assign(new Error('Bad Request'), {
+        response: { status: 400, statusText: 'Bad Request' },
+      });
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: {
+            candidates: [],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 11 },
+          },
+        })
+        .mockRejectedValueOnce(terminalError);
+      mockGoogleClientRequest(mockRequest);
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          vertexai: true,
+          projectId: 'test-project',
+          maxRetries: 1,
+          baseRetryDelay: 0,
+          inputCost: 0.01,
+          outputCost: 0.02,
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('Bad Request');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 1,
+        total: 11,
+        numRequests: 2,
+      });
+      expect(result.cost).toBeCloseTo(0.12);
     });
 
     it('should retry empty candidate responses in OAuth mode', async () => {
@@ -780,6 +1143,37 @@ describe('Google Gemini provider retry logic', () => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
       expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
     });
+
+    it('should consume a complete stream before classifying an empty leading chunk', async () => {
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: [
+          { candidates: [], usageMetadata: { promptTokenCount: 10, totalTokenCount: 10 } },
+          {
+            candidates: [
+              { content: { parts: [{ text: 'stream complete' }] }, finishReason: 'STOP' },
+            ],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4, totalTokenCount: 14 },
+          },
+        ],
+      });
+      mockGoogleClientRequest(mockRequest);
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          vertexai: true,
+          projectId: 'test-project',
+          streaming: true,
+          maxRetries: 1,
+          baseRetryDelay: 0,
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('stream complete');
+      expect(mockRequest).toHaveBeenCalledOnce();
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+    });
   });
 
   describe('exponential backoff', () => {
@@ -803,13 +1197,11 @@ describe('Google Gemini provider retry logic', () => {
       await provider.callApi('test prompt');
 
       // Check that sleep was called with increasing delays
-      // attempt 0: 100 * 2^0 + 0.5 * 100 = 150
-      // attempt 1: 100 * 2^1 + 0.5 * 100 = 250
-      // attempt 2: 100 * 2^2 + 0.5 * 100 = 450
+      // Jitter is 20% of the exponential delay, with Math.random() fixed at 0.5.
       expect(timeUtil.sleep).toHaveBeenCalledTimes(3);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(1, 150);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(2, 250);
-      expect(timeUtil.sleep).toHaveBeenNthCalledWith(3, 450);
+      expect(timeUtil.sleep).toHaveBeenNthCalledWith(1, 110);
+      expect(timeUtil.sleep).toHaveBeenNthCalledWith(2, 220);
+      expect(timeUtil.sleep).toHaveBeenNthCalledWith(3, 440);
 
       mockRandom.mockRestore();
     });

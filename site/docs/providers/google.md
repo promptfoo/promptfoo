@@ -104,9 +104,29 @@ For promptfoo's built-in cost estimates, Google providers also support `config.c
 `config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
 prompt and completion pricing. The legacy `cost` option remains the shared fallback.
 
-Gemini text calls retry transient `408`, `429`, `5xx`, network errors, and empty
-candidate/output responses three times by default. Set `config.maxRetries: 0` to disable
-retries, or tune `config.baseRetryDelay` with a millisecond delay used for exponential backoff.
+Google AI Studio GenerateContent calls (Gemini, Gemma, CodeGemma, and PaliGemma) and Vertex
+Gemini text calls retry transient `408`, `429`, `500`, `502`, `503`, `504`, connection
+errors, and responses with no usable candidate output. Promptfoo does not retry hard quota
+errors or responses with a safety block or another terminal finish reason. Local exponential
+backoff uses jitter and is capped at 60 seconds. Server-provided `Retry-After` delays are not
+shortened; the shared request timeout can end the call before a long delay completes.
+
+`config.maxRetries` is the number of retries after the initial request (default `3`). Set it
+to `0` to disable retries. `config.baseRetryDelay` sets the initial backoff in
+milliseconds. All attempts share the normal request timeout and caller cancellation signal,
+and the scheduler does not add a second retry loop around these provider-managed attempts.
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      maxRetries: 3
+      baseRetryDelay: 1000
+```
+
+Gemini generation requests are not idempotent. If a connection fails after Google accepts a
+request, a retry can repeat upstream generation, built-in tool work, and billing. Promptfoo
+reports usage returned by completed responses; usage from a lost response cannot be measured.
 
 ## Quick Start
 

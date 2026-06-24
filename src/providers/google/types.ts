@@ -307,8 +307,8 @@ export interface CompletionOptions {
   mcp?: MCPConfig;
 
   /**
-   * Maximum number of retries for transient Gemini failures (408, 429, 5xx,
-   * network errors, and empty candidate/output responses).
+   * Maximum number of retries for transient Gemini failures (408, 429,
+   * 500, 502, 503, 504, network errors, and empty candidate/output responses).
    * Set to 0 to disable retries.
    * @default 3
    */
@@ -316,7 +316,8 @@ export interface CompletionOptions {
 
   /**
    * Base delay in milliseconds for exponential backoff between retries.
-   * Actual delay is: baseRetryDelay * 2^attempt + random jitter.
+   * Locally computed delays use jitter and are capped at 60 seconds;
+   * server-provided Retry-After delays are honored without shortening.
    * @default 1000
    */
   baseRetryDelay?: number;

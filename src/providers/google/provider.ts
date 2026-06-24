@@ -23,13 +23,6 @@ import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
-  getGeminiMaxRetries,
-  isGeminiRetryableError,
-  isGeminiRetryableResponseData,
-  isGeminiRetryableStatus,
-  waitBeforeGeminiRetry,
-} from './retry';
-import {
   calculateGoogleCost,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
@@ -58,14 +51,6 @@ import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from 
 
 // Type for Google API errors
 type GaxiosError = any;
-
-type GeminiRequestResult = {
-  cached: boolean;
-  data?: GeminiApiResponse;
-  deleteFromCache?: () => Promise<void>;
-  error?: string;
-  status?: number;
-};
 
 const DEFAULT_AI_STUDIO_HOST = 'generativelanguage.googleapis.com';
 
@@ -340,79 +325,6 @@ export class GoogleProvider extends GoogleGenericProvider {
     return this.callGeminiApi(prompt, context);
   }
 
-  private async callGeminiApiOnce(
-    body: Record<string, any>,
-    config: CompletionOptions,
-  ): Promise<GeminiRequestResult> {
-    if (this.isVertexMode && !this.isExpressMode()) {
-      // Vertex AI OAuth mode
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
-      const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-      const res = await client.request({
-        url,
-        method: 'POST',
-        data: body,
-        timeout: getRequestTimeoutMs(),
-      });
-      return { data: res.data as GeminiApiResponse, cached: false };
-    }
-
-    if (this.isVertexMode && this.isExpressMode()) {
-      // Vertex AI express mode (API key)
-      const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-      const res = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: await this.getAuthHeaders(),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(getRequestTimeoutMs()),
-        disableTransientRetries: true,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-        return {
-          cached: false,
-          status: res.status,
-          error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-        };
-      }
-
-      return { data: (await res.json()) as GeminiApiResponse, cached: false };
-    }
-
-    // AI Studio mode
-    const endpoint = this.getApiEndpoint('generateContent');
-    const headers = await this.getAuthHeaders();
-    const authDiscriminator = createAuthCacheDiscriminator(headers);
-    const result = await fetchWithCache<GeminiApiResponse>(
-      endpoint,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        // Include auth discriminator in cache key to prevent cross-tenant cache sharing
-        ...(authDiscriminator && { _authHash: authDiscriminator }),
-      } as RequestInit,
-      getRequestTimeoutMs(),
-      'json',
-      false,
-      0,
-    );
-
-    return {
-      cached: result.cached,
-      data: result.data,
-      deleteFromCache: result.deleteFromCache,
-      status: result.status,
-    };
-  }
-
   /**
    * Call the Gemini API.
    */
@@ -491,58 +403,80 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     let data: GeminiApiResponse;
     let cached = false;
-    const maxRetries = getGeminiMaxRetries(config);
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const result = await this.callGeminiApiOnce(body, config);
-        const shouldRetryStatus =
-          result.status !== undefined && isGeminiRetryableStatus(result.status);
+    try {
+      if (this.isVertexMode && !this.isExpressMode()) {
+        // Vertex AI OAuth mode
+        const client = await this.getClientWithCredentials();
+        const projectId = await this.getProjectId();
+        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-        if (shouldRetryStatus && attempt < maxRetries) {
-          await waitBeforeGeminiRetry(config, attempt, maxRetries);
-          continue;
-        }
+        const res = await client.request({
+          url,
+          method: 'POST',
+          data: body,
+          timeout: getRequestTimeoutMs(),
+        });
+        data = res.data as GeminiApiResponse;
+      } else if (this.isVertexMode && this.isExpressMode()) {
+        // Vertex AI express mode (API key)
+        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-        if (result.data && isGeminiRetryableResponseData(result.data)) {
-          await result.deleteFromCache?.();
-          if (attempt < maxRetries) {
-            await waitBeforeGeminiRetry(config, attempt, maxRetries);
-            continue;
-          }
-        }
+        const res = await fetchWithProxy(url, {
+          method: 'POST',
+          headers: await this.getAuthHeaders(),
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(getRequestTimeoutMs()),
+        });
 
-        if (result.error) {
-          return { error: result.error };
-        }
-        data = result.data as GeminiApiResponse;
-        cached = result.cached;
-
-        // Success - break out of retry loop
-        break;
-      } catch (err) {
-        // Check if we should retry
-        if (attempt < maxRetries && isGeminiRetryableError(err)) {
-          await waitBeforeGeminiRetry(config, attempt, maxRetries);
-          continue;
-        }
-
-        const geminiError = err as GaxiosError;
-        if (geminiError.response?.data?.[0]?.error) {
-          const errorDetails = geminiError.response.data[0].error;
-          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => null);
+          logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
           return {
-            error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
+            error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
           };
         }
+
+        data = (await res.json()) as GeminiApiResponse;
+      } else {
+        // AI Studio mode
+        const endpoint = this.getApiEndpoint('generateContent');
+        const headers = await this.getAuthHeaders();
+        const authDiscriminator = createAuthCacheDiscriminator(headers);
+        const result = await fetchWithCache(
+          endpoint,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            // Include auth discriminator in cache key to prevent cross-tenant cache sharing
+            ...(authDiscriminator && { _authHash: authDiscriminator }),
+          } as RequestInit,
+          getRequestTimeoutMs(),
+          'json',
+          false,
+        );
+        data = result.data as GeminiApiResponse;
+        cached = result.cached;
+      }
+    } catch (err) {
+      const geminiError = err as GaxiosError;
+      if (geminiError.response?.data?.[0]?.error) {
+        const errorDetails = geminiError.response.data[0].error;
+        logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
         return {
-          error: `API call error: ${String(err)}`,
+          error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
         };
       }
+      return {
+        error: `API call error: ${String(err)}`,
+      };
     }
 
     // Parse response
-    return this.parseGeminiResponse(data!, cached, config, context);
+    return this.parseGeminiResponse(data, cached, config, context);
   }
 
   /**
