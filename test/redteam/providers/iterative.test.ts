@@ -1299,21 +1299,22 @@ describe('RedteamIterativeProvider', () => {
         throw abortError;
       });
 
-      await expect(
-        runRedteamConversation({
-          context: { prompt: { raw: '', label: '' }, vars: {} },
-          filters: undefined,
-          injectVar: 'test',
-          numIterations: 1,
-          options: {},
-          prompt: { raw: 'test', label: 'test' },
-          redteamProvider: mockRedteamProvider,
-          gradingProvider: mockRedteamProvider,
-          targetProvider: mockTargetProvider,
-          vars: { test: 'goal' },
-          excludeTargetOutputFromAgenticAttackGeneration: false,
-        }),
-      ).rejects.toThrow('The operation was aborted');
+      const caught = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      }).catch((error) => error);
+
+      expect(caught).toBe(abortError);
+      expect(caught.name).toBe('AbortError');
     });
 
     it('should re-throw AbortError from judge response parse failure', async () => {
@@ -1332,21 +1333,22 @@ describe('RedteamIterativeProvider', () => {
           throw abortError;
         });
 
-      await expect(
-        runRedteamConversation({
-          context: { prompt: { raw: '', label: '' }, vars: {} },
-          filters: undefined,
-          injectVar: 'test',
-          numIterations: 1,
-          options: {},
-          prompt: { raw: 'test', label: 'test' },
-          redteamProvider: mockRedteamProvider,
-          gradingProvider: mockRedteamProvider,
-          targetProvider: mockTargetProvider,
-          vars: { test: 'goal' },
-          excludeTargetOutputFromAgenticAttackGeneration: false,
-        }),
-      ).rejects.toThrow('The operation was aborted');
+      const caught = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      }).catch((error) => error);
+
+      expect(caught).toBe(abortError);
+      expect(caught.name).toBe('AbortError');
     });
 
     it('should pass options to gradingProvider.callApi', async () => {

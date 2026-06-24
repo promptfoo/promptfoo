@@ -357,6 +357,87 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should keep usage-bearing strategy failures non-fatal and attach their usage once', async () => {
+      vi.mocked(extractSystemPurposeWithMetadata).mockResolvedValueOnce({
+        result: 'Test purpose',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'generated prompt' },
+            metadata: {
+              providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            },
+          },
+        ]),
+      } as any);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'citation',
+        action: vi.fn().mockRejectedValue(
+          Object.assign(new Error('citation generation failed'), {
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          }),
+        ),
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'citation' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 3,
+      });
+    });
+
+    it('should retain failed plugin usage when another plugin produces a row', async () => {
+      vi.spyOn(Plugins, 'find').mockImplementation(
+        (predicate) =>
+          [
+            {
+              key: 'failed-plugin',
+              action: vi.fn().mockRejectedValue(
+                Object.assign(new Error('plugin generation failed'), {
+                  tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+                }),
+              ),
+            },
+            {
+              key: 'working-plugin',
+              action: vi.fn().mockResolvedValue([{ vars: { query: 'generated prompt' } }]),
+            },
+          ].find(predicate as any) as any,
+      );
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [
+          { id: 'failed-plugin', numTests: 1 },
+          { id: 'working-plugin', numTests: 1 },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 5,
+        prompt: 3,
+        completion: 2,
+        numRequests: 1,
+      });
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

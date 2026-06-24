@@ -381,6 +381,10 @@ function rethrowWithAccumulatedUsage(error: unknown, totalTokenUsage: TokenUsage
     { countAsRequest: false },
   );
 
+  if (error instanceof Error && error.name === 'AbortError') {
+    throw Object.assign(error, { tokenUsage: aggregateTokenUsage });
+  }
+
   throw new RedteamProviderError(
     error instanceof Error ? error.message : String(error),
     aggregateTokenUsage,

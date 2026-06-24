@@ -269,6 +269,7 @@ export async function addMathPrompt(
 
   const encodedTestCases: TestCase[] = [];
   const totalOperations = fallbackTestCases.length * mathConcepts.length;
+  let accumulatedTokenUsage: TokenUsage | undefined;
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
@@ -287,9 +288,30 @@ export async function addMathPrompt(
     const originalText = String(testCase.vars![injectVar]);
     const { providerTokenUsage: inheritedProviderTokenUsage, ...baseMetadata } =
       testCase.metadata ?? {};
+    accumulatedTokenUsage = mergeProviderTokenUsage(
+      accumulatedTokenUsage,
+      inheritedProviderTokenUsage,
+    );
 
     for (const [conceptIndex, concept] of mathConcepts.entries()) {
-      const { encodedPrompt, tokenUsage } = await encodeMathPrompt(originalText, concept);
+      let encodedPrompt: string;
+      let tokenUsage: TokenUsage | undefined;
+      try {
+        ({ encodedPrompt, tokenUsage } = await encodeMathPrompt(originalText, concept));
+      } catch (error) {
+        progressBar?.stop();
+        const aggregateTokenUsage = mergeProviderTokenUsage(
+          accumulatedTokenUsage,
+          getErrorTokenUsage(error),
+        );
+        if (aggregateTokenUsage) {
+          throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+            tokenUsage: aggregateTokenUsage,
+          });
+        }
+        throw error;
+      }
+      accumulatedTokenUsage = mergeProviderTokenUsage(accumulatedTokenUsage, tokenUsage);
       const providerTokenUsage = mergeProviderTokenUsage(
         conceptIndex === 0 ? inheritedProviderTokenUsage : undefined,
         tokenUsage,

@@ -1667,6 +1667,50 @@ describe('Token Counting', () => {
     }
   });
 
+  it('should preserve AbortError identity through accumulated-usage handling', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    const attackerProvider = createMockProvider({ id: 'mock-attacker' });
+    attackerProvider.callApi.mockRejectedValue(abortError);
+    const gradingProvider = createMockProvider({ id: 'mock-judge' });
+    const targetProvider = createMockProvider({ id: 'mock-target' });
+    const attackerSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(attackerProvider);
+    const gradingSpy = vi
+      .spyOn(redteamProviderManager, 'getGradingProvider')
+      .mockResolvedValue(gradingProvider);
+
+    try {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'query',
+        maxDepth: 1,
+        branchingFactor: 1,
+        maxAttempts: 1,
+        maxWidth: 1,
+        maxNoImprovement: 1,
+      });
+
+      const caught = await provider
+        .callApi('', {
+          originalProvider: targetProvider,
+          prompt: { label: 'target', raw: '{{query}}' },
+          vars: { query: 'test goal' },
+          test: {
+            vars: { query: 'test goal' },
+            metadata: { goal: 'test goal', pluginId: 'harmful:hate' },
+          },
+        })
+        .catch((error) => error);
+
+      expect(caught).toBe(abortError);
+      expect(caught.name).toBe('AbortError');
+    } finally {
+      attackerSpy.mockRestore();
+      gradingSpy.mockRestore();
+    }
+  });
+
   it('should handle provider delay settings during token tracking', async () => {
     const mockProviderWithDelay = createMockProvider({
       id: 'mock-provider-with-delay',

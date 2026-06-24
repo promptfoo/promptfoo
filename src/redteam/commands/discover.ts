@@ -275,7 +275,7 @@ export async function doTargetPurposeDiscovery(
       return;
     }
     accumulateResponseTokenUsage(tokenUsage, response);
-    hasTokenUsage ||= Boolean(response.tokenUsage);
+    hasTokenUsage = true;
   };
   let turn = 0;
 

@@ -226,14 +226,15 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
-  it('should preserve attacker usage when voice prompt generation fails', async () => {
+  it('should preserve attacker usage when voice prompt generation throws', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(
       createMockProvider({
         id: 'mock-provider',
-        callApi: vi.fn().mockResolvedValue({
-          error: 'provider refusal',
-          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
-        }),
+        callApi: vi.fn().mockRejectedValue(
+          Object.assign(new Error('provider refusal'), {
+            tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+          }),
+        ),
       }),
     );
 
@@ -305,15 +306,16 @@ describe('VoiceCrescendoProvider', () => {
     });
   });
 
-  it('should preserve scorer usage when evaluation JSON is malformed', async () => {
+  it('should preserve scorer usage when evaluation throws', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
     vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
       createMockProvider({
         id: 'mock-grader',
-        callApi: vi.fn().mockResolvedValue({
-          output: 'malformed evaluation',
-          tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
-        }),
+        callApi: vi.fn().mockRejectedValue(
+          Object.assign(new Error('scorer failed'), {
+            tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
+          }),
+        ),
       }),
     );
 

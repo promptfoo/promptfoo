@@ -305,6 +305,55 @@ describe('Plugins', () => {
       });
     });
 
+    it('should retry an empty billed batch and retain its usage on later success', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            result: [],
+            tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { testVar: 'first prompt' } }, { vars: { testVar: 'second prompt' } }],
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 100 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result?.[1]?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

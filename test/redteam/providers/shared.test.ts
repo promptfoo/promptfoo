@@ -449,6 +449,24 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('preserves token usage carried by thrown target errors', async () => {
+      const mockProvider = createMockProvider({
+        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(
+          Object.assign(new Error('Billed target error'), {
+            tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+          }),
+        ),
+      });
+
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+
+      expect(result).toEqual({
+        output: '',
+        error: 'Billed target error',
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      });
+    });
+
     it('re-throws AbortError from getTargetResponse and does not swallow it', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';

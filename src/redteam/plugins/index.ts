@@ -8,6 +8,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -325,11 +326,24 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       let rejectedTokenUsage: TokenUsage | undefined;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
-        const generatedTestCases = await pluginFactory.action({
-          ...params,
-          n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
-        });
+        let generatedTestCases: TestCase[];
+        try {
+          generatedTestCases = await pluginFactory.action({
+            ...params,
+            n: Math.max(params.n - currentTestCases.length, 0),
+            config: retryConfig,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw error;
+          }
+          const errorTokenUsage = getErrorTokenUsage(error);
+          if (!errorTokenUsage) {
+            throw error;
+          }
+          rejectedTokenUsage = mergeProviderTokenUsage(rejectedTokenUsage, errorTokenUsage);
+          return [];
+        }
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -369,7 +383,13 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       );
 
       const strippedTestCases = testCases.map(stripRetryModifier);
-      if (!rejectedTokenUsage || strippedTestCases.length === 0) {
+      if (strippedTestCases.length === 0 && rejectedTokenUsage) {
+        throw new RemotePluginGenerationError(
+          `Plugin generation failed after retries for ${pluginFactory.key}`,
+          rejectedTokenUsage,
+        );
+      }
+      if (!rejectedTokenUsage) {
         return strippedTestCases;
       }
 

@@ -251,6 +251,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -422,6 +423,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -529,6 +531,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -717,6 +720,7 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 });

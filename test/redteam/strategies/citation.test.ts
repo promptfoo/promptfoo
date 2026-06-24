@@ -255,6 +255,44 @@ describe('citation strategy', () => {
     });
   });
 
+  it('should preserve completed results and usage when another fetch throws', async () => {
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: {
+          result: {
+            citation: {
+              type: 'Article',
+              content: 'Surviving citation',
+            },
+          },
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error('citation fetch failed'), {
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        }),
+      );
+
+    const result = await addCitationTestCases(
+      [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
+      'prompt',
+      {},
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      cached: 0,
+      numRequests: 2,
+    });
+  });
+
   it('should handle invalid response structure gracefully', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {

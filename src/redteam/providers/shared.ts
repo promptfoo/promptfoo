@@ -379,12 +379,15 @@ export async function getTargetResponse(
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
+    const errorTokenUsage = getErrorTokenUsage(error);
     return {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
+        ...errorTokenUsage,
         numRequests:
-          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+          errorTokenUsage?.numRequests ??
+          (error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1),
       },
     };
   }

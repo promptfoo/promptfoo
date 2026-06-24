@@ -6,6 +6,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -79,15 +80,30 @@ async function generateCitations(
         tokenUsage?: TokenUsage;
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
+      let data: CitationGenerationResponse;
+      try {
+        ({ data } = await fetchWithCache<CitationGenerationResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(payload),
+          },
+          getRequestTimeoutMs(),
+        ));
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw error;
+        }
+        logger.error(`Error in remote citation generation: ${error}`);
+        deferredFailureMessage ??= error instanceof Error ? error.message : String(error);
+        deferredFailureTokenUsage = mergeProviderTokenUsage(
+          deferredFailureTokenUsage,
+          getErrorTokenUsage(error),
+        );
+        progressBar?.increment(1);
+        return;
+      }
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -211,7 +227,10 @@ async function generateCitations(
       progressBar.stop();
     }
     logger.error(`Error in remote citation generation: ${error}`);
-    if (error instanceof CitationGenerationError) {
+    if (
+      error instanceof CitationGenerationError ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
       throw error;
     }
     return [];

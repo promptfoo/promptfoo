@@ -20,7 +20,11 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
@@ -320,12 +324,26 @@ export class VoiceCrescendoProvider implements ApiProvider {
         this.memory.getConversationAsText(this.conversationId) || 'No previous conversation',
     });
 
-    const response = await redTeamProvider.callApi(
-      JSON.stringify([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'Generate the next voice prompt.' },
-      ]),
-    );
+    let response: ProviderResponse;
+    try {
+      response = await redTeamProvider.callApi(
+        JSON.stringify([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate the next voice prompt.' },
+        ]),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      return {
+        voicePrompt: '',
+        emotionalTone: 'neutral',
+        escalationLevel: 'medium',
+        tokenUsage: getErrorTokenUsage(error),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
 
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamProvider.id(), response);
 
@@ -429,12 +447,26 @@ export class VoiceCrescendoProvider implements ApiProvider {
       response,
     });
 
-    const evalResponse = await scoringProvider.callApi(
-      JSON.stringify([
-        { role: 'system', content: evalPrompt },
-        { role: 'user', content: 'Evaluate the response.' },
-      ]),
-    );
+    let evalResponse: ProviderResponse;
+    try {
+      evalResponse = await scoringProvider.callApi(
+        JSON.stringify([
+          { role: 'system', content: evalPrompt },
+          { role: 'user', content: 'Evaluate the response.' },
+        ]),
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      return {
+        objectiveAchieved: false,
+        confidence: 0,
+        reason: `Evaluation error: ${error instanceof Error ? error.message : String(error)}`,
+        partialSuccess: false,
+        tokenUsage: getErrorTokenUsage(error),
+      };
+    }
 
     TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
 

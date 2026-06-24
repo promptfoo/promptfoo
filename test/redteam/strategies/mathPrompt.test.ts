@@ -237,6 +237,48 @@ describe('mathPrompt', () => {
       });
     });
 
+    it('should preserve completed concept usage when a later encoding throws', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const provider = createMockProvider({
+        id: 'mock',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: JSON.stringify({ encodedPrompt: 'encoded' }),
+            tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+          })
+          .mockRejectedValueOnce(
+            Object.assign(new Error('second concept failed'), {
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            }),
+          ),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(provider);
+
+      await expect(
+        addMathPrompt(
+          [
+            {
+              vars: { prompt: 'test' },
+              metadata: {
+                providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+              },
+            },
+          ] as any,
+          'prompt',
+          { mathConcepts: ['topology', 'calculus'] },
+        ),
+      ).rejects.toMatchObject({
+        message: 'second concept failed',
+        tokenUsage: {
+          total: 22,
+          prompt: 12,
+          completion: 10,
+          numRequests: 3,
+        },
+      });
+    });
+
     it('should preserve empty remote batch usage before local fallback', async () => {
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(fetchWithCache).mockResolvedValue({
