@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   createGeminiRetrySignal,
   getGeminiErrorHeaders,
@@ -119,13 +118,7 @@ describe('Gemini retry policy', () => {
 
   it('uses one timeout budget for the request and all retry waits', async () => {
     const signal = createGeminiRetrySignal(undefined, 100);
-    const pending = waitBeforeGeminiRetry(
-      { baseRetryDelay: 10_000 },
-      0,
-      3,
-      undefined,
-      signal,
-    );
+    const pending = waitBeforeGeminiRetry({ baseRetryDelay: 10_000 }, 0, 3, undefined, signal);
 
     await vi.advanceTimersByTimeAsync(100);
 
