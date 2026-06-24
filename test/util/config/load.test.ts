@@ -32,6 +32,8 @@ import {
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
+const MOCK_CWD = path.join(path.parse(import.meta.filename).root, 'mock', 'cwd');
+
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
 }));
@@ -225,7 +227,7 @@ describe('combineConfigs', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
-    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    vi.spyOn(process, 'cwd').mockReturnValue(MOCK_CWD);
     vi.mocked(globSync).mockImplementation((pathOrGlob) => {
       const filePart =
         typeof pathOrGlob === 'string'
@@ -1192,10 +1194,9 @@ describe('combineConfigs', () => {
     vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
-    const configDir = path.join(path.parse(import.meta.filename).root, 'mock', 'cwd');
     vi.mocked(globSync)
-      .mockReturnValueOnce([path.join(configDir, 'config1.json')])
-      .mockReturnValueOnce([path.join(configDir, 'config2.json')]);
+      .mockReturnValueOnce([path.join(MOCK_CWD, 'config1.json')])
+      .mockReturnValueOnce([path.join(MOCK_CWD, 'config2.json')]);
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
@@ -1609,7 +1610,7 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(globSync).mockReset();
-    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    vi.spyOn(process, 'cwd').mockReturnValue(MOCK_CWD);
     cliState.selectedProviderConfigs = undefined;
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
