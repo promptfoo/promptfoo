@@ -715,6 +715,40 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it.each([
+    ['image', 'image_text'],
+    ['video', 'video_text'],
+    ['indirect-web-pwn', 'embeddedInjection'],
+  ])('should skip rendering %s strategy display variable %s', async (strategyId, displayVar) => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Safe encoded payload',
+          [displayVar]: 'Copied attack text: {{missing | trim}}',
+        },
+        metadata: {
+          pluginConfig: {},
+          pluginId: 'ssrf',
+          strategyId,
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Safe encoded payload');
+  });
+
   it('should fail before calling the provider when redteam maxCharsPerMessage is exceeded', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
 

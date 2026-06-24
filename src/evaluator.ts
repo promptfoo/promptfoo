@@ -459,6 +459,28 @@ function shouldSkipRedteamInjectVar(
   return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
+const REDTEAM_STRATEGY_DERIVED_INJECT_VARS: Record<string, string[]> = {
+  image: ['image_text'],
+  'indirect-web-pwn': ['embeddedInjection'],
+  video: ['video_text'],
+};
+
+function getRedteamSkipRenderVars(
+  test: AtomicTestCase,
+  prompt: Prompt,
+  testSuite: TestSuite | undefined,
+  isRedteam: boolean,
+): string[] | undefined {
+  if (!shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    return undefined;
+  }
+  const strategyId = typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : '';
+  return [
+    getRedteamInjectVar(test, prompt, testSuite),
+    ...(REDTEAM_STRATEGY_DERIVED_INJECT_VARS[strategyId] ?? []),
+  ];
+}
+
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
   if (testSuite?.redteam?.injectVar) {
     return testSuite.redteam.injectVar;
@@ -805,9 +827,7 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVars = getRedteamSkipRenderVars(test, promptForRender, testSuite, isRedteam);
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,

@@ -532,6 +532,76 @@ function getRemoteAssertionSetAssertions(
   return assertion.assert;
 }
 
+function getAssertionsByType(
+  assertions: unknown[],
+  assertionType: string,
+): Record<string, unknown>[] {
+  const matches: Record<string, unknown>[] = [];
+  for (const assertion of assertions) {
+    if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
+      continue;
+    }
+    if ('type' in assertion && assertion.type === assertionType) {
+      matches.push(assertion as Record<string, unknown>);
+    }
+    if (
+      'type' in assertion &&
+      assertion.type === 'assert-set' &&
+      'assert' in assertion &&
+      Array.isArray(assertion.assert)
+    ) {
+      matches.push(...getAssertionsByType(assertion.assert, assertionType));
+    }
+  }
+  return matches;
+}
+
+function validateIndirectPromptInjectionTestCase(
+  key: string,
+  testCase: Record<string, unknown>,
+  assertions: unknown[],
+  config: PluginConfig,
+): void {
+  if (key !== 'indirect-prompt-injection' || typeof config.indirectInjectionVar !== 'string') {
+    return;
+  }
+  const vars = testCase.vars;
+  const indirectInjection =
+    vars &&
+    typeof vars === 'object' &&
+    !Array.isArray(vars) &&
+    Object.hasOwn(vars, config.indirectInjectionVar)
+      ? (vars as Record<string, unknown>)[config.indirectInjectionVar]
+      : undefined;
+  if (typeof indirectInjection !== 'string' || indirectInjection.trim().length === 0) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      `expected \`vars\` to contain the non-empty indirect injection variable \`${config.indirectInjectionVar}\``,
+    );
+  }
+
+  for (const assertion of getAssertionsByType(
+    assertions,
+    'promptfoo:redteam:indirect-prompt-injection',
+  )) {
+    if (typeof assertion.value !== 'string' || assertion.value.trim().length === 0) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'promptfoo:redteam:indirect-prompt-injection',
+        'expected a non-empty string `value`',
+      );
+    }
+    if (assertion.value !== indirectInjection) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'promptfoo:redteam:indirect-prompt-injection',
+        `expected \`value\` to match \`vars.${config.indirectInjectionVar}\``,
+      );
+    }
+  }
+}
+
 function collectUnsupportedRemoteRedteamAssertionTypes(
   key: string,
   assertions: unknown[],
@@ -640,6 +710,7 @@ function validateRemoteRedteamAssertions(
       allowedRedteamAssertionTypes,
       config,
     );
+    validateIndirectPromptInjectionTestCase(key, testCase, assertions, config);
   }
 
   if (unsupportedAssertionTypes.size > 0) {
@@ -788,7 +859,7 @@ function normalizeRemoteTestVars(
     typeof vars !== 'object' ||
     Array.isArray(vars) ||
     (Object.getPrototypeOf(vars) !== Object.prototype && Object.getPrototypeOf(vars) !== null) ||
-    !(injectVar in vars)
+    !Object.hasOwn(vars, injectVar)
   ) {
     throw new InvalidRemoteRedteamAssertionPayloadError(
       key,
@@ -796,7 +867,7 @@ function normalizeRemoteTestVars(
       `expected \`vars\` to contain the injection variable \`${injectVar}\``,
     );
   }
-  const normalizedVars: Record<string, string> = {};
+  const normalizedEntries: [string, string][] = [];
   for (const [variableName, value] of Object.entries(vars)) {
     const unsafeVariableReference = getUnsafeRemoteReference(
       value,
@@ -823,16 +894,16 @@ function normalizeRemoteTestVars(
         `expected remote test variable \`${variableName}\` to be a string`,
       );
     }
-    normalizedVars[variableName] = value;
+    normalizedEntries.push([variableName, value]);
   }
-  return normalizedVars;
+  return Object.fromEntries(normalizedEntries);
 }
 
 function normalizeRemoteTestMetadata(
   key: string,
   testCase: Record<string, unknown>,
   config: PluginConfig,
-): Record<string, unknown> {
+): { metadata: Record<string, unknown>; remoteFields: string[] } {
   if (
     testCase.metadata !== undefined &&
     (!testCase.metadata ||
@@ -857,9 +928,11 @@ function normalizeRemoteTestMetadata(
     );
   }
   return {
-    ...sanitizedMetadata,
-    ...getLocalRemoteTestMetadata(key, config),
-    ...(key.startsWith('coding-agent:') ? { [REMOTE_GENERATED_METADATA_KEY]: true } : {}),
+    metadata: {
+      ...sanitizedMetadata,
+      ...getLocalRemoteTestMetadata(key, config),
+    },
+    remoteFields: Object.keys(sanitizedMetadata ?? {}),
   };
 }
 
@@ -892,7 +965,13 @@ function normalizeRemoteTestCase(
 ): TestCase {
   validateRemoteTestCaseFields(key, testCase);
   const vars = normalizeRemoteTestVars(key, testCase, injectVar, allowedVariableNames);
-  const metadata = normalizeRemoteTestMetadata(key, testCase, config);
+  const { metadata, remoteFields } = normalizeRemoteTestMetadata(key, testCase, config);
+  if (key.startsWith('coding-agent:')) {
+    metadata[REMOTE_GENERATED_METADATA_KEY] = {
+      metadata: remoteFields,
+      vars: Object.keys(vars ?? {}),
+    };
+  }
   validateRemoteCrossSessionOptions(key, testCase);
 
   return {

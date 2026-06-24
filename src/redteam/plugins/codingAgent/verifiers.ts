@@ -590,8 +590,27 @@ function stringsFromAssertionAndTest(
 
 function verifierControlSourcesFromTest(test: AtomicTestCase): unknown[] {
   const metadata = getObject(test.metadata);
-  if (metadata?.__promptfooRemoteGenerated === true) {
-    return [metadata.pluginConfig];
+  const remoteOrigin = getObject(metadata?.__promptfooRemoteGenerated);
+  if (remoteOrigin) {
+    const remoteVarNames = new Set(
+      Array.isArray(remoteOrigin.vars)
+        ? remoteOrigin.vars.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    const remoteMetadataNames = new Set(
+      Array.isArray(remoteOrigin.metadata)
+        ? remoteOrigin.metadata.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
+    const trustedVars = Object.fromEntries(
+      Object.entries(test.vars ?? {}).filter(([key]) => !remoteVarNames.has(key)),
+    );
+    const trustedMetadata = Object.fromEntries(
+      Object.entries(metadata ?? {}).filter(
+        ([key]) => key !== '__promptfooRemoteGenerated' && !remoteMetadataNames.has(key),
+      ),
+    );
+    return [trustedVars, trustedMetadata];
   }
   return [test.vars, test.metadata];
 }
