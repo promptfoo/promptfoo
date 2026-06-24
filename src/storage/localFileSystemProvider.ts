@@ -23,6 +23,7 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
+const LEGACY_MEDIA_FILENAME_REGEX = /^[a-fA-F0-9]{12}\.[a-zA-Z0-9]+$/;
 
 /**
  * Get file extension from content type
@@ -122,6 +123,30 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       );
     }
     return targetPath;
+  }
+
+  /**
+   * Legacy keys can share a filename across distinct full hashes. Confirm the
+   * sidecar still describes the indexed content before treating one as a hit.
+   */
+  private async legacyKeyMatchesContentHash(key: string, contentHash: string): Promise<boolean> {
+    if (!LEGACY_MEDIA_FILENAME_REGEX.test(path.basename(key))) {
+      return true;
+    }
+
+    try {
+      const metadata = JSON.parse(
+        await fsPromises.readFile(`${this.getFilePath(key)}.meta.json`, 'utf8'),
+      ) as unknown;
+      return (
+        typeof metadata === 'object' &&
+        metadata !== null &&
+        'contentHash' in metadata &&
+        metadata.contentHash === contentHash
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -268,9 +293,16 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async findByHash(contentHash: string): Promise<string | null> {
     const key = this.hashIndex.get(contentHash);
     if (key && (await this.exists(key))) {
-      return key;
+      if (await this.legacyKeyMatchesContentHash(key, contentHash)) {
+        return key;
+      }
+      logger.warn('[LocalStorage] Ignoring mismatched legacy hash index entry', {
+        contentHash,
+        key,
+      });
     }
-    // Clean up stale index entry if file doesn't exist
+
+    // Clean up stale or mismatched index entries.
     if (key) {
       this.hashIndex.delete(contentHash);
       await this.saveHashIndex();
