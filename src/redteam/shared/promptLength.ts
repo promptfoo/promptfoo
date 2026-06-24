@@ -159,12 +159,32 @@ export function getGeneratedPromptLengthViolation(
   return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
 }
 
+function getStringRecordValues(value: unknown): string[] | undefined {
+  if (!isRecord(value) || !Object.values(value).every((entry) => typeof entry === 'string')) {
+    return undefined;
+  }
+  return Object.values(value) as string[];
+}
+
 function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar: string): string[] {
-  return injectVar === MULTI_INPUT_VAR
-    ? Object.entries(vars ?? {})
-        .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
-        .map(([, value]) => String(value))
-    : [String(vars?.[injectVar] ?? '')];
+  if (injectVar !== MULTI_INPUT_VAR) {
+    return [String(vars?.[injectVar] ?? '')];
+  }
+
+  try {
+    const parsedPromptValues = getStringRecordValues(
+      JSON.parse(String(vars?.[MULTI_INPUT_VAR] ?? '')),
+    );
+    if (parsedPromptValues) {
+      return parsedPromptValues;
+    }
+  } catch {
+    // Fall back to already materialized individual input vars.
+  }
+
+  return Object.entries(vars ?? {})
+    .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
+    .map(([, value]) => String(value));
 }
 
 function getFirstGeneratedPromptLengthViolation(
@@ -195,12 +215,9 @@ export function getGeneratedPromptObjectLengthViolation(
   let generatedPrompts = '__prompt' in prompt ? [prompt.__prompt] : Object.values(prompt);
   if (isMultiInput && '__prompt' in prompt) {
     try {
-      const parsedPrompt = JSON.parse(prompt.__prompt) as unknown;
-      if (
-        isRecord(parsedPrompt) &&
-        Object.values(parsedPrompt).every((value) => typeof value === 'string')
-      ) {
-        generatedPrompts = Object.values(parsedPrompt) as string[];
+      const parsedPromptValues = getStringRecordValues(JSON.parse(prompt.__prompt) as unknown);
+      if (parsedPromptValues) {
+        generatedPrompts = parsedPromptValues;
       }
     } catch {
       // Preserve the serialized prompt fallback for malformed custom plugin output.
