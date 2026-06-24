@@ -332,6 +332,7 @@ describe('Prompts', () => {
     const fallbackLabel = matchingCells.find((cell) => cell.classList.contains('line-clamp-2'));
 
     expect(fallbackLabel).toHaveClass('line-clamp-2', 'break-words');
+    expect(screen.getByRole('button', { name: longRawPrompt })).toHaveClass('whitespace-normal');
   });
 
   it('should render the Label column in DataGrid on very narrow viewport widths', () => {

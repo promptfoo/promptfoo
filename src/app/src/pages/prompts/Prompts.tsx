@@ -86,7 +86,7 @@ export default function Prompts({
             type="button"
             variant="link"
             size="sm"
-            className="h-auto max-w-full justify-start px-0 text-left"
+            className="h-auto max-w-full justify-start whitespace-normal px-0 text-left"
             onClick={(event) => {
               event.stopPropagation();
               openPromptDetails(row.original);
