@@ -522,7 +522,7 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('latency budget for pattern "cache.*" was satisfied');
   });
 
-  it('clamps clock-skewed (endTime < startTime) durations to 0 instead of reporting negative ms', () => {
+  it('rejects clock-skewed spans instead of treating them as successful zero-duration evidence', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: { max: 100, percentile: 0 } },
@@ -542,10 +542,9 @@ describe('handleTraceSpanDuration', () => {
       },
     };
 
-    const result = handleTraceSpanDuration(params);
-    expect(result.pass).toBe(true); // clamped 0ms is within the 100ms budget
-    expect(result.reason).toContain('0.00ms');
-    expect(result.reason).not.toContain('-400');
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion encountered a span with invalid timing data',
+    );
   });
 
   it('handles percentile boundary values 0 (min) and 100 (max)', () => {
