@@ -4,9 +4,121 @@ import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 
+import type { TraceData } from '../../src/types/tracing';
+
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('passes trace data and its compact summary to the grader', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {},
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {},
+    };
+    const trace: TraceData = {
+      traceId: 'trace-1',
+      evaluationId: 'eval-1',
+      testCaseId: 'test-1',
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 1,
+          attributes: { 'tool.name': 'lookup' },
+        },
+      ],
+    };
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Fresh grader result',
+      },
+      rubric: 'Fresh rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    const gradingContext = getResultSpy.mock.calls[0]?.[7];
+    expect(gradingContext).toMatchObject({ traceData: trace });
+    expect(gradingContext?.traceSummary).toBeTruthy();
+  });
+
+  it('rejects redteam grading when no prompt source is available', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {},
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {},
+    };
+
+    await expect(
+      handleRedteam({
+        assertion,
+        baseType: getAssertionBaseType(assertion),
+        assertionValueContext: {
+          prompt: undefined,
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: isAssertionInverse(assertion),
+        latencyMs: 0,
+        logProbs: [],
+        output: 'test output',
+        outputString: 'test output',
+        prompt: undefined,
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      }),
+    ).rejects.toThrow('must have a prompt');
   });
 
   it('reuses a stored grader result when its assertion type matches exactly', async () => {
