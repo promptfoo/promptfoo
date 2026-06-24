@@ -178,7 +178,12 @@ describe('programmatic scenario config expansion', () => {
       process.chdir(originalCwd);
     }
     const summary = await record.toEvaluateSummary();
-    const serializedConfig = JSON.stringify(record.config);
+    const configProvider = record.config.scenarios?.[0]?.config[0]?.provider as
+      | { id: string; config: { payload: string } }
+      | undefined;
+    const testProvider = record.config.scenarios?.[1]?.tests[0]?.provider as
+      | { id: string }
+      | undefined;
 
     expect(summary.results.map((result) => result.response?.output)).toEqual([
       'scenario-provider',
@@ -189,9 +194,13 @@ describe('programmatic scenario config expansion', () => {
       ['scenario-provider', 'scenario-provider'],
     );
     expect(fs.existsSync(path.join(tmpDir, 'calls.log'))).toBe(false);
-    expect(serializedConfig).toContain(`file://${path.join(scenarioDir, 'provider.cjs')}`);
-    expect(serializedConfig).toContain(`file://${path.join(scenarioDir, 'payload.txt')}`);
-    expect(serializedConfig).not.toContain(`file://${path.join(tmpDir, 'provider.cjs')}`);
+    expect(configProvider).toMatchObject({
+      id: `file://${path.join(scenarioDir, 'provider.cjs')}`,
+      config: { payload: `file://${path.join(scenarioDir, 'payload.txt')}` },
+    });
+    expect(testProvider).toMatchObject({
+      id: `file://${path.join(scenarioDir, 'provider.cjs')}`,
+    });
   });
 
   it('does not fall back to a parent provider or expose its options when a scenario provider is missing', async () => {
