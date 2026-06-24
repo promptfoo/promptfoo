@@ -330,10 +330,9 @@ export const SubmitRatingResponseSchema = z
     success: z.boolean(),
     score: z.number(),
     failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-    gradingResult: z.custom<GradingResult | null>(
-      (value) => value === null || (typeof value === 'object' && !Array.isArray(value)),
-      'Expected grading result object or null',
-    ),
+    // Keep the permissive runtime contract while using a shape that can be
+    // represented by the generated OpenAPI document.
+    gradingResult: z.object({}).passthrough().nullable() as z.ZodType<GradingResult | null>,
   })
   .passthrough();
 
