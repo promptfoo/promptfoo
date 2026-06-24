@@ -239,7 +239,7 @@ describe('RunOptionsContent', () => {
       await user.tab();
 
       expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 300);
-      expect(minCharsPerMessageInput).toHaveValue(80);
+      expect(minCharsPerMessageInput).toHaveValue(50);
     });
 
     it('should clear maxCharsPerMessage when the field is emptied', async () => {
