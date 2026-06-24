@@ -13,6 +13,7 @@ import {
   isGeminiRetryableStatus,
   waitBeforeGeminiRetry,
 } from '../../../src/providers/google/retry';
+import { sleepForGeminiRetry } from '../../../src/providers/google/retryPrimitives';
 
 describe('Gemini retry policy', () => {
   beforeEach(() => {
@@ -124,6 +125,29 @@ describe('Gemini retry policy', () => {
     controller.abort(new DOMException('cancelled', 'AbortError'));
 
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('resolves retry timers with and without a signal', async () => {
+    const controller = new AbortController();
+    const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const signaledSleep = sleepForGeminiRetry(25, controller.signal);
+    const unsignaledSleep = sleepForGeminiRetry(25);
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expect(signaledSleep).resolves.toBeUndefined();
+    await expect(unsignaledSleep).resolves.toBeUndefined();
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('rejects before scheduling when the retry signal is already aborted', async () => {
+    const controller = new AbortController();
+    const reason = new DOMException('cancelled', 'AbortError');
+    controller.abort(reason);
+
+    await expect(sleepForGeminiRetry(25, controller.signal)).rejects.toBe(reason);
     expect(vi.getTimerCount()).toBe(0);
   });
 
