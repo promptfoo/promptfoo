@@ -126,9 +126,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     let statusText: string;
     let latencyMs: number | undefined;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
-      ({ data, cached, status, statusText, latencyMs } =
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
         await fetchWithCache<SnowflakeCortexResponse>(
           `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
           {
@@ -157,21 +158,39 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
+    const firstChoice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
+    const choice =
+      firstChoice && typeof firstChoice === 'object' && !Array.isArray(firstChoice)
+        ? firstChoice
+        : undefined;
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
+    const cost = calculateOpenAICost(
+      this.modelName,
+      config,
+      data?.usage?.prompt_tokens,
+      data?.usage?.completion_tokens,
+    );
+
     // Process the response (should be OpenAI-compatible)
-    if (!data.choices?.[0]?.message) {
+    const message = choice?.message;
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      await deleteFromCache?.();
       return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
+        error: 'Malformed response data: expected choices[0].message',
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
       };
     }
-
-    const message = data.choices[0].message;
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
     // Handle tool calls and content
     let output: string | object = '';
@@ -208,12 +227,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       tokenUsage: getTokenUsage(data, cached),
       cached,
       latencyMs,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost,
       ...(finishReason && { finishReason }),
     };
   }

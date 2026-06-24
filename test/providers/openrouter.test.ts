@@ -166,15 +166,25 @@ describe('OpenRouter', () => {
       }
     });
 
-    it('returns a clean error instead of crashing on an empty choices array', async () => {
+    it.each([
+      ['a null body', null],
+      ['missing choices', {}],
+      ['null choices', { choices: null }],
+      ['non-array choices', { choices: { 0: { message: { content: 'wrong shape' } } } }],
+      ['empty choices', { choices: [] }],
+      ['a null first choice', { choices: [null] }],
+      ['a missing message', { choices: [{}] }],
+      ['a null message', { choices: [{ message: null }] }],
+      ['a primitive message', { choices: [{ message: 'wrong shape' }] }],
+      ['an array message', { choices: [{ message: [] }] }],
+    ])('returns a structured error for %s', async (_description, responseBody) => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
       try {
         const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
 
-        // A 200 response whose `choices` array is empty (e.g. when an upstream
-        // model is filtered) must not throw "Cannot read properties of undefined".
-        const response = new Response(JSON.stringify({ choices: [], usage: { total_tokens: 0 } }), {
+        // A malformed 200 response must resolve through the provider error contract.
+        const response = new Response(JSON.stringify(responseBody), {
           status: 200,
           statusText: 'OK',
           headers: new Headers({ 'Content-Type': 'application/json' }),
@@ -182,8 +192,118 @@ describe('OpenRouter', () => {
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
         const result = await provider.callApi('Test prompt');
-        expect(result.error).toContain('Malformed response data');
+        expect(result.error).toBe('Malformed response data: expected choices[0].message');
+        expect(result.cached).toBe(false);
         expect(result.output).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('evicts malformed responses while preserving bounded accounting metadata', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {
+          config: { inputCost: 0.001, outputCost: 0.002 },
+        });
+        const malformedResponse = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+            private: 'must-not-appear',
+            padding: 'x'.repeat(10_000),
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        const recoveredResponse = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(malformedResponse)
+          .mockResolvedValueOnce(recoveredResponse);
+
+        const malformed = await provider.callApi('Test prompt');
+        expect(malformed).toEqual({
+          error: 'Malformed response data: expected choices[0].message',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          cached: false,
+          cost: 0.007,
+        });
+
+        const recovered = await provider.callApi('Test prompt');
+        expect(recovered.output).toBe('Recovered');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('treats a documented choice-level error as an error and evicts it', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {
+          config: { inputCost: 0.001, outputCost: 0.002 },
+        });
+        const choiceErrorResponse = new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: 'partial output must not be graded' },
+                finish_reason: 'error',
+                error: { code: 502, message: 'Upstream provider failed' },
+              },
+            ],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        const recoveredResponse = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(choiceErrorResponse)
+          .mockResolvedValueOnce(recoveredResponse);
+
+        const failed = await provider.callApi('Test prompt');
+        expect(failed.error).toContain('API error: Upstream provider failed, Code: 502');
+        expect(failed.error).not.toContain('partial output must not be graded');
+        expect(failed).toMatchObject({
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          cached: false,
+          cost: 0.007,
+          finishReason: 'error',
+        });
+        expect(failed.output).toBeUndefined();
+
+        const recovered = await provider.callApi('Test prompt');
+        expect(recovered.output).toBe('Recovered');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
       } finally {
         restoreEnv();
       }

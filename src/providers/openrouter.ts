@@ -131,7 +131,15 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
+    type OpenRouterChatCompletionResponse = Omit<OpenAI.ChatCompletion, 'choices'> & {
+      choices: Array<
+        OpenAI.ChatCompletion.Choice & {
+          error?: {
+            code?: number | string;
+            message?: string;
+          };
+        }
+      >;
       error?: {
         code?: string;
         message?: string;
@@ -142,9 +150,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
-      ({ data, cached, status, statusText } =
+      ({ data, cached, status, statusText, deleteFromCache } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
           `${this.getApiUrl()}/chat/completions`,
           {
@@ -174,21 +183,54 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
-    // Process the response with special handling for Gemini
-    if (!data.choices?.[0]?.message) {
+    const firstChoice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
+    const choice =
+      firstChoice && typeof firstChoice === 'object' && !Array.isArray(firstChoice)
+        ? firstChoice
+        : undefined;
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
+    const cost = calculateOpenAICost(
+      this.modelName,
+      config,
+      data?.usage?.prompt_tokens,
+      data?.usage?.completion_tokens,
+    );
+
+    if (choice?.error) {
+      await deleteFromCache?.();
       return {
-        error: `Malformed response data: ${JSON.stringify(data)}`,
+        error: formatOpenAiError({
+          error: {
+            message: choice.error.message || 'OpenRouter provider returned a generation error',
+            ...(choice.error.code != null && { code: String(choice.error.code) }),
+          },
+        }),
+        tokenUsage,
+        cached,
+        cost,
+        ...(finishReason && { finishReason }),
       };
     }
 
-    const message: any = data.choices[0].message;
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    // Process the response with special handling for Gemini
+    const message: any = choice?.message;
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      await deleteFromCache?.();
+      return {
+        error: 'Malformed response data: expected choices[0].message',
+        tokenUsage,
+        cached,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
+    }
 
     // Prioritize tool calls over content and reasoning
     let output: string | object = '';
@@ -230,12 +272,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost,
       ...(finishReason && { finishReason }),
     };
   }

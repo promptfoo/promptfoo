@@ -233,26 +233,77 @@ describe('Snowflake Cortex Provider', () => {
       ]);
     });
 
-    it('returns a clean error instead of crashing on an empty choices array', async () => {
+    it.each([
+      ['a null body', null],
+      ['missing choices', {}],
+      ['null choices', { choices: null }],
+      ['non-array choices', { choices: { 0: { message: { content: 'wrong shape' } } } }],
+      ['empty choices', { choices: [] }],
+      ['a null first choice', { choices: [null] }],
+      ['a missing message', { choices: [{}] }],
+      ['a null message', { choices: [{ message: null }] }],
+      ['a primitive message', { choices: [{ message: 'wrong shape' }] }],
+      ['an array message', { choices: [{ message: [] }] }],
+    ])('returns a structured error for %s', async (_description, responseBody) => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {
           accountIdentifier: 'myorg-myaccount',
           apiKey: 'test-key',
         },
       });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
 
-      // A 200 response whose `choices` array is empty (e.g. when the model is
-      // filtered) must not throw "Cannot read properties of undefined".
+      // A malformed 200 response must resolve through the provider error contract.
       mockFetchWithCache.mockResolvedValueOnce({
-        data: { choices: [], usage: { total_tokens: 0 } },
+        data: responseBody,
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache,
       });
 
       const result = await provider.callApi('Test prompt');
-      expect(result.error).toContain('Malformed response data');
+      expect(result.error).toBe('Malformed response data: expected choices[0].message');
+      expect(result.cached).toBe(false);
       expect(result.output).toBeUndefined();
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('preserves cached accounting metadata when rejecting a malformed response', async () => {
+      const provider = new SnowflakeCortexProvider('gpt-4o', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+          inputCost: 0.001,
+          outputCost: 0.002,
+        },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ finish_reason: 'content_filter' }],
+          usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          private: 'must-not-appear',
+          padding: 'x'.repeat(10_000),
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        latencyMs: 42,
+        deleteFromCache,
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result).toEqual({
+        error: 'Malformed response data: expected choices[0].message',
+        tokenUsage: { cached: 5, total: 5 },
+        cached: true,
+        latencyMs: 42,
+        cost: 0.007,
+        finishReason: 'content_filter',
+      });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
   });
 });
