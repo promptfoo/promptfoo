@@ -3,7 +3,7 @@ import { Command, InvalidArgumentError } from 'commander';
 import logger from '../logger';
 import { optimizePromptTestSuite } from '../optimizer/promptOptimizer';
 import telemetry from '../telemetry';
-import { type UnifiedConfig } from '../types/index';
+import { type CommandLineOptions, type EvaluateOptions, type UnifiedConfig } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
 import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -16,6 +16,36 @@ interface OptimizeOptions {
   validationSplit?: number;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
+}
+
+function applyCommandLineEvaluateOptions(
+  config: Partial<UnifiedConfig>,
+  commandLineOptions: Partial<CommandLineOptions> | undefined,
+): Partial<UnifiedConfig> {
+  const overrides: Partial<EvaluateOptions> = {};
+  if (commandLineOptions?.delay !== undefined) {
+    overrides.delay = commandLineOptions.delay;
+  }
+  if (commandLineOptions?.filterRange !== undefined) {
+    overrides.filterRange = commandLineOptions.filterRange;
+  }
+  if (commandLineOptions?.generateSuggestions !== undefined) {
+    overrides.generateSuggestions = commandLineOptions.generateSuggestions;
+  }
+  if (commandLineOptions?.maxConcurrency !== undefined) {
+    overrides.maxConcurrency = commandLineOptions.maxConcurrency;
+  }
+  if (commandLineOptions?.repeat !== undefined) {
+    overrides.repeat = commandLineOptions.repeat;
+  }
+  const generateSuggestions =
+    commandLineOptions?.generateSuggestions ?? config.evaluateOptions?.generateSuggestions;
+  if (generateSuggestions === true && commandLineOptions?.suggestionsCount !== undefined) {
+    overrides.suggestionsCount = commandLineOptions.suggestionsCount;
+  }
+  return Object.keys(overrides).length > 0
+    ? { ...config, evaluateOptions: { ...config.evaluateOptions, ...overrides } }
+    : config;
 }
 
 export async function doOptimize(options: OptimizeOptions): Promise<void> {
@@ -53,7 +83,11 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     validationSplit: options.validationSplit ?? 0,
   });
 
-  const result = await optimizePromptTestSuite(resolved.config, resolved.testSuite, {
+  const optimizationConfig = applyCommandLineEvaluateOptions(
+    resolved.config,
+    resolved.commandLineOptions,
+  );
+  const result = await optimizePromptTestSuite(optimizationConfig, resolved.testSuite, {
     promptIndex: options.promptIndex ?? 0,
     providerIndex: options.providerIndex ?? 0,
     validationSplit: options.validationSplit,

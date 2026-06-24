@@ -110,6 +110,109 @@ describe('prompt optimizer', () => {
     expect(evidence.gradingReason.length).toBeLessThanOrEqual(1214);
   });
 
+  it('propagates cancellation to the suggestions provider and rejects ignored cancellation', async () => {
+    const controller = new AbortController();
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Ignored cancellation'),
+    });
+    vi.mocked(provider.callApi).mockImplementationOnce(async () => {
+      controller.abort();
+      return optimizerResponse('Ignored cancellation');
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    await expect(
+      generateOptimizedPromptCandidates({
+        prompt: 'Original prompt',
+        failures: [],
+        successes: [],
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(provider.callApi).toHaveBeenCalledWith(expect.any(String), undefined, {
+      abortSignal: controller.signal,
+    });
+  });
+
+  it('stops after a cancelled baseline eval without requesting candidates', async () => {
+    const controller = new AbortController();
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      controller.abort();
+      return baselineEval;
+    });
+
+    await expect(
+      optimizePromptTestSuite(
+        {},
+        {
+          providers: [createMockProvider({ id: 'target-provider' })],
+          prompts: [{ raw: 'Seed', label: 'Seed' }],
+          tests: [{}],
+        },
+        { abortSignal: controller.signal },
+      ),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(evaluate).mock.calls[0][2]?.abortSignal).toBe(controller.signal);
+    expect(getDefaultProviders).not.toHaveBeenCalled();
+  });
+
+  it('does not return partial candidate results after cancellation', async () => {
+    const controller = new AbortController();
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const partialCandidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [evalResult(0, true, 'partial result')],
+    );
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        return partialCandidateEval;
+      });
+
+    await expect(
+      optimizePromptTestSuite(
+        {},
+        {
+          providers: [createMockProvider({ id: 'target-provider' })],
+          prompts: [{ raw: 'Seed', label: 'Seed' }],
+          tests: [{}],
+        },
+        { abortSignal: controller.signal },
+      ),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('evaluates candidates from the selected prompt and provider', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
@@ -404,6 +507,7 @@ describe('prompt optimizer', () => {
     const internalEvalOptions = await collectInternalEvalOptions({
       evaluateOptions: {
         delay: 25,
+        maxConcurrency: 8,
       },
     });
 
@@ -417,45 +521,46 @@ describe('prompt optimizer', () => {
     }
   });
 
-  it('preserves configured concurrency when the internal eval delay is not positive', async () => {
+  it.each([
+    ['unset', undefined],
+    ['zero', 0],
+    ['negative', -25],
+    ['NaN', Number.NaN],
+  ])('normalizes %s internal eval delay and preserves configured concurrency', async (_, delay) => {
     const internalEvalOptions = await collectInternalEvalOptions({
-      evaluateOptions: {
-        delay: -25,
-        maxConcurrency: 4,
-      },
+      evaluateOptions: { delay, maxConcurrency: 4 },
+    });
+
+    for (const options of internalEvalOptions) {
+      expect(options?.delay).toBeUndefined();
+      expect(options?.maxConcurrency).toBe(4);
+    }
+  });
+
+  it('uses the runtime test suite as the redteam source of truth', async () => {
+    const redteam = { plugins: [{ id: 'harmful' }] };
+    const internalEvalOptions = await collectInternalEvalOptions({
+      redteam,
+      evaluateOptions: { isRedteam: true },
     });
 
     for (const options of internalEvalOptions) {
       expect(options).toEqual(
         expect.objectContaining({
-          delay: -25,
-          maxConcurrency: 4,
-        }),
-      );
-    }
-  });
-
-  it('marks internal optimizer evals as redteam when the config has a redteam block', async () => {
-    const redteam = { plugins: [{ id: 'harmful' }] };
-    const internalEvalOptions = await collectInternalEvalOptions({ redteam });
-
-    for (const options of internalEvalOptions) {
-      expect(options).toEqual(
-        expect.objectContaining({
-          isRedteam: true,
+          isRedteam: false,
         }),
       );
     }
     for (const [suite] of vi.mocked(evaluate).mock.calls) {
-      expect(suite.redteam).toEqual(redteam);
+      expect(suite.redteam).toBeUndefined();
     }
   });
 
-  it('marks internal optimizer evals as redteam when the test suite has a redteam block', async () => {
+  it('marks internal optimizer evals as redteam for an empty runtime redteam block', async () => {
     const internalEvalOptions = await collectInternalEvalOptions(
-      {},
+      { evaluateOptions: { isRedteam: false } },
       {
-        redteam: { plugins: [{ id: 'harmful' }] },
+        redteam: {},
       },
     );
 
@@ -465,6 +570,17 @@ describe('prompt optimizer', () => {
           isRedteam: true,
         }),
       );
+    }
+  });
+
+  it('respects an explicit null runtime redteam value', async () => {
+    const internalEvalOptions = await collectInternalEvalOptions(
+      { redteam: { plugins: [{ id: 'harmful' }] } },
+      { redteam: null as unknown as TestSuite['redteam'] },
+    );
+
+    for (const options of internalEvalOptions) {
+      expect(options?.isRedteam).toBe(false);
     }
   });
 
@@ -1089,6 +1205,7 @@ describe('prompt optimizer', () => {
     const testSuite: TestSuite = {
       providers: [createMockProvider({ id: 'target-provider' })],
       prompts: [{ raw: 'Base', label: 'Base' }],
+      defaultTest: { assert: [{ type: 'contains', value: 'default' }] },
       tests: Array.from({ length: 5 }, (_, index) => ({ vars: { id: String(index) } })),
     };
 
@@ -1098,6 +1215,41 @@ describe('prompt optimizer', () => {
       }),
     ).rejects.toThrow('Prompt optimization filterRange did not select any tests.');
     expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a defaultTest-only filterRange for the evaluator when no split is possible', async () => {
+    const internalEvalOptions = await collectInternalEvalOptions(
+      { evaluateOptions: { filterRange: '0:1' } },
+      {
+        defaultTest: { vars: { id: 'implicit' } },
+        tests: undefined,
+      },
+      { validationSplit: 0.5 },
+    );
+
+    expect(vi.mocked(evaluate).mock.calls[0][0].tests).toBeUndefined();
+    for (const options of internalEvalOptions) {
+      expect(options?.filterRange).toBe('0:1');
+    }
+  });
+
+  it('rejects an out-of-range defaultTest-only selection after evaluator filtering', async () => {
+    vi.mocked(evaluate).mockResolvedValueOnce(emptyEval([completedPrompt('Seed', 'Seed', 0.5)]));
+
+    await expect(
+      optimizePromptTestSuite(
+        { evaluateOptions: { filterRange: '1:2' } },
+        {
+          providers: [createMockProvider({ id: 'target-provider' })],
+          prompts: [{ raw: 'Seed', label: 'Seed' }],
+          defaultTest: { vars: { id: 'implicit' } },
+        },
+        { validationSplit: 0.5 },
+      ),
+    ).rejects.toThrow('No eval test cases ran for the selected prompt/provider');
+
+    expect(vi.mocked(evaluate).mock.calls[0][2]?.filterRange).toBe('1:2');
+    expect(getDefaultProviders).not.toHaveBeenCalled();
   });
 
   it('keeps the baseline when validation and search scores both tie', async () => {
@@ -1234,6 +1386,7 @@ function emptyEval(prompts: CompletedPrompt[]): Eval {
 async function collectInternalEvalOptions(
   config: Parameters<typeof optimizePromptTestSuite>[0] = {},
   testSuiteOverrides: Partial<TestSuite> = {},
+  optimizationOptions: Parameters<typeof optimizePromptTestSuite>[2] = {},
 ) {
   const provider = createMockProvider({
     id: 'optimizer-provider',
@@ -1262,12 +1415,16 @@ async function collectInternalEvalOptions(
   );
   vi.mocked(evaluate).mockResolvedValue(candidateEval).mockResolvedValueOnce(baselineEval);
 
-  await optimizePromptTestSuite(config, {
-    providers: [createMockProvider({ id: 'target-provider' })],
-    prompts: [{ raw: 'Seed', label: 'Seed' }],
-    tests: [{}],
-    ...testSuiteOverrides,
-  });
+  await optimizePromptTestSuite(
+    config,
+    {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+      ...testSuiteOverrides,
+    },
+    optimizationOptions,
+  );
 
   return vi.mocked(evaluate).mock.calls.map((call) => call[2]);
 }
