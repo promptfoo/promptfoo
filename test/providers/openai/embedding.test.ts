@@ -108,6 +108,28 @@ describe('OpenAI Provider', () => {
       expect(mockEmbeddingResponse.usage.completion_tokens).toBe(0);
     });
 
+    it('should price input-only usage for unknown embedding models', async () => {
+      const inputCost = 0.42 / 1e6;
+      const customProvider = new OpenAiEmbeddingProvider('text-embedding-v4', {
+        config: { apiKey: 'test-key', inputCost },
+      });
+      const mockResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { prompt_tokens: 10, total_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await customProvider.callEmbeddingApi('test text');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 0, total: 10 });
+      expect(result.cost).toBeCloseTo(10 * inputCost, 12);
+    });
+
     it('should handle API errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 

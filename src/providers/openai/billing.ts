@@ -532,10 +532,12 @@ function getExplicitTokenCount(...values: unknown[]): number | undefined {
 
 function getUnknownModelTextUsage(
   rawUsage: any,
+  allowMissingOutputTokens = false,
 ): { inputTokens: number; outputTokens: number } | undefined {
   const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
   const rawInputTokens = usage.prompt_tokens ?? usage.input_tokens;
-  const rawOutputTokens = usage.completion_tokens ?? usage.output_tokens;
+  const rawOutputTokens =
+    usage.completion_tokens ?? usage.output_tokens ?? (allowMissingOutputTokens ? 0 : undefined);
   const inputTokens = getExplicitTokenCount(rawInputTokens);
   const outputTokens = getExplicitTokenCount(rawOutputTokens);
 
@@ -716,6 +718,7 @@ export function calculateOpenAIUsageCost(
   options: {
     serviceTier?: string | null;
     cachedResponse?: boolean;
+    allowMissingOutputTokens?: boolean;
   } = {},
 ): number | undefined {
   if (!rawUsage) {
@@ -726,7 +729,7 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const rates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!rates) {
-    const textUsage = getUnknownModelTextUsage(rawUsage);
+    const textUsage = getUnknownModelTextUsage(rawUsage, options.allowMissingOutputTokens);
     if (!textUsage) {
       return undefined;
     }

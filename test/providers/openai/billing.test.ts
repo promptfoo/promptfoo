@@ -218,6 +218,18 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.00015, 10);
   });
 
+  it('prices input-only usage only when the caller opts into an outputless API', () => {
+    const usage = { prompt_tokens: 100, total_tokens: 100 };
+    const config = { inputCost: 0.000001 };
+
+    expect(calculateOpenAIUsageCost('third-party/embedding', config, usage)).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('third-party/embedding', config, usage, {
+        allowMissingOutputTokens: true,
+      }),
+    ).toBeCloseTo(0.0001, 10);
+  });
+
   it('prices zero-token sides without requiring an explicit cost', () => {
     expect(
       calculateOpenAIUsageCost(
