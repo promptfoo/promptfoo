@@ -37,7 +37,7 @@ export default function UpdateBanner() {
     dismissRuntimeNotice,
     dismissUpdate,
   } = useVersionCheck();
-  const { recordEvent } = useTelemetry();
+  const { isInitialized, recordEvent } = useTelemetry();
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const recordedRuntimeNoticeRef = useRef<string | null>(null);
@@ -45,12 +45,18 @@ export default function UpdateBanner() {
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
+  const runtimeSupportEnded = runtimeNotice
+    ? hasRuntimeSupportEnded(runtimeNotice.removalDate)
+    : false;
+  const updateBlockedByRuntime =
+    !!versionInfo?.updateBlockedByRuntime ||
+    (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
   const shouldShowRuntimeNotice = !!activeRuntimeNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
     !isUpdateDismissed &&
     !!versionInfo?.updateAvailable &&
-    !versionInfo?.updateBlockedByRuntime;
+    !updateBlockedByRuntime;
   const shouldShowBanner = !loading && !error && (shouldShowRuntimeNotice || shouldShowUpdate);
   const dismissLabel = "Don't remind me of this version";
 
@@ -103,11 +109,12 @@ export default function UpdateBanner() {
   }, [copied]);
 
   useEffect(() => {
-    if (
-      shouldShowBanner &&
-      activeRuntimeNotice &&
-      recordedRuntimeNoticeRef.current !== activeRuntimeNotice.id
-    ) {
+    if (!shouldShowBanner || !activeRuntimeNotice) {
+      recordedRuntimeNoticeRef.current = null;
+      return;
+    }
+
+    if (isInitialized && recordedRuntimeNoticeRef.current !== activeRuntimeNotice.id) {
       recordEvent('feature_used', {
         action: 'shown',
         feature: 'runtime_compatibility_notice',
@@ -117,7 +124,7 @@ export default function UpdateBanner() {
       });
       recordedRuntimeNoticeRef.current = activeRuntimeNotice.id;
     }
-  }, [activeRuntimeNotice, recordEvent, shouldShowBanner]);
+  }, [activeRuntimeNotice, isInitialized, recordEvent, shouldShowBanner]);
 
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
@@ -208,8 +215,7 @@ export default function UpdateBanner() {
         {activeRuntimeNotice ? (
           <div className="flex max-w-4xl flex-col gap-0.5">
             <span className="text-sm font-medium">
-              Node.js 20 support{' '}
-              {hasRuntimeSupportEnded(activeRuntimeNotice.removalDate) ? 'ended' : 'ends'}{' '}
+              Node.js 20 support {runtimeSupportEnded ? 'ended' : 'ends'}{' '}
               {formatRemovalDate(activeRuntimeNotice.removalDate)}
             </span>
             <span className="text-sm text-muted-foreground">

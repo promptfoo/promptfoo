@@ -1,3 +1,4 @@
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -6,13 +7,21 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
 
+vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useVersionCheck');
 
 describe('UpdateBanner', () => {
+  const mockRecordEvent = vi.fn();
+  const mockUseTelemetry = vi.mocked(useTelemetry);
   const mockUseVersionCheck = vi.mocked(useVersionCheck);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseTelemetry.mockReturnValue({
+      identifyUser: vi.fn(),
+      isInitialized: true,
+      recordEvent: mockRecordEvent,
+    });
     document.documentElement.style.removeProperty('--update-banner-height');
   });
 
@@ -214,6 +223,181 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
     expect(screen.queryByText(/Node.js 20 support ends/i)).not.toBeInTheDocument();
+  });
+
+  it('should not show an npm update from stale pre-cutoff data after runtime support ends', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 1,
+        },
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: true,
+      dismiss: vi.fn(),
+      runtimeNoticeDismissed: true,
+      updateDismissed: false,
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+  });
+
+  it('should still show a Docker update after runtime support ends', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 1,
+        },
+        updateCommands: {
+          primary: 'docker pull promptfoo/promptfoo:latest',
+          alternative: null,
+        },
+        commandType: 'docker',
+      },
+      loading: false,
+      error: null,
+      dismissed: true,
+      dismiss: vi.fn(),
+      runtimeNoticeDismissed: true,
+      updateDismissed: false,
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toBeInTheDocument();
+  });
+
+  it('should record a runtime notice impression after telemetry initializes', () => {
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: false,
+        latestVersion: '1.9.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 7,
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
+    mockUseTelemetry.mockReturnValue({
+      identifyUser: vi.fn(),
+      isInitialized: false,
+      recordEvent: mockRecordEvent,
+    });
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(mockRecordEvent).not.toHaveBeenCalled();
+
+    mockUseTelemetry.mockReturnValue({
+      identifyUser: vi.fn(),
+      isInitialized: true,
+      recordEvent: mockRecordEvent,
+    });
+    rerender(<UpdateBanner />);
+
+    expect(mockRecordEvent).toHaveBeenCalledWith(
+      'feature_used',
+      expect.objectContaining({
+        action: 'shown',
+        feature: 'runtime_compatibility_notice',
+      }),
+    );
+  });
+
+  it('should record another impression when the same runtime notice resurfaces', () => {
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 7 as const,
+    };
+    const visibleState: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: false,
+        latestVersion: '1.9.0',
+        currentVersion: '1.9.0',
+        runtimeNotice,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimeNoticeDismissed: false,
+    };
+    mockUseVersionCheck.mockReturnValue(visibleState);
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+
+    mockUseVersionCheck.mockReturnValue({
+      ...visibleState,
+      dismissed: true,
+      runtimeNoticeDismissed: true,
+    });
+    rerender(<UpdateBanner />);
+
+    mockUseVersionCheck.mockReturnValue(visibleState);
+    rerender(<UpdateBanner />);
+
+    expect(mockRecordEvent).toHaveBeenCalledTimes(2);
   });
 
   it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {

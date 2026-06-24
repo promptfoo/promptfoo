@@ -4,14 +4,12 @@ import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
-import {
-  getRuntimeCompatibilityNotice,
-  isUpdateBlockedByRuntime,
-} from '../../runtimeCompatibility';
+import { isUpdateBlockedByRuntime } from '../../runtimeCompatibility';
 import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
+import { getRuntimeNoticeForVersionResponse } from './versionUtils';
 import type { Request, Response } from 'express';
 
 /**
@@ -99,7 +97,10 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
-    const runtimeNotice = getRuntimeCompatibilityNotice();
+    const runtimeNotice = getRuntimeNoticeForVersionResponse(
+      process.version,
+      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
+    );
 
     const response = {
       currentVersion: VERSION,
@@ -119,7 +120,10 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-    const runtimeNotice = getRuntimeCompatibilityNotice();
+    const runtimeNotice = getRuntimeNoticeForVersionResponse(
+      process.version,
+      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
+    );
 
     res.status(500).json({
       error: 'Failed to check version',

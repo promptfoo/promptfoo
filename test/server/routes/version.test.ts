@@ -1,6 +1,7 @@
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { describe, expect, it } from 'vitest';
+import { getRuntimeNoticeForVersionResponse } from '../../../src/server/routes/versionUtils';
 
 /**
  * These tests verify the logic used in src/server/routes/version.ts
@@ -116,6 +117,19 @@ describe('isUpdateAvailable', () => {
       // If somehow we get non-semver strings, use string inequality
       expect(isUpdateAvailable('abc', 'def')).toBe(true); // Different strings
       expect(isUpdateAvailable('abc', 'abc')).toBe(false); // Same strings
+    });
+  });
+});
+
+describe('getRuntimeNoticeForVersionResponse', () => {
+  it('should omit runtime notices when runtime warnings are disabled', () => {
+    expect(getRuntimeNoticeForVersionResponse('v20.20.2', true)).toBeNull();
+  });
+
+  it('should return applicable runtime notices when warnings are enabled', () => {
+    expect(getRuntimeNoticeForVersionResponse('v20.20.2', false)).toMatchObject({
+      currentMajor: 20,
+      id: 'node20-removal-2026-07-30',
     });
   });
 });
