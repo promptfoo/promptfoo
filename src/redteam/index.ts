@@ -505,7 +505,7 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
     const pluginConfig = testCase.metadata?.pluginConfig as
       | { maxCharsPerMessage?: number; minCharsPerMessage?: number }
       | undefined;
-    const violation = getGeneratedPromptLengthViolation(String(testCase.vars?.[injectVar] ?? ''), {
+    const charLimits = {
       maxCharsPerMessage:
         maxCharsPerMessage ??
         strategyConfig?.maxCharsPerMessage ??
@@ -514,7 +514,16 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
         minCharsPerMessage ??
         strategyConfig?.minCharsPerMessage ??
         pluginConfig?.minCharsPerMessage,
-    });
+    };
+    const generatedPrompts =
+      injectVar === MULTI_INPUT_VAR
+        ? Object.entries(testCase.vars ?? {})
+            .filter(([key, value]) => key !== MULTI_INPUT_VAR && typeof value === 'string')
+            .map(([, value]) => String(value))
+        : [String(testCase.vars?.[injectVar] ?? '')];
+    const violation = generatedPrompts
+      .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
+      .find((candidate) => candidate !== undefined);
     if (!violation) {
       return true;
     }

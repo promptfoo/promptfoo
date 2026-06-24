@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { getGeneratedPromptLengthViolation } from '../shared/promptLength';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -158,13 +159,33 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const next = await stepAction(applicable, injectVar, {
+    const stepConfig = {
       ...(stepObj.config || {}),
       ...(config || {}),
-    });
+    };
+    const next = await stepAction(applicable, injectVar, stepConfig);
+    const maxCharsPerMessage = stepConfig.maxCharsPerMessage as number | undefined;
+    const minCharsPerMessage = stepConfig.minCharsPerMessage as number | undefined;
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
-    current = next as TestCaseWithPlugin[];
+    current = (next as TestCaseWithPlugin[]).filter((testCase) => {
+      const violation = getGeneratedPromptLengthViolation(
+        String(testCase.vars?.[injectVar] ?? ''),
+        {
+          maxCharsPerMessage,
+          minCharsPerMessage,
+        },
+      );
+      if (!violation) {
+        return true;
+      }
+      const limitKey = violation.kind === 'max' ? 'maxCharsPerMessage' : 'minCharsPerMessage';
+      const verb = violation.kind === 'max' ? 'exceeds' : 'is below';
+      logger.warn(
+        `[Layer strategy ${stepObj.id}] Dropping generated test case that ${verb} ${limitKey}=${violation.limit} (${violation.length} chars)`,
+      );
+      return false;
+    });
   }
 
   return current;

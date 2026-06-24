@@ -185,6 +185,18 @@ describe('addLayerTestCases', () => {
     );
   });
 
+  it('should drop short outputs using layer step minCharsPerMessage', async () => {
+    const result = await addLayerTestCases(
+      [{ vars: { input: 'a' }, metadata: { pluginId: 'test-plugin' } }],
+      'input',
+      { steps: [{ id: 'base64', config: { minCharsPerMessage: 10 } }] },
+      mockStrategies,
+      mockLoadStrategy,
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it('should load and apply custom file:// strategies', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {

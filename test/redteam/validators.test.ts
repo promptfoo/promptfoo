@@ -365,6 +365,23 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should preserve layered strategy step targets in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'pii:direct', config: { minCharsPerMessage: 10 } }],
+        strategies: [
+          {
+            id: 'layer',
+            config: {
+              plugins: ['pii:direct'],
+              steps: [{ id: 'goat', config: { plugins: ['harmful:hate'], maxCharsPerMessage: 5 } }],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject layered strategy step ranges combined with plugin ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({

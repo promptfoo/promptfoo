@@ -381,6 +381,7 @@ function validateEffectiveCharsPerMessageRanges(
             config: {
               ...step.config,
               ...strategyObject.config,
+              ...(step.config?.plugins === undefined ? {} : { plugins: step.config.plugins }),
             },
           },
         }));
