@@ -268,6 +268,39 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
+    it('applies a bounded default output cap to a configured provider with no output bound', async () => {
+      const loaded = {
+        id: () => 'openai:gpt-4.1',
+        callApi: vi.fn(),
+        config: {} as Record<string, unknown>,
+      };
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+      redteamProviderManager.clearProvider();
+
+      await redteamProviderManager.getProvider({ provider: 'openai:gpt-4.1' });
+
+      expect(loaded.config.max_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(loaded.config.max_completion_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
+    });
+
+    it('respects an explicit output bound on a configured provider (does not override)', async () => {
+      const loaded = {
+        id: () => 'openai:gpt-4.1',
+        callApi: vi.fn(),
+        config: { max_tokens: 9000 } as Record<string, unknown>,
+      };
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+      redteamProviderManager.clearProvider();
+
+      await redteamProviderManager.getProvider({
+        provider: { id: 'openai:gpt-4.1', config: { max_tokens: 9000 } },
+      });
+
+      expect(loaded.config.max_tokens).toBe(9000);
+      // We must not graft a mismatched completion cap on top of the caller's bound.
+      expect(loaded.config.max_completion_tokens).toBeUndefined();
+    });
+
     it('uses small model when preferSmallModel is true', async () => {
       const result = await redteamProviderManager.getProvider({ preferSmallModel: true });
 

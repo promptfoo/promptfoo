@@ -87,6 +87,26 @@ export function resetRedteamProviderLoader(): void {
   redteamProviderLoader = defaultRedteamProviderLoader;
 }
 
+/**
+ * Apply a bounded default output cap to a loaded redteam provider so a degenerate /
+ * non-terminating generation can't run all the way to the model's token ceiling (minutes of
+ * latency, then an unparseable response). Only a DEFAULT: if the provider config already
+ * specifies any output bound (`max_tokens` or `max_completion_tokens`) it is respected and
+ * left untouched. Otherwise both forms are set so the cap applies whether the model takes
+ * `max_tokens` (e.g. gpt-4.1) or `max_completion_tokens` (reasoning / gpt-5 models).
+ */
+function applyDefaultOutputCap(provider: ApiProvider): void {
+  const config = (provider as { config?: Record<string, unknown> }).config;
+  if (!config || typeof config !== 'object') {
+    return;
+  }
+  if (config.max_tokens !== undefined || config.max_completion_tokens !== undefined) {
+    return;
+  }
+  config.max_tokens = REDTEAM_PROVIDER_MAX_TOKENS;
+  config.max_completion_tokens = REDTEAM_PROVIDER_MAX_TOKENS;
+}
+
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
@@ -106,6 +126,11 @@ async function loadRedteamProvider({
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
     ret = (await redteamProviderLoader([redteamProvider]))[0];
+    // A configured redteam provider (string id or ProviderOptions) would otherwise fall
+    // through to OPENAI_MAX_TOKENS / the model's output ceiling, so an occasional degenerate
+    // generation can run away. Apply a bounded default cap to the loaded provider unless it
+    // set one explicitly.
+    applyDefaultOutputCap(ret);
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
