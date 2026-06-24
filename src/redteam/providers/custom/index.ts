@@ -18,7 +18,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { getSessionId, isCleanRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
@@ -943,10 +943,10 @@ export class CustomProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
+    // Only complete, classifier-clean refusals may bypass semantic refusal grading.
+    if (isCleanRefusal(lastResponse)) {
       logger.debug(
-        '[Custom] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
+        '[Custom] Response is a classifier-clean refusal. Short-circuiting refusal grading.',
       );
       return [true, 'The output contains a standard refusal.'];
     }

@@ -38,7 +38,7 @@ import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   getSessionId,
-  isBasicRefusal,
+  isCleanRefusal,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -1243,10 +1243,10 @@ export class CrescendoProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
+    // Only complete, classifier-clean refusals may bypass semantic refusal grading.
+    if (isCleanRefusal(lastResponse)) {
       logger.debug(
-        '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
+        '[Crescendo] Response is a classifier-clean refusal. Short-circuiting refusal grading.',
       );
       return [true, 'The output contains a standard refusal.'];
     }

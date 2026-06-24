@@ -19,7 +19,7 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 // Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 const mockGetSessionId = vi.hoisted(() => vi.fn());
-const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
+const mockIsCleanRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
 const mockResolveTracingOptions = vi.hoisted(() =>
@@ -75,7 +75,7 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
-  isBasicRefusal: mockIsBasicRefusal,
+  isCleanRefusal: mockIsCleanRefusal,
   getSessionId: mockGetSessionId,
 }));
 
@@ -154,7 +154,7 @@ describe('HydraProvider', () => {
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
-    mockIsBasicRefusal.mockReturnValue(false);
+    mockIsCleanRefusal.mockReturnValue(false);
 
     // Reset tracing mocks to default (disabled) state
     mockResolveTracingOptions.mockReturnValue({
@@ -734,7 +734,7 @@ describe('HydraProvider', () => {
       });
 
       // First response is a refusal, second is not
-      mockIsBasicRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
+      mockIsCleanRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -763,7 +763,7 @@ describe('HydraProvider', () => {
     it('should stop when max backtracks reached', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
-      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
+      mockIsCleanRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -800,7 +800,7 @@ describe('HydraProvider', () => {
     it('should not backtrack in stateful mode', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
-      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
+      mockIsCleanRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',

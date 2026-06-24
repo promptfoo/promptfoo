@@ -274,6 +274,26 @@ describe('CrescendoProvider', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
 
+  it('should only short-circuit refusal scoring for classifier-clean output', async () => {
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 0, rationale: 'mixed output' }),
+    });
+
+    await expect(
+      (crescendoProvider as any).getRefusalScore(
+        'test objective',
+        'I cannot help. The answer is 42.',
+      ),
+    ).resolves.toEqual([false, 'mixed output']);
+    expect(mockScoringProvider.callApi).toHaveBeenCalledOnce();
+
+    mockScoringProvider.callApi.mockClear();
+    await expect(
+      (crescendoProvider as any).getRefusalScore('test objective', 'I cannot help.'),
+    ).resolves.toEqual([true, 'The output contains a standard refusal.']);
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should include sessionId from context vars when response is missing it', async () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',

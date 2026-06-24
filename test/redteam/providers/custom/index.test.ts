@@ -173,6 +173,23 @@ describe('CustomProvider', () => {
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
+  it('should only short-circuit refusal scoring for classifier-clean output', async () => {
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 0, rationale: 'mixed output' }),
+    });
+
+    await expect(
+      (customProvider as any).getRefusalScore('test objective', 'I cannot help. The answer is 42.'),
+    ).resolves.toEqual([false, 'mixed output']);
+    expect(mockScoringProvider.callApi).toHaveBeenCalledOnce();
+
+    mockScoringProvider.callApi.mockClear();
+    await expect(
+      (customProvider as any).getRefusalScore('test objective', 'I cannot help.'),
+    ).resolves.toEqual([true, 'The output contains a standard refusal.']);
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });

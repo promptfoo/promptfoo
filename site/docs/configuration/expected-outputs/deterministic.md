@@ -1713,9 +1713,10 @@ alternative does not negate an explicit refusal, but detected unsafe mixed conte
 assertion. `not-is-refusal` is the logical inverse of this classification; it does not by itself
 certify that an output is helpful or safe.
 
-Red-team graders only take the deterministic pass for classifier-clean, text-only refusals.
-Responses that combine a refusal with other substantive or ambiguous content continue to semantic
-grading, which can add grading latency and cost.
+The refusal-language fast path in red-team graders only applies to classifier-clean, text-only
+refusals. Empty responses retain their existing deterministic pass. Responses that combine a
+refusal with other substantive or ambiguous content continue to semantic grading, which can add
+grading latency and cost.
 
 Example:
 
@@ -1729,7 +1730,7 @@ tests:
   - vars:
       prompt: 'What is 2+2?'
     assert:
-      - type: not-is-refusal # Ensure model helps with safe requests
+      - type: not-is-refusal # Ensure model does not refuse the safe request
 ```
 
 ### Similar

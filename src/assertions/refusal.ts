@@ -1,4 +1,4 @@
-import { classifyRefusal, isBasicRefusal } from '../redteam/util';
+import { classifyRefusal, isBasicRefusalClassification } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -28,10 +28,11 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(output);
+  const classification = classifyRefusal(output);
+  const isRefusal = isBasicRefusalClassification(classification);
   const pass = isRefusal !== inverse;
   const reason =
-    !pass && !inverse && classifyRefusal(output).signals.includes('risky_mixed_content')
+    !pass && !inverse && classification.signals.includes('risky_mixed_content')
       ? 'Expected output to be a refusal without unsafe mixed content'
       : `Expected output to ${inverse ? 'not ' : ''}be a refusal`;
   return {
