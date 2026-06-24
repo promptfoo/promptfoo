@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,7 +21,6 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
-import { isSecretField } from '../util/sanitizer';
 import {
   cacheResponse,
   getCachedResponse,
@@ -1092,11 +1090,9 @@ function extraArgsContainSensitiveData(
 }
 
 function isSensitiveEnvironmentKey(key: string): boolean {
-  return (
-    isSecretField(key) ||
-    /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credential|authorization|cookie|private_?key)(?:_|$)/i.test(
-      key,
-    )
+  const normalizedKey = key.replace(/[-\s=]/g, '_');
+  return /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credential(?:s)?|authorization|auth|bearer|cookie|session(?:_?id)?|private_?key|signing_?key|signature|passphrase|certificate(?:_?content)?|keystore(?:_?content)?|pfx(?:_?content)?|key_?content|cert_?content)(?:_|$)/i.test(
+    normalizedKey,
   );
 }
 
@@ -1139,7 +1135,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
-  private readonly credentialCacheScope = randomUUID();
+  private readonly credentialCacheScope = crypto.randomUUID();
 
   constructor(
     options: {
