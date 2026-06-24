@@ -97,7 +97,10 @@ describe('LocalFileSystemProvider', () => {
     expect(fs.existsSync(path.join(tempDir, 'audio', `${contentHash}.wav`))).toBe(false);
   });
 
-  it('recovers from a legacy hash-index entry whose file was overwritten', async () => {
+  it.each([
+    'mismatched',
+    'stale',
+  ] as const)('recovers from a legacy hash-index entry with %s sidecar metadata', async (sidecarState) => {
     tempDir = createTempDir('promptfoo-media-');
     const payload = Buffer.from('original media');
     const overwrittenPayload = Buffer.from('collision replacement');
@@ -108,7 +111,12 @@ describe('LocalFileSystemProvider', () => {
 
     fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
     fs.writeFileSync(legacyPath, overwrittenPayload);
-    fs.writeFileSync(`${legacyPath}.meta.json`, JSON.stringify({ contentHash: overwrittenHash }));
+    fs.writeFileSync(
+      `${legacyPath}.meta.json`,
+      JSON.stringify({
+        contentHash: sidecarState === 'stale' ? contentHash : overwrittenHash,
+      }),
+    );
     fs.writeFileSync(
       path.join(tempDir, 'hash-index.json'),
       JSON.stringify({ [contentHash]: legacyKey, [overwrittenHash]: legacyKey }),
@@ -130,5 +138,34 @@ describe('LocalFileSystemProvider', () => {
     ) as Record<string, string>;
     expect(hashIndex[contentHash]).toBe(result.ref.key);
     expect(hashIndex[overwrittenHash]).toBe(legacyKey);
+  });
+
+  it('rejects a full-hash index entry that points at a different digest', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const payload = Buffer.from('wanted media');
+    const otherPayload = Buffer.from('other media');
+    const contentHash = createHash('sha256').update(payload).digest('hex');
+    const otherHash = createHash('sha256').update(otherPayload).digest('hex');
+    const otherKey = `audio/${otherHash}.wav`;
+    const otherPath = path.join(tempDir, otherKey);
+
+    fs.mkdirSync(path.dirname(otherPath), { recursive: true });
+    fs.writeFileSync(otherPath, otherPayload);
+    fs.writeFileSync(`${otherPath}.meta.json`, JSON.stringify({ contentHash: otherHash }));
+    fs.writeFileSync(
+      path.join(tempDir, 'hash-index.json'),
+      JSON.stringify({ [contentHash]: otherKey }),
+    );
+
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const result = await provider.store(payload, {
+      contentType: 'audio/wav',
+      mediaType: 'audio',
+    });
+
+    expect(result.deduplicated).toBe(false);
+    expect(result.ref.key).toBe(`audio/${contentHash}.wav`);
+    expect(await provider.retrieve(result.ref.key)).toEqual(payload);
+    expect(fs.readFileSync(otherPath)).toEqual(otherPayload);
   });
 });

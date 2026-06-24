@@ -23,7 +23,7 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
-const LEGACY_MEDIA_FILENAME_REGEX = /^[a-fA-F0-9]{12}\.[a-zA-Z0-9]+$/;
+const MEDIA_FILENAME_REGEX = /^([a-fA-F0-9]{12}|[a-fA-F0-9]{64})\.[a-zA-Z0-9]+$/;
 
 /**
  * Get file extension from content type
@@ -126,24 +126,36 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   /**
-   * Legacy keys can share a filename across distinct full hashes. Confirm the
-   * sidecar still describes the indexed content before treating one as a hit.
+   * Confirm an indexed key still represents the requested content hash.
    */
-  private async legacyKeyMatchesContentHash(key: string, contentHash: string): Promise<boolean> {
-    if (!LEGACY_MEDIA_FILENAME_REGEX.test(path.basename(key))) {
-      return true;
+  private async indexedKeyMatchesContentHash(key: string, contentHash: string): Promise<boolean> {
+    const filenameMatch = MEDIA_FILENAME_REGEX.exec(path.basename(key));
+    if (!filenameMatch) {
+      return false;
+    }
+
+    const filenameHash = filenameMatch[1].toLowerCase();
+    if (filenameHash.length === 64) {
+      return filenameHash === contentHash;
     }
 
     try {
       const metadata = JSON.parse(
         await fsPromises.readFile(`${this.getFilePath(key)}.meta.json`, 'utf8'),
       ) as unknown;
-      return (
+      if (
         typeof metadata === 'object' &&
         metadata !== null &&
         'contentHash' in metadata &&
         metadata.contentHash === contentHash
-      );
+      ) {
+        const fileHash = crypto.createHash('sha256');
+        for await (const chunk of fs.createReadStream(this.getFilePath(key))) {
+          fileHash.update(chunk);
+        }
+        return fileHash.digest('hex') === contentHash;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -293,10 +305,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async findByHash(contentHash: string): Promise<string | null> {
     const key = this.hashIndex.get(contentHash);
     if (key && (await this.exists(key))) {
-      if (await this.legacyKeyMatchesContentHash(key, contentHash)) {
+      if (await this.indexedKeyMatchesContentHash(key, contentHash)) {
         return key;
       }
-      logger.warn('[LocalStorage] Ignoring mismatched legacy hash index entry', {
+      logger.warn('[LocalStorage] Ignoring inconsistent hash index entry', {
         contentHash,
         key,
       });
