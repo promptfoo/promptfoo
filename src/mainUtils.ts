@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getGlobalDispatcher } from 'undici';
+import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
 import telemetry from './telemetry';
@@ -168,7 +169,11 @@ export function addCommonOptionsRecursively(command: Command) {
   }
 
   command.hook('preAction', (thisCommand, actionCommand) => {
-    if (thisCommand.opts().verbose) {
+    const keepStructuredCodeScanOutputMuted = requestsStructuredCodeScanOutput(
+      process.argv.slice(2),
+    );
+
+    if (thisCommand.opts().verbose && !keepStructuredCodeScanOutputMuted) {
       setLogLevel('debug');
       logger.debug('Verbose mode enabled via --verbose flag');
     }
@@ -241,7 +246,7 @@ export const shutdownGracefully = async (): Promise<void> => {
     // Can't log since logger might be closed.
   }
 
-  closeDbIfOpen();
+  await closeDbIfOpen();
   clearAgentCache();
 
   try {

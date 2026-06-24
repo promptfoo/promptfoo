@@ -122,7 +122,11 @@ vi.mock('./CompareEvalMenuItem', () => ({
 }));
 
 vi.mock('./EvalSelectorDialog', () => ({
-  default: () => <div>Eval Selector Dialog</div>,
+  default: ({ focusedDatasetId }: { focusedDatasetId?: string | null }) => (
+    <div data-testid="eval-selector-dialog" data-focused-dataset-id={focusedDatasetId ?? ''}>
+      Eval Selector Dialog
+    </div>
+  ),
 }));
 
 vi.mock('./EvalSelectorKeyboardShortcut', () => ({
@@ -384,6 +388,30 @@ describe('ResultsView Share Button', () => {
       // Use getAllByText since there may be multiple Delete elements (menu item + dialog)
       expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
     });
+  });
+
+  it('passes the current dataset to the comparison eval selector', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={[
+          {
+            ...mockRecentEvals[0],
+            evalId: 'test-eval-id',
+            datasetId: 'dataset-for-comparison',
+          },
+        ]}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByTestId('eval-selector-dialog')
+        .some(
+          (dialog) => dialog.getAttribute('data-focused-dataset-id') === 'dataset-for-comparison',
+        ),
+    ).toBe(true);
   });
 
   it('carries the source eval id when editing and rerunning a redacted config', async () => {

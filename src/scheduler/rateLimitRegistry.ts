@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
-import { sanitizeUrl } from '../util/sanitizer';
+import { sanitizeProviderIdForLog } from '../util/provider';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
@@ -197,10 +197,4 @@ function getProviderMaxRetries(provider: ApiProvider): number | undefined {
     },
   );
   return undefined;
-}
-
-function sanitizeProviderIdForLog(providerId: string): string {
-  return providerId.includes('://') || providerId.startsWith('/')
-    ? sanitizeUrl(providerId)
-    : providerId;
 }
