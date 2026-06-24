@@ -1,11 +1,13 @@
 import {
   createMockResponse,
+  getCallApiMock,
   mockCallApiResponse,
   mockCallApiResponseOnce,
   rejectCallApi,
   rejectCallApiOnce,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,12 +24,11 @@ describe('useVersionCheck', () => {
   beforeEach(() => {
     resetCallApiMock();
     localStorage.clear();
-    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
-    // Only use fake timers in specific tests that need timer control
+    // Only use fake timers in specific tests that need timer control.
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    restoreTestTimers();
     vi.restoreAllMocks();
   });
 
@@ -68,8 +69,8 @@ describe('useVersionCheck', () => {
   });
 
   it('should refresh runtime policy time when the initial response crosses the cutoff', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-29T23:59:59.900Z'));
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-29T23:59:59.900Z'));
     const runtimeNotice = {
       id: 'node20-removal-2026-07-30',
       kind: 'runtime_deprecation' as const,
@@ -83,7 +84,7 @@ describe('useVersionCheck', () => {
       reminderIntervalDays: 1 as const,
     };
     let resolveVersion!: (response: Response) => void;
-    vi.mocked(callApi).mockImplementationOnce(
+    getCallApiMock().mockImplementationOnce(
       () =>
         new Promise<Response>((resolve) => {
           resolveVersion = resolve;
@@ -93,7 +94,7 @@ describe('useVersionCheck', () => {
     const { result } = renderHook(() => useVersionCheck());
     expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-29T23:59:59.900Z'));
 
-    vi.setSystemTime(new Date('2026-07-30T00:00:00.100Z'));
+    timers.setSystemTime(new Date('2026-07-30T00:00:00.100Z'));
     await act(async () => {
       resolveVersion(
         createMockResponse({
@@ -240,8 +241,8 @@ describe('useVersionCheck', () => {
   });
 
   it('should re-enable a snoozed runtime notice without reloading the page', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
     const runtimeNotice = {
       id: 'node20-removal-2026-07-30',
       kind: 'runtime_deprecation' as const,
@@ -268,7 +269,7 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimeNoticeDismissed).toBe(true);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(7 * 24 * 60 * 60 * 1000);
+      await timers.advanceByAsync(7 * 24 * 60 * 60 * 1000);
     });
 
     expect(callApi).toHaveBeenCalledTimes(2);
@@ -276,8 +277,8 @@ describe('useVersionCheck', () => {
   });
 
   it('should refetch runtime policy when the support cutoff is reached', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
     const runtimeNotice = {
       id: 'node20-removal-2026-07-30',
       kind: 'runtime_deprecation' as const,
@@ -310,7 +311,7 @@ describe('useVersionCheck', () => {
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60 * 1000);
+      await timers.advanceByAsync(60 * 1000);
     });
 
     expect(callApi).toHaveBeenCalledTimes(2);
@@ -318,8 +319,8 @@ describe('useVersionCheck', () => {
   });
 
   it('should advance runtime policy time when the cutoff refresh fails', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
     const runtimeNotice = {
       id: 'node20-removal-2026-07-30',
       kind: 'runtime_deprecation' as const,
@@ -351,7 +352,7 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimeNoticeDismissed).toBe(true);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60 * 1000);
+      await timers.advanceByAsync(60 * 1000);
     });
 
     expect(callApi).toHaveBeenCalledTimes(2);
@@ -361,14 +362,14 @@ describe('useVersionCheck', () => {
 
     unmount();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await timers.advanceByAsync(5 * 60 * 1000);
     });
     expect(callApi).toHaveBeenCalledTimes(2);
   });
 
   it('should preserve a retry after the refresh effect is replaced', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
     const runtimeNotice = {
       id: 'node20-removal-2026-07-30',
       kind: 'runtime_deprecation' as const,
@@ -393,7 +394,7 @@ describe('useVersionCheck', () => {
       runtimeNotice,
     });
     let rejectRefresh!: (reason?: unknown) => void;
-    vi.mocked(callApi).mockImplementationOnce(
+    getCallApiMock().mockImplementationOnce(
       () =>
         new Promise<Response>((_resolve, reject) => {
           rejectRefresh = reject;
@@ -412,7 +413,7 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimeNoticeDismissed).toBe(true);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60 * 1000);
+      await timers.advanceByAsync(60 * 1000);
     });
     expect(callApi).toHaveBeenCalledTimes(2);
     expect(result.current.runtimeNoticeDismissed).toBe(false);
@@ -421,7 +422,7 @@ describe('useVersionCheck', () => {
       rejectRefresh(new Error('Policy refresh failed'));
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      await timers.advanceByAsync(5 * 60 * 1000);
     });
 
     expect(callApi).toHaveBeenCalledTimes(3);
