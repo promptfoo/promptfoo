@@ -69,7 +69,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -433,6 +433,12 @@ function getRepeatCacheNamespace(
   return undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -588,16 +594,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function isAbortShapedError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
-}
-
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
 
   if (aborted) {
     // Skip stack serialization on the abort path — debug logs usually go
@@ -655,6 +657,17 @@ interface ProviderCallResult {
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
 
+function mergeProviderPromptConfig(
+  promptConfig: Prompt['config'],
+  testOptions: AtomicTestCase['options'],
+): Prompt['config'] {
+  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  return {
+    ...(promptConfig ?? {}),
+    ...providerOptions,
+  };
+}
+
 function createRunEvalState({
   provider,
   prompt,
@@ -667,10 +680,7 @@ function createRunEvalState({
   const setup = createRunEvalSetup({
     provider,
     prompt,
-    promptConfig: {
-      ...(prompt.config ?? {}),
-      ...(test.options ?? {}),
-    },
+    promptConfig: mergeProviderPromptConfig(prompt.config, test.options),
     vars,
   });
 
@@ -809,10 +819,7 @@ async function renderRunEvalPrompt({
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
-  const promptConfig = {
-    ...(promptForRender.config ?? {}),
-    ...(test.options ?? {}),
-  };
+  const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
   setup.prompt.raw = renderedPrompt;
   return {
@@ -2182,6 +2189,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
+      ...data.options,
       ...test.options,
     },
     assert: [...(scenarioData.assert || []), ...(test.assert || [])],
@@ -2398,13 +2406,19 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
-  for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
+  const globalRepeat = normalizeRepeatCount(options.repeat);
+  const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
+  const effectiveOptions = {
+    ...options,
+    repeat: testRepeat,
+  };
+  for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
     for (const vars of varCombinations) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
         evalId,
-        options,
+        options: effectiveOptions,
         promptIdCache,
         promptIndexMap,
         promptPrefix,

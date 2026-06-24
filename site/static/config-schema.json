@@ -371,6 +371,9 @@
         "MINIMAX_API_KEY": {
           "type": "string"
         },
+        "MOONSHOT_API_KEY": {
+          "type": "string"
+        },
         "MLFLOW_GATEWAY_API_KEY": {
           "type": "string"
         },
@@ -1184,6 +1187,11 @@
         },
         "runSerially": {
           "type": "boolean"
+        },
+        "repeat": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": {}
@@ -1886,6 +1894,9 @@
                       "type": "string"
                     },
                     "MINIMAX_API_KEY": {
+                      "type": "string"
+                    },
+                    "MOONSHOT_API_KEY": {
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_API_KEY": {
