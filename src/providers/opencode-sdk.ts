@@ -707,10 +707,6 @@ function convertToolsConfigToRuleset(config: OpenCodeToolConfig): OpenCodePermis
   }));
 }
 
-function hasExplicitToolRules(config: OpenCodeToolConfig | undefined): boolean {
-  return config !== undefined && Object.values(config).some((value) => value !== undefined);
-}
-
 function openCodeMcpContainsCacheSensitiveData(
   config: Record<string, OpenCodeMCPServerConfig> | undefined,
 ): boolean {
@@ -987,11 +983,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   private buildEffectiveToolsConfig(config: OpenCodeSDKConfig): OpenCodeToolConfig {
     const customAgent = config.agent ? undefined : config.custom_agent;
-    return {
-      ...this.buildToolsConfig({ ...config, tools: undefined }),
-      ...this.buildToolsConfig(config, false),
-      ...this.buildToolsConfig({ ...config, tools: customAgent?.tools }, false),
-    };
+    const tools = new Map<string, boolean>();
+    for (const [tool, enabled] of Object.entries(this.buildToolsConfig(config))) {
+      if (enabled !== undefined) {
+        tools.set(tool, enabled);
+      }
+    }
+    for (const [tool, enabled] of Object.entries(
+      this.buildToolsConfig({ ...config, tools: customAgent?.tools }, false),
+    )) {
+      if (enabled !== undefined) {
+        tools.delete(tool);
+        tools.set(tool, enabled);
+      }
+    }
+    return Object.fromEntries(tools);
   }
 
   private buildConfiguredPermissionRules(config: OpenCodeSDKConfig): OpenCodePermissionRule[] {
@@ -1350,17 +1356,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return;
     }
 
-    const customAgent = config.agent ? undefined : config.custom_agent;
     const hasPermissionRules = this.buildConfiguredPermissionRules(config).length > 0;
-    const hasToolRules =
-      hasExplicitToolRules(customAgent?.tools) || hasExplicitToolRules(config.tools);
-    if (
-      this.opencodeModule.apiVersion === 'v2' &&
-      config.session_id &&
-      (hasPermissionRules || hasToolRules)
-    ) {
+    if (this.opencodeModule.apiVersion === 'v2' && config.session_id && hasPermissionRules) {
       throw new Error(
-        'OpenCode SDK v2 applies tool and permission policies when sessions are created; explicit session_id resumes cannot safely rebind them.',
+        'OpenCode SDK v2 explicit session_id resumes cannot safely rebind permission rules; create a new session to change permission.',
       );
     }
 
@@ -1464,11 +1463,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (config.variant) {
       promptBody.variant = config.variant;
     }
-    // The public v1 prompt API can atomically replace boolean tool rules, but
-    // cannot represent pattern-based permissions. Static permission policies
-    // are applied by the locally started server instead.
+    // The prompt API atomically replaces boolean tool rules. V1 uses it for
+    // every supported call; v2 uses it for explicit resumes because new v2
+    // sessions receive the full permission ruleset when they are created.
     if (
-      this.opencodeModule.apiVersion === 'v1' &&
+      (this.opencodeModule.apiVersion === 'v1' || Boolean(config.session_id)) &&
       this.buildConfiguredPermissionRules(config).length === 0
     ) {
       promptBody.tools = this.buildEffectiveToolsConfig(config);

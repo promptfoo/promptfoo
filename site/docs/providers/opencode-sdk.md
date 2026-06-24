@@ -461,12 +461,12 @@ providers:
       session_id: previous-session-id
 ```
 
-OpenCode v2 only appends permission updates to a session; it cannot atomically replace the existing
-rules. Promptfoo therefore rejects non-empty top-level or custom-agent `tools` or `permission`
-together with `session_id` on v2 rather than risk retaining authority omitted from the new config.
-Configure the policy when creating the session, or resume a session whose existing policy is
-already appropriate. Promptfoo omits prompt-level tools on v2 so a resumed prompt cannot replace
-the stored rules.
+OpenCode v2 accepts boolean `tools` on each prompt and atomically replaces the session's stored
+permission rules before execution. Promptfoo therefore reapplies its wildcard-deny baseline,
+read-only defaults, and configured top-level or custom-agent `tools` when resuming with
+`session_id`. Granular `permission` rules cannot be represented by that prompt contract, so
+Promptfoo rejects non-empty top-level or custom-agent `permission` together with `session_id` on
+v2. Configure granular rules when creating the session.
 
 OpenCode v1 can atomically replace the tool map on each prompt, so `tools` remains supported with
 `session_id`. Its public SDK cannot atomically apply `permission` rules on an existing

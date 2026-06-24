@@ -1005,6 +1005,7 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             sessionID: 'existing-session',
+            tools: { '*': false },
           }),
         );
       });
@@ -1020,36 +1021,139 @@ describe('OpenCodeSDKProvider', () => {
 
         await expect(provider.callApi('Test prompt')).resolves.toEqual({
           error:
-            'Error calling OpenCode SDK: OpenCode SDK v2 applies tool and permission policies when sessions are created; explicit session_id resumes cannot safely rebind them.',
+            'Error calling OpenCode SDK: OpenCode SDK v2 explicit session_id resumes cannot safely rebind permission rules; create a new session to change permission.',
         });
-        expect(mockCreateOpencode).not.toHaveBeenCalled();
-        expect(mockSessionPrompt).not.toHaveBeenCalled();
-      });
-
-      it('should reject v2 session resumes that try to rebind tools', async () => {
-        const provider = new OpenCodeSDKProvider({
-          config: {
-            session_id: 'existing-session',
-            tools: { bash: false },
-          },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        const result = await provider.callApi('Test prompt');
-
-        expect(result.error).toMatch(/cannot safely rebind/);
         expect(mockCreateOpencode).not.toHaveBeenCalled();
         expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
 
       it.each([
-        { tools: { bash: true } },
-        { permission: { bash: 'deny' as const } },
-      ])('should reject v2 session resumes with custom-agent policy %#', async (customPolicy) => {
+        false,
+        true,
+      ])('should reapply v2 tool policy when resuming a session with bash=%s', async (bash) => {
         const provider = new OpenCodeSDKProvider({
           config: {
             session_id: 'existing-session',
-            custom_agent: { description: 'restricted agent', ...customPolicy },
+            tools: { bash },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false, bash },
+          }),
+        );
+      });
+
+      it('should reapply custom-agent tool policy when resuming a v2 session', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            custom_agent: { description: 'restricted agent', tools: { bash: true } },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false, bash: true },
+          }),
+        );
+      });
+
+      it.each([
+        {
+          tools: { bash: true },
+          customTools: { '*': false },
+          expected: [
+            ['bash', true],
+            ['*', false],
+          ],
+        },
+        {
+          tools: { bash: false },
+          customTools: { '*': true },
+          expected: [
+            ['bash', false],
+            ['*', true],
+          ],
+        },
+      ])('should preserve custom-agent-last tool ordering when resuming %#', async ({
+        tools,
+        customTools,
+        expected,
+      }) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            tools,
+            custom_agent: { description: 'ordered policy', tools: customTools },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(Object.entries(mockSessionPrompt.mock.calls[0][0].tools)).toEqual(expected);
+      });
+
+      it.each([
+        {
+          tools: { '*': false },
+          expected: [
+            ['*', false],
+            ['glob', true],
+            ['grep', true],
+            ['list', true],
+            ['read', true],
+          ],
+        },
+        {
+          tools: { read: false, '*': true },
+          expected: [
+            ['*', true],
+            ['glob', true],
+            ['grep', true],
+            ['list', true],
+            ['read', false],
+          ],
+        },
+      ])('should preserve new-session default and top-level ordering when resuming %#', async ({
+        tools,
+        expected,
+      }) => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            working_dir: '/test/dir',
+            tools,
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(Object.entries(mockSessionPrompt.mock.calls[0][0].tools)).toEqual(expected);
+      });
+
+      it('should reject v2 session resumes with custom-agent permission policy', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            custom_agent: {
+              description: 'restricted agent',
+              permission: { bash: 'deny' },
+            },
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
@@ -1060,11 +1164,14 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
 
-      it('should allow v2 session resumes with empty permission configs', async () => {
+      it.each([
+        { permission: {} },
+        { tools: {} },
+      ])('should apply defaults to v2 session resumes with empty policy %#', async (emptyPolicy) => {
         const provider = new OpenCodeSDKProvider({
           config: {
             session_id: 'existing-session',
-            permission: {},
+            ...emptyPolicy,
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
@@ -1074,44 +1181,56 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             sessionID: 'existing-session',
+            tools: { '*': false },
           }),
         );
-        expect(mockSessionPrompt.mock.calls[0][0]).not.toHaveProperty('tools');
       });
 
-      it('does not serve a cached v1 response for a rejected v2 policy rebind', async () => {
-        enableCache();
-        const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
-        });
-        const config = { session_id: 'existing-session', tools: { bash: false } };
-        const v1Provider = new OpenCodeSDKProvider({
-          config,
+      it('should reapply read-only defaults when resuming a v2 session', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            working_dir: '/test/dir',
+          },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
-        await expect(v1Provider.callApi('same prompt')).resolves.toMatchObject({
-          output: 'Test response',
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: {
+              '*': false,
+              glob: true,
+              grep: true,
+              list: true,
+              read: true,
+            },
+          }),
+        );
+      });
+
+      it('should reapply defaults when resuming through a remote v2 client', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'https://opencode.example.test',
+            session_id: 'existing-session',
+          },
         });
 
-        vi.mocked(importModule).mockResolvedValue({
-          createOpencode: mockCreateOpencode,
-          createOpencodeClient: mockCreateOpencodeClient,
-        });
-        const v2Provider = new OpenCodeSDKProvider({
-          config,
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        const result = await v2Provider.callApi('same prompt');
+        await provider.callApi('Test prompt');
 
-        expect(result.error).toMatch(/cannot safely rebind/);
-        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+        expect(mockCreateOpencodeClient).toHaveBeenCalledWith({
+          baseUrl: 'https://opencode.example.test',
+        });
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+            tools: { '*': false },
+          }),
+        );
       });
 
       it.each([
