@@ -288,6 +288,7 @@ const SCENARIO_CONFIG_CHILD_CONTEXTS: Partial<
     provider: 'provider',
     options: 'scenario-test-options',
     assert: 'scenario-test-assertions',
+    assertScoringFunction: 'assertion',
   },
   'scenario-test-options': { provider: 'provider' },
   'scenario-test-assertions': {

@@ -3,10 +3,16 @@ import * as path from 'path';
 
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import { z } from 'zod';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { isScenarioConfigValuesRef, TestCaseSchema } from '../../types/index';
-import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../file';
-import { normalizeFilePath } from '../functions/loadFunction';
+import {
+  getNunjucksEngineForFilePath,
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+} from '../file';
+import { normalizeFilePath, parseFileUrl } from '../functions/loadFunction';
+import { renderEnvOnlyInObject } from '../render';
 import { ConfigResolutionError } from './errors';
 
 import type {
@@ -140,9 +146,9 @@ export function resolveFileRefFromBase(
   const renderedFileRef = fileRef.includes('{')
     ? getNunjucksEngineForFilePath(envOverrides).renderString(fileRef, {})
     : fileRef;
-  const filePath = fileRefToPath(renderedFileRef);
+  const { filePath, functionName } = parseFileUrl(renderedFileRef);
   const resolvedPath = resolvePathFromBase(basePath, filePath);
-  return `${FILE_REF_PREFIX}${resolvedPath}`;
+  return `${FILE_REF_PREFIX}${resolvedPath}${functionName ? `:${functionName}` : ''}`;
 }
 
 /**
@@ -308,13 +314,84 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
+function getSourceEnv(envOverrides?: EnvOverrides): EnvOverrides {
+  const processEnvVarsDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  return {
+    ...(processEnvVarsDisabled ? {} : process.env),
+    ...(envOverrides ?? {}),
+  };
+}
+
+function isLiveProvider(value: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'id') &&
+    Object.prototype.hasOwnProperty.call(value, 'callApi') &&
+    typeof value.id === 'function' &&
+    typeof value.callApi === 'function'
+  );
+}
+
+function renderSourceEnvTemplates<T>(
+  value: T,
+  sourceEnv: EnvOverrides,
+  seen = new WeakMap<object, unknown>(),
+): T {
+  if (typeof value === 'string') {
+    return renderEnvOnlyInObject(value, sourceEnv, true) as T;
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const cached = seen.get(value);
+  if (cached !== undefined) {
+    return cached as T;
+  }
+  if (Array.isArray(value)) {
+    const rendered: unknown[] = [];
+    seen.set(value, rendered);
+    let changed = false;
+    for (const item of value) {
+      const renderedItem = renderSourceEnvTemplates(item, sourceEnv, seen);
+      changed ||= renderedItem !== item;
+      rendered.push(renderedItem);
+    }
+    return (changed ? rendered : value) as T;
+  }
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (isLiveProvider(record)) {
+    return value;
+  }
+
+  const rendered: Record<string, unknown> = {};
+  seen.set(value, rendered);
+  let changed = false;
+  for (const [key, nested] of Object.entries(record)) {
+    const renderedValue = renderSourceEnvTemplates(nested, sourceEnv, seen);
+    changed ||= renderedValue !== nested;
+    defineRecordProperty(rendered, key, renderedValue);
+  }
+  return (changed ? rendered : value) as T;
+}
+
 function resolveScenarioProviderRef(
   basePath: string,
   provider: unknown,
   envOverrides?: EnvOverrides,
 ): unknown {
+  const sourceEnv = getSourceEnv(envOverrides);
   if (typeof provider === 'string') {
-    return resolveFileRefFromBase(basePath, provider, envOverrides);
+    return resolveFileRefFromBase(
+      basePath,
+      renderSourceEnvTemplates(provider, sourceEnv),
+      envOverrides,
+    );
   }
   if (!isPlainRecord(provider)) {
     return provider;
@@ -328,13 +405,16 @@ function resolveScenarioProviderRef(
     return provider;
   }
   if (typeof providerId === 'string') {
-    return resolveNestedFileRefs(basePath, record, envOverrides);
+    const renderedRecord = renderSourceEnvTemplates(record, sourceEnv);
+    return resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
   }
 
   let resolved: Record<string, unknown> | undefined;
   for (const [key, value] of Object.entries(record)) {
-    const resolvedKey = resolveFileRefFromBase(basePath, key, envOverrides);
-    const resolvedValue = resolveNestedFileRefs(basePath, value, envOverrides);
+    const renderedKey = renderSourceEnvTemplates(key, sourceEnv);
+    const renderedValue = renderSourceEnvTemplates(value, sourceEnv);
+    const resolvedKey = resolveFileRefFromBase(basePath, renderedKey, envOverrides);
+    const resolvedValue = resolveNestedFileRefs(basePath, renderedValue, envOverrides);
     if (resolvedKey !== key || resolvedValue !== value) {
       resolved ??= { ...record };
       delete resolved[key];
@@ -462,6 +542,16 @@ export function resolveScenarioTestCaseProviderRefs<T>(
   envOverrides?: EnvOverrides,
 ): T {
   return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
+}
+
+function materializeScenarioConfigRow(
+  basePath: string,
+  row: unknown,
+  envOverrides?: EnvOverrides,
+): Scenario['config'][number] {
+  const resolvedFileRefs = resolveNestedFileRefs(basePath, row, envOverrides);
+  const loadedFileRefs = maybeLoadConfigFromExternalFile(resolvedFileRefs, 'scenario-test');
+  return resolveScenarioConfigRowProviders(basePath, loadedFileRefs, envOverrides);
 }
 
 export function resolveScenarioFileRefs(
@@ -746,7 +836,7 @@ export async function expandScenarioConfigValues(
       validateMatrixRows(rows, concreteRef);
       for (const row of rows) {
         expandedConfig.push(
-          resolveScenarioConfigRowProviders(
+          materializeScenarioConfigRow(
             path.dirname(valuesFilePath),
             row,
             sourceContext.envOverrides,

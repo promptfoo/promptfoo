@@ -75,6 +75,12 @@ describe('scenarioMatrix (real filesystem)', () => {
       ).toBe(`file://${matrixPath}`);
     });
 
+    it('preserves executable function names while resolving refs', () => {
+      expect(resolveFileRefFromBase('/base/dir', 'file://score.js:customScore')).toBe(
+        `file://${path.resolve('/base/dir', 'score.js')}:customScore`,
+      );
+    });
+
     it('uses explicit config env instead of process env', () => {
       vi.stubEnv('PROMPTFOO_SCENARIO_MATRIX_TEST_PATH', '/wrong/process/path.yaml');
 
@@ -263,6 +269,69 @@ describe('scenarioMatrix (real filesystem)', () => {
           provider: `file://${path.join(tmpDir, 'matrices/providers/matrix.cjs')}`,
         },
       ]);
+    });
+
+    it('materializes matrix row file refs against the matrix file', async () => {
+      const matrixPath = write(
+        'matrices/rows.yaml',
+        `- vars:
+    case: files
+  providerOutput: file://output.txt
+  assertScoringFunction: file://score.js:customScore
+  assert:
+    - type: contains
+      value: file://expected.txt
+    - type: javascript
+      value: file://script.js
+`,
+      );
+      write('matrices/output.txt', 'MODEL_OUTPUT');
+      write('matrices/expected.txt', 'EXPECTED');
+      write('matrices/script.js', 'module.exports = () => true;\n');
+
+      const [expanded] = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
+      const matrixDir = path.dirname(matrixPath);
+
+      expect(expanded).toEqual({
+        vars: { case: 'files' },
+        providerOutput: 'MODEL_OUTPUT',
+        assertScoringFunction: `file://${path.join(matrixDir, 'score.js')}:customScore`,
+        assert: [
+          { type: 'contains', value: 'EXPECTED' },
+          { type: 'javascript', value: `file://${path.join(matrixDir, 'script.js')}` },
+        ],
+      });
+    });
+
+    it('renders matrix provider templates with the source env', async () => {
+      const previousConfig = cliState.config;
+      cliState.config = { env: { PROVIDER_ID: 'wrong-provider' } };
+      const matrixPath = write(
+        'matrices/providers.yaml',
+        `- vars:
+    case: env-provider
+  provider: "{{ env.PROVIDER_ID }}"
+  options:
+    provider:
+      id: "{{ env.GRADER_ID }}"
+`,
+      );
+
+      try {
+        const [expanded] = await expandScenarioConfigValues(
+          [{ $values: `file://${matrixPath}` }],
+          tmpDir,
+          {
+            PROVIDER_ID: 'echo',
+            GRADER_ID: 'openai:gpt-4o-mini',
+          },
+        );
+
+        expect(expanded.provider).toBe('echo');
+        expect(expanded.options?.provider).toEqual({ id: 'openai:gpt-4o-mini' });
+      } finally {
+        cliState.config = previousConfig;
+      }
     });
 
     it('preserves live provider identity while canonicalizing scenario rows', async () => {
