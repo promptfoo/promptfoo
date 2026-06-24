@@ -13,7 +13,10 @@ import { createMockProvider } from '../../../factories/provider';
 
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
-vi.mock('../../../../src/redteam/util');
+vi.mock('../../../../src/redteam/util', async (importOriginal) => ({
+  ...(await importOriginal()),
+  classifyRefusal: vi.fn(),
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();

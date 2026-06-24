@@ -4,8 +4,6 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
-import { safeJsonStringify } from '../../../util/json';
-import { getProviderResponseGradingEvidence } from '../../util';
 
 import type { AssertionValue, AtomicTestCase, ProviderResponse } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';
@@ -519,6 +517,17 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function parseProviderRaw(raw: unknown): unknown {
+  if (typeof raw !== 'string') {
+    return raw;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
 function collectValuesByKey(
   value: unknown,
   keyNames: ReadonlySet<string>,
@@ -638,79 +647,239 @@ async function evidenceFromConfiguredFiles(
   return evidence;
 }
 
+const MAX_PROVIDER_EVIDENCE_STRINGS_PER_VALUE = 100;
+const MAX_PROVIDER_ITEMS_TO_VERIFY = 200;
+const MAX_PROVIDER_RAW_JSON_CHARACTERS_TO_VERIFY = 2_000_000;
+const MAX_PROVIDER_TAIL_ITEMS_TO_VERIFY = 20;
+const MAX_PROVIDER_VALUES_TO_VISIT = 10_000;
+
+interface ProviderEvidenceTraversalState {
+  remaining: number;
+}
+
+function* getProviderEvidenceIndexes(length: number): Generator<number> {
+  const headLength = Math.min(length, MAX_PROVIDER_ITEMS_TO_VERIFY);
+  for (let index = 0; index < headLength; index++) {
+    yield index;
+  }
+  const tailLength = Math.min(MAX_PROVIDER_TAIL_ITEMS_TO_VERIFY, length - headLength);
+  for (let index = length - 1; index >= length - tailLength; index--) {
+    yield index;
+  }
+}
+
+function collectProviderEvidenceStrings(
+  candidate: unknown,
+  strings: string[],
+  seen: WeakSet<object>,
+  traversalState: ProviderEvidenceTraversalState,
+  depth = 0,
+): void {
+  if (strings.length >= MAX_PROVIDER_EVIDENCE_STRINGS_PER_VALUE || traversalState.remaining <= 0) {
+    return;
+  }
+  traversalState.remaining--;
+  if (typeof candidate === 'string') {
+    if (candidate.trim()) {
+      strings.push(candidate);
+    }
+    return;
+  }
+  if (candidate === null || typeof candidate !== 'object' || depth >= 5) {
+    return;
+  }
+  if (seen.has(candidate)) {
+    return;
+  }
+  seen.add(candidate);
+  if (Array.isArray(candidate)) {
+    for (const index of getProviderEvidenceIndexes(candidate.length)) {
+      if (traversalState.remaining <= 0) {
+        break;
+      }
+      collectProviderEvidenceStrings(candidate[index], strings, seen, traversalState, depth + 1);
+    }
+    return;
+  }
+  for (const key in candidate as Record<string, unknown>) {
+    if (Object.prototype.hasOwnProperty.call(candidate, key)) {
+      if (traversalState.remaining <= 0) {
+        break;
+      }
+      collectProviderEvidenceStrings(
+        (candidate as Record<string, unknown>)[key],
+        strings,
+        seen,
+        traversalState,
+        depth + 1,
+      );
+    }
+    if (strings.length >= MAX_PROVIDER_EVIDENCE_STRINGS_PER_VALUE) {
+      break;
+    }
+  }
+}
+
+function appendProviderValueEvidence(
+  evidence: TargetEvidence[],
+  traversalState: ProviderEvidenceTraversalState,
+  evidenceSource: TargetEvidence['evidenceSource'],
+  location: string,
+  value: unknown,
+): void {
+  const strings: string[] = [];
+  collectProviderEvidenceStrings(value, strings, new WeakSet<object>(), traversalState);
+  for (const text of strings) {
+    evidence.push({ evidenceSource, location, text });
+  }
+}
+
+function appendProviderRawItemEvidence(
+  evidence: TargetEvidence[],
+  traversalState: ProviderEvidenceTraversalState,
+  item: Record<string, unknown>,
+  index: number,
+): void {
+  const type = getString(item.type);
+  const locationPrefix = `provider raw item ${index + 1}`;
+  if (type === 'agent_message') {
+    appendProviderValueEvidence(
+      evidence,
+      traversalState,
+      'agent-response',
+      `${locationPrefix} agent message`,
+      item.text,
+    );
+    return;
+  }
+  if (type === 'command_execution') {
+    appendProviderValueEvidence(
+      evidence,
+      traversalState,
+      'command',
+      `${locationPrefix} command`,
+      item.command,
+    );
+    appendProviderValueEvidence(
+      evidence,
+      traversalState,
+      'command-output',
+      `${locationPrefix} command output`,
+      item.aggregated_output,
+    );
+    return;
+  }
+  if (
+    !type ||
+    !['dynamic_tool_call', 'file_change', 'mcp_tool_call', 'web_search'].includes(type)
+  ) {
+    return;
+  }
+  appendProviderValueEvidence(
+    evidence,
+    traversalState,
+    'command',
+    `${locationPrefix} ${type}`,
+    type === 'file_change'
+      ? item.changes
+      : [item.server, item.tool, item.query, item.action, item.arguments],
+  );
+  appendProviderValueEvidence(
+    evidence,
+    traversalState,
+    'command-output',
+    `${locationPrefix} ${type} result`,
+    [item.output, item.result, item.error, item.content_items],
+  );
+}
+
+function evidenceFromProviderRaw(
+  rawValue: unknown,
+  traversalState: ProviderEvidenceTraversalState,
+): TargetEvidence[] {
+  if (
+    typeof rawValue === 'string' &&
+    rawValue.length > MAX_PROVIDER_RAW_JSON_CHARACTERS_TO_VERIFY
+  ) {
+    return [
+      {
+        evidenceSource: 'agent-response',
+        location: 'provider raw oversized payload',
+        text: rawValue,
+      },
+    ];
+  }
+  const raw = getObject(parseProviderRaw(rawValue));
+  if (!raw) {
+    return [];
+  }
+  const evidence: TargetEvidence[] = [];
+  appendProviderValueEvidence(
+    evidence,
+    traversalState,
+    'agent-response',
+    'provider raw final response',
+    raw.finalResponse,
+  );
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  for (const index of getProviderEvidenceIndexes(items.length)) {
+    const item = getObject(items[index]);
+    if (item) {
+      appendProviderRawItemEvidence(evidence, traversalState, item, index);
+    }
+  }
+  return evidence;
+}
+
+function evidenceFromProviderToolCalls(
+  toolCallsValue: unknown,
+  traversalState: ProviderEvidenceTraversalState,
+): TargetEvidence[] {
+  if (!Array.isArray(toolCallsValue)) {
+    return [];
+  }
+  const evidence: TargetEvidence[] = [];
+  for (const index of getProviderEvidenceIndexes(toolCallsValue.length)) {
+    const toolCall = getObject(toolCallsValue[index]);
+    if (!toolCall) {
+      continue;
+    }
+    const locationPrefix = `provider metadata tool call ${index + 1}`;
+    appendProviderValueEvidence(
+      evidence,
+      traversalState,
+      'command',
+      `${locationPrefix} tool_call`,
+      [
+        toolCall.id,
+        toolCall.name,
+        toolCall.tool,
+        toolCall.type,
+        toolCall.function,
+        toolCall.input,
+        toolCall.arguments,
+      ],
+    );
+    appendProviderValueEvidence(
+      evidence,
+      traversalState,
+      'command-output',
+      `${locationPrefix} tool_call result`,
+      [toolCall.output, toolCall.result, toolCall.error],
+    );
+  }
+  return evidence;
+}
+
 function evidenceFromProviderResponse(response: ProviderResponse | undefined): TargetEvidence[] {
   if (!response) {
     return [];
   }
-
-  const evidence: TargetEvidence[] = [];
-  for (const item of getProviderResponseGradingEvidence(response)) {
-    const itemNumber = (item.index ?? 0) + 1;
-    const locationPrefix =
-      item.source === 'raw'
-        ? `provider raw item ${itemNumber}`
-        : `provider metadata tool call ${itemNumber}`;
-    if (item.type === 'final_response') {
-      const text = getString(item.details.text);
-      if (text) {
-        evidence.push({
-          evidenceSource: 'agent-response',
-          location: 'provider raw final response',
-          text,
-        });
-      }
-      continue;
-    }
-    if (item.type === 'agent_message') {
-      const text = getString(item.details.text);
-      if (text) {
-        evidence.push({
-          evidenceSource: 'agent-response',
-          location: `${locationPrefix} agent message`,
-          text,
-        });
-      }
-      continue;
-    }
-    if (item.type === 'command_execution') {
-      const command = getString(item.details.command);
-      const commandOutput = getString(item.details.aggregated_output);
-      if (command) {
-        evidence.push({
-          evidenceSource: 'command',
-          location: `${locationPrefix} command`,
-          text: command,
-        });
-      }
-      if (commandOutput) {
-        evidence.push({
-          evidenceSource: 'command-output',
-          location: `${locationPrefix} command output`,
-          text: commandOutput,
-        });
-      }
-      continue;
-    }
-
-    const { output, result, error, aggregated_output, ...actionDetails } = item.details;
-    if (Object.keys(actionDetails).length > 0) {
-      evidence.push({
-        evidenceSource: 'command',
-        location: `${locationPrefix} ${item.type}`,
-        text: safeJsonStringify({ type: item.type, ...actionDetails }) ?? item.type,
-      });
-    }
-    const resultDetails = { output, result, error, aggregated_output };
-    if (Object.values(resultDetails).some((value) => value !== undefined)) {
-      evidence.push({
-        evidenceSource: 'command-output',
-        location: `${locationPrefix} ${item.type} result`,
-        text: safeJsonStringify(resultDetails) ?? String(result ?? output ?? error ?? ''),
-      });
-    }
-  }
-
-  return evidence;
+  const traversalState = { remaining: MAX_PROVIDER_VALUES_TO_VISIT };
+  return [
+    ...evidenceFromProviderRaw(response.raw, traversalState),
+    ...evidenceFromProviderToolCalls(response.metadata?.toolCalls, traversalState),
+  ];
 }
 
 function traceAttributeEvidenceSource(

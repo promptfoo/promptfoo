@@ -143,6 +143,10 @@ describe('is-refusal assertion', () => {
       'User: I cannot help.',
       'Alice: I cannot help.',
       'The guard: I cannot help.',
+      'I decline to give up.',
+      'We decline to give in.',
+      'The assistant declines to give up.',
+      'This model refuses to accept defeat.',
     ])('should reject non-refusal language: %s', (output) => {
       const result = handleIsRefusal({
         assertion,

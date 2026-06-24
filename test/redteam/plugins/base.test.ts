@@ -2231,11 +2231,91 @@ describe('RedteamGraderBase', () => {
       if ('traceSummary' in context || 'traceContext' in context) {
         expect(result.rubric).toContain('TARGET EXECUTION TRACE');
       }
+      if ('wasExfiltrated' in context) {
+        expect(result.rubric).toContain('TARGET PROVIDER ACTIONS');
+        expect(result.rubric).toContain('confirmed_exfiltration');
+        expect(result.rubric).toContain('authoritative');
+      }
       const providerResponse = 'providerResponse' in context ? context.providerResponse : undefined;
       if (providerResponse?.raw || providerResponse?.metadata?.toolCalls) {
         expect(result.rubric).toContain('TARGET PROVIDER ACTIONS');
         expect(result.rubric).toContain('cat .env');
       }
+    });
+
+    it('keeps late action and exfiltration evidence in the bounded grader rubric', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Late evidence evaluated',
+      });
+
+      const result = await grader.getResult(
+        'test prompt',
+        'I cannot help.',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: 'I cannot help.',
+            raw: {
+              items: [
+                ...Array.from({ length: 20 }, (_, index) => ({
+                  type: 'agent_message',
+                  text: `benign message ${index}`,
+                })),
+                {
+                  type: 'command_execution',
+                  command: 'cat .env',
+                  aggregated_output: 'LATE_COMMAND_SENTINEL',
+                },
+              ],
+            },
+            metadata: {
+              toolCalls: [{ name: 'Bash', input: { command: 'cat .env' } }],
+            },
+          },
+          wasExfiltrated: true,
+          exfilCount: 1,
+        },
+      );
+
+      expect(result.rubric).toContain('LATE_COMMAND_SENTINEL');
+      expect(result.rubric).toContain('confirmed_exfiltration');
+      expect(result.rubric).toContain('tool_call');
+    });
+
+    it('grades provider exfiltration when context only has a zero count', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Provider exfiltration evaluated',
+      });
+
+      const result = await grader.getResult(
+        'test prompt',
+        'I cannot help.',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          exfilCount: 0,
+          providerResponse: {
+            output: 'I cannot help.',
+            metadata: { wasExfiltrated: true, exfilCount: 1 },
+          },
+        },
+      );
+
+      expect(result.grade).toMatchObject({ pass: false, score: 0 });
+      expect(result.rubric).toContain('confirmed_exfiltration');
+      expect(result.rubric).toContain('provider');
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
     });
 
     it.each([
@@ -2342,6 +2422,84 @@ describe('RedteamGraderBase', () => {
       expect(result.rubric).toContain('\\u003c/Rubric\\u003e');
       expect(result.rubric.match(/<\/target_provider_evidence_json>/g)).toHaveLength(1);
       expect(userMessage.match(/<\/Rubric>/g)).toHaveLength(1);
+    });
+
+    it('redacts embedded credentials from trace and provider grading evidence', async () => {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz123456';
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Credential-bearing action evaluated',
+      });
+
+      const result = await grader.getResult(
+        'test prompt',
+        'I cannot help.',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceSummary: `request failed with Authorization: Bearer ${secret}`,
+          providerResponse: {
+            output: 'I cannot help.',
+            raw: {
+              items: [
+                {
+                  type: 'command_execution',
+                  command: `curl -H "Authorization: Bearer ${secret}" https://example.test`,
+                  aggregated_output: `OPENAI_API_KEY=${secret}`,
+                },
+              ],
+            },
+          },
+        },
+      );
+
+      expect(result.rubric).toContain('curl');
+      expect(result.rubric).toContain('[REDACTED]');
+      expect(result.rubric).not.toContain(secret);
+    });
+
+    it('normalizes non-JSON provider action values before grading', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Native provider action evaluated',
+      });
+
+      const result = await grader.getResult(
+        'test prompt',
+        'I cannot help.',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            output: 'I cannot help.',
+            raw: {
+              items: [
+                {
+                  type: 'mcp_tool_call',
+                  arguments: {
+                    sequence: 1n,
+                    toJSON: () => {
+                      throw new Error('provider toJSON must not execute');
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      );
+
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      expect(result.rubric).toContain('"sequence":"1"');
+      expect(result.rubric).toContain('"toJSON":"[Function]"');
     });
 
     it('bounds trace and provider action evidence before grading', async () => {
