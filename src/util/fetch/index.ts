@@ -148,7 +148,7 @@ async function waitForTransientResponseRetry({
   const retryAfter = response.headers.get('Retry-After');
   const retryAfterDelayMs = retryAfter ? getBoundedRetryAfterDelayMs(retryAfter) : undefined;
   if (retryAfterDelayMs !== undefined) {
-    logger.debug('[fetch] Transient HTTP response honoring Retry-After', {
+    logger.debug('[fetch] Transient HTTP response using bounded Retry-After delay', {
       url: urlForLog(url),
       status: response.status,
       statusText: response.statusText,

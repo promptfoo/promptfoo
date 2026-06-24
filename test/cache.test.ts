@@ -22,6 +22,7 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -467,6 +468,23 @@ describe('fetchWithCache', () => {
         cached: false,
         data: JSON.stringify({ result: ['recovered'] }),
       });
+    });
+
+    it('should not log cached response bodies', async () => {
+      const sensitiveResponse = JSON.stringify({ apiKey: 'cache-response-secret' });
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, sensitiveResponse),
+      );
+
+      try {
+        await fetchWithCache<string>(url, {}, 1000, 'text');
+        await fetchWithCache<string>(url, {}, 1000, 'text');
+
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('cache-response-secret');
+      } finally {
+        debugSpy.mockRestore();
+      }
     });
 
     it('should return cached false to all concurrent callers on a cache miss', async () => {

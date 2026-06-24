@@ -667,6 +667,7 @@ async function prepareFetchResponse(
   isIdempotent: boolean,
   format: 'json' | 'text',
 ): Promise<PreparedFetchResponse> {
+  const sanitizedUrl = sanitizeUrl(getRequestUrlString(url));
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
   const responseText = result.respText;
@@ -700,16 +701,19 @@ async function prepareFetchResponse(
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+      logger.debug('[Cache] Not caching response because it contains an error key', {
+        url: sanitizedUrl,
+      });
       return {
         response: serializedResponse,
         cacheable: false,
       };
     }
 
-    logger.debug(
-      `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
-    );
+    logger.debug('[Cache] Storing response in cache', {
+      url: sanitizedUrl,
+      latencyMs: fetchLatencyMs,
+    });
     return {
       response: serializedResponse,
       cacheable: true,
@@ -813,7 +817,9 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+    logger.debug('[Cache] Returning cached response', {
+      url: sanitizeUrl(getRequestUrlString(url)),
+    });
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
