@@ -1120,6 +1120,60 @@ describe('eval routes', () => {
       });
     });
 
+    it('preserves server-owned fields when explicitly clearing a legacy rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      await markResultAsError(eval_, result);
+
+      result.gradingResult = {
+        ...createManualRatingPayload(result, true),
+        comment: 'Server-current comment',
+        metadata: { source: 'server' },
+        reason: 'Server-current manual reason',
+        tokensUsed: { total: 7 },
+      };
+      result.success = true;
+      result.score = 1;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.score += 1;
+      prompt.metrics.testErrorCount -= 1;
+      prompt.metrics.testPassCount += 1;
+      prompt.metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const legacyRating = await EvalResult.findById(result.id);
+      invariant(legacyRating, 'Legacy rating is required');
+      const clearPayload = createClearManualRatingPayload(legacyRating);
+      clearPayload.comment = 'Stale client comment';
+      clearPayload.metadata = { source: 'stale client' };
+      clearPayload.reason = 'Stale client reason';
+      clearPayload.tokensUsed = { total: 999 };
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...clearPayload, ratingAction: 'clear' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.gradingResult).toMatchObject({
+        comment: 'Server-current comment',
+        metadata: { source: 'server' },
+        reason: 'Server-current manual reason',
+        tokensUsed: { total: 7 },
+      });
+      expect(response.body.gradingResult?.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+      expect(response.body).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      });
+    });
+
     it('restores server-owned automated components when a clear payload mutates them', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

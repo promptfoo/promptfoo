@@ -876,11 +876,32 @@ function getEditedManualRatingState(
   return existingState.status === 'cleared' ? undefined : existingState;
 }
 
+function buildExplicitClearGradingResult(
+  current: GradingResult,
+  normalized: GradingResult,
+): GradingResult {
+  const cleared = {
+    ...current,
+    pass: normalized.pass,
+    score: normalized.score,
+  } as GradingResult;
+  cleared.reason = current.reason;
+  if (hasOwn(normalized, 'componentResults')) {
+    cleared.componentResults = normalized.componentResults;
+  } else {
+    delete cleared.componentResults;
+  }
+  if (isHumanAssertion(cleared.assertion)) {
+    delete cleared.assertion;
+  }
+  return cleared;
+}
+
 function resolveClearingManualRating(
   result: RatingEvalResult,
-  normalizedGradingResult: GradingResult,
   existingState: ManualRatingState | undefined,
   clearRestoreBase: GradingResult,
+  explicitClearGradingResult: GradingResult,
   legacyClearRequestHash: string | undefined,
 ) {
   if (existingState?.status === 'active') {
@@ -897,9 +918,9 @@ function resolveClearingManualRating(
     };
   }
   return {
-    gradingResult: normalizedGradingResult,
-    success: normalizedGradingResult.pass,
-    score: normalizedGradingResult.score,
+    gradingResult: explicitClearGradingResult,
+    success: explicitClearGradingResult.pass,
+    score: explicitClearGradingResult.score,
     failureReason:
       existingState?.status === 'legacy-active'
         ? existingState.original.failureReason
@@ -975,6 +996,10 @@ function resolveRatingTransition(
     ratingAction === 'clear' && result.gradingResult
       ? result.gradingResult
       : normalized.gradingResult;
+  const explicitClearGradingResult =
+    ratingAction === 'clear' && result.gradingResult
+      ? buildExplicitClearGradingResult(result.gradingResult, normalized.gradingResult)
+      : normalized.gradingResult;
 
   if (isRepeatedClear) {
     // The rating is already absent. Keep the authoritative current baseline rather than
@@ -1028,9 +1053,9 @@ function resolveRatingTransition(
   } else if (normalized.clearingManualRating) {
     const cleared = resolveClearingManualRating(
       result,
-      normalized.gradingResult,
       existingState,
       clearRestoreBase,
+      explicitClearGradingResult,
       legacyClearRequestHash,
     );
     ({ gradingResult, success, score, failureReason, nextState } = cleared);

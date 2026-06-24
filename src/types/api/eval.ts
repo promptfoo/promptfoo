@@ -294,8 +294,14 @@ export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
-    ratingAction: z.enum(['rate', 'clear', 'update']).optional(),
-    ratingUpdate: z.enum(['score', 'comment']).optional(),
+    ratingAction: z
+      .enum(['rate', 'clear', 'update'])
+      .optional()
+      .describe('Rating intent. Omit for the legacy inferred-rating behavior.'),
+    ratingUpdate: z
+      .enum(['score', 'comment'])
+      .optional()
+      .describe('Field to update; required only when ratingAction is update.'),
   })
   .passthrough()
   .refine(
