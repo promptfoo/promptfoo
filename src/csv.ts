@@ -1,12 +1,19 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
-import { isJavascriptFile } from './util/fileExtensions';
+import { isJavascriptFile, parsePythonFileReference } from './util/fileExtensions';
 import invariant from './util/invariant';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+function isPythonFileReference(value: string): boolean {
+  if (!value.startsWith('file://')) {
+    return false;
+  }
+  return parsePythonFileReference(value.slice('file://'.length)) !== undefined;
+}
 
 // Keep this parser local rather than importing it from src/assertions/contains.ts:
 // this module is bundled into the frontend (see the app layer's allowedImportPaths
@@ -156,12 +163,10 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (
-    expected.startsWith('python:') ||
-    (expected.startsWith('file://') && /\.py(:|$)/i.test(expected))
-  ) {
-    const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
-    const functionBody = expected.slice(sliceLength).trim();
+  if (expected.startsWith('python:') || isPythonFileReference(expected)) {
+    const functionBody = expected.startsWith('python:')
+      ? expected.slice('python:'.length).trim()
+      : expected;
     return {
       type: 'python',
       value: functionBody,

@@ -4,7 +4,12 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
+import {
+  isJavascriptFile,
+  isPythonFile,
+  JAVASCRIPT_EXTENSIONS,
+  parseExecutableFileReference,
+} from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
@@ -37,7 +42,7 @@ export async function loadFunction<T extends Function>({
     return functionCache[cacheKey] as T;
   }
 
-  if (!isJavascriptFile(resolvedPath) && !resolvedPath.endsWith('.py')) {
+  if (!isJavascriptFile(resolvedPath) && !isPythonFile(resolvedPath)) {
     throw new Error(
       `File must be a JavaScript (${JAVASCRIPT_EXTENSIONS.join(', ')}) or Python (.py) file`,
     );
@@ -109,26 +114,11 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
-
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
-
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
-      return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
-      };
-    }
-
-    return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
-  }
-
+  const parsedReference = parseExecutableFileReference(urlWithoutProtocol);
   return {
-    filePath: normalizeFilePath(urlWithoutProtocol),
+    filePath: normalizeFilePath(parsedReference.filePath),
+    ...(parsedReference.functionName !== undefined && {
+      functionName: parsedReference.functionName,
+    }),
   };
 }

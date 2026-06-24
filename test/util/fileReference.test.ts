@@ -33,7 +33,15 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
-vi.mock('../../src/util/fileExtensions');
+vi.mock('../../src/util/fileExtensions', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fileExtensions')>(
+    '../../src/util/fileExtensions',
+  );
+  return {
+    ...actual,
+    isJavascriptFile: vi.fn(),
+  };
+});
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -172,6 +180,18 @@ describe('fileReference utility functions', () => {
 
       expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', []);
       expect(result).toEqual(pythonOutput);
+    });
+
+    it.each([
+      'file:///path/to/config?handler=loader.PY',
+      'file:///path/to/config#loader.PY',
+    ])('should reject query-like Python file references: %s', async (fileRef) => {
+      const resolvedPath = fileRef.slice('file://'.length);
+      vi.mocked(path.resolve).mockReturnValue(resolvedPath);
+      vi.mocked(path.extname).mockReturnValue('.PY');
+
+      await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .py');
+      expect(runPython).not.toHaveBeenCalled();
     });
 
     it('should load text files correctly', async () => {
