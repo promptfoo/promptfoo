@@ -14,8 +14,14 @@ import Eval, {
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
+import { PromptfooAttributes } from '../../src/tracing/genaiTracer';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
+import {
+  type EvaluateResult,
+  type Prompt,
+  ResultFailureReason,
+  type TraceData,
+} from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
@@ -27,6 +33,8 @@ import {
   createEvaluateResult,
   createEvaluateSummaryV2,
   createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
 } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { mockProcessEnv } from '../util/utils';
@@ -1407,6 +1415,230 @@ describe('evaluator', () => {
       expect(results).not.toHaveProperty('traces');
     });
 
+    it('applies output strip flags to default full prompts, results, and traces', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addPrompts([
+        createCompletedPrompt('V4_PROMPT_RAW', {
+          label: 'V4_PROMPT_LABEL',
+          display: 'V4_PROMPT_DISPLAY',
+          template: 'V4_PROMPT_TEMPLATE',
+          config: { suffix: 'V4_PROMPT_CONFIG' },
+        }),
+      ]);
+      await eval1.addResult(
+        createEvaluateResult({
+          prompt: {
+            raw: 'V4_RESULT_PROMPT_RAW',
+            label: 'V4_RESULT_PROMPT_LABEL',
+            template: 'V4_RESULT_PROMPT_TEMPLATE',
+          },
+          vars: { prompt: 'V4_RESULT_VAR' },
+          response: {
+            output: 'V4_RESULT_OUTPUT',
+            prompt: 'V4_PROVIDER_PROMPT',
+            metadata: { redteamFinalPrompt: 'V4_FINAL_PROMPT' },
+          },
+          testCase: {
+            vars: { prompt: 'V4_TEST_CASE_VAR' },
+            metadata: { purpose: 'V4_TEST_CASE_METADATA' },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'V4_GRADING_REASON',
+          },
+          metadata: { debug: 'V4_RESULT_METADATA' },
+        }),
+      );
+      const trace: TraceData = {
+        traceId: 'trace-id',
+        evaluationId: eval1.id,
+        testCaseId: 'test-case-id',
+        metadata: {
+          vars: { prompt: 'V4_TRACE_VAR' },
+          debug: 'V4_TRACE_METADATA',
+        },
+        spans: [
+          {
+            spanId: 'span-id',
+            name: 'provider call',
+            startTime: 0,
+            attributes: {
+              [PromptfooAttributes.REQUEST_BODY]: 'V4_TRACE_REQUEST',
+              [PromptfooAttributes.RESPONSE_BODY]: 'V4_TRACE_RESPONSE',
+              safe: 'retained',
+            },
+          },
+        ],
+      };
+      vi.spyOn(eval1, 'getTraces').mockResolvedValue([trace]);
+
+      const unstripped = await eval1.toResultsFile();
+      expect(JSON.stringify(unstripped)).toContain('V4_PROMPT_TEMPLATE');
+      expect(JSON.stringify(unstripped)).toContain('V4_TRACE_REQUEST');
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile();
+        const serialized = JSON.stringify(projected);
+
+        expect(serialized).not.toContain('V4_');
+        expect(projected.prompts?.[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
+        expect('prompts' in projected.results && projected.results.prompts[0]).toEqual(
+          projected.prompts?.[0],
+        );
+        expect(projected.results.results[0]).toMatchObject({
+          vars: {},
+          response: { output: '[output stripped]' },
+          gradingResult: null,
+        });
+        expect(projected.traces?.[0]).not.toHaveProperty('metadata');
+        expect(projected.traces?.[0].spans[0].attributes).toEqual({ safe: 'retained' });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('applies output strip flags to default legacy results and table copies', async () => {
+      const sensitiveMarkers = [
+        'V2_RESULT_PROMPT',
+        'V2_RESULT_VAR',
+        'V2_RESULT_OUTPUT',
+        'V2_PROVIDER_PROMPT',
+        'V2_GRADING_REASON',
+        'V2_RESULT_METADATA',
+        'V2_TABLE_PROMPT',
+        'V2_TABLE_PROMPT_TEMPLATE',
+        'V2_TABLE_PROMPT_CONFIG',
+        'V2_ROW_VAR',
+        'V2_ROW_TEST_VAR',
+        'V2_ROW_TEST_METADATA',
+        'V2_TABLE_OUTPUT_PROMPT',
+        'V2_TABLE_OUTPUT_TEXT',
+        'V2_TABLE_RESPONSE_OUTPUT',
+        'V2_TABLE_RESPONSE_PROMPT',
+        'V2_TABLE_GRADING_REASON',
+        'V2_TABLE_TEST_CASE_VAR',
+        'V2_TABLE_TEST_CASE_METADATA',
+        'V2_TABLE_METADATA',
+        'V2_TABLE_ERROR',
+      ];
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            prompt: { raw: 'V2_RESULT_PROMPT', label: 'V2_RESULT_PROMPT' },
+            vars: { prompt: 'V2_RESULT_VAR' },
+            response: {
+              output: 'V2_RESULT_OUTPUT',
+              prompt: 'V2_PROVIDER_PROMPT',
+            },
+            gradingResult: { pass: false, score: 0, reason: 'V2_GRADING_REASON' },
+            metadata: { debug: 'V2_RESULT_METADATA' },
+          }),
+        ],
+        table: createEvaluateTable({
+          head: {
+            prompts: [
+              createCompletedPrompt('V2_TABLE_PROMPT', {
+                template: 'V2_TABLE_PROMPT_TEMPLATE',
+                config: { suffix: 'V2_TABLE_PROMPT_CONFIG' },
+              }),
+            ],
+            vars: ['prompt'],
+          },
+          body: [
+            createEvaluateTableRow({
+              vars: ['V2_ROW_VAR'],
+              test: {
+                vars: { prompt: 'V2_ROW_TEST_VAR' },
+                metadata: { purpose: 'V2_ROW_TEST_METADATA' },
+              },
+              outputs: [
+                createEvaluateTableOutput({
+                  prompt: 'V2_TABLE_OUTPUT_PROMPT',
+                  text: 'V2_TABLE_OUTPUT_TEXT',
+                  response: {
+                    output: 'V2_TABLE_RESPONSE_OUTPUT',
+                    prompt: 'V2_TABLE_RESPONSE_PROMPT',
+                  },
+                  gradingResult: {
+                    pass: false,
+                    score: 0,
+                    reason: 'V2_TABLE_GRADING_REASON',
+                  },
+                  testCase: {
+                    vars: { prompt: 'V2_TABLE_TEST_CASE_VAR' },
+                    metadata: { purpose: 'V2_TABLE_TEST_CASE_METADATA' },
+                  },
+                  metadata: { debug: 'V2_TABLE_METADATA' },
+                  error: 'V2_TABLE_ERROR',
+                }),
+              ],
+            }),
+          ],
+        }),
+      });
+
+      const unstripped = await eval1.toResultsFile({ includeTraces: false });
+      const unstrippedSerialized = JSON.stringify(unstripped);
+      for (const marker of sensitiveMarkers) {
+        expect(unstrippedSerialized).toContain(marker);
+      }
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ includeTraces: false });
+        const serialized = JSON.stringify(projected);
+
+        expect(serialized).not.toContain('V2_');
+        expect(projected.results.version).toBe(2);
+        if (projected.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+        const tableOutput = projected.results.table.body[0].outputs[0];
+        expect(projected.results.results).toHaveLength(1);
+        expect(projected.results.table.body).toHaveLength(1);
+        expect(projected.results.table.head.prompts[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        });
+        expect(projected.results.table.head.prompts[0]).not.toHaveProperty('template');
+        expect(projected.results.table.head.prompts[0]).not.toHaveProperty('config');
+        expect(projected.results.table.body[0].vars).toEqual(['']);
+        expect(tableOutput).toMatchObject({
+          prompt: '[prompt stripped]',
+          text: '[output stripped]',
+          response: { output: '[output stripped]' },
+          gradingResult: null,
+          error: '[error details stripped]',
+        });
+        expect(tableOutput).not.toHaveProperty('metadata');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should remove oversized fields from redteam report result projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       const loadResultsSpy = vi.spyOn(eval1, 'loadResults');
@@ -2559,7 +2791,9 @@ describe('evaluator', () => {
       const projectedHistoryFragments: string[] = [];
       const executeSpy = vi.spyOn(db.$client, 'execute').mockImplementation(async (statement) => {
         const queryResult = await originalExecute(statement);
-        if (statement.includes('json_group_object')) {
+        const query =
+          typeof statement === 'string' ? statement : (statement as unknown as { sql: string }).sql;
+        if (query.includes('json_group_object')) {
           projectedHistoryFragments.push(JSON.stringify(queryResult.rows));
         }
         return queryResult;

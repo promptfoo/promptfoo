@@ -8,16 +8,20 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
+import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type ApiProvider,
   type AtomicTestCase,
   type EvaluateResult,
+  type EvaluateTable,
+  type EvaluateTableOutput,
   type GradingResult,
   isResultFailureReason,
   type Prompt,
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
@@ -186,7 +190,7 @@ function projectProviderResponse(
   return projectedResponse;
 }
 
-function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
+export function projectPromptForOutput<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   if (!stripPromptText) {
     return prompt;
   }
@@ -197,7 +201,7 @@ function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
     raw: '[prompt stripped]',
     label: '[prompt stripped]',
     ...(prompt.display !== undefined && { display: '[prompt stripped]' }),
-  };
+  } as T;
 }
 
 function projectTestCase(testCase: AtomicTestCase, stripFlags: OutputStripFlags): AtomicTestCase {
@@ -261,7 +265,7 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
 
   return {
     ...result,
-    prompt: projectPrompt(result.prompt, shouldStripPromptText),
+    prompt: projectPromptForOutput(result.prompt, shouldStripPromptText),
     promptId: shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
     response: projectProviderResponse(result.response, stripFlags),
     testCase: projectTestCase(result.testCase, stripFlags),
@@ -269,6 +273,62 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
     vars: shouldStripTestVars ? {} : result.vars,
     metadata: projectResultMetadata(result.metadata, stripFlags),
     error: projectErrorForOutput(result.error, stripFlags),
+  };
+}
+
+export function projectEvaluateTableForOutput(table: EvaluateTable): EvaluateTable {
+  const stripFlags = getOutputStripFlags();
+  if (!hasAnyStripFlag(stripFlags)) {
+    return table;
+  }
+
+  const projectOutput = (output: EvaluateTableOutput): EvaluateTableOutput => {
+    const projectedOutput = { ...output };
+    if (stripFlags.shouldStripResponseOutput) {
+      delete projectedOutput.audio;
+      delete projectedOutput.images;
+      delete projectedOutput.video;
+    }
+
+    const metadata = projectMetadataForOutput(
+      output.metadata as Record<string, unknown> | undefined,
+      stripFlags,
+    );
+    const error = projectErrorForOutput(output.error, stripFlags);
+    const projected = {
+      ...projectedOutput,
+      prompt: stripFlags.shouldStripPromptText ? '[prompt stripped]' : output.prompt,
+      text: stripFlags.shouldStripResponseOutput
+        ? '[output stripped]'
+        : output.error && error !== output.error
+          ? (error ?? '')
+          : output.text,
+      response: projectProviderResponse(output.response, stripFlags),
+      gradingResult: stripFlags.shouldStripGradingResult ? null : output.gradingResult,
+      testCase: projectTestCase(output.testCase, stripFlags),
+      error,
+      metadata,
+    };
+    if (metadata === undefined) {
+      delete projected.metadata;
+    }
+    return projected;
+  };
+
+  return {
+    ...table,
+    head: {
+      ...table.head,
+      prompts: table.head.prompts.map((prompt) =>
+        projectPromptForOutput(prompt, stripFlags.shouldStripPromptText),
+      ),
+    },
+    body: table.body.map((row) => ({
+      ...row,
+      vars: stripFlags.shouldStripTestVars ? row.vars.map(() => '') : row.vars,
+      test: projectTestCase(row.test, stripFlags),
+      outputs: row.outputs.map(projectOutput),
+    })),
   };
 }
 
@@ -724,6 +784,62 @@ export function getOutputStripFlags(): OutputStripFlags {
   };
 }
 
+export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
+  const stripFlags = getOutputStripFlags();
+  if (
+    !stripFlags.shouldStripMetadata &&
+    !stripFlags.shouldStripPromptText &&
+    !stripFlags.shouldStripResponseOutput &&
+    !stripFlags.shouldStripTestVars
+  ) {
+    return traces;
+  }
+
+  return traces.map((trace) => {
+    let projectedTrace = trace;
+    if (stripFlags.shouldStripMetadata) {
+      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
+      projectedTrace = traceWithoutMetadata;
+    } else if (stripFlags.shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
+      const { vars: _vars, ...metadata } = traceMetadata;
+      projectedTrace = {
+        ...traceWithoutMetadata,
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      };
+    }
+
+    if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripResponseOutput) {
+      return projectedTrace;
+    }
+
+    return {
+      ...projectedTrace,
+      spans: projectedTrace.spans.map((span) => {
+        if (!span.attributes) {
+          return span;
+        }
+
+        const projectedAttributes = { ...span.attributes };
+        if (stripFlags.shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+        }
+        if (stripFlags.shouldStripResponseOutput) {
+          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+        }
+
+        const { attributes: _attributes, ...projectedSpan } = span;
+        return {
+          ...projectedSpan,
+          ...(Object.keys(projectedAttributes).length > 0 && {
+            attributes: projectedAttributes,
+          }),
+        };
+      }),
+    };
+  });
+}
+
 /**
  * Sanitize a result before it is serialized into a JSONL output artifact. This is the
  * JSONL-boundary equivalent of the database-persistence sanitization and must stay in sync
@@ -777,7 +893,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }),
     ...(artifactResult.prompt
       ? {
-          prompt: projectPrompt(
+          prompt: projectPromptForOutput(
             sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
             shouldStripPromptText,
           ),

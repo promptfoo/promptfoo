@@ -63,7 +63,10 @@ import EvalResult, {
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
   projectEvaluateResultForOutput,
+  projectEvaluateTableForOutput,
   projectMetadataForOutput,
+  projectPromptForOutput,
+  projectTracesForOutput,
   sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
@@ -2272,8 +2275,8 @@ export default class Eval {
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
+        results: this.oldResults.results.map(projectEvaluateResultForOutput),
+        table: projectEvaluateTableForOutput(this.oldResults.table),
         stats: this.oldResults.stats,
       };
     }
@@ -2285,10 +2288,7 @@ export default class Eval {
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
 
     const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
+      ? this.prompts.map((prompt) => projectPromptForOutput(prompt, true))
       : this.prompts;
 
     return {
@@ -2525,9 +2525,10 @@ export default class Eval {
     includeTraces = true,
     resultProjection = 'full',
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
-    const traces = includeTraces ? await this.getTraces() : [];
+    const traces = includeTraces ? projectTracesForOutput(await this.getTraces()) : [];
     const injectVar = this.config.redteam?.injectVar ?? 'prompt';
-    const stripFlags = resultProjection === 'redteamReport' ? getOutputStripFlags() : undefined;
+    const outputStripFlags = getOutputStripFlags();
+    const stripFlags = resultProjection === 'redteamReport' ? outputStripFlags : undefined;
     const results = stripFlags
       ? await this.toRedteamReportSummary(injectVar, stripFlags)
       : await this.toEvaluateSummary();
@@ -2544,7 +2545,9 @@ export default class Eval {
       author: this.author || null,
       prompts:
         stripFlags === undefined
-          ? prompts
+          ? outputStripFlags.shouldStripPromptText
+            ? prompts.map((prompt) => projectPromptForOutput(prompt, true))
+            : prompts
           : prompts.map((prompt) =>
               projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
             ),
