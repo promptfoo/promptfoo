@@ -251,6 +251,9 @@ async function assertTreeHasNoSymlinks(root: string, signal: AbortSignal): Promi
   throwIfAborted(signal);
   for (const entry of await withAbort(fs.promises.readdir(root, { withFileTypes: true }), signal)) {
     throwIfAborted(signal);
+    if (VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
     const entryPath = path.join(root, entry.name);
     const entryStat = await withAbort(fs.promises.lstat(entryPath), signal);
     if (entryStat.isSymbolicLink()) {
