@@ -300,6 +300,7 @@ function pluginIdsOverlap(pluginId: string, targetPlugin: string): boolean {
 type ScopedPromptLimitConfig = Record<string, unknown> & {
   maxCharsPerMessage?: unknown;
   minCharsPerMessage?: unknown;
+  steps?: ScopedPromptLimit[];
 };
 type ScopedPromptLimit = string | { id: string; config?: ScopedPromptLimitConfig };
 
@@ -361,10 +362,26 @@ function validateEffectiveCharsPerMessageRanges(
   }));
   const strategyConfigs = (data.strategies ?? [])
     .filter((strategy) => !isBasicStrategy(strategy))
-    .map((strategy, index) => ({
-      index,
-      strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
-    }));
+    .flatMap((strategy, index) => {
+      const strategyObject = typeof strategy === 'string' ? { id: strategy } : strategy;
+      if (strategyObject.id !== 'layer' || !Array.isArray(strategyObject.config?.steps)) {
+        return [{ index, strategy: strategyObject }];
+      }
+
+      const layerStepConfigs = strategyObject.config.steps
+        .filter((step): step is Exclude<ScopedPromptLimit, string> => typeof step !== 'string')
+        .map((step) => ({
+          index,
+          strategy: {
+            id: step.id,
+            config: {
+              ...step.config,
+              ...strategyObject.config,
+            },
+          },
+        }));
+      return [{ index, strategy: strategyObject }, ...layerStepConfigs];
+    });
   const effectivePlugins =
     pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
   const effectiveStrategies =

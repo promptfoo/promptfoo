@@ -355,6 +355,17 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject layered strategy step ranges combined with plugin ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { minCharsPerMessage: 10 } }],
+        strategies: [
+          { id: 'layer', config: { steps: [{ id: 'goat', config: { maxCharsPerMessage: 5 } }] } },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should reject strategy config with minCharsPerMessage above maxCharsPerMessage', () => {
     expect(
       RedteamConfigSchema.safeParse({

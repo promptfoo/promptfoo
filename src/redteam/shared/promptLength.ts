@@ -60,6 +60,17 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
 
     if (
       isRecord(parsed) &&
+      Object.entries(parsed).every(([, value]) => typeof value === 'string')
+    ) {
+      return Object.entries(parsed).map(([path, content]) => ({
+        content: content as string,
+        path,
+        role: 'user',
+      }));
+    }
+
+    if (
+      isRecord(parsed) &&
       parsed._promptfoo_audio_hybrid === true &&
       (parsed.history === undefined || Array.isArray(parsed.history)) &&
       isRecord(parsed.currentTurn) &&

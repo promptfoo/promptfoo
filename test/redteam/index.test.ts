@@ -615,6 +615,33 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should drop short multi-input generated values instead of counting the JSON wrapper', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: {
+              [MULTI_INPUT_VAR]: '{"user_message":"short","retrieved_context":"long enough"}',
+              user_message: 'short',
+              retrieved_context: 'long enough',
+            },
+          },
+        ]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        inputs: { user_message: 'user input', retrieved_context: 'retrieved input' },
+        minCharsPerMessage: 10,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{user_message}}\n{{retrieved_context}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toEqual([]);
+    });
+
     it('should warn about unregistered plugins', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
 
