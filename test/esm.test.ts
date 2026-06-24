@@ -289,23 +289,29 @@ describe('ESM utilities', () => {
     it('sets error.cause with both ESM and CJS errors when combined error is thrown', async () => {
       const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallbackFailure.js');
 
-      let combinedError: Error | undefined;
-      try {
-        await importModule(modulePath);
-      } catch (error) {
-        combinedError = error as Error;
-      }
+      const combinedError = await importModule(modulePath).catch((error) => error as Error);
 
       expect(combinedError).toBeInstanceOf(Error);
-      expect(combinedError?.message).toContain('Failed to load module');
-      expect(combinedError?.message).toContain('ESM import error');
-      expect(combinedError?.message).toContain('CJS fallback error');
+      expect(combinedError.stack).toMatch(
+        new RegExp(
+          `^Error: Failed to load module ${modulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`,
+        ),
+      );
 
-      const cause = combinedError?.cause as { esmError?: unknown; cjsError?: unknown } | undefined;
+      const cause = combinedError.cause as { esmError?: unknown; cjsError?: unknown } | undefined;
       expect(cause?.esmError).toBeInstanceOf(Error);
-      expect(cause?.cjsError).toBeInstanceOf(Error);
+      expect(cause?.cjsError).toMatchObject({
+        name: 'SyntaxError',
+        message: "Cannot use 'import.meta' outside a module",
+      });
+      expect(cause?.esmError).not.toBe(cause?.cjsError);
       expect((cause?.esmError as Error).message).toContain('require is not defined');
-      expect((cause?.cjsError as Error).message).toContain('require is not defined');
+      expect(combinedError.message).toContain(
+        `  ESM import error: ${(cause?.esmError as Error).message}`,
+      );
+      const cjsErrorMessage =
+        cause?.cjsError instanceof Error ? cause.cjsError.message : String(cause?.cjsError);
+      expect(combinedError.message).toContain(`  CJS fallback error: ${cjsErrorMessage}`);
     });
 
     describe('CJS fallback for .js files', () => {

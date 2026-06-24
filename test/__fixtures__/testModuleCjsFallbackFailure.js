@@ -1,2 +1,2 @@
-// Force Promptfoo into the CJS fallback branch, then fail there too.
-throw new ReferenceError('require is not defined');
+// Force an ESM failure that triggers the CJS fallback, then a CJS parse failure.
+throw new ReferenceError(`require is not defined in ${import.meta.url}`);

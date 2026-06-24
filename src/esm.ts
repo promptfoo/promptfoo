@@ -296,7 +296,7 @@ export async function importModule(modulePath: string, functionName?: string) {
         logger.error(`ESM import failed for ${modulePath}: ${errorMessage}`);
         logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
 
-        // Create a combined error that includes both failure reasons.
+        // Create a combined error that includes both failure reasons
         const combinedError = new Error(
           `Failed to load module ${modulePath}:\n` +
             `  ESM import error: ${errorMessage}\n` +
