@@ -380,7 +380,14 @@ export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey:
   }
 
   if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
-    const scopedAgentId = trimmedSessionKey.split(':', 2)[1];
+    const sessionKeyParts = trimmedSessionKey.split(':');
+    const scopedAgentId = sessionKeyParts[1]?.trim();
+    const scopedSessionId = sessionKeyParts.slice(2).join(':').trim();
+    if (!scopedAgentId || !scopedSessionId) {
+      throw new Error(
+        `OpenClaw session key "${trimmedSessionKey}" must use the form "agent:<agent-id>:<session-id>"`,
+      );
+    }
     if (scopedAgentId?.toLowerCase() !== trimmedAgentId.toLowerCase()) {
       throw new Error(
         `OpenClaw session key targets agent "${scopedAgentId || '(missing)'}" but the provider targets "${trimmedAgentId}"`,
@@ -440,6 +447,10 @@ export function buildOpenClawHeaders(
   config?: OpenClawConfig,
 ): Record<string, string> {
   const headers: Record<string, string> = {};
+  const contextHeaders = buildOpenClawContextHeaders(config);
+  const generatedContextHeaderNames = new Set(
+    Object.keys(contextHeaders).map((name) => name.toLowerCase()),
+  );
   let headerSessionKey: string | undefined;
   for (const [name, value] of Object.entries(config?.headers ?? {})) {
     const normalizedName = name.toLowerCase();
@@ -448,6 +459,9 @@ export function buildOpenClawHeaders(
     }
     if (normalizedName === 'x-openclaw-session-key') {
       headerSessionKey = value;
+      continue;
+    }
+    if (generatedContextHeaderNames.has(normalizedName)) {
       continue;
     }
     headers[name] = value;
@@ -462,7 +476,7 @@ export function buildOpenClawHeaders(
   }
   return {
     ...headers,
-    ...buildOpenClawContextHeaders(config),
+    ...contextHeaders,
   };
 }
 
@@ -491,7 +505,7 @@ export function buildOpenClawProviderOptions(
     ...providerOptions,
     config: {
       ...config,
-      ...(passthrough && { passthrough: sanitizedPassthrough }),
+      ...(passthrough === undefined ? {} : { passthrough: sanitizedPassthrough }),
       apiBaseUrl: `${gatewayUrl}/v1`,
       // Only set apiKey if we resolved an OpenClaw token; don't clobber user-supplied keys
       ...(authToken && { apiKey: authToken }),

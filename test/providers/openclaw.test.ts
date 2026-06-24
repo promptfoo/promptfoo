@@ -817,6 +817,19 @@ describe('OpenClaw Provider', () => {
       ).toThrow('session key targets agent "other" but the provider targets "main"');
     });
 
+    it.each([
+      'agent:main',
+      'agent:main:',
+      'agent::shared-session',
+    ])('should reject malformed scoped session key %s', (sessionKey) => {
+      expect(
+        () =>
+          new OpenClawChatProvider('main', {
+            config: { session_key: sessionKey },
+          }),
+      ).toThrow('must use the form "agent:<agent-id>:<session-id>"');
+    });
+
     it('should not set session key header when not provided', () => {
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.config.headers?.['x-openclaw-session-key']).toBeUndefined();
@@ -892,7 +905,10 @@ describe('OpenClaw Provider', () => {
 
     it('should reapply routing headers after merging prompt-level config', async () => {
       const provider = new OpenClawChatProvider('main', {
-        config: { session_key: 'provider-session' },
+        config: {
+          backend_model: 'openai/gpt-5.4',
+          session_key: 'provider-session',
+        },
       });
 
       const result = await provider.getOpenAiBody('test prompt', {
@@ -903,6 +919,7 @@ describe('OpenClaw Provider', () => {
           config: {
             headers: {
               'X-OpenClaw-Agent-Id': 'other-agent',
+              'X-OpenClaw-Model': 'stale/model',
               'X-OpenClaw-Session-Key': 'agent:other:prompt-session',
               'x-custom': 'prompt',
             },
@@ -913,6 +930,7 @@ describe('OpenClaw Provider', () => {
       expect(result.config.headers).toEqual({
         'x-custom': 'prompt',
         'x-openclaw-agent-id': 'main',
+        'x-openclaw-model': 'openai/gpt-5.4',
         'x-openclaw-session-key': 'agent:main:provider-session',
       });
     });
@@ -937,11 +955,27 @@ describe('OpenClaw Provider', () => {
       const provider = new OpenClawChatProvider('main', {
         config: {
           backend_model: 'openai/gpt-5.4',
-          headers: { 'x-openclaw-model': 'stale-model' },
+          message_channel: 'slack',
+          account_id: 'work',
+          scopes: ['operator.read'],
+          headers: {
+            'X-OpenClaw-Model': 'stale-model',
+            'X-OpenClaw-Message-Channel': 'other-channel',
+            'X-OpenClaw-Account-Id': 'other-account',
+            'X-OpenClaw-Scopes': 'admin',
+            'x-custom': 'value',
+          },
         },
       });
 
-      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(Object.fromEntries(new Headers(provider.config.headers).entries())).toEqual({
+        'x-custom': 'value',
+        'x-openclaw-account-id': 'work',
+        'x-openclaw-agent-id': 'main',
+        'x-openclaw-message-channel': 'slack',
+        'x-openclaw-model': 'openai/gpt-5.4',
+        'x-openclaw-scopes': 'operator.read',
+      });
     });
 
     it('should price usage from an explicit OpenAI backend model override', async () => {
