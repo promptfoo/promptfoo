@@ -186,7 +186,10 @@ export function throwIfTargetPromptViolatesCharLimits(
   );
 }
 
-export function getTargetPromptCharLimits(context?: CallApiContextParams): {
+export function getTargetPromptCharLimits(
+  context?: CallApiContextParams,
+  providerCharLimits?: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+): {
   maxCharsPerMessage?: number;
   minCharsPerMessage?: number;
 } {
@@ -194,6 +197,7 @@ export function getTargetPromptCharLimits(context?: CallApiContextParams): {
     const configuredLimit =
       cliState.config?.redteam?.[key] ??
       (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
+      providerCharLimits?.[key] ??
       (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
     return typeof configuredLimit === 'number' &&
       Number.isInteger(configuredLimit) &&

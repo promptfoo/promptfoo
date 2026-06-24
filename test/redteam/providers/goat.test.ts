@@ -207,6 +207,23 @@ describe('RedteamGoatProvider', () => {
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('should prefer provider maxCharsPerMessage over plugin config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 500,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, undefined, {
+      metadata: { pluginConfig: { maxCharsPerMessage: 5 } },
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalled();
+  });
+
   it('should preserve an explicit maxTurns value of 0', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

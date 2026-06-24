@@ -221,13 +221,7 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
-    const contextCharLimits = getTargetPromptCharLimits(context);
-    const getCharsPerMessageLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage') =>
-      contextCharLimits[key] ?? this.config[key];
-    const charLimits = {
-      maxCharsPerMessage: getCharsPerMessageLimit('maxCharsPerMessage'),
-      minCharsPerMessage: getCharsPerMessageLimit('minCharsPerMessage'),
-    };
+    const charLimits = getTargetPromptCharLimits(context, this.config);
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
