@@ -1429,6 +1429,90 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('re-resumes a persistent explicit thread when its authority changes', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_id: 'thr_authority',
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+    const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
+      provider.callApi('Check authority', {
+        prompt: {
+          raw: 'Check authority',
+          label: 'authority',
+          config: { sandbox_mode },
+        },
+        vars: {},
+      });
+
+    const firstResult = callWithSandbox('danger-full-access');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+    expect(firstResume.params).toMatchObject({
+      threadId: 'thr_authority',
+      sandbox: 'danger-full-access',
+    });
+    server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
+    const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: firstTurn.id,
+      result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_authority',
+        turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
+      },
+    });
+    await firstResult;
+
+    const secondResult = callWithSandbox('read-only');
+    const unsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
+    );
+    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+    const secondResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+    );
+    expect(secondResume.params).toMatchObject({
+      threadId: 'thr_authority',
+      sandbox: 'read-only',
+    });
+    server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
+    const secondTurn = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
+    );
+    server.send({
+      id: secondTurn.id,
+      result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_authority',
+        turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
+      },
+    });
+    await secondResult;
+
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      2,
+    );
+  });
+
   it('unsubscribes a non-persistent resumed thread by default', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -1482,7 +1566,7 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Released' });
   });
 
-  it('defers resumed thread unsubscribe while another turn is queued for the same thread id', async () => {
+  it('serializes resume, turn, and cleanup for concurrent calls to the same thread id', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -1501,12 +1585,7 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.method === 'thread/resume',
     );
-    const secondThreadResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
-    );
     server.send({ id: firstThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
-    server.send({ id: secondThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
 
     const firstTurnStart = await waitForMessage(
       server,
@@ -1532,19 +1611,22 @@ describe('OpenAICodexAppServerProvider', () => {
         turn: { id: 'turn_existing_queue_1', status: 'completed', items: [], error: null },
       },
     });
+    const firstUnsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_existing_queue',
+    );
+    server.send({ id: firstUnsubscribe.id, result: { status: 'unsubscribed' } });
+    const secondThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
+    );
+    server.send({ id: secondThreadResume.id, result: { thread: { id: 'thr_existing_queue' } } });
     const secondTurnStart = await waitForMessage(
       server,
       (message) => message.method === 'turn/start' && message.id !== firstTurnStart.id,
     );
-    const secondTurnStartIndex = server
-      .messages()
-      .findIndex((message) => message.method === 'turn/start' && message.id === secondTurnStart.id);
-    expect(
-      server
-        .messages()
-        .slice(0, secondTurnStartIndex)
-        .some((message) => message.method === 'thread/unsubscribe'),
-    ).toBe(false);
     server.send({
       id: secondTurnStart.id,
       result: { turn: { id: 'turn_existing_queue_2', status: 'inProgress' } },
@@ -1565,13 +1647,14 @@ describe('OpenAICodexAppServerProvider', () => {
         turn: { id: 'turn_existing_queue_2', status: 'completed', items: [], error: null },
       },
     });
-    const unsubscribe = await waitForMessage(
+    const secondUnsubscribe = await waitForMessage(
       server,
       (message) =>
         message.method === 'thread/unsubscribe' &&
-        message.params?.threadId === 'thr_existing_queue',
+        message.params?.threadId === 'thr_existing_queue' &&
+        message.id !== firstUnsubscribe.id,
     );
-    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+    server.send({ id: secondUnsubscribe.id, result: { status: 'unsubscribed' } });
 
     await expect(firstResultPromise).resolves.toMatchObject({ output: 'Queued first' });
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Queued second' });
@@ -1611,16 +1694,8 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.method === 'thread/resume',
     );
-    const secondThreadResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
-    );
     server.send({
       id: firstThreadResume.id,
-      result: { thread: { id: 'thr_existing_abort_queue' } },
-    });
-    server.send({
-      id: secondThreadResume.id,
       result: { thread: { id: 'thr_existing_abort_queue' } },
     });
 
@@ -1716,16 +1791,10 @@ describe('OpenAICodexAppServerProvider', () => {
       result: { turn: { id: 'turn_existing_deep_1', status: 'inProgress' } },
     });
 
-    const secondThreadResume = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'thread/resume',
-    );
-    secondServer.send({
-      id: secondThreadResume.id,
-      result: { thread: { id: 'thr_existing_deep' } },
-    });
     await new Promise<void>((resolve) => queueMicrotask(resolve));
-    expect(secondServer.messages().some((message) => message.method === 'turn/start')).toBe(false);
+    expect(secondServer.messages().some((message) => message.method === 'thread/resume')).toBe(
+      false,
+    );
 
     firstServer.send({
       method: 'item/agentMessage/delta',
@@ -1744,6 +1813,14 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
+    const secondThreadResume = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/resume',
+    );
+    secondServer.send({
+      id: secondThreadResume.id,
+      result: { thread: { id: 'thr_existing_deep' } },
+    });
     const secondTurnStart = await waitForMessage(
       secondServer,
       (message) => message.method === 'turn/start',
@@ -2817,6 +2894,14 @@ describe('OpenAICodexAppServerProvider', () => {
             isSecret: false,
             options: [{ label: 'high', description: 'High impact' }],
           },
+          {
+            id: '__proto__',
+            header: 'Boundary',
+            question: 'Choose a boundary answer',
+            isOther: false,
+            isSecret: false,
+            options: [{ label: 'safe', description: 'Safe answer' }],
+          },
         ],
       },
     });
@@ -2824,11 +2909,9 @@ describe('OpenAICodexAppServerProvider', () => {
       server,
       (message) => message.id === 100 && message.result,
     );
-    expect(userInputResponse.result).toEqual({
-      answers: {
-        severity: { answers: ['high'] },
-      },
-    });
+    expect(userInputResponse.result.answers.severity).toEqual({ answers: ['high'] });
+    expect(Object.hasOwn(userInputResponse.result.answers, '__proto__')).toBe(true);
+    expect(userInputResponse.result.answers.__proto__).toEqual({ answers: ['safe'] });
 
     server.send({
       id: 101,
@@ -3204,6 +3287,89 @@ describe('OpenAICodexAppServerProvider', () => {
 
     expect(server.messages().some((message) => message.method === 'turn/start')).toBe(false);
     expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('finishes aborted explicit-resume cleanup before re-resuming the thread', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1_000,
+        thread_id: 'thr_abort_cleanup_order',
+      },
+    });
+
+    const firstResult = provider.callApi('First', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+
+    abortController.abort();
+    await expect(firstResult).resolves.toEqual({ error: 'OpenAI Codex app-server call aborted' });
+
+    const secondResult = provider.callApi('Second');
+    await flushMicrotasks();
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+
+    server.send({
+      id: firstResume.id,
+      result: { thread: { id: 'thr_abort_cleanup_order' } },
+    });
+    const firstUnsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_abort_cleanup_order',
+    );
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+
+    server.send({ id: firstUnsubscribe.id, result: { status: 'unsubscribed' } });
+    const secondResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+    );
+    server.send({
+      id: secondResume.id,
+      result: { thread: { id: 'thr_abort_cleanup_order' } },
+    });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_abort_cleanup_order', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_abort_cleanup_order',
+        turnId: 'turn_abort_cleanup_order',
+        itemId: 'msg_abort_cleanup_order',
+        delta: 'Second completed safely',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_abort_cleanup_order',
+        turn: { id: 'turn_abort_cleanup_order', status: 'completed', items: [], error: null },
+      },
+    });
+    const secondUnsubscribe = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/unsubscribe' && message.id !== firstUnsubscribe.id,
+    );
+    server.send({ id: secondUnsubscribe.id, result: { status: 'unsubscribed' } });
+
+    await expect(secondResult).resolves.toMatchObject({ output: 'Second completed safely' });
   });
 
   it('keeps a reused app-server process after a JSON-RPC request abort', async () => {
@@ -5293,6 +5459,7 @@ describe('OpenAICodexAppServerProvider', () => {
           { id: 'q1', label: 'Single answer' },
           { id: 'q2', label: 'Multi answer' },
           { id: 'q3', label: 'Unconfigured' },
+          { id: '__proto__', label: 'Prototype-shaped ID' },
         ],
       },
     });
@@ -5301,6 +5468,8 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(userInputResponse.result.answers.q1).toEqual({ answers: ['Option A'] });
     expect(userInputResponse.result.answers.q2).toEqual({ answers: ['X', 'Y'] });
     expect(userInputResponse.result.answers.q3).toEqual({ answers: [] });
+    expect(Object.hasOwn(userInputResponse.result.answers, '__proto__')).toBe(true);
+    expect(userInputResponse.result.answers.__proto__).toEqual({ answers: [] });
 
     server.send({
       method: 'turn/completed',

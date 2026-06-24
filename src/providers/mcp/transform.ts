@@ -118,14 +118,10 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
 export async function transformMCPConfigToClaudeCode(
   config: MCPConfig,
 ): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
+  validateMCPConfigForClaudeCode(config);
+
   if (config.enabled === false) {
     return {};
-  }
-
-  if (config.tools !== undefined || config.exclude_tools !== undefined) {
-    throw new Error(
-      'Claude Agent SDK MCP integration does not support MCP tool allowlists or exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
-    );
   }
 
   const serverConfigs = [...(config.servers ?? [])];
@@ -137,11 +133,37 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
-  return servers.reduce<Record<string, ClaudeCodeMcpServerConfig>>((acc, transformed) => {
-    const [key, out] = transformed;
-    acc[key] = out;
-    return acc;
-  }, {});
+  return Object.fromEntries(servers);
+}
+
+export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error('Claude Agent SDK MCP configuration must be an object');
+  }
+
+  if (config.enabled !== undefined && typeof config.enabled !== 'boolean') {
+    throw new Error('Claude Agent SDK MCP `enabled` must be a boolean');
+  }
+  if (config.enabled === false) {
+    return;
+  }
+
+  if (
+    (config.server !== undefined &&
+      (!config.server || typeof config.server !== 'object' || Array.isArray(config.server))) ||
+    (config.servers !== undefined && !Array.isArray(config.servers))
+  ) {
+    throw new Error('Claude Agent SDK MCP `server`/`servers` configuration is malformed');
+  }
+
+  const hasUnsupportedExclusions =
+    config.exclude_tools !== undefined &&
+    (!Array.isArray(config.exclude_tools) || config.exclude_tools.length > 0);
+  if (config.tools !== undefined || hasUnsupportedExclusions) {
+    throw new Error(
+      'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
+    );
+  }
 }
 
 async function transformMCPServerConfigToClaudeCode(
@@ -171,8 +193,8 @@ async function transformMCPServerConfigToClaudeCode(
       url: serverUrl,
       headers: { ...(config.headers ?? {}), ...getAuthHeaders(renderedConfig, oauthToken) },
     };
-  } else if (config.command && config.args) {
-    out = { type: 'stdio', command: config.command, args: config.args };
+  } else if (config.command) {
+    out = { type: 'stdio', command: config.command, args: config.args ?? [] };
   } else if (config.path) {
     const isPy = config.path.endsWith('.py');
     const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;

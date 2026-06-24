@@ -409,6 +409,11 @@ providers:
           tracking: ABC123
 ```
 
+Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
+`Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
+capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
+or prompt. Use direct agents for side-effect-free mock handoffs.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:

@@ -268,7 +268,7 @@ describe('transformMCPConfigToClaudeCode', () => {
         servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
         tools: ['safe_tool'],
       }),
-    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
 
     await expect(
       transformMCPConfigToClaudeCode({
@@ -276,7 +276,7 @@ describe('transformMCPConfigToClaudeCode', () => {
         servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
         exclude_tools: ['dangerous_tool'],
       }),
-    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
 
     await expect(
       transformMCPConfigToClaudeCode({
@@ -284,7 +284,7 @@ describe('transformMCPConfigToClaudeCode', () => {
         servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
         tools: [],
       }),
-    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+    ).rejects.toThrow(/does not support MCP tool allowlists or/);
 
     await expect(
       transformMCPConfigToClaudeCode({
@@ -292,7 +292,60 @@ describe('transformMCPConfigToClaudeCode', () => {
         servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
         exclude_tools: [],
       }),
-    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+    ).resolves.toEqual({
+      filtered: { type: 'stdio', command: 'npx', args: ['filtered-server'] },
+    });
+  });
+
+  it('combines singular and plural server config without mutating the input', async () => {
+    const servers = [{ name: 'plural', command: 'plural-server' }];
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'single', command: 'single-server' },
+        servers,
+      }),
+    ).resolves.toEqual({
+      plural: { type: 'stdio', command: 'plural-server', args: [] },
+      single: { type: 'stdio', command: 'single-server', args: [] },
+    });
+    expect(servers).toEqual([{ name: 'plural', command: 'plural-server' }]);
+  });
+
+  it('accepts a zero-argument stdio server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'no-args', command: 'mcp-server' },
+      }),
+    ).resolves.toEqual({
+      'no-args': { type: 'stdio', command: 'mcp-server', args: [] },
+    });
+  });
+
+  it('preserves prototype-shaped server names as own entries', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      server: { name: '__proto__', command: 'mcp-server' },
+    });
+
+    expect(Object.hasOwn(servers, '__proto__')).toBe(true);
+    expect(servers.__proto__).toEqual({ type: 'stdio', command: 'mcp-server', args: [] });
+    expect(JSON.stringify(servers)).toBe(
+      '{"__proto__":{"type":"stdio","command":"mcp-server","args":[]}}',
+    );
+  });
+
+  it.each([
+    null,
+    [],
+    { enabled: 'false' },
+    { enabled: true, server: [] },
+    { enabled: true, servers: 'not-an-array' },
+  ])('rejects malformed MCP config %#', async (config) => {
+    await expect(transformMCPConfigToClaudeCode(config as any)).rejects.toThrow(
+      /MCP.*(object|boolean|malformed)/,
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +22,7 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
+import { isSecretField } from '../util/sanitizer';
 import {
   cacheResponse,
   getCachedResponse,
@@ -28,8 +30,7 @@ import {
   resolveAgenticWorkingDir,
 } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
-import { transformMCPConfigToClaudeCode } from './mcp/transform';
-import { MCPConfig } from './mcp/types';
+import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -59,6 +60,7 @@ import type {
   ProviderResponse,
   SkillCallEntry,
 } from '../types/index';
+import type { MCPConfig, MCPServerConfig } from './mcp/types';
 
 /**
  * Represents a single tool call captured during a Claude Agent SDK session.
@@ -942,8 +944,15 @@ function createAskUserQuestionCanUseTool(
       };
     }
 
-    const toolInput = input as unknown as AskUserQuestionToolInput;
-    const answers: Record<string, string> = {};
+    if (!isAskUserQuestionToolInput(input)) {
+      return {
+        behavior: 'deny',
+        message: 'AskUserQuestion received malformed question input',
+      };
+    }
+
+    const toolInput = input;
+    const answers = Object.create(null) as Record<string, string>;
 
     // Generate answers for each question based on the configured behavior
     for (const question of toolInput.questions) {
@@ -974,6 +983,150 @@ function createAskUserQuestionCanUseTool(
   };
 }
 
+function validateAskUserQuestionConfig(config: unknown): void {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error('ask_user_question must be an object');
+  }
+
+  const behavior = (config as { behavior?: unknown }).behavior;
+  if (
+    behavior !== undefined &&
+    behavior !== 'first_option' &&
+    behavior !== 'random' &&
+    behavior !== 'deny'
+  ) {
+    throw new Error('ask_user_question.behavior must be first_option, random, or deny');
+  }
+}
+
+function validateClaudeToolPolicyConfig(config: ClaudeCodeOptions): void {
+  for (const option of ['allow_all_tools', 'allow_dangerously_skip_permissions'] as const) {
+    if (config[option] !== undefined && typeof config[option] !== 'boolean') {
+      throw new Error(`${option} must be a boolean`);
+    }
+  }
+
+  for (const option of [
+    'custom_allowed_tools',
+    'append_allowed_tools',
+    'disallowed_tools',
+  ] as const) {
+    const value = config[option];
+    if (
+      value !== undefined &&
+      (!Array.isArray(value) || value.some((tool) => typeof tool !== 'string'))
+    ) {
+      throw new Error(`${option} must be an array of tool-name strings`);
+    }
+  }
+
+  const permissionModes = [
+    'default',
+    'plan',
+    'acceptEdits',
+    'bypassPermissions',
+    'dontAsk',
+    'auto',
+  ];
+  if (
+    config.permission_mode !== undefined &&
+    !permissionModes.includes(config.permission_mode as string)
+  ) {
+    throw new Error(`permission_mode must be one of ${permissionModes.join(', ')}`);
+  }
+
+  if (config.tools !== undefined) {
+    const validArray =
+      Array.isArray(config.tools) && config.tools.every((tool) => typeof tool === 'string');
+    const validPreset =
+      !!config.tools &&
+      typeof config.tools === 'object' &&
+      !Array.isArray(config.tools) &&
+      config.tools.type === 'preset' &&
+      config.tools.preset === 'claude_code';
+    if (!validArray && !validPreset) {
+      throw new Error('tools must be an array of tool-name strings or the claude_code preset');
+    }
+  }
+}
+
+function mcpServerContainsCacheSensitiveData(server: MCPServerConfig): boolean {
+  if (server.auth || Object.keys(server.headers ?? {}).length > 0) {
+    return true;
+  }
+  if (!server.url) {
+    return false;
+  }
+  try {
+    const url = new URL(server.url);
+    return Boolean(url.username || url.password || url.search);
+  } catch {
+    return server.url.includes('?') || server.url.includes('@');
+  }
+}
+
+function mcpConfigContainsCacheSensitiveData(config: MCPConfig | undefined): boolean {
+  if (!config || config.enabled === false) {
+    return false;
+  }
+  return [...(config.servers ?? []), ...(config.server ? [config.server] : [])].some(
+    mcpServerContainsCacheSensitiveData,
+  );
+}
+
+function settingsContainEnvironment(settings: unknown): boolean {
+  return Boolean(
+    settings &&
+      typeof settings === 'object' &&
+      !Array.isArray(settings) &&
+      Object.keys((settings as { env?: Record<string, unknown> }).env ?? {}).length > 0,
+  );
+}
+
+function extraArgsContainSensitiveData(
+  extraArgs: Record<string, string | null> | undefined,
+): boolean {
+  return Object.keys(extraArgs ?? {}).some((key) =>
+    isSensitiveEnvironmentKey(key.replaceAll('-', '_')),
+  );
+}
+
+function isSensitiveEnvironmentKey(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credential|authorization|cookie|private_?key)(?:_|$)/i.test(
+      key,
+    )
+  );
+}
+
+function isAskUserQuestionToolInput(input: unknown): input is AskUserQuestionToolInput {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !Array.isArray((input as { questions?: unknown }).questions)
+  ) {
+    return false;
+  }
+
+  return (input as { questions: unknown[] }).questions.every(
+    (question) =>
+      !!question &&
+      typeof question === 'object' &&
+      typeof (question as { question?: unknown }).question === 'string' &&
+      typeof (question as { header?: unknown }).header === 'string' &&
+      typeof (question as { multiSelect?: unknown }).multiSelect === 'boolean' &&
+      Array.isArray((question as { options?: unknown }).options) &&
+      (question as { options: unknown[] }).options.every(
+        (option) =>
+          !!option &&
+          typeof option === 'object' &&
+          typeof (option as { label?: unknown }).label === 'string' &&
+          typeof (option as { description?: unknown }).description === 'string',
+      ),
+  );
+}
+
 export class ClaudeCodeSDKProvider implements ApiProvider {
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
@@ -986,6 +1139,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
+  private readonly credentialCacheScope = randomUUID();
 
   constructor(
     options: {
@@ -1026,6 +1180,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     return this.providerId;
   }
 
+  private getCredentialCacheScope(env: Record<string, string>): string | undefined {
+    return Object.keys(env).some(isSensitiveEnvironmentKey) ? this.credentialCacheScope : undefined;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1036,6 +1194,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    if (config.ask_user_question !== undefined) {
+      validateAskUserQuestionConfig(config.ask_user_question);
+    }
+    if (config.mcp !== undefined) {
+      validateMCPConfigForClaudeCode(config.mcp);
+    }
+    validateClaudeToolPolicyConfig(config);
 
     // Sort keys for stable cache-key hashing. Precedence is documented on the
     // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
@@ -1068,6 +1234,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
+    const credentialCacheScope = this.getCredentialCacheScope(env);
+    const cacheSafeEnv = Object.fromEntries(
+      Object.entries(env).filter(([key]) => !isSensitiveEnvironmentKey(key)),
+    );
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (
@@ -1088,11 +1258,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Set up allowed tools for the Claude Agent SDK call
     // Check for conflicting config options (may want a zod schema in the future)
     if (
-      config.allow_all_tools &&
-      ('custom_allowed_tools' in config || 'append_allowed_tools' in config)
+      config.allow_all_tools === true &&
+      ('custom_allowed_tools' in config ||
+        'append_allowed_tools' in config ||
+        config.tools !== undefined)
     ) {
       throw new Error(
-        'Cannot specify both allow_all_tools and custom_allowed_tools or append_allowed_tools',
+        'Cannot specify allow_all_tools together with tools, custom_allowed_tools, or append_allowed_tools',
       );
     }
     if ('custom_allowed_tools' in config && 'append_allowed_tools' in config) {
@@ -1102,7 +1274,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Validate that bypassPermissions mode requires the safety flag
     if (
       config.permission_mode === 'bypassPermissions' &&
-      !config.allow_dangerously_skip_permissions
+      config.allow_dangerously_skip_permissions !== true
     ) {
       throw new Error(
         "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
@@ -1133,6 +1305,27 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const disallowedTools = config.disallowed_tools
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
+    let tools = config.tools;
+    if (tools === undefined) {
+      if (config.allow_all_tools === true) {
+        tools = { type: 'preset', preset: 'claude_code' } as const;
+      } else {
+        const derivedTools = new Set(allowedTools);
+        if (config.ask_user_question) {
+          derivedTools.add('AskUserQuestion');
+        }
+        if (config.skills === 'all' || (Array.isArray(config.skills) && config.skills.length > 0)) {
+          derivedTools.add('Skill');
+        }
+        if (config.agents && Object.keys(config.agents).length > 0) {
+          derivedTools.add('Task');
+        }
+        if (config.permission_mode === 'plan') {
+          derivedTools.add('ExitPlanMode');
+        }
+        tools = Array.from(derivedTools).sort();
+      }
+    }
 
     const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
 
@@ -1231,40 +1424,86 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable
         ? safeResolve(basePath, config.path_to_claude_code_executable)
         : undefined,
-      settingSources: config.setting_sources,
-      tools: config.tools,
+      settingSources: config.setting_sources ?? [],
+      tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
       taskBudget: config.task_budget,
-      env,
+      env: cacheSafeEnv,
     };
 
-    // Cache handling using shared utilities. A user-supplied can_use_tool callback can change
-    // tool decisions in ways that aren't representable in the cache key. The built-in
-    // ask_user_question=random callback is intentionally nondeterministic, so skip caching there too.
-    const canUseToolBypassesCache =
-      Boolean(config.can_use_tool) || config.ask_user_question?.behavior === 'random';
-    if (canUseToolBypassesCache) {
+    // Runtime callbacks can change tool or elicitation decisions in ways that aren't representable
+    // in the cache key. The built-in ask_user_question=random callback is nondeterministic too.
+    const runtimeCallbackBypassesCache =
+      Boolean(config.can_use_tool) ||
+      Boolean(config.on_elicitation) ||
+      Boolean(config.hooks) ||
+      Boolean(config.spawn_claude_code_process) ||
+      config.ask_user_question?.behavior === 'random';
+    const activeMcpConfig =
+      config.mcp?.enabled !== false &&
+      (config.mcp?.server || (config.mcp?.servers?.length ?? 0) > 0)
+        ? config.mcp
+        : undefined;
+    const sensitiveMcpBypassesCache = mcpConfigContainsCacheSensitiveData(activeMcpConfig);
+    const settingsEnvironmentBypassesCache =
+      settingsContainEnvironment(config.settings) ||
+      settingsContainEnvironment(config.managed_settings);
+    const sensitiveExtraArgsBypassCache = extraArgsContainSensitiveData(config.extra_args);
+    const promptCredentialOverrideBypassesCache =
+      config.env !== this.config.env &&
+      Object.keys(config.env ?? {}).some(isSensitiveEnvironmentKey);
+    const externalCredentialProviderBypassesCache =
+      config.apiKeyRequired === false ||
+      Boolean(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX);
+    if (runtimeCallbackBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: runtime callback is not cache-stable');
+    }
+    if (sensitiveMcpBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: MCP configuration contains secrets');
+    }
+    if (credentialCacheScope) {
+      logger.debug('[ClaudeCodeSDKProvider] Scoping cache to in-memory credential identity');
+    }
+    if (settingsEnvironmentBypassesCache) {
       logger.debug(
-        '[ClaudeCodeSDKProvider] Bypassing cache: canUseTool callback is not cache-stable',
+        '[ClaudeCodeSDKProvider] Bypassing cache: SDK settings contain environment data',
       );
     }
-    const cacheResult = canUseToolBypassesCache
-      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
-      : await initializeAgenticCache(
-          {
-            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-            workingDir,
-            bustCache: context?.bustCache,
-            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-            cacheMcp: config.cache_mcp,
-          },
-          {
-            prompt,
-            cacheKeyQueryOptions,
-            ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
-          },
-        );
+    if (sensitiveExtraArgsBypassCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: extra_args contains secret-like keys');
+    }
+    if (promptCredentialOverrideBypassesCache) {
+      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: prompt config overrides credentials');
+    }
+    if (externalCredentialProviderBypassesCache) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: external credential identity is not cache-stable',
+      );
+    }
+    const cacheResult =
+      runtimeCallbackBypassesCache ||
+      sensitiveMcpBypassesCache ||
+      settingsEnvironmentBypassesCache ||
+      sensitiveExtraArgsBypassCache ||
+      promptCredentialOverrideBypassesCache ||
+      externalCredentialProviderBypassesCache
+        ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+        : await initializeAgenticCache(
+            {
+              cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+              workingDir,
+              bustCache: context?.bustCache,
+              mcp: activeMcpConfig,
+              cacheMcp: config.cache_mcp,
+            },
+            {
+              prompt,
+              cacheKeyQueryOptions,
+              ...(credentialCacheScope ? { credentialCacheScope } : {}),
+              ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
+            },
+          );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
@@ -1311,6 +1550,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Make the Claude Agent SDK call
     const options: QueryOptions = {
       ...cacheKeyQueryOptions,
+      env,
       abortController,
       mcpServers,
       cwd: workingDir,
