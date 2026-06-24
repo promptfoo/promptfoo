@@ -422,16 +422,6 @@ export class MCPClient {
           nextAction: 'reconnect',
         });
       }
-    } else if (existingTransport) {
-      try {
-        await existingTransport.close();
-      } catch {
-        logger.debug('[MCP] Failed to close transport without an owning client', {
-          operation: 'oauth-refresh',
-          resource: 'transport',
-          nextAction: 'reconnect',
-        });
-      }
     }
 
     // Remove old entries (keep tools and oauthConfig)
