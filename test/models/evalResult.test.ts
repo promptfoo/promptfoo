@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { evalResultsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
@@ -1001,6 +1004,35 @@ describe('EvalResult', () => {
         evaluationId: 'bulk-evaluation-id',
         metadata: { source: 'import' },
       });
+    });
+
+    it('does not import private manual-rating provenance', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            manualRatingState: {
+              version: 1,
+              status: 'active',
+              original: {
+                success: false,
+                score: 0.123,
+                failureReason: ResultFailureReason.ASSERT,
+                gradingResult: null,
+              },
+            },
+          } as EvaluateResult & { manualRatingState: unknown },
+        ],
+        'test-eval-bulk-private-state',
+      );
+
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.manualRatingState).toBeNull();
+      expect(result).not.toHaveProperty('manualRatingState');
     });
   });
 

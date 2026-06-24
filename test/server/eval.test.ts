@@ -185,6 +185,79 @@ describe('eval routes', () => {
         testEvalIds.add(createdEval.id);
       }
     });
+
+    it('does not accept private manual-rating provenance in v4 result payloads', async () => {
+      const sourceEval = await EvalFactory.create();
+      testEvalIds.add(sourceEval.id);
+      const [sourceResult] = await sourceEval.getResults();
+      invariant(sourceResult instanceof EvalResult, 'Source result is required');
+
+      const response = await api.post('/api/eval').send({
+        config: { description: 'private provenance import test' },
+        prompts: [{ raw: 'hello', label: 'hello' }],
+        results: [
+          {
+            ...sourceResult.toEvaluateResult(),
+            manualRatingState: {
+              version: 1,
+              status: 'active',
+              original: {
+                success: false,
+                score: 0.123,
+                failureReason: ResultFailureReason.ASSERT,
+                gradingResult: null,
+              },
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      testEvalIds.add(response.body.id);
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, response.body.id))
+        .get();
+      expect(stored?.manualRatingState).toBeNull();
+    });
+  });
+
+  describe('POST /:id/results', () => {
+    it('does not accept private manual-rating provenance from result payloads', async () => {
+      const sourceEval = await EvalFactory.create();
+      const targetEval = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(sourceEval.id);
+      testEvalIds.add(targetEval.id);
+      const [sourceResult] = await sourceEval.getResults();
+      invariant(sourceResult instanceof EvalResult, 'Source result is required');
+      const resultId = crypto.randomUUID();
+
+      const response = await api.post(`/api/eval/${targetEval.id}/results`).send([
+        {
+          ...sourceResult.toEvaluateResult(),
+          id: resultId,
+          manualRatingState: {
+            version: 1,
+            status: 'active',
+            original: {
+              success: false,
+              score: 0.123,
+              failureReason: ResultFailureReason.ASSERT,
+              gradingResult: null,
+            },
+          },
+        },
+      ]);
+
+      expect(response.status).toBe(204);
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, resultId))
+        .get();
+      expect(stored?.manualRatingState).toBeNull();
+    });
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {

@@ -537,6 +537,7 @@ export default class Eval {
             opts.results?.map((r) => ({
               ...r,
               metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              manualRatingState: null,
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -1363,6 +1364,7 @@ export default class Eval {
           results.map((r) => ({
             ...r,
             metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            manualRatingState: null,
             evalId: this.id,
           })),
         )

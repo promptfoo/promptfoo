@@ -1392,6 +1392,7 @@ export default class EvalResult {
       latencyMs,
       cost,
       metadata: sanitizeForDb(persistedMetadata),
+      manualRatingState: null,
       failureReason,
     };
     if (persist) {
@@ -1434,7 +1435,12 @@ export default class EvalResult {
         // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
         // via `persistTraceMetadata`; strip the top-level fields so the DB write
         // only carries known-schema columns.
-        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
+        const {
+          traceId: _traceId,
+          evaluationId: _evaluationId,
+          manualRatingState: _manualRatingState,
+          ...rest
+        } = result as EvaluateResult & { manualRatingState?: unknown };
         const sanitizedResult = {
           ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
@@ -1448,6 +1454,7 @@ export default class EvalResult {
           }),
           namedScores: sanitizeForDb(result.namedScores),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
+          manualRatingState: null,
         };
         const dbResult = await tx
           .insert(evalResultsTable)
@@ -1667,7 +1674,8 @@ export default class EvalResult {
       traceId: this.traceId,
       evaluationId: this.evaluationId,
     } = surfaceTraceMetadata(opts.metadata));
-    this.#manualRatingState = parseManualRatingState(opts.manualRatingState);
+    this.#manualRatingState =
+      opts.persisted === true ? parseManualRatingState(opts.manualRatingState) : undefined;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
