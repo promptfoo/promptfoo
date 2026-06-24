@@ -251,8 +251,11 @@ async function calculateMeteorScore(
   beta: number = 3.0,
   gamma: number = 0.5,
 ): Promise<number> {
-  if (!candidate || references.length === 0) {
+  if (candidate == null || references.length === 0) {
     throw new Error('Invalid inputs');
+  }
+  if (candidate.trim() === '') {
+    return 0;
   }
 
   const scores = await Promise.all(
@@ -295,7 +298,7 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : `METEOR score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }

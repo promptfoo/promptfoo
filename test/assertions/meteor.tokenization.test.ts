@@ -54,19 +54,29 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
 
     expect(result.pass).toBe(false);
     expect(result.score).toBeLessThan(0.9);
-    expect(result.reason).toContain('did not meet threshold 0.9');
+    expect(result.reason).toContain('is less than threshold 0.9');
   });
 
   it('inverts the threshold comparison and score for not-meteor', async () => {
-    const result = await meteor({
+    const passingResult = await meteor({
       assertion: { type: 'meteor', threshold: 0.5 },
       inverse: true,
       renderedValue: 'completely different reference',
       outputString: 'the cat sat on the mat',
     });
 
-    expect(result.pass).toBe(true);
-    expect(result.score).toBeGreaterThan(0.9);
+    expect(passingResult.pass).toBe(true);
+    expect(passingResult.score).toBeGreaterThan(0.9);
+
+    const failingResult = await meteor({
+      assertion: { type: 'meteor', threshold: 0.5 },
+      inverse: true,
+    });
+
+    expect(failingResult.pass).toBe(false);
+    expect(failingResult.reason).toBe(
+      'METEOR score 0.9977 is greater than or equal to threshold 0.5',
+    );
   });
 
   it('rejects empty reference arrays', async () => {
@@ -79,12 +89,25 @@ describe('handleMeteorAssertion tokenization (real implementation)', () => {
     expect(result.score).toBe(0);
   });
 
-  it('distinguishes an empty-string candidate (throws) from whitespace-only (scores 0)', async () => {
-    // A whitespace-only candidate is a non-empty string, so it passes the
-    // `!candidate` guard, tokenizes to [] and scores 0. An empty-string candidate
-    // is falsy and still throws 'Invalid inputs'. Pin this asymmetry.
-    expect((await meteor({ outputString: '   \t  ' })).score).toBe(0);
-    await expect(meteor({ outputString: '' })).rejects.toThrow('Invalid inputs');
+  it('scores empty and whitespace-only candidates as zero', async () => {
+    for (const outputString of ['', '   \t  ']) {
+      expect(await meteor({ outputString })).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'METEOR score 0.0000 is less than threshold 0.5',
+      });
+      expect(
+        await meteor({
+          assertion: { type: 'meteor', threshold: 0.5 },
+          inverse: true,
+          outputString,
+        }),
+      ).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'METEOR assertion passed',
+      });
+    }
   });
 
   it('preserves punctuation-only token scoring', async () => {
