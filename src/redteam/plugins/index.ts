@@ -468,6 +468,17 @@ async function fetchRemoteTestCases(
       throw new RemoteGenerationFailure(`Remote generation returned invalid JSON for ${key}`);
     }
 
+    if (data?.error) {
+      await deleteFromCache?.();
+      abortSignal?.throwIfAborted();
+      logger.error(`Error generating test cases for ${key}`, {
+        status,
+        statusText,
+        responseFormat: 'error-envelope',
+      });
+      throw new RemoteGenerationFailure(`Remote generation returned an error for ${key}`);
+    }
+
     if (!data || !Array.isArray(data.result)) {
       await deleteFromCache?.();
       abortSignal?.throwIfAborted();
@@ -477,9 +488,6 @@ async function fetchRemoteTestCases(
         resultType: Array.isArray(data?.result) ? 'array' : typeof data?.result,
       });
       throw new RemoteGenerationFailure(`Remote generation returned an invalid result for ${key}`);
-    }
-    if (data.error) {
-      await deleteFromCache?.();
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       try {

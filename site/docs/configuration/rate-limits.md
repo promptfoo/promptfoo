@@ -41,9 +41,10 @@ Promptfoo automatically retries requests that fail with transient server errors:
 | 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare-specific) |
 
 Direct `fetchWithProxy` calls retry these errors up to 3 times with fixed exponential backoff
-(1s, 2s, 4s). Requests routed through `fetchWithRetries` use the shared HTTP retry budget and
-jittered backoff described below. The status text check ensures that permanent failures (like
-authentication errors that happen to use 502) are not retried.
+(1s, 2s, 4s). `fetchWithRetries` disables that nested status policy to avoid multiplying attempts;
+its callers must explicitly opt selected response statuses into the shared HTTP retry budget and
+jittered backoff described below. The direct policy's status text check prevents permanent failures
+(like authentication errors that happen to use 502) from being retried.
 
 ### How Adaptive Concurrency Works
 
@@ -100,7 +101,7 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 Promptfoo has two retry layers:
 
 1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times by default. If a provider config sets `maxRetries`, the scheduler uses that value (including `0` to disable scheduler retries entirely).
-2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set. The effective HTTP retry budget is normalized to an integer from 0 through 10; non-finite values fall back to the default.
+2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set. The effective HTTP retry budget is normalized to a non-negative integer; non-finite values fall back to the default.
 
 When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
 

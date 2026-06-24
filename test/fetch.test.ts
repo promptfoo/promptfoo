@@ -20,7 +20,7 @@ import {
   isRateLimited,
   isTransientError,
 } from '../src/util/fetch/index';
-import { withFetchRetryContext } from '../src/util/fetch/retryContext';
+import { resolveFetchRetryMaxRetries, withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep, sleepWithAbort } from '../src/util/time';
 import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
@@ -1327,15 +1327,31 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(4);
   });
 
-  it('should cap huge retry budgets', async () => {
-    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+  it('should preserve huge finite retry budgets for public API compatibility', () => {
+    expect(resolveFetchRetryMaxRetries(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
+  });
 
+  it.each([
+    null,
+    '503',
+    [Number.NaN],
+    [99],
+    [600],
+    [503.5],
+  ])('should reject invalid retry status policy %j before sending a request', async (retryOnStatusCodes) => {
     await expect(
-      fetchWithRetries('https://example.com', {}, 1000, Number.MAX_SAFE_INTEGER),
-    ).rejects.toThrow('Request failed after 10 retries: Error: Network error');
+      fetchWithRetries(
+        'https://example.com',
+        { method: 'POST', body: '{}', retryOnStatusCodes } as any,
+        1000,
+        2,
+      ),
+    ).rejects.toThrow(
+      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+    );
 
-    expect(global.fetch).toHaveBeenCalledTimes(11);
-    expect(sleep).toHaveBeenCalledTimes(10);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it('should honor retry context maxRetries when explicit argument is omitted', async () => {

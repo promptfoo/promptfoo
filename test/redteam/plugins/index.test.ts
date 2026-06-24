@@ -892,7 +892,7 @@ describe('Plugins', () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: JSON.stringify({ error: 'temporary failure' }),
+        data: JSON.stringify({ error: 'temporary failure', result: [] }),
         cached: false,
         deleteFromCache,
         status: 200,
@@ -905,12 +905,13 @@ describe('Plugins', () => {
         purpose: 'test',
         injectVar: 'testVar',
         n: 1,
-        config: {},
+        config: { maxCharsPerMessage: 10 },
         delayMs: 0,
       });
 
       expect(result).toEqual([]);
       expect(deleteFromCache).toHaveBeenCalledOnce();
+      expect(fetchWithCache).toHaveBeenCalledOnce();
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {

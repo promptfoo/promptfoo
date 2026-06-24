@@ -546,6 +546,33 @@ describe('fetchWithCache', () => {
       await expect(Promise.all([noRetry, retryOnce])).resolves.toHaveLength(2);
     });
 
+    it('should isolate concurrent requests with different retry status policies', async () => {
+      let resolveFirst: ((response: Response) => void) | undefined;
+      let resolveSecond: ((response: Response) => void) | undefined;
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+
+      const retry500 = fetchWithCache(url, { retryOnStatusCodes: [500] }, 1000);
+      const retry503 = fetchWithCache(url, { retryOnStatusCodes: [503] }, 1000);
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(2));
+      resolveFirst?.(mockFetchWithRetriesResponse(true, { data: 'retry 500' }));
+      resolveSecond?.(mockFetchWithRetriesResponse(true, { data: 'retry 503' }));
+
+      await expect(Promise.all([retry500, retry503])).resolves.toHaveLength(2);
+    });
+
     it('should isolate in-flight fetch deduping by namespace', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
@@ -1283,17 +1310,30 @@ describe('fetchWithCache', () => {
       expect(explicitUndefined.cached).toBe(true);
     });
 
-    it('should isolate cached responses by retry status policy', async () => {
-      mockFetchWithRetries
-        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: '500 policy' }))
-        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: '501 policy' }));
+    it('should reuse successful cached responses across retry status policies', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'successful response' }),
+      );
 
       const firstResult = await fetchWithCache(url, { retryOnStatusCodes: [500] }, 1000);
       const secondResult = await fetchWithCache(url, { retryOnStatusCodes: [501] }, 1000);
 
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(firstResult).toMatchObject({ cached: false, data: { data: '500 policy' } });
-      expect(secondResult).toMatchObject({ cached: false, data: { data: '501 policy' } });
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(firstResult).toMatchObject({ cached: false, data: { data: 'successful response' } });
+      expect(secondResult).toMatchObject({ cached: true, data: { data: 'successful response' } });
+    });
+
+    it('should reject invalid retry status policies before consulting a warm cache', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'cached response' }),
+      );
+      await fetchWithCache(url, {}, 1000);
+
+      await expect(fetchWithCache(url, { retryOnStatusCodes: null } as any, 1000)).rejects.toThrow(
+        'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
     });
 
     it('should isolate cached responses by requested response format', async () => {

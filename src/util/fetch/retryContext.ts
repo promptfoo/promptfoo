@@ -6,7 +6,6 @@ interface FetchRetryContext {
 
 const fetchRetryContext = new AsyncLocalStorage<FetchRetryContext>();
 const DEFAULT_FETCH_RETRIES = 4;
-const MAX_FETCH_RETRIES = 10;
 
 /**
  * Run `fn` with a fetch retry context so nested `fetchWithRetries` /
@@ -35,5 +34,5 @@ export function resolveFetchRetryMaxRetries(maxRetries?: number): number {
   if (!Number.isFinite(resolved)) {
     return DEFAULT_FETCH_RETRIES;
   }
-  return Math.min(MAX_FETCH_RETRIES, Math.max(0, Math.floor(resolved)));
+  return Math.max(0, Math.floor(resolved));
 }

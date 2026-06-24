@@ -12,7 +12,12 @@ import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
-import { type FetchOptions, fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import {
+  type FetchOptions,
+  fetchWithRetries,
+  getFetchWithProxyHeaders,
+  normalizeRetryOnStatusCodes,
+} from './util/fetch/index';
 import {
   getCloudBearerToken,
   getCloudTaskTeamId,
@@ -499,16 +504,6 @@ function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown
     }
 
     if (key === 'retryOnStatusCodes') {
-      if (value == null) {
-        continue;
-      }
-      if (!Array.isArray(value) || !value.every((status) => Number.isInteger(status))) {
-        return { cacheable: false, identity: undefined };
-      }
-      const retryOnStatusCodes = [...new Set(value)].sort((a, b) => a - b);
-      if (retryOnStatusCodes.length > 0) {
-        identity.retryOnStatusCodes = retryOnStatusCodes;
-      }
       continue;
     }
 
@@ -570,11 +565,12 @@ function getAbortSignalId(signal: AbortSignal) {
 function getInflightFetchCacheKey(
   cacheKey: string,
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   maxRetries: number,
 ) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  const retryKey = `${cacheKey}:maxRetries:${maxRetries}`;
+  const retryStatusKey = options.retryOnStatusCodes?.join(',') ?? '';
+  const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}`;
   return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;
 }
 
@@ -779,6 +775,10 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const requestOptions: FetchOptions = {
+    ...options,
+    retryOnStatusCodes: normalizeRetryOnStatusCodes(options.retryOnStatusCodes),
+  };
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex } = cacheOptions;
@@ -786,17 +786,21 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    requestOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
   const cacheKey =
-    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
+    cacheEnabled && !bust
+      ? getFetchCacheKey(url, requestOptions, method, format, repeatIndex)
+      : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      requestOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -835,7 +839,7 @@ export async function fetchWithCache<T = unknown>(
   const inflightCacheKey = getInflightFetchCacheKey(
     cacheKey,
     url,
-    options,
+    requestOptions,
     resolveFetchRetryMaxRetries(maxRetries),
   );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
@@ -843,7 +847,7 @@ export async function fetchWithCache<T = unknown>(
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        requestOptions,
         timeout,
         maxRetries,
         isIdempotent,

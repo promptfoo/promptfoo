@@ -28,6 +28,24 @@ import type { FetchOptions } from './types';
 const DEFAULT_REQUEST_BACKOFF_MS = 5000;
 const MAX_RETRY_DELAY_MS = 60_000;
 
+export function normalizeRetryOnStatusCodes(value: unknown): readonly number[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (status) =>
+        Number.isInteger(status) && Number.isFinite(status) && status >= 100 && status <= 599,
+    )
+  ) {
+    throw new TypeError(
+      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+    );
+  }
+  return [...new Set(value)].sort((a, b) => a - b);
+}
+
 function getAbortError(signal: AbortSignal, fallback: unknown): unknown {
   if (signal.reason instanceof Error) {
     return signal.reason;
@@ -774,7 +792,8 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  const { retryOnStatusCodes = [], ...requestOptions } = options;
+  const { retryOnStatusCodes: configuredRetryStatusCodes, ...requestOptions } = options;
+  const retryOnStatusCodes = normalizeRetryOnStatusCodes(configuredRetryStatusCodes);
   const signal = requestOptions.signal ?? (url instanceof Request ? url.signal : undefined);
   const effectiveRequestOptions = signal ? { ...requestOptions, signal } : requestOptions;
   maxRetries = resolveFetchRetryMaxRetries(maxRetries);
