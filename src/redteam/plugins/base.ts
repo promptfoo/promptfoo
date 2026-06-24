@@ -202,9 +202,11 @@ export abstract class RedteamPluginBase {
       const formatter = getPromptOutputFormatter(this.config);
       const parsedPrompts = formatter.parse(generatedPrompts, this.config);
       const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
-      const rejectedPromptLengths: number[] = [];
-      let rejectedPromptLimit: number | undefined;
-      let rejectedPromptKind: 'max' | 'min' | undefined;
+      const rejectedPromptViolations: Array<{
+        kind: 'max' | 'min';
+        length: number;
+        limit: number;
+      }> = [];
 
       for (const prompt of parsedPrompts) {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
@@ -215,27 +217,45 @@ export abstract class RedteamPluginBase {
           minCharsPerMessage: this.config.minCharsPerMessage,
         });
         if (violation) {
-          rejectedPromptLengths.push(violation.length);
-          rejectedPromptLimit = violation.limit;
-          rejectedPromptKind = violation.kind;
+          rejectedPromptViolations.push(violation);
         } else {
           acceptedPrompts.push(prompt);
         }
       }
 
-      if (rejectedPromptLengths.length > 0) {
-        const comparison = rejectedPromptKind === 'min' ? 'below' : 'above';
-        const requiredDirection = rejectedPromptKind === 'min' ? 'at least' : 'at most';
-        const rejectedPromptLengthDescription =
-          rejectedPromptKind === 'min'
-            ? `The shortest rejected prompt was ${Math.min(...rejectedPromptLengths)} characters.`
-            : `The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.`;
+      if (rejectedPromptViolations.length > 0) {
+        const minViolations = rejectedPromptViolations.filter(
+          (violation) => violation.kind === 'min',
+        );
+        const maxViolations = rejectedPromptViolations.filter(
+          (violation) => violation.kind === 'max',
+        );
+        const rejectedPromptLengthDescriptions = [
+          ...(minViolations.length > 0
+            ? [
+                `${minViolations.length} prompt${minViolations.length === 1 ? '' : 's'} were below the ${minViolations[0].limit}-character minimum; the shortest was ${Math.min(...minViolations.map((violation) => violation.length))} characters.`,
+              ]
+            : []),
+          ...(maxViolations.length > 0
+            ? [
+                `${maxViolations.length} prompt${maxViolations.length === 1 ? '' : 's'} were above the ${maxViolations[0].limit}-character maximum; the longest was ${Math.max(...maxViolations.map((violation) => violation.length))} characters.`,
+              ]
+            : []),
+        ];
+        const requiredDirections = [
+          ...(this.config.minCharsPerMessage
+            ? [`at least ${this.config.minCharsPerMessage} characters`]
+            : []),
+          ...(this.config.maxCharsPerMessage
+            ? [`at most ${this.config.maxCharsPerMessage} characters`]
+            : []),
+        ].join(' and ');
         retryInstructions = dedent`
-          Your previous response included ${rejectedPromptLengths.length} generated prompt${
-            rejectedPromptLengths.length === 1 ? '' : 's'
-          } that were ${comparison} the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          ${rejectedPromptLengthDescription}
-          Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
+          Your previous response included ${rejectedPromptViolations.length} generated prompt${
+            rejectedPromptViolations.length === 1 ? '' : 's'
+          } outside the configured character range.
+          ${rejectedPromptLengthDescriptions.join(' ')}
+          Generate replacement prompts only, and keep every user message ${requiredDirections}.
         `.trim();
       } else {
         retryInstructions = undefined;

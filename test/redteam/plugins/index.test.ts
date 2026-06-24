@@ -206,6 +206,41 @@ describe('Plugins', () => {
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
     });
 
+    it('should describe mixed prompt length retry violations', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: tiny\nPrompt: this prompt is too long',
+          error: undefined,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: acceptable\nPrompt: suitable',
+          error: undefined,
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { minCharsPerMessage: 5, maxCharsPerMessage: 12 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('below the 5-character minimum'),
+      );
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('above the 12-character maximum'),
+      );
+    });
+
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

@@ -289,23 +289,34 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
 }
 
 function buildCharLimitsRetryInstructions(
-  rejectedPromptLengths: number[],
-  violationKind?: 'max' | 'min',
-  limit?: number,
+  violations: Array<{ kind: 'max' | 'min'; length: number; limit: number }>,
+  {
+    maxCharsPerMessage,
+    minCharsPerMessage,
+  }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
 ): string {
-  const longestRejectedPromptText =
-    rejectedPromptLengths.length > 0
-      ? `${Math.max(...rejectedPromptLengths)} characters`
-      : 'unknown length';
-
-  const comparison = violationKind === 'min' ? 'below' : 'above';
-  const requiredDirection = violationKind === 'min' ? 'at least' : 'at most';
+  const minViolations = violations.filter((violation) => violation.kind === 'min');
+  const maxViolations = violations.filter((violation) => violation.kind === 'max');
+  const descriptions = [
+    ...(minViolations.length > 0
+      ? [
+          `${minViolations.length} prompt${minViolations.length === 1 ? '' : 's'} were below the ${minViolations[0].limit}-character minimum; the shortest was ${Math.min(...minViolations.map((violation) => violation.length))} characters.`,
+        ]
+      : []),
+    ...(maxViolations.length > 0
+      ? [
+          `${maxViolations.length} prompt${maxViolations.length === 1 ? '' : 's'} were above the ${maxViolations[0].limit}-character maximum; the longest was ${Math.max(...maxViolations.map((violation) => violation.length))} characters.`,
+        ]
+      : []),
+  ];
+  const requirements = [
+    ...(minCharsPerMessage ? [`at least ${minCharsPerMessage} characters`] : []),
+    ...(maxCharsPerMessage ? [`at most ${maxCharsPerMessage} characters`] : []),
+  ].join(' and ');
   return dedent`
-    Your previous response included ${rejectedPromptLengths.length} generated prompt${
-      rejectedPromptLengths.length === 1 ? '' : 's'
-    } that were ${comparison} the ${limit ?? 'configured'}-character limit.
-    The most recently rejected prompt length was ${longestRejectedPromptText}.
-    Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
+    Your previous response included ${violations.length} generated prompt${violations.length === 1 ? '' : 's'} outside the configured character range.
+    ${descriptions.join(' ')}
+    Generate replacement prompts only, and keep every user message ${requirements}.
   `.trim();
 }
 
@@ -329,9 +340,11 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
         });
 
         const validTestCases: TestCase[] = [];
-        const rejectedPromptLengths: number[] = [];
-        let rejectedPromptLimit: number | undefined;
-        let rejectedPromptKind: 'max' | 'min' | undefined;
+        const rejectedPromptViolations: Array<{
+          kind: 'max' | 'min';
+          length: number;
+          limit: number;
+        }> = [];
 
         for (const testCase of generatedTestCases) {
           const violation = getGeneratedPromptLengthViolation(
@@ -342,9 +355,7 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
             },
           );
           if (violation) {
-            rejectedPromptLengths.push(violation.length);
-            rejectedPromptLimit = violation.limit;
-            rejectedPromptKind = violation.kind;
+            rejectedPromptViolations.push(violation);
             continue;
           }
 
@@ -352,12 +363,11 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
         }
 
         retryInstructions =
-          rejectedPromptLengths.length > 0
-            ? buildCharLimitsRetryInstructions(
-                rejectedPromptLengths,
-                rejectedPromptKind,
-                rejectedPromptLimit,
-              )
+          rejectedPromptViolations.length > 0
+            ? buildCharLimitsRetryInstructions(rejectedPromptViolations, {
+                maxCharsPerMessage,
+                minCharsPerMessage,
+              })
             : undefined;
 
         return validTestCases;
