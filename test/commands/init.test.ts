@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import path from 'path';
 
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
@@ -523,7 +524,9 @@ describe('init command', () => {
         await init.handleExampleDownload('.', 'custom-runner');
 
         expect(logger.info).toHaveBeenCalledWith(
-          expect.stringContaining('View the README file at custom-runner/README.md'),
+          expect.stringContaining(
+            `View the README file at ${path.join('custom-runner', 'README.md')}`,
+          ),
         );
         expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('promptfoo eval'));
       });
