@@ -1438,6 +1438,36 @@ describe('calculateFilteredMetrics', () => {
         }),
       ).rejects.toThrow('Filtered result details exceed the safe processing limit');
     });
+
+    it('should not budget test vars when named scores are empty', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await insertRawNamedScoreResult({
+        id: 'empty-named-scores-large-vars',
+        evalId: eval_.id,
+        namedScores: '{}',
+        gradingResult: JSON.stringify({
+          componentResults: [{ pass: true }, { pass: false }],
+        }),
+        testCase: JSON.stringify({ vars: { payload: 'x'.repeat(9 * 1024 * 1024) } }),
+      });
+
+      await expect(
+        calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql: sql`eval_id = ${eval_.id}`,
+        }),
+      ).resolves.toMatchObject([
+        {
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          testFailCount: 1,
+          assertPassCount: 1,
+          assertFailCount: 1,
+        },
+      ]);
+    });
   });
 
   describe('error handling', () => {

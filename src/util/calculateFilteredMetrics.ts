@@ -267,6 +267,10 @@ async function aggregateResultDetails(
   whereSql: SQL<unknown>,
   db: QueryDatabase,
 ): Promise<void> {
+  const hasNamedScoreEntriesSql = sql`
+    eval_results.named_scores IS NOT NULL
+    AND eval_results.named_scores <> ${'{}'}
+  `;
   let lastRowCursor: number | undefined;
   let processedRows = 0;
   let totalDetailBytes = 0;
@@ -280,13 +284,13 @@ async function aggregateResultDetails(
         COALESCE(LENGTH(CAST(named_scores AS BLOB)), 0) +
           COALESCE(LENGTH(CAST(grading_result AS BLOB)), 0) +
           CASE
-            WHEN named_scores IS NOT NULL THEN LENGTH(CAST(test_case AS BLOB))
+            WHEN ${hasNamedScoreEntriesSql} THEN LENGTH(CAST(test_case AS BLOB))
             ELSE 0
           END AS detail_bytes
       FROM eval_results
       WHERE ${whereSql}
         ${cursorSql}
-        AND (named_scores IS NOT NULL OR grading_result IS NOT NULL)
+        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
       ORDER BY eval_results.rowid
       LIMIT ${RESULT_DETAILS_BATCH_SIZE}
     `)) as ResultDetailsPageRow[];
@@ -319,12 +323,12 @@ async function aggregateResultDetails(
         prompt_idx,
         named_scores,
         grading_result,
-        CASE WHEN named_scores IS NOT NULL THEN test_case ELSE NULL END AS test_case
+        CASE WHEN ${hasNamedScoreEntriesSql} THEN test_case ELSE NULL END AS test_case
       FROM eval_results
       WHERE ${whereSql}
         ${cursorSql}
         AND eval_results.rowid <= ${pageLastRowCursor}
-        AND (named_scores IS NOT NULL OR grading_result IS NOT NULL)
+        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
       ORDER BY eval_results.rowid
     `)) as ResultDetailsRow[];
     if (rows.length !== pageRows.length) {
