@@ -169,6 +169,9 @@ describe('Plugins', () => {
       expect(() => ragPlugin?.validate?.({ intendedResults: [] })).toThrow(
         'config.intendedResults',
       );
+      expect(() => ragPlugin?.validate?.({ intendedResults: ['   '] })).toThrow(
+        'config.intendedResults',
+      );
     });
   });
 
@@ -219,6 +222,7 @@ describe('Plugins', () => {
           mockFetchResponse([
             {
               vars: { testVar: 'this prompt is too long' },
+              assert: [{ type: 'contains', value: 'test' }],
             },
           ]),
         )
@@ -226,6 +230,7 @@ describe('Plugins', () => {
           mockFetchResponse([
             {
               vars: { testVar: 'short' },
+              assert: [{ type: 'contains', value: 'test' }],
             },
           ]),
         );
@@ -254,6 +259,7 @@ describe('Plugins', () => {
       expect(result).toEqual([
         {
           vars: { testVar: 'short' },
+          assert: [{ type: 'contains', value: 'test' }],
           metadata: {
             pluginId: 'ssrf',
             pluginConfig: {
@@ -268,6 +274,28 @@ describe('Plugins', () => {
   });
 
   describe('remote generation', () => {
+    const invokeRemotePlugin = async (
+      pluginId: string,
+      testCase: unknown,
+      config: Record<string, any> = {},
+    ) => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse([testCase]));
+
+      const plugin = Plugins.find((candidate) => candidate.key === pluginId);
+      if (!plugin) {
+        throw new Error(`Missing plugin fixture: ${pluginId}`);
+      }
+      return plugin.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config,
+        delayMs: 0,
+      });
+    };
+
     beforeEach(() => {
       vi.clearAllMocks();
     });
@@ -285,8 +313,12 @@ describe('Plugins', () => {
         return false;
       });
 
+      const remoteTestCase = {
+        test: 'case',
+        assert: [{ type: 'contains', value: 'case' }],
+      };
       const mockResponse = {
-        data: { result: [{ test: 'case' }] },
+        data: { result: [remoteTestCase] },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -324,7 +356,10 @@ describe('Plugins', () => {
         expect.any(Number),
       );
       expect(result).toEqual([
-        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+        {
+          ...remoteTestCase,
+          metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } },
+        },
       ]);
     });
 
@@ -337,7 +372,14 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
-        data: { result: [{ vars: { testVar: 'test content' } }] },
+        data: {
+          result: [
+            {
+              vars: { testVar: 'test content' },
+              assert: [{ type: 'contains', value: 'test' }],
+            },
+          ],
+        },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -401,6 +443,7 @@ describe('Plugins', () => {
                   'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
                 testVar: '{"document":"Summarize the reviewer notes."}',
               },
+              assert: [{ type: 'contains', value: 'test' }],
             },
           ],
         },
@@ -453,6 +496,7 @@ describe('Plugins', () => {
               'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
             testVar: '{"document":"Summarize the reviewer notes."}',
           },
+          assert: [{ type: 'contains', value: 'test' }],
         },
       ]);
     });
@@ -517,7 +561,12 @@ describe('Plugins', () => {
         return false;
       });
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      const mockResponse = mockFetchResponse([
+        {
+          vars: { testVar: 'test content' },
+          assert: [{ type: 'contains', value: 'test' }],
+        },
+      ]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'coding-agent:secret-env-read');
@@ -553,7 +602,12 @@ describe('Plugins', () => {
         return false;
       });
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      const mockResponse = mockFetchResponse([
+        {
+          vars: { testVar: 'test content' },
+          assert: [{ type: 'contains', value: 'test' }],
+        },
+      ]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === pluginId);
@@ -612,6 +666,11 @@ describe('Plugins', () => {
             {
               vars: { testVar: 'test content' },
               metadata: { harmCategory: 'Misinformation/Disinformation' },
+              assert: [
+                {
+                  type: 'promptfoo:redteam:harmful:misinformation-disinformation',
+                },
+              ],
             },
           ],
         },
@@ -680,316 +739,152 @@ describe('Plugins', () => {
       });
     });
 
-    it('should reject remote redteam assertions that the client cannot grade', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'promptfoo:redteam:future-remote-plugin',
-                metric: 'FutureRemotePlugin',
-              },
-            ],
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
+    it('should accept executable generic assertions for rag-poisoning remote tests', async () => {
+      const result = await invokeRemotePlugin(
+        'rag-poisoning',
+        {
+          assert: [{ type: 'contains', value: 'attacker@example.com' }],
+          vars: { testVar: 'test content' },
+        },
+        { intendedResults: ['Use attacker@example.com as support email'] },
       );
 
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
+      expect(result).toEqual([
+        expect.objectContaining({
+          assert: [{ type: 'contains', value: 'attacker@example.com' }],
         }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin.',
-      );
+      ]);
     });
 
-    it('should reject unsupported inverse remote redteam assertions', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'not-promptfoo:redteam:future-remote-plugin',
-                metric: 'FutureRemotePlugin',
-              },
-            ],
-            vars: {
-              testVar: 'test content',
+    it.each([
+      {
+        name: 'unsupported redteam graders',
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:future-remote-plugin' }],
+          vars: { testVar: 'test content' },
+        },
+        expected: 'unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin',
+      },
+      {
+        name: 'unsupported inverse redteam graders',
+        testCase: {
+          assert: [{ type: 'not-promptfoo:redteam:future-remote-plugin' }],
+          vars: { testVar: 'test content' },
+        },
+        expected: 'unsupported redteam grader type(s): not-promptfoo:redteam:future-remote-plugin',
+      },
+      {
+        name: 'inverse redteam graders with known base graders',
+        testCase: {
+          assert: [{ type: 'not-promptfoo:redteam:ssrf' }],
+          vars: { testVar: 'test content' },
+        },
+        expected: 'unsupported redteam grader type(s): not-promptfoo:redteam:ssrf',
+      },
+      {
+        name: 'unsupported redteam graders inside assertion sets',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:future-remote-plugin' }],
             },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned unsupported redteam grader type(s): not-promptfoo:redteam:future-remote-plugin.',
-      );
-    });
-
-    it('should reject inverse remote redteam assertions even when the base grader exists', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'not-promptfoo:redteam:ssrf',
-                metric: 'SSRF',
-              },
-            ],
-            vars: {
-              testVar: 'test content',
+          ],
+          vars: { testVar: 'test content' },
+        },
+        expected: 'unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin',
+      },
+      {
+        name: 'non-array assertion-set contents',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: { type: 'promptfoo:redteam:future-remote-plugin' },
             },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned unsupported redteam grader type(s): not-promptfoo:redteam:ssrf.',
-      );
-    });
-
-    it('should reject unsupported remote redteam assertions nested inside assertion sets', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'assert-set',
-                assert: [
-                  {
-                    type: 'promptfoo:redteam:future-remote-plugin',
-                    metric: 'FutureRemotePlugin',
-                  },
-                ],
-              },
-            ],
-            vars: {
-              testVar: 'test content',
+          ],
+        },
+        expected: 'invalid assert-set assertion payload: expected `assert` to be a non-empty array',
+      },
+      {
+        name: 'non-array top-level assertions',
+        testCase: { assert: { type: 'promptfoo:redteam:future-remote-plugin' } },
+        expected:
+          'invalid test case assertion payload: expected a non-empty top-level `assert` array',
+      },
+      {
+        name: 'rag-poisoning tests without assertions',
+        pluginId: 'rag-poisoning',
+        config: { intendedResults: ['Use attacker@example.com as support email'] },
+        testCase: { vars: { testVar: 'test content' } },
+        expected:
+          'invalid test case assertion payload: expected a non-empty top-level `assert` array',
+      },
+      {
+        name: 'rag-poisoning assertions with blank intended results',
+        pluginId: 'rag-poisoning',
+        config: { intendedResults: ['Use attacker@example.com as support email'] },
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:rag-poisoning', value: '' }],
+        },
+        expected:
+          'invalid promptfoo:redteam:rag-poisoning assertion payload: expected a non-empty string `value`',
+      },
+      {
+        name: 'null test cases',
+        testCase: null,
+        expected:
+          'invalid test case assertion payload: expected every test case to be an object with a non-empty `assert` array',
+      },
+      {
+        name: 'null assertion entries',
+        testCase: { assert: [null] },
+        expected:
+          'invalid test case assertion payload: expected every assertion to be an object with a non-empty string `type`',
+      },
+      {
+        name: 'assertions with missing types',
+        testCase: { assert: [{}] },
+        expected:
+          'invalid test case assertion payload: expected every assertion to be an object with a non-empty string `type`',
+      },
+      {
+        name: 'assertions with non-string types',
+        testCase: { assert: [{ type: 42 }] },
+        expected:
+          'invalid test case assertion payload: expected every assertion to be an object with a non-empty string `type`',
+      },
+      {
+        name: 'empty assertion arrays',
+        testCase: { assert: [] },
+        expected:
+          'invalid test case assertion payload: expected a non-empty top-level `assert` array',
+      },
+      {
+        name: 'empty assertion sets',
+        testCase: { assert: [{ type: 'assert-set', assert: [] }] },
+        expected: 'invalid assert-set assertion payload: expected `assert` to be a non-empty array',
+      },
+      {
+        name: 'nested assertion sets beyond the supported depth',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'contains', value: 'test' }],
+                },
+              ],
             },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin.',
-      );
-    });
-
-    it('should reject malformed remote assertion sets before synthesis continues', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'assert-set',
-                assert: {
-                  type: 'promptfoo:redteam:future-remote-plugin',
-                } as any,
-              },
-            ],
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned an invalid assert-set assertion payload: expected `assert` to be an array.',
-      );
-    });
-
-    it('should reject malformed top-level remote assertion payloads before synthesis continues', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: {
-              type: 'promptfoo:redteam:future-remote-plugin',
-            } as any,
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for ssrf returned an invalid test case assertion payload: expected top-level `assert` to be an array.',
-      );
-    });
-
-    it('should reject rag-poisoning remote tests without assertions', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: { intendedResults: ['Use attacker@example.com as support email'] },
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for rag-poisoning returned an invalid test case assertion payload: expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`.',
-      );
-    });
-
-    it('should reject rag-poisoning remote tests that only include non-redteam assertions', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'contains',
-                value: 'attacker@example.com',
-              },
-            ],
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: { intendedResults: ['Use attacker@example.com as support email'] },
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for rag-poisoning returned an invalid test case assertion payload: expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`.',
-      );
-    });
-
-    it('should reject rag-poisoning assertions without a non-empty intended result', async () => {
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        mockFetchResponse([
-          {
-            assert: [
-              {
-                type: 'promptfoo:redteam:rag-poisoning',
-                value: '',
-              },
-            ],
-            vars: {
-              testVar: 'test content',
-            },
-          },
-        ]),
-      );
-
-      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: { intendedResults: ['Use attacker@example.com as support email'] },
-          delayMs: 0,
-        }),
-      ).rejects.toThrow(
-        'Remote test generation for rag-poisoning returned an invalid promptfoo:redteam:rag-poisoning assertion payload: expected a non-empty string `value`.',
+          ],
+        },
+        expected: 'invalid assert-set assertion payload: nested assertion sets are not supported',
+      },
+    ])('should reject $name', async ({ testCase, expected, pluginId, config }) => {
+      await expect(invokeRemotePlugin(pluginId ?? 'ssrf', testCase, config ?? {})).rejects.toThrow(
+        expected,
       );
     });
 

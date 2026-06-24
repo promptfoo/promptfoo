@@ -16,6 +16,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { UnsupportedRemoteRedteamAssertionsError } from '../../../src/redteam/types';
 import {
   extractGeneratedPrompt,
   getPluginConfigurationError,
@@ -407,6 +408,27 @@ describe('Redteam Routes', () => {
     });
 
     describe('validation', () => {
+      it('should return an actionable remote assertion contract error', async () => {
+        const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+          'promptfoo:redteam:future-remote-plugin',
+        ]);
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'ssrf',
+          action: vi.fn().mockRejectedValue(contractError),
+        });
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'ssrf', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(502);
+        expect(response.body.error).toBe(contractError.message);
+      });
+
       it('should return 400 for invalid plugin ID', async () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
@@ -642,6 +664,25 @@ describe('Redteam Routes', () => {
         expect(failedResponse.body).toMatchObject({
           status: 'error',
           logs: expect.arrayContaining(['working', 'Error: run failed']),
+        });
+      });
+    });
+
+    it('should publish remote assertion contract errors without stack traces', async () => {
+      const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+        'promptfoo:redteam:future-remote-plugin',
+      ]);
+      mockedDoRedteamRun.mockRejectedValueOnce(contractError);
+
+      const runResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' } });
+
+      await vi.waitFor(async () => {
+        const failedResponse = await request(app).get(`/api/eval/job/${runResponse.body.id}`);
+        expect(failedResponse.body).toMatchObject({
+          status: 'error',
+          logs: [`Error: ${contractError.message}`],
         });
       });
     });

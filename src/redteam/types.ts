@@ -89,7 +89,9 @@ export const PluginConfigSchema = z.object({
   // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
   // RAG Poisoning
-  intendedResults: z.array(z.string()).optional(),
+  intendedResults: z
+    .array(z.string().refine((value) => value.trim().length > 0, 'Expected a non-empty string'))
+    .optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),

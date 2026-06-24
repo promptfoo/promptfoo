@@ -360,86 +360,105 @@ function validateRagPoisoningAssertionValue(key: string, assertion: object): voi
 
 function collectUnsupportedRemoteRedteamAssertionTypes(
   key: string,
-  assertions: unknown,
+  assertions: unknown[],
   unsupportedAssertionTypes: Set<string>,
-): boolean {
-  if (!Array.isArray(assertions)) {
-    return false;
-  }
-
-  let hasRagPoisoningAssertion = false;
-
+  assertionSetDepth = 0,
+): void {
   for (const assertion of assertions) {
-    if (!assertion || typeof assertion !== 'object') {
-      continue;
+    if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        'expected every assertion to be an object with a non-empty string `type`',
+      );
     }
 
-    if ('type' in assertion && assertion.type === 'assert-set') {
-      if (!('assert' in assertion) || !Array.isArray(assertion.assert)) {
+    const assertionType = 'type' in assertion ? assertion.type : undefined;
+    if (typeof assertionType !== 'string' || assertionType.trim().length === 0) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        'expected every assertion to be an object with a non-empty string `type`',
+      );
+    }
+
+    if (assertionType === 'assert-set') {
+      if (assertionSetDepth > 0) {
         throw new InvalidRemoteRedteamAssertionPayloadError(
           key,
           'assert-set',
-          'expected `assert` to be an array',
+          'nested assertion sets are not supported',
+        );
+      }
+      if (
+        !('assert' in assertion) ||
+        !Array.isArray(assertion.assert) ||
+        assertion.assert.length === 0
+      ) {
+        throw new InvalidRemoteRedteamAssertionPayloadError(
+          key,
+          'assert-set',
+          'expected `assert` to be a non-empty array',
         );
       }
 
-      hasRagPoisoningAssertion =
-        collectUnsupportedRemoteRedteamAssertionTypes(
-          key,
-          assertion.assert,
-          unsupportedAssertionTypes,
-        ) || hasRagPoisoningAssertion;
+      collectUnsupportedRemoteRedteamAssertionTypes(
+        key,
+        assertion.assert,
+        unsupportedAssertionTypes,
+        assertionSetDepth + 1,
+      );
       continue;
     }
 
-    const assertionType =
-      'type' in assertion && typeof assertion.type === 'string' ? assertion.type : '';
     const graderType = getRemoteRedteamGraderType(assertionType);
     if (!graderType.startsWith('promptfoo:redteam:')) {
       continue;
     }
     if (assertionType === 'promptfoo:redteam:rag-poisoning') {
       validateRagPoisoningAssertionValue(key, assertion);
-      hasRagPoisoningAssertion = true;
     }
     // Redteam grading dispatch currently supports only exact positive grader IDs.
     if (assertionType !== graderType || !getGraderById(graderType)) {
       unsupportedAssertionTypes.add(assertionType);
     }
   }
-
-  return hasRagPoisoningAssertion;
 }
 
-function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): void {
+function validateRemoteRedteamAssertions(key: string, testCases: unknown[]): void {
   const unsupportedAssertionTypes = new Set<string>();
-  const requiresRagPoisoningAssertion = key === 'rag-poisoning';
+  validateRemoteTestCaseObjects(key, testCases);
 
   for (const testCase of testCases) {
-    if (testCase.assert !== undefined && !Array.isArray(testCase.assert)) {
+    const assertions = testCase.assert;
+    if (!Array.isArray(assertions) || assertions.length === 0) {
       throw new InvalidRemoteRedteamAssertionPayloadError(
         key,
         'test case',
-        'expected top-level `assert` to be an array',
+        'expected a non-empty top-level `assert` array',
       );
     }
 
-    const hasRagPoisoningAssertion = collectUnsupportedRemoteRedteamAssertionTypes(
-      key,
-      testCase.assert,
-      unsupportedAssertionTypes,
-    );
-    if (requiresRagPoisoningAssertion && !hasRagPoisoningAssertion) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        'test case',
-        'expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`',
-      );
-    }
+    collectUnsupportedRemoteRedteamAssertionTypes(key, assertions, unsupportedAssertionTypes);
   }
 
   if (unsupportedAssertionTypes.size > 0) {
     throw new UnsupportedRemoteRedteamAssertionsError(key, Array.from(unsupportedAssertionTypes));
+  }
+}
+
+function validateRemoteTestCaseObjects(
+  key: string,
+  testCases: unknown[],
+): asserts testCases is Record<string, unknown>[] {
+  for (const testCase of testCases) {
+    if (!testCase || typeof testCase !== 'object' || Array.isArray(testCase)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        'expected every test case to be an object with a non-empty `assert` array',
+      );
+    }
   }
 }
 
@@ -517,7 +536,6 @@ async function fetchRemoteTestCases(
     return [];
   }
 
-  validateRemoteRedteamAssertions(key, ret);
   logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
   return ret;
 }
@@ -561,6 +579,7 @@ function createPluginFactory<T extends PluginConfig>(
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
       );
+      validateRemoteRedteamAssertions(key, testCases);
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({
@@ -687,6 +706,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.config ?? {},
         params.targetId,
       );
+      validateRemoteRedteamAssertions(category, testCases);
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
@@ -729,6 +749,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.config ?? {},
       params.targetId,
     );
+    validateRemoteRedteamAssertions(category, testCases);
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
@@ -774,6 +795,7 @@ function createRemotePlugin<T extends PluginConfig>(
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
       );
+      validateRemoteTestCaseObjects(key, testCases);
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
@@ -787,13 +809,15 @@ function createRemotePlugin<T extends PluginConfig>(
         },
       }));
 
-      if (key.startsWith('harmful:') || key.startsWith('bias:')) {
-        return testsWithMetadata.map((testCase) => ({
-          ...testCase,
-          assert: getHarmfulAssertions(key as HarmPlugin),
-        }));
-      }
-      return testsWithMetadata;
+      const effectiveTestCases =
+        key.startsWith('harmful:') || key.startsWith('bias:')
+          ? testsWithMetadata.map((testCase) => ({
+              ...testCase,
+              assert: getHarmfulAssertions(key as HarmPlugin),
+            }))
+          : testsWithMetadata;
+      validateRemoteRedteamAssertions(key, effectiveTestCases);
+      return effectiveTestCases;
     },
   };
 }
@@ -817,8 +841,13 @@ remotePlugins.push(
     'rag-poisoning',
     (config: { intendedResults: string[] }) =>
       invariant(
-        Array.isArray(config.intendedResults) && config.intendedResults.length > 0,
-        'RAG Poisoning plugin requires `config.intendedResults` to be set to a non-empty array of expected outcomes from poisoned documents',
+        Array.isArray(config.intendedResults) &&
+          config.intendedResults.length > 0 &&
+          config.intendedResults.every(
+            (intendedResult) =>
+              typeof intendedResult === 'string' && intendedResult.trim().length > 0,
+          ),
+        'RAG Poisoning plugin requires `config.intendedResults` to be a non-empty array of non-empty expected outcomes from poisoned documents',
       ),
   ),
 );

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -70,7 +70,7 @@ describe('synthesize', () => {
     id: () => 'test-provider',
   };
 
-  afterAll(() => {
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
@@ -262,6 +262,15 @@ describe('synthesize', () => {
     });
 
     it('should stop synthesis when remote generation returns unsupported redteam graders', async () => {
+      const stopProgressBar = vi.fn();
+      vi.mocked(cliProgress.SingleBar).mockImplementationOnce(function () {
+        return {
+          increment: vi.fn(),
+          start: vi.fn(),
+          stop: stopProgressBar,
+          update: vi.fn(),
+        } as any;
+      });
       const mockPluginAction = vi
         .fn()
         .mockRejectedValue(
@@ -279,8 +288,10 @@ describe('synthesize', () => {
           prompts: ['Test prompt'],
           strategies: [],
           targetIds: ['test-provider'],
+          showProgressBar: true,
         }),
       ).rejects.toThrow(UnsupportedRemoteRedteamAssertionsError);
+      expect(stopProgressBar).toHaveBeenCalledOnce();
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

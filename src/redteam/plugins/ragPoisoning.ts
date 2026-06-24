@@ -5,6 +5,7 @@ const PLUGIN_ID = 'promptfoo:redteam:rag-poisoning';
 
 export class RagPoisoningGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
+  protected readonly shouldSkipRefusalCheck = true;
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose:
 

@@ -19,6 +19,7 @@ import {
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+import { RemoteRedteamAssertionContractError } from '../../redteam/types';
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -221,6 +222,11 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
+    if (error instanceof RemoteRedteamAssertionContractError) {
+      logger.warn('Remote test generation returned an incompatible assertion payload', { error });
+      res.status(502).json({ error: error.message });
+      return;
+    }
     logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
@@ -286,11 +292,21 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     })
     .catch((error) => {
-      logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
+      const isRemoteContractError = error instanceof RemoteRedteamAssertionContractError;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      if (isRemoteContractError) {
+        logger.error('Red team generation stopped by a remote compatibility error', { error });
+      } else {
+        logger.error(`Error running red team: ${errorMessage}\n${errorStack || ''}`);
+      }
       if (currentJobId === id) {
         evalJobService.fail(
           id,
-          [`Error: ${error.message}`, ...(error.stack ? [`Stack trace: ${error.stack}`] : [])],
+          [
+            `Error: ${errorMessage}`,
+            ...(!isRemoteContractError && errorStack ? [`Stack trace: ${errorStack}`] : []),
+          ],
           { append: true, resetResult: false },
         );
       }

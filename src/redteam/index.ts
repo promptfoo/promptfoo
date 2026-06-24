@@ -1323,6 +1323,13 @@ export async function synthesize({
     // Use totalTests to include both plugin and strategy tests in progress tracking
     progressBar.start(totalTests, 0, { task: 'Initializing' });
   }
+  const stopProgressBar = () => {
+    progressBar?.stop();
+    if (progressBar) {
+      // Newline after progress bar to avoid overlap
+      logger.info('');
+    }
+  };
 
   // Replace progress bar updates with logger calls when in web UI
   if (showProgressBar) {
@@ -1347,7 +1354,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+  const pluginGeneration = async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1639,7 +1646,10 @@ export async function synthesize({
         if (definedLanguages.length > 1) {
           for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
             const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
-            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
+            pluginResults[displayId] = {
+              requested: result.requested,
+              generated: result.generated,
+            };
           }
         } else {
           pluginResults[baseDisplayId] = {
@@ -1661,6 +1671,12 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
     }
   });
+  try {
+    await pluginGeneration;
+  } catch (error) {
+    stopProgressBar();
+    throw error;
+  }
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
@@ -1728,11 +1744,7 @@ export async function synthesize({
   checkAbort();
 
   progressBar?.update({ task: 'Done.' });
-  progressBar?.stop();
-  if (progressBar) {
-    // Newline after progress bar to avoid overlap
-    logger.info('');
-  }
+  stopProgressBar();
 
   logger.info(generateReport(pluginResults, strategyResults));
 
