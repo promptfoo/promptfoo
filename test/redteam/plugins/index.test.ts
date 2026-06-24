@@ -370,6 +370,7 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
+        commitToCache: vi.fn().mockResolvedValue(undefined),
         data: JSON.stringify({ result: [{ test: 'case' }] }),
         cached: false,
         status: 200,
@@ -415,7 +416,9 @@ describe('Plugins', () => {
         }),
         expect.any(Number),
         'text',
+        { deferCacheWrite: true },
       );
+      expect(mockResponse.commitToCache).toHaveBeenCalledOnce();
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
       ]);
@@ -781,7 +784,7 @@ describe('Plugins', () => {
         abortController.abort();
         return {
           data: 'not-json',
-          cached: false,
+          cached: true,
           deleteFromCache,
           status: 200,
           statusText: 'OK',
@@ -839,7 +842,7 @@ describe('Plugins', () => {
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: '',
-        cached: false,
+        cached: true,
         deleteFromCache,
         status: 204,
         statusText: 'No Content',
@@ -864,7 +867,7 @@ describe('Plugins', () => {
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: 'must-not-appear',
-        cached: false,
+        cached: true,
         deleteFromCache,
         status: 200,
         statusText: 'OK',
@@ -896,7 +899,7 @@ describe('Plugins', () => {
       const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: JSON.stringify({ error: 'temporary failure', result: [] }),
-        cached: false,
+        cached: true,
         deleteFromCache,
         status: 200,
         statusText: 'OK',
@@ -915,6 +918,31 @@ describe('Plugins', () => {
       expect(result).toEqual([]);
       expect(deleteFromCache).toHaveBeenCalledOnce();
       expect(fetchWithCache).toHaveBeenCalledOnce();
+    });
+
+    it('should not commit malformed successful responses to the cache', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const commitToCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        commitToCache,
+        data: 'not-json',
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(commitToCache).not.toHaveBeenCalled();
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {

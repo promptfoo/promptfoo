@@ -104,7 +104,7 @@ describe('API Health Utilities', () => {
           controller.abort(abortReason);
           throw new SyntaxError('Invalid JSON');
         },
-      } as Response);
+      } as unknown as Response);
 
       await expect(checkRemoteHealth('https://test.api/health', controller.signal)).rejects.toBe(
         abortReason,

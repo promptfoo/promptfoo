@@ -119,6 +119,15 @@ async function suppressRemoteGenerationFailure(
   }
 }
 
+async function evictCachedRemoteResponse(
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+): Promise<void> {
+  if (cached) {
+    await deleteFromCache?.();
+  }
+}
+
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
  * Used to ensure modifiers are available for strategies when using remote generation.
@@ -430,6 +439,8 @@ async function fetchRemoteTestCases(
 
   try {
     const {
+      cached,
+      commitToCache,
       data: responseText,
       deleteFromCache,
       status,
@@ -447,13 +458,10 @@ async function fetchRemoteTestCases(
       },
       getRequestTimeoutMs(),
       'text',
+      { deferCacheWrite: true },
     );
     if (status !== 200) {
-      // fetchWithCache persists only successful responses. Evict unexpected 2xx values, but do
-      // not let a non-cacheable 4xx/5xx response delete a valid result stored concurrently.
-      if (status >= 200 && status < 300) {
-        await deleteFromCache?.();
-      }
+      await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, { status, statusText });
       throw new RemoteGenerationFailure(`Remote generation returned HTTP ${status} for ${key}`);
@@ -463,7 +471,7 @@ async function fetchRemoteTestCases(
     try {
       data = JSON.parse(responseText) as PluginGenerationResponse;
     } catch {
-      await deleteFromCache?.();
+      await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
@@ -474,7 +482,7 @@ async function fetchRemoteTestCases(
     }
 
     if (data?.error) {
-      await deleteFromCache?.();
+      await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
@@ -485,7 +493,7 @@ async function fetchRemoteTestCases(
     }
 
     if (!data || !Array.isArray(data.result)) {
-      await deleteFromCache?.();
+      await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
@@ -498,13 +506,14 @@ async function fetchRemoteTestCases(
       try {
         assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
       } catch (error) {
-        await deleteFromCache?.();
+        await evictCachedRemoteResponse(cached, deleteFromCache);
         abortSignal?.throwIfAborted();
         throw error;
       }
     }
     const ret = data.result;
     abortSignal?.throwIfAborted();
+    await commitToCache?.();
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {

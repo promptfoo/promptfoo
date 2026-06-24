@@ -285,6 +285,7 @@ export type FetchWithCacheResult<T> = {
   statusText: string;
   headers?: Record<string, string>;
   latencyMs?: number;
+  commitToCache?: () => Promise<void>;
   deleteFromCache?: () => Promise<void>;
 };
 
@@ -295,7 +296,7 @@ type PreparedFetchResponse = {
   cacheable: boolean;
 };
 
-const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const inflightFetchResponses = new Map<string, Promise<PreparedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -567,10 +568,11 @@ function getInflightFetchCacheKey(
   url: RequestInfo,
   options: FetchOptions,
   maxRetries: number,
+  deferCacheWrite: boolean,
 ) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
   const retryStatusKey = options.retryOnStatusCodes?.join(',') ?? '';
-  const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}`;
+  const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}:deferCacheWrite:${deferCacheWrite}`;
   return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;
 }
 
@@ -595,6 +597,7 @@ function deserializeFetchResponse<T>(
   cached: boolean,
   cache: Cache,
   cacheKey: string,
+  commitToCache?: () => Promise<void>,
 ) {
   const parsedResponse = JSON.parse(response);
   return {
@@ -604,7 +607,12 @@ function deserializeFetchResponse<T>(
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
     latencyMs: parsedResponse.latencyMs,
+    commitToCache,
     deleteFromCache: async () => {
+      const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+      if (currentResponse !== response) {
+        return;
+      }
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
     },
@@ -715,10 +723,6 @@ async function prepareFetchResponse(
       };
     }
 
-    logger.debug('[Cache] Storing response in cache', {
-      url: sanitizedUrl,
-      latencyMs: fetchLatencyMs,
-    });
     return {
       response: serializedResponse,
       cacheable: true,
@@ -781,7 +785,7 @@ export async function fetchWithCache<T = unknown>(
   };
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, repeatIndex } = cacheOptions;
+  const { bust = false, deferCacheWrite = false, repeatIndex } = cacheOptions;
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
@@ -841,6 +845,7 @@ export async function fetchWithCache<T = unknown>(
     url,
     requestOptions,
     resolveFetchRetryMaxRetries(maxRetries),
+    deferCacheWrite,
   );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
@@ -853,18 +858,36 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
       );
-      if (preparedResponse.cacheable) {
+      if (preparedResponse.cacheable && !deferCacheWrite) {
         await cache.set(cacheKey, preparedResponse.response);
+        logger.debug('[Cache] Stored response in cache', {
+          url: sanitizeUrl(getRequestUrlString(url)),
+        });
       }
-      return preparedResponse.response;
+      return preparedResponse;
     })().finally(() => {
       inflightFetchResponses.delete(inflightCacheKey);
     });
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
-  return deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  const preparedResponse = await inflightResponse;
+  const commitToCache =
+    deferCacheWrite && preparedResponse.cacheable
+      ? async () => {
+          await cache.set(cacheKey, preparedResponse.response);
+          logger.debug('[Cache] Committed validated response to cache', {
+            url: sanitizeUrl(getRequestUrlString(url)),
+          });
+        }
+      : undefined;
+  return deserializeFetchResponse<T>(
+    preparedResponse.response,
+    false,
+    cache,
+    cacheKey,
+    commitToCache,
+  );
 }
 
 /**

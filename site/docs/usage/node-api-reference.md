@@ -508,7 +508,13 @@ export async function fetchWithCache<T>(
   options?: FetchOptions,
   timeout?: number,
   format?: 'json' | 'text',
-  bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
+  bustOrOptions?:
+    | boolean
+    | {
+        bust?: boolean;
+        deferCacheWrite?: boolean;
+        repeatIndex?: number;
+      },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
 
@@ -525,6 +531,10 @@ contract makes replay safe.
 
 `maxRetries` is normalized to a non-negative integer. Non-finite values fall back to the default of
 4 retries.
+
+Set `deferCacheWrite` when the caller must validate a successful HTTP response before caching it.
+On a cache miss, call the returned `commitToCache()` only after validation succeeds. Existing cache
+hits are returned normally.
 
 **Example:**
 

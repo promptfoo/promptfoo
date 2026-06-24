@@ -452,6 +452,61 @@ describe('fetchWithCache', () => {
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('should defer cache writes until the caller commits a validated response', async () => {
+      const invalidSignal = new AbortController().signal;
+      const validSignal = new AbortController().signal;
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(
+            true,
+            JSON.stringify({ result: [{ vars: { prompt: 'valid' } }] }),
+          ),
+        );
+
+      const [invalidResult, validResult] = await Promise.all([
+        fetchWithCache<string>(url, { signal: invalidSignal }, 1000, 'text', {
+          deferCacheWrite: true,
+        }),
+        fetchWithCache<string>(url, { signal: validSignal }, 1000, 'text', {
+          deferCacheWrite: true,
+        }),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(invalidResult.data).toBe('not-json');
+      expect(invalidResult.commitToCache).toBeInstanceOf(Function);
+      await validResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: validResult.data });
+    });
+
+    it('should not let a stale eviction callback delete a newer response', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['valid'] })),
+        );
+
+      const invalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      const staleInvalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      await invalidResult.deleteFromCache?.();
+
+      const validResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      await validResult.commitToCache?.();
+      await staleInvalidResult.deleteFromCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: validResult.data });
+    });
+
     it('should refetch a text response after the caller evicts it', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
