@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { VERSION } from '../constants';
 import { type Inputs, InputsSchema } from '../types/shared';
+import { VERSION } from '../version';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 

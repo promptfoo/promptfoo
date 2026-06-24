@@ -5,11 +5,15 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { AssertionSchema, AssertionSetSchema, VarsSchema } from '../../types/index';
+import {
+  AssertionSchema,
+  AssertionSetSchema,
+  PluginConfigSchema,
+  VarsSchema,
+} from '../../types/index';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
-import { templateReferencesVariable } from '../../util/templates';
 import {
   BIAS_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
@@ -18,6 +22,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../constants/codingAgents';
 import { getGraderById } from '../graders';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
@@ -68,7 +73,7 @@ import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy/index';
-import { isValidPolicyObject } from './policy/utils';
+import { isValidPolicyObject, makeInlinePolicyIdSync } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
@@ -366,23 +371,27 @@ function validateRagPoisoningAssertionValue(key: string, assertion: object): voi
   }
 }
 
-const FORBIDDEN_REMOTE_ASSERTION_FIELDS = [
-  'config',
-  'contextTransform',
-  'provider',
-  'rubricPrompt',
-  'transform',
-] as const;
 const RemoteAssertionSetMetadataSchema = AssertionSetSchema.omit({ assert: true });
 const REMOTE_TEST_CASE_FIELDS = new Set(['assert', 'metadata', 'vars']);
 const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
+  ...Object.keys(PluginConfigSchema.shape),
   '_promptfooFileMetadata',
   'conversationId',
+  'contextId',
+  'contextVars',
+  'embeddedPrompt',
   'entities',
   'evaluationId',
+  'fetchPrompt',
+  'goal',
+  'indirectWebPwnTurn',
   'language',
   'modifiers',
+  'originalPrompt',
   'originalTestCaseId',
+  'output',
+  'policyId',
+  'policyName',
   'pluginConfig',
   'pluginId',
   'purpose',
@@ -397,27 +406,47 @@ const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
   'traceId',
   'traceparent',
   'tracing',
+  'tracingEnabled',
+  'webPageEmbeddingLocation',
+  'webPageUrl',
+  'webPageUuid',
 ]);
+
+const REMOTE_ASSERTION_FIELDS = new Set(['metric', 'type', 'value']);
+const REMOTE_ASSERTION_SET_FIELDS = new Set(['assert', 'metric', 'type']);
+
+interface UnsafeRemoteReferenceOptions {
+  allowNunjucks?: boolean;
+  allowPackage?: boolean;
+}
+
+function containsEnvironmentTemplate(value: string): boolean {
+  const templates = value.match(/\{\{(?:[^}]|\}(?!\}))*\}\}/g);
+  return templates?.some((template) => /\benv\.|env\[/.test(template)) ?? false;
+}
 
 function getUnsafeRemoteReference(
   value: unknown,
-  checkEnvironmentTemplates: boolean,
+  options: UnsafeRemoteReferenceOptions = {},
 ): string | undefined {
   if (typeof value === 'string') {
     if (value.startsWith('file://')) {
       return '`file://` references';
     }
-    if (value.startsWith('package:')) {
+    if (!options.allowPackage && value.startsWith('package:')) {
       return '`package:` references';
     }
-    if (checkEnvironmentTemplates && templateReferencesVariable(value, 'env')) {
+    if (containsEnvironmentTemplate(value)) {
       return '`env` template references';
+    }
+    if (!options.allowNunjucks && /\{[{%#]/.test(value)) {
+      return 'Nunjucks templates';
     }
     return undefined;
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const unsafeReference = getUnsafeRemoteReference(item, checkEnvironmentTemplates);
+      const unsafeReference = getUnsafeRemoteReference(item, options);
       if (unsafeReference) {
         return unsafeReference;
       }
@@ -426,7 +455,7 @@ function getUnsafeRemoteReference(
   }
   if (value && typeof value === 'object') {
     for (const item of Object.values(value)) {
-      const unsafeReference = getUnsafeRemoteReference(item, checkEnvironmentTemplates);
+      const unsafeReference = getUnsafeRemoteReference(item, options);
       if (unsafeReference) {
         return unsafeReference;
       }
@@ -440,17 +469,19 @@ function validateRemoteAssertionSafety(
   assertionType: string,
   assertion: Record<string, unknown>,
 ): void {
-  const forbiddenField = FORBIDDEN_REMOTE_ASSERTION_FIELDS.find((field) => field in assertion);
-  if (forbiddenField) {
+  const allowedFields =
+    assertionType === 'assert-set' ? REMOTE_ASSERTION_SET_FIELDS : REMOTE_ASSERTION_FIELDS;
+  const unsupportedField = Object.keys(assertion).find((field) => !allowedFields.has(field));
+  if (unsupportedField) {
     throw new InvalidRemoteRedteamAssertionPayloadError(
       key,
       assertionType,
-      `remote assertions may not set local-only field \`${forbiddenField}\``,
+      `remote assertions may not set local-only field \`${unsupportedField}\``,
     );
   }
 
   for (const field of ['value', 'metric'] as const) {
-    const unsafeReference = getUnsafeRemoteReference(assertion[field], true);
+    const unsafeReference = getUnsafeRemoteReference(assertion[field]);
     if (unsafeReference) {
       throw new InvalidRemoteRedteamAssertionPayloadError(
         key,
@@ -459,6 +490,26 @@ function validateRemoteAssertionSafety(
       );
     }
   }
+  if (assertion.value !== undefined && typeof assertion.value !== 'string') {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      assertionType,
+      'expected `value` to be a string when present',
+    );
+  }
+}
+
+function getAllowedRemoteRedteamAssertionTypes(key: string): ReadonlySet<string> {
+  if ((PII_PLUGINS as readonly string[]).includes(key)) {
+    return new Set(['promptfoo:redteam:pii', `promptfoo:redteam:${key}`]);
+  }
+  if (key === 'coding-agent:core') {
+    return new Set(CODING_AGENT_CORE_PLUGINS.map((plugin) => `promptfoo:redteam:${plugin}`));
+  }
+  if (key === 'coding-agent:all') {
+    return new Set(CODING_AGENT_PLUGINS.map((plugin) => `promptfoo:redteam:${plugin}`));
+  }
+  return new Set([`promptfoo:redteam:${key}`]);
 }
 
 function getRemoteAssertionSetAssertions(
@@ -495,6 +546,8 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
   assertions: unknown[],
   unsupportedAssertionTypes: Set<string>,
   locallyDefinedAssertionTypes: ReadonlySet<string>,
+  allowedRedteamAssertionTypes: ReadonlySet<string>,
+  config: PluginConfig,
   assertionSetDepth = 0,
 ): void {
   for (const assertion of assertions) {
@@ -515,7 +568,9 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
       );
     }
 
-    validateRemoteAssertionSafety(key, assertionType, assertion as Record<string, unknown>);
+    if (!locallyDefinedAssertionTypes.has(assertionType)) {
+      validateRemoteAssertionSafety(key, assertionType, assertion as Record<string, unknown>);
+    }
 
     if (assertionType === 'assert-set') {
       collectUnsupportedRemoteRedteamAssertionTypes(
@@ -527,6 +582,8 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
         ),
         unsupportedAssertionTypes,
         locallyDefinedAssertionTypes,
+        allowedRedteamAssertionTypes,
+        config,
         assertionSetDepth + 1,
       );
       continue;
@@ -547,11 +604,23 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
       }
       continue;
     }
-    if (assertionType === 'promptfoo:redteam:rag-poisoning') {
+    if (key === 'rag-poisoning' && assertionType === 'promptfoo:redteam:rag-poisoning') {
       validateRagPoisoningAssertionValue(key, assertion);
+      const assertionValue = (assertion as Record<string, unknown>).value as string;
+      if (!config.intendedResults?.includes(assertionValue)) {
+        throw new InvalidRemoteRedteamAssertionPayloadError(
+          key,
+          assertionType,
+          'expected `value` to match one of the configured `intendedResults`',
+        );
+      }
     }
     // Redteam grading dispatch currently supports only exact positive grader IDs.
-    if (assertionType !== graderType || !getGraderById(graderType)) {
+    if (
+      assertionType !== graderType ||
+      !allowedRedteamAssertionTypes.has(assertionType) ||
+      !getGraderById(graderType)
+    ) {
       unsupportedAssertionTypes.add(assertionType);
     }
   }
@@ -561,8 +630,10 @@ function validateRemoteRedteamAssertions(
   key: string,
   testCases: unknown[],
   locallyDefinedAssertionTypes: ReadonlySet<string> = new Set(),
+  config: PluginConfig = {},
 ): void {
   const unsupportedAssertionTypes = new Set<string>();
+  const allowedRedteamAssertionTypes = getAllowedRemoteRedteamAssertionTypes(key);
   validateRemoteTestCaseObjects(key, testCases);
 
   for (const [index, testCase] of testCases.entries()) {
@@ -583,6 +654,8 @@ function validateRemoteRedteamAssertions(
       assertions,
       unsupportedAssertionTypes,
       locallyDefinedAssertionTypes,
+      allowedRedteamAssertionTypes,
+      config,
     );
   }
 
@@ -614,12 +687,52 @@ function isAllowedRemoteTestCaseField(key: string, field: string): boolean {
   );
 }
 
-function sanitizeRemoteTestMetadata(metadata: Record<string, unknown> | undefined) {
+function sanitizeRemoteTestMetadataValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeRemoteTestMetadataValue);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([field]) => !LOCAL_ONLY_REMOTE_METADATA_FIELDS.has(field))
+      .map(([field, child]) => [field, sanitizeRemoteTestMetadataValue(child)]),
+  );
+}
+
+function sanitizeRemoteTestMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
   return metadata
-    ? Object.fromEntries(
-        Object.entries(metadata).filter(([field]) => !LOCAL_ONLY_REMOTE_METADATA_FIELDS.has(field)),
-      )
+    ? (sanitizeRemoteTestMetadataValue(metadata) as Record<string, unknown>)
     : undefined;
+}
+
+function getLocalRemoteTestMetadata(key: string, config: PluginConfig): Record<string, unknown> {
+  if (key === 'policy') {
+    if (typeof config.policy === 'string') {
+      return {
+        policy: config.policy,
+        policyId: makeInlinePolicyIdSync(config.policy),
+      };
+    }
+    if (
+      config.policy &&
+      isValidPolicyObject(config.policy) &&
+      typeof config.policy.text === 'string'
+    ) {
+      return {
+        policy: config.policy.text,
+        policyId: config.policy.id,
+        ...(config.policy.name ? { policyName: config.policy.name } : {}),
+      };
+    }
+  }
+  if (key === 'prompt-extraction' && typeof config.systemPrompt === 'string') {
+    return { systemPrompt: config.systemPrompt };
+  }
+  return {};
 }
 
 function validateRemoteCrossSessionLeakPairs(
@@ -667,83 +780,150 @@ function validateRemoteCrossSessionLeakPairs(
   }
 }
 
+function validateRemoteTestCaseFields(key: string, testCase: Record<string, unknown>): void {
+  const disallowedField = Object.keys(testCase).find(
+    (field) => !isAllowedRemoteTestCaseField(key, field),
+  );
+  if (disallowedField) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      `remote test cases may not set local-only field \`${disallowedField}\``,
+    );
+  }
+}
+
+function normalizeRemoteTestVars(
+  key: string,
+  testCase: Record<string, unknown>,
+  injectVar: string,
+  allowedVariableNames: ReadonlySet<string>,
+): TestCase['vars'] {
+  const parsedVars = VarsSchema.safeParse(testCase.vars);
+  if (!parsedVars.success || !(injectVar in parsedVars.data)) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      `expected \`vars\` to contain the injection variable \`${injectVar}\``,
+    );
+  }
+  for (const [variableName, value] of Object.entries(parsedVars.data)) {
+    const unsafeVariableReference = getUnsafeRemoteReference(
+      value,
+      variableName === injectVar ? { allowNunjucks: true, allowPackage: true } : {},
+    );
+    if (unsafeVariableReference) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `remote test variable \`${variableName}\` may not contain ${unsafeVariableReference}`,
+      );
+    }
+    if (!allowedVariableNames.has(variableName)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `remote test variables may not set undeclared variable \`${variableName}\``,
+      );
+    }
+    if (typeof value !== 'string') {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        `expected remote test variable \`${variableName}\` to be a string`,
+      );
+    }
+  }
+  return parsedVars.data;
+}
+
+function normalizeRemoteTestMetadata(
+  key: string,
+  testCase: Record<string, unknown>,
+  config: PluginConfig,
+): Record<string, unknown> {
+  if (
+    testCase.metadata !== undefined &&
+    (!testCase.metadata ||
+      typeof testCase.metadata !== 'object' ||
+      Array.isArray(testCase.metadata))
+  ) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      'expected `metadata` to be an object',
+    );
+  }
+  const sanitizedMetadata = sanitizeRemoteTestMetadata(
+    testCase.metadata as Record<string, unknown> | undefined,
+  );
+  const unsafeMetadataReference = getUnsafeRemoteReference(sanitizedMetadata);
+  if (unsafeMetadataReference) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      `remote test metadata may not contain ${unsafeMetadataReference}`,
+    );
+  }
+  return {
+    ...sanitizedMetadata,
+    ...getLocalRemoteTestMetadata(key, config),
+  };
+}
+
+function validateRemoteCrossSessionOptions(key: string, testCase: Record<string, unknown>): void {
+  if (key !== 'cross-session-leak' || testCase.options === undefined) {
+    return;
+  }
+  if (
+    !testCase.options ||
+    typeof testCase.options !== 'object' ||
+    Array.isArray(testCase.options) ||
+    !('runSerially' in testCase.options) ||
+    testCase.options.runSerially !== true ||
+    Object.keys(testCase.options).length !== 1
+  ) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      'cross-session-leak tests may only set `options.runSerially` to true',
+    );
+  }
+}
+
+function normalizeRemoteTestCase(
+  key: string,
+  testCase: Record<string, unknown>,
+  injectVar: string,
+  allowedVariableNames: ReadonlySet<string>,
+  config: PluginConfig,
+): TestCase {
+  validateRemoteTestCaseFields(key, testCase);
+  const vars = normalizeRemoteTestVars(key, testCase, injectVar, allowedVariableNames);
+  const metadata = normalizeRemoteTestMetadata(key, testCase, config);
+  validateRemoteCrossSessionOptions(key, testCase);
+
+  return {
+    vars,
+    ...('assert' in testCase ? { assert: testCase.assert as TestCase['assert'] } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    ...(key === 'cross-session-leak' ? { options: { runSerially: true } } : {}),
+    ...(key === 'agentic:memory-poisoning' ? { provider: 'agentic:memory-poisoning' } : {}),
+  };
+}
+
 function normalizeRemoteTestCases(
   key: string,
   testCases: unknown[],
   injectVar: string,
+  config: PluginConfig,
 ): TestCase[] {
   validateRemoteTestCaseObjects(key, testCases);
   validateRemoteCrossSessionLeakPairs(key, testCases);
-
-  return testCases.map((testCase) => {
-    const disallowedField = Object.keys(testCase).find(
-      (field) => !isAllowedRemoteTestCaseField(key, field),
-    );
-    if (disallowedField) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        'test case',
-        `remote test cases may not set local-only field \`${disallowedField}\``,
-      );
-    }
-    const parsedVars = VarsSchema.safeParse(testCase.vars);
-    if (!parsedVars.success || !(injectVar in parsedVars.data)) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        'test case',
-        `expected \`vars\` to contain the injection variable \`${injectVar}\``,
-      );
-    }
-    for (const [variableName, value] of Object.entries(parsedVars.data)) {
-      const unsafeVariableReference = getUnsafeRemoteReference(value, false);
-      if (unsafeVariableReference) {
-        throw new InvalidRemoteRedteamAssertionPayloadError(
-          key,
-          'test case',
-          `remote test variable \`${variableName}\` may not contain ${unsafeVariableReference}`,
-        );
-      }
-    }
-    if (
-      testCase.metadata !== undefined &&
-      (!testCase.metadata ||
-        typeof testCase.metadata !== 'object' ||
-        Array.isArray(testCase.metadata))
-    ) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        'test case',
-        'expected `metadata` to be an object',
-      );
-    }
-    if (
-      key === 'cross-session-leak' &&
-      testCase.options !== undefined &&
-      (!testCase.options ||
-        typeof testCase.options !== 'object' ||
-        Array.isArray(testCase.options) ||
-        !('runSerially' in testCase.options) ||
-        testCase.options.runSerially !== true ||
-        Object.keys(testCase.options).length !== 1)
-    ) {
-      throw new InvalidRemoteRedteamAssertionPayloadError(
-        key,
-        'test case',
-        'cross-session-leak tests may only set `options.runSerially` to true',
-      );
-    }
-    const metadata = sanitizeRemoteTestMetadata(
-      testCase.metadata as Record<string, unknown> | undefined,
-    );
-
-    return {
-      vars: parsedVars.data,
-      ...('assert' in testCase ? { assert: testCase.assert as TestCase['assert'] } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(key === 'cross-session-leak' ? { options: { runSerially: true } } : {}),
-      ...(key === 'agentic:memory-poisoning' ? { provider: 'agentic:memory-poisoning' } : {}),
-    };
-  });
+  const allowedVariableNames = new Set([injectVar, ...Object.keys(config.inputs ?? {})]);
+  return testCases.map((testCase) =>
+    normalizeRemoteTestCase(key, testCase, injectVar, allowedVariableNames, config),
+  );
 }
 
 function getLocallyDefinedAssertionsForRemotePlugin(key: string): Assertion[] | undefined {
@@ -846,7 +1026,7 @@ async function fetchRemoteTestCases(
   }
 
   logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-  return ret;
+  return normalizeRemoteTestCases(key, ret, injectVar, config);
 }
 
 function createPluginFactory<T extends PluginConfig>(
@@ -880,19 +1060,15 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
-      const testCases = normalizeRemoteTestCases(
+      const testCases = await fetchRemoteTestCases(
         key,
-        await fetchRemoteTestCases(
-          key,
-          purpose,
-          injectVar,
-          n,
-          configWithDefaults ?? {},
-          redteamGenerationContext ?? targetId,
-        ),
+        purpose,
         injectVar,
+        n,
+        configWithDefaults ?? {},
+        redteamGenerationContext ?? targetId,
       );
-      validateRemoteRedteamAssertions(key, testCases);
+      validateRemoteRedteamAssertions(key, testCases, new Set(), configWithDefaults ?? {});
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({
@@ -1019,7 +1195,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.config ?? {},
         params.targetId,
       );
-      validateRemoteRedteamAssertions(category, testCases);
+      validateRemoteRedteamAssertions(category, testCases, new Set(), params.config ?? {});
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
@@ -1062,7 +1238,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.config ?? {},
       params.targetId,
     );
-    validateRemoteRedteamAssertions(category, testCases);
+    validateRemoteRedteamAssertions(category, testCases, new Set(), params.config ?? {});
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
@@ -1100,17 +1276,13 @@ function createRemotePlugin<T extends PluginConfig>(
         return [];
       }
       const pluginId = getShortPluginId(key);
-      const testCases = normalizeRemoteTestCases(
+      const testCases = await fetchRemoteTestCases(
         key,
-        await fetchRemoteTestCases(
-          key,
-          purpose,
-          injectVar,
-          n,
-          configWithDefaults ?? {},
-          redteamGenerationContext ?? targetId,
-        ),
+        purpose,
         injectVar,
+        n,
+        configWithDefaults ?? {},
+        redteamGenerationContext ?? targetId,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({
@@ -1136,6 +1308,7 @@ function createRemotePlugin<T extends PluginConfig>(
         key,
         effectiveTestCases,
         new Set(locallyDefinedAssertions?.map((assertion) => assertion.type)),
+        configWithDefaults ?? {},
       );
       return effectiveTestCases;
     },
