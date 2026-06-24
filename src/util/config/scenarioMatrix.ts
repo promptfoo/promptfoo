@@ -411,6 +411,16 @@ function resolveScenarioProviderRef(
   return resolved ?? provider;
 }
 
+function resolveScenarioScoringFunctionRef(
+  basePath: string,
+  scoringFunction: unknown,
+  envOverrides?: EnvOverrides,
+): unknown {
+  return typeof scoringFunction === 'string'
+    ? resolveFileRefFromBase(basePath, scoringFunction, envOverrides)
+    : scoringFunction;
+}
+
 function resolveScenarioAssertionProviderRefs(
   basePath: string,
   value: unknown,
@@ -482,6 +492,11 @@ function resolveScenarioConfigRowProviders(
   const provider = hasProvider
     ? resolveScenarioProviderRef(basePath, originalProvider, envOverrides)
     : undefined;
+  const hasScoringFunction = Object.prototype.hasOwnProperty.call(record, 'assertScoringFunction');
+  const originalScoringFunction = hasScoringFunction ? record.assertScoringFunction : undefined;
+  const scoringFunction = hasScoringFunction
+    ? resolveScenarioScoringFunctionRef(basePath, originalScoringFunction, envOverrides)
+    : undefined;
 
   const hasOptions = Object.prototype.hasOwnProperty.call(record, 'options');
   const options = hasOptions ? record.options : undefined;
@@ -505,6 +520,7 @@ function resolveScenarioConfigRowProviders(
 
   if (
     provider === originalProvider &&
+    scoringFunction === originalScoringFunction &&
     resolvedOptions === options &&
     assertions === originalAssertions
   ) {
@@ -513,6 +529,9 @@ function resolveScenarioConfigRowProviders(
   const resolved = { ...record };
   if (provider !== originalProvider) {
     resolved.provider = provider;
+  }
+  if (scoringFunction !== originalScoringFunction) {
+    resolved.assertScoringFunction = scoringFunction;
   }
   if (resolvedOptions !== options) {
     resolved.options = resolvedOptions;
@@ -537,7 +556,11 @@ function materializeScenarioConfigRow(
   envOverrides?: EnvOverrides,
 ): Scenario['config'][number] {
   const resolvedFileRefs = resolveNestedFileRefs(basePath, row, envOverrides);
-  const loadedFileRefs = maybeLoadConfigFromExternalFile(resolvedFileRefs, 'scenario-test');
+  const loadedFileRefs = maybeLoadConfigFromExternalFile(
+    resolvedFileRefs,
+    'scenario-test',
+    envOverrides,
+  );
   return resolveScenarioConfigRowProviders(basePath, loadedFileRefs, envOverrides);
 }
 
@@ -688,45 +711,56 @@ function assertValidValuesRef(entry: object, sourceDescription: string): Scenari
   return entry as ScenarioConfigValuesRef;
 }
 
-function validateMatrixRows(rows: unknown[], sourceRef: string): void {
+function validateMatrixRowShape(
+  row: unknown,
+  rowIndex: number,
+  sourceRef: string,
+  unrecognizedKeys: DiagnosticKeySummary,
+): void {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new ConfigResolutionError(
+      `Scenario config $values row ${rowIndex + 1} must be an object (partial test case); got ${describeValue(row)} in ${sourceRef}`,
+    );
+  }
+  if ('$values' in row || '$expand' in row) {
+    throw new ConfigResolutionError(
+      `Nested $values references are not supported; found one in row ${rowIndex + 1} of ${sourceRef}`,
+    );
+  }
+  const keys = Object.keys(row);
+  if (keys.length > 0 && !keys.some((key) => TEST_CASE_FIELD_NAMES.has(key))) {
+    // A row with nothing the evaluator understands silently produces a test with
+    // no vars/asserts — the classic flat-CSV mistake. Fail instead.
+    throw new ConfigResolutionError(
+      `Scenario config row from ${sourceRef} has no recognized test case fields (e.g. vars, assert); got keys [${formatKeySummary(summarizeKeys(keys))}]. Did you mean to nest them under "vars"?`,
+    );
+  }
+  for (const key of keys) {
+    if (!TEST_CASE_FIELD_NAMES.has(key)) {
+      addDiagnosticKey(unrecognizedKeys, key);
+    }
+  }
+}
+
+function validateMatrixRowValues(row: unknown, rowIndex: number, sourceRef: string): void {
+  const validationResult = MATRIX_ROW_SCHEMA.safeParse(row);
+  if (!validationResult.success) {
+    const invalidFields = createDiagnosticKeySummary();
+    for (const issue of validationResult.error.issues) {
+      // Only name the top-level schema field. Nested keys are user data and
+      // may contain secrets; they also make diagnostics attacker-sized.
+      addDiagnosticKey(invalidFields, issue.path.length > 0 ? String(issue.path[0]) : '<row>');
+    }
+    throw new ConfigResolutionError(
+      `Scenario config row ${rowIndex + 1} from ${sourceRef} has invalid test case field values at [${formatKeySummary(invalidFields)}]`,
+    );
+  }
+}
+
+function validateMatrixRowShapes(rows: unknown[], sourceRef: string): void {
   const unrecognizedKeys = createDiagnosticKeySummary();
   for (const [rowIndex, row] of rows.entries()) {
-    if (!row || typeof row !== 'object' || Array.isArray(row)) {
-      throw new ConfigResolutionError(
-        `Scenario config $values row ${rowIndex + 1} must be an object (partial test case); got ${describeValue(row)} in ${sourceRef}`,
-      );
-    }
-    if ('$values' in row || '$expand' in row) {
-      throw new ConfigResolutionError(
-        `Nested $values references are not supported; found one in row ${rowIndex + 1} of ${sourceRef}`,
-      );
-    }
-    const keys = Object.keys(row);
-    if (keys.length > 0 && !keys.some((key) => TEST_CASE_FIELD_NAMES.has(key))) {
-      // A row with nothing the evaluator understands silently produces a test with
-      // no vars/asserts — the classic flat-CSV mistake. Fail instead.
-      throw new ConfigResolutionError(
-        `Scenario config row from ${sourceRef} has no recognized test case fields (e.g. vars, assert); got keys [${formatKeySummary(summarizeKeys(keys))}]. Did you mean to nest them under "vars"?`,
-      );
-    }
-    for (const key of keys) {
-      if (!TEST_CASE_FIELD_NAMES.has(key)) {
-        addDiagnosticKey(unrecognizedKeys, key);
-      }
-    }
-
-    const validationResult = MATRIX_ROW_SCHEMA.safeParse(row);
-    if (!validationResult.success) {
-      const invalidFields = createDiagnosticKeySummary();
-      for (const issue of validationResult.error.issues) {
-        // Only name the top-level schema field. Nested keys are user data and
-        // may contain secrets; they also make diagnostics attacker-sized.
-        addDiagnosticKey(invalidFields, issue.path.length > 0 ? String(issue.path[0]) : '<row>');
-      }
-      throw new ConfigResolutionError(
-        `Scenario config row ${rowIndex + 1} from ${sourceRef} has invalid test case field values at [${formatKeySummary(invalidFields)}]`,
-      );
-    }
+    validateMatrixRowShape(row, rowIndex, sourceRef, unrecognizedKeys);
   }
   if (unrecognizedKeys.keys.length > 0) {
     logger.warn(
@@ -820,15 +854,13 @@ export async function expandScenarioConfigValues(
       if (rows.length === 0) {
         continue;
       }
-      validateMatrixRows(rows, concreteRef);
-      for (const row of rows) {
-        expandedConfig.push(
-          materializeScenarioConfigRow(
-            path.dirname(valuesFilePath),
-            row,
-            sourceContext.envOverrides,
-          ),
-        );
+      validateMatrixRowShapes(rows, concreteRef);
+      const materializedRows = rows.map((row) =>
+        materializeScenarioConfigRow(path.dirname(valuesFilePath), row, sourceContext.envOverrides),
+      );
+      for (const [rowIndex, row] of materializedRows.entries()) {
+        validateMatrixRowValues(row, rowIndex, concreteRef);
+        expandedConfig.push(row);
       }
     }
     if (expandedConfig.length === expansionStart) {

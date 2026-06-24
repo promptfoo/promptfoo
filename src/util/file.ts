@@ -368,15 +368,19 @@ function getConfigFileChildContext(
   return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
 }
 
-export function maybeLoadConfigFromExternalFile(config: any, context?: ConfigFileContext): any {
+export function maybeLoadConfigFromExternalFile(
+  config: any,
+  context?: ConfigFileContext,
+  envOverrides?: EnvOverrides,
+): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) => maybeLoadConfigFromExternalFile(item, context, envOverrides));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       const childContext = getConfigFileChildContext(config, key, context);
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext, envOverrides);
 
       Object.defineProperty(result, key, {
         value,
@@ -392,7 +396,7 @@ export function maybeLoadConfigFromExternalFile(config: any, context?: ConfigFil
   }
   const externalContext =
     context === 'assertion' || context === 'general' || context === 'vars' ? context : undefined;
-  return maybeLoadFromExternalFile(config, externalContext);
+  return maybeLoadFromExternalFile(config, externalContext, envOverrides);
 }
 
 /**

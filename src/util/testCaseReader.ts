@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
@@ -5,7 +6,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -44,6 +45,28 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
+const GLOB_OPTIONS = { windowsPathsNoEscape: process.platform === 'win32' };
+
+function escapeExistingDirectoryPrefix(pattern: string): string {
+  const { root } = path.parse(pattern);
+  const parts = pattern.slice(root.length).split(path.sep).filter(Boolean);
+  let literalPrefix = root;
+  let consumedParts = 0;
+
+  for (const part of parts) {
+    const candidate = path.join(literalPrefix, part);
+    if (!fs.statSync(candidate, { throwIfNoEntry: false })?.isDirectory()) {
+      break;
+    }
+    literalPrefix = candidate;
+    consumedParts++;
+  }
+
+  if (consumedParts === 0) {
+    return pattern;
+  }
+  return path.join(escapeGlob(literalPrefix, GLOB_OPTIONS), ...parts.slice(consumedParts));
+}
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -470,9 +493,10 @@ export async function loadTestsFromGlob(
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
+  const globPattern = hasMagic(resolvedPath, GLOB_OPTIONS)
+    ? escapeExistingDirectoryPrefix(resolvedPath)
+    : resolvedPath;
+  const testFiles: Array<string> = globSync(globPattern, GLOB_OPTIONS);
 
   // Check for possible function names in the path (Windows-aware)
   const lastColonIndex = resolvedPath.lastIndexOf(':');
@@ -520,7 +544,7 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = loadTestCaseConfig(rawContent, allowPartialTests);
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests, envOverrides);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
@@ -529,12 +553,12 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = loadTestCaseConfig(rawCases, allowPartialTests);
+      testCases = loadTestCaseConfig(rawCases, allowPartialTests, envOverrides);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = loadTestCaseConfig(rawContent, allowPartialTests);
+      testCases = loadTestCaseConfig(rawContent, allowPartialTests, envOverrides);
       assertLoadedTestCaseShapes(testCases, testFile);
       testCases = await _deref(testCases, testFile);
     } else {
@@ -546,10 +570,15 @@ export async function loadTestsFromGlob(
   return ret;
 }
 
-function loadTestCaseConfig(config: unknown, allowPartialTests: boolean): TestCase[] {
+function loadTestCaseConfig(
+  config: unknown,
+  allowPartialTests: boolean,
+  envOverrides?: EnvOverrides,
+): TestCase[] {
   return maybeLoadConfigFromExternalFile(
     config,
     allowPartialTests ? 'scenario-test' : undefined,
+    envOverrides,
   ) as TestCase[];
 }
 

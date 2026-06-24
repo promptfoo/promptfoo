@@ -303,6 +303,28 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
     });
 
+    it('renders matrix scoring function templates before validating rows', async () => {
+      const matrixPath = write(
+        'matrices/scorers.yaml',
+        `- vars:
+    case: scorer
+  assertScoringFunction: file://{{ env.SCORE_FILE }}:customScore
+`,
+      );
+      write('matrices/score.js', 'module.exports = () => ({ pass: true, score: 1 });\n');
+
+      const [expanded] = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+        { SCORE_FILE: 'score.js' },
+      );
+
+      expect(expanded).toMatchObject({
+        vars: { case: 'scorer' },
+        assertScoringFunction: `file://${path.join(path.dirname(matrixPath), 'score.js')}:customScore`,
+      });
+    });
+
     it('renders matrix provider templates with the source env', async () => {
       const previousConfig = cliState.config;
       cliState.config = { env: { PROVIDER_ID: 'wrong-provider' } };
@@ -784,6 +806,44 @@ describe('scenarioMatrix (real filesystem)', () => {
       ]);
     });
 
+    it('resolves scoring functions in file-backed scenario tests against the test file', async () => {
+      const testsPath = write(
+        'tests/scorers.yaml',
+        `- vars:
+    case: scorer
+  assertScoringFunction: file://score.js:customScore
+`,
+      );
+      write('tests/score.js', 'module.exports = () => ({ pass: true, score: 1 });\n');
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests?.[0].assertScoringFunction).toBe(
+        `file://${path.join(path.dirname(testsPath), 'score.js')}:customScore`,
+      );
+    });
+
+    it('uses source env while loading nested refs in file-backed scenario tests', async () => {
+      const expectedPath = write('tests/expected.txt', 'EXPECTED_FROM_SOURCE_ENV');
+      const testsPath = write(
+        'tests/env-refs.yaml',
+        `- vars:
+    case: env-ref
+  assert:
+    - type: contains
+      value: file://{{ env.EXPECTED_FILE }}
+`,
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir, {
+        EXPECTED_FILE: expectedPath,
+      });
+
+      expect(tests?.[0].assert?.[0]).toMatchObject({
+        value: 'EXPECTED_FROM_SOURCE_ENV',
+      });
+    });
+
     it('still loads nested data fields named provider in scenario test assertions', async () => {
       const expectedPath = write('tests/expected.txt', 'EXPECTED_DATA');
       const testsPath = write(
@@ -853,6 +913,22 @@ describe('scenarioMatrix (real filesystem)', () => {
 
       expect(tests?.map((test) => test.vars?.name)).toEqual(['class-generated']);
     });
+
+    it.runIf(process.platform !== 'win32')(
+      'loads scenario test globs declared below directories with glob metacharacters',
+      async () => {
+        const scenarioPath = write(
+          'configs [prod]/scenario.yaml',
+          '- config:\n    - {}\n  tests: file://tests/*.yaml\n',
+        );
+        write('configs [prod]/tests/cases.yaml', '- vars:\n    source: globbed\n');
+
+        const scenarios = await loadScenarioConfigs([`file://${scenarioPath}`], tmpDir);
+        const tests = await readScenarioTests(scenarios?.[0].tests, tmpDir);
+
+        expect(tests).toEqual([expect.objectContaining({ vars: { source: 'globbed' } })]);
+      },
+    );
 
     it('rejects malformed or empty generator contributions', async () => {
       const emptyGeneratorPath = write('empty.cjs', 'module.exports = () => [];\n');
