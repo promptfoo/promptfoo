@@ -20,7 +20,7 @@ cd integration-crewai
 This example requires the following:
 
 1. **Python 3.10+**
-2. **Node.js 20+**
+2. **Node.js ^20.20.0 or >=22.22.0 (Node.js 20 is supported through July 29, 2026; Node.js 24 LTS recommended)**
 3. **OpenAI API Key** - You MUST have a valid OpenAI API key to run this example
 
 ## Environment Setup

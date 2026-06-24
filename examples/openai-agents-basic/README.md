@@ -13,7 +13,7 @@ This example demonstrates how to use the OpenAI Agents SDK with promptfoo to cre
 
 ## Prerequisites
 
-- Node.js 20+ (use `nvm use` to align with `.nvmrc`)
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 is supported through July 29, 2026; Node.js 24 LTS recommended); use `nvm use` to align with `.nvmrc`
 - OpenAI API key
 - The `@openai/agents` SDK (installed via npm)
 
