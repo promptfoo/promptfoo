@@ -12,6 +12,9 @@ const configPath = path.join(
   '../../examples/openai-codex-app-server/computer-use/promptfooconfig.yaml',
 );
 const config = yaml.load(fs.readFileSync(configPath, 'utf8')) as {
+  providers: Array<{
+    config: { server_request_policy: { mcp_elicitation: unknown } };
+  }>;
   defaultTest: { assert: Assertion[] };
 };
 const trajectoryAssertion = config.defaultTest.assert.find(
@@ -20,6 +23,15 @@ const trajectoryAssertion = config.defaultTest.assert.find(
 );
 
 describe('Codex Computer Use example', () => {
+  it('submits empty form content for the allowlisted Computer Use approval', () => {
+    expect(config.providers[0].config.server_request_policy.mcp_elicitation).toEqual({
+      action: 'accept',
+      content: {},
+      allowed_server_names: ['computer-use'],
+      allowed_messages: ['Allow Codex to use Promptfoo Computer Use Target?'],
+    });
+  });
+
   it('rejects a failed MCP trajectory even when the model returns the canary', async () => {
     expect(trajectoryAssertion).toBeDefined();
     const targetApp = '/tmp/PromptfooComputerUseTarget.app';

@@ -53,6 +53,7 @@ providers:
       server_request_policy:
         mcp_elicitation:
           action: accept
+          content: {}
           allowed_server_names:
             - computer-use
           allowed_messages:
