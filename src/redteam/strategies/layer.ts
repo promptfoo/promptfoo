@@ -63,6 +63,10 @@ export async function addLayerTestCases(
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepObj = typeof step === 'string' ? { id: step } : step;
+    const stepConfig = {
+      ...(stepObj.config || {}),
+      ...(config || {}),
+    };
 
     // ═══════════════════════════════════════════════════════════════════════
     // CHECK: Is this an attack provider (hydra, crescendo, etc.)?
@@ -85,6 +89,11 @@ export async function addLayerTestCases(
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
+      const { steps: _steps, ...layerConfig } = config || {};
+      const attackProviderConfig = {
+        ...(stepObj.config || {}),
+        ...layerConfig,
+      };
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
@@ -103,7 +112,7 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...attackProviderConfig,
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
@@ -118,7 +127,9 @@ export async function addLayerTestCases(
           metadata: {
             ...testCase.metadata,
             strategyId,
-            ...(stepObj.config && { strategyConfig: stepObj.config }),
+            ...(Object.keys(attackProviderConfig).length > 0 && {
+              strategyConfig: attackProviderConfig,
+            }),
             originalText,
           },
         };
@@ -160,10 +171,6 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const stepConfig = {
-      ...(stepObj.config || {}),
-      ...(config || {}),
-    };
     const next = await stepAction(applicable, injectVar, stepConfig);
     const maxCharsPerMessage = stepConfig.maxCharsPerMessage as number | undefined;
     const minCharsPerMessage = stepConfig.minCharsPerMessage as number | undefined;

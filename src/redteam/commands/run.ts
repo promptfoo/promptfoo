@@ -23,11 +23,13 @@ function applyCloudRunOverrides(config: Record<string, unknown>, opts: RedteamRu
   if (opts.description) {
     config.description = opts.description;
   }
+
+  const redteam = (config.redteam ??= {}) as Record<string, unknown>;
   if (opts.maxCharsPerMessage !== undefined) {
-    config.maxCharsPerMessage = opts.maxCharsPerMessage;
+    redteam.maxCharsPerMessage = opts.maxCharsPerMessage;
   }
   if (opts.minCharsPerMessage !== undefined) {
-    config.minCharsPerMessage = opts.minCharsPerMessage;
+    redteam.minCharsPerMessage = opts.minCharsPerMessage;
   }
 }
 

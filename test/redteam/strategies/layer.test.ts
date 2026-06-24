@@ -454,6 +454,26 @@ describe('addLayerTestCases', () => {
   });
 
   describe('attack provider detection', () => {
+    it('should preserve attack provider layer char limits for runtime enforcement', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { prompt: 'original' }, metadata: { pluginId: 'harmful:hate' } },
+      ];
+      const result = await addLayerTestCases(
+        testCases,
+        'prompt',
+        { minCharsPerMessage: 100, steps: ['jailbreak:hydra'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].provider?.config).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 100 }),
+      );
+      expect(result[0].metadata?.strategyConfig).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 100 }),
+      );
+    });
+
     it('should preserve attack provider step char limits for runtime enforcement', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {

@@ -591,12 +591,12 @@ async function doGenerateRedteamInternal(
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-    ...((redteamConfig?.maxCharsPerMessage ?? options.maxCharsPerMessage) === undefined
+    ...((options.maxCharsPerMessage ?? redteamConfig?.maxCharsPerMessage) === undefined
       ? {}
-      : { maxCharsPerMessage: redteamConfig?.maxCharsPerMessage ?? options.maxCharsPerMessage }),
-    ...((redteamConfig?.minCharsPerMessage ?? options.minCharsPerMessage) === undefined
+      : { maxCharsPerMessage: options.maxCharsPerMessage ?? redteamConfig?.maxCharsPerMessage }),
+    ...((options.minCharsPerMessage ?? redteamConfig?.minCharsPerMessage) === undefined
       ? {}
-      : { minCharsPerMessage: redteamConfig?.minCharsPerMessage ?? options.minCharsPerMessage }),
+      : { minCharsPerMessage: options.minCharsPerMessage ?? redteamConfig?.minCharsPerMessage }),
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
     plugins,
