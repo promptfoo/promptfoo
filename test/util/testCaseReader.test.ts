@@ -2161,7 +2161,8 @@ describe('readVarsFiles', () => {
   ])('should parse CSV references from an external vars file: %s', async (varsFile) => {
     const varsPath = path.resolve('/suite/fixtures', varsFile);
     const csvPath = path.resolve('/suite/fixtures/data/rows.csv');
-    const csvReference = `file://${csvPath.replace(/\\/g, '/')}`;
+    const canonicalCsvPath = csvPath.replace(/\\/g, '/');
+    const csvReference = `file://${canonicalCsvPath}`;
     vi.mocked(globSync).mockImplementation((input) =>
       String(input) === varsPath ? [varsPath] : [],
     );
@@ -2171,7 +2172,7 @@ describe('readVarsFiles', () => {
         : `context: ${csvReference}\nnested:\n  rows: ${csvReference}`,
     );
     vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) => {
-      if (filePath === csvPath) {
+      if (filePath === canonicalCsvPath) {
         return [
           { marker: 'alpha', report: 'file://alpha.txt' },
           { marker: 'beta', report: 'file://beta.txt' },
@@ -2190,7 +2191,7 @@ describe('readVarsFiles', () => {
       { marker: 'beta', report: 'file://fixtures/data/beta.txt' },
     ];
     expect(result).toEqual({ context: expectedRows, nested: { rows: expectedRows } });
-    expect(loadConfigFromFilePath).toHaveBeenCalledWith(csvPath);
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(canonicalCsvPath);
   });
 
   it('should rebase file references returned as structured scalar values', async () => {
