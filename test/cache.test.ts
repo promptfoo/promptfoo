@@ -507,6 +507,52 @@ describe('fetchWithCache', () => {
       expect(cachedResult).toMatchObject({ cached: true, data: 'newer' });
     });
 
+    it('should not let an older deferred response overwrite a newer immediate write', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'older-deferred', 'text/plain'))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer-immediate', 'text/plain'));
+
+      const olderResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      await fetchWithCache<string>(url, {}, 1000, 'text');
+      await olderResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer-immediate' });
+    });
+
+    it('should not let an older immediate response overwrite a newer deferred commit', async () => {
+      let markOlderStarted: () => void = () => {};
+      let resolveOlderResponse: (response: Response) => void = () => {};
+      const olderStarted = new Promise<void>((resolve) => {
+        markOlderStarted = resolve;
+      });
+      const olderResponse = new Promise<Response>((resolve) => {
+        resolveOlderResponse = resolve;
+      });
+      mockFetchWithRetries
+        .mockImplementationOnce(async () => {
+          markOlderStarted();
+          return olderResponse;
+        })
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer-deferred', 'text/plain'));
+
+      const olderResultPromise = fetchWithCache<string>(url, {}, 1000, 'text');
+      await olderStarted;
+      const newerResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+      await newerResult.commitToCache?.();
+      resolveOlderResponse(mockFetchWithRetriesResponse(true, 'older-immediate', 'text/plain'));
+      await olderResultPromise;
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer-deferred' });
+    });
+
     it('should serialize stale eviction with a newer deferred commit', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(

@@ -5,6 +5,13 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import {
+  type ApiProvider,
+  type PluginActionParams,
+  type PluginConfig,
+  type TestCase,
+  TestCaseSchema,
+} from '../../types/index';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -80,7 +87,6 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -128,8 +134,13 @@ async function evictCachedRemoteResponse(
   }
 }
 
-function isRemoteGeneratedTestCase(value: unknown): value is TestCase {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function isRemoteGeneratedTestCase(value: unknown, injectVar: string): value is TestCase {
+  if (!TestCaseSchema.safeParse(value).success) {
+    return false;
+  }
+
+  const vars = (value as TestCase).vars;
+  return vars !== undefined && Object.hasOwn(vars, injectVar);
 }
 
 /**
@@ -499,7 +510,7 @@ async function fetchRemoteTestCases(
     if (
       !data ||
       !Array.isArray(data.result) ||
-      !Array.from(data.result).every(isRemoteGeneratedTestCase)
+      !Array.from(data.result).every((testCase) => isRemoteGeneratedTestCase(testCase, injectVar))
     ) {
       await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();

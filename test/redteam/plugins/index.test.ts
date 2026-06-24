@@ -371,7 +371,7 @@ describe('Plugins', () => {
 
       const mockResponse = {
         commitToCache: vi.fn().mockResolvedValue(undefined),
-        data: JSON.stringify({ result: [{ test: 'case' }] }),
+        data: JSON.stringify({ result: [{ vars: { testVar: 'case' } }] }),
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -420,7 +420,10 @@ describe('Plugins', () => {
       );
       expect(mockResponse.commitToCache).toHaveBeenCalledOnce();
       expect(result).toEqual([
-        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+        {
+          vars: { testVar: 'case' },
+          metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } },
+        },
       ]);
     });
 
@@ -950,6 +953,10 @@ describe('Plugins', () => {
       [],
       'invalid',
       1,
+      {},
+      { vars: {} },
+      { vars: { otherVar: 'missing requested injection variable' } },
+      { vars: { testVar: null } },
     ])('should reject invalid remote result item %j before committing', async (invalidItem) => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       const commitToCache = vi.fn().mockResolvedValue(undefined);

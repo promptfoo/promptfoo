@@ -523,6 +523,17 @@ interface FetchOptions extends RequestInit {
   disableTransientRetries?: boolean;
   retryOnStatusCodes?: readonly number[];
 }
+
+interface FetchWithCacheResult<T> {
+  data: T;
+  cached: boolean;
+  status: number;
+  statusText: string;
+  headers?: Record<string, string>;
+  latencyMs?: number;
+  commitToCache?: () => Promise<void>;
+  deleteFromCache?: () => Promise<void>;
+}
 ```
 
 `retryOnStatusCodes` explicitly opts selected HTTP statuses into the shared retry budget, including
@@ -533,9 +544,12 @@ contract makes replay safe.
 4 retries.
 
 Set `deferCacheWrite` when the caller must validate a successful HTTP response before caching it.
-On a cache miss, call the returned `commitToCache()` only after validation succeeds. Existing cache
-hits are returned normally. If deferred requests for the same cache key overlap, a commit from an
-older request does not replace a newer committed response.
+On a cacheable miss, call the optional callback with `await result.commitToCache?.()` only after
+validation succeeds. The callback is absent for cache hits, bypassed caching, and responses that
+cannot be cached. If validation rejects an existing cached response, call
+`await result.deleteFromCache?.()` before retrying; deletion is conditional and will not remove a
+newer response written concurrently. If requests for the same cache key overlap, an older response
+does not replace a newer committed response, whether either write is deferred or immediate.
 
 **Example:**
 
