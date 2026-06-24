@@ -354,6 +354,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject invalid plugin ranges even when strategies target other plugins', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5, minCharsPerMessage: 6 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['pii:direct'] } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { id: 'missing-purpose' },
     { id: 'empty-purpose', purpose: '' },

@@ -327,6 +327,14 @@ function validateScopedCharsPerMessageLimits(
         });
       }
     }
+    if (
+      !hasValidCharsPerMessageRange({
+        maxCharsPerMessage: getCharsPerMessageLimit(scope.config.maxCharsPerMessage),
+        minCharsPerMessage: getCharsPerMessageLimit(scope.config.minCharsPerMessage),
+      })
+    ) {
+      addCharsPerMessageRangeIssue(ctx, [scopeName, index, 'config', 'minCharsPerMessage']);
+    }
   }
 }
 
