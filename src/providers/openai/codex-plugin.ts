@@ -709,21 +709,50 @@ async function removeRuntime(root: string): Promise<void> {
   }
 }
 
-function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArtifactReference[] {
+async function ensureContainedDirectoryAsync(
+  root: string,
+  directory: string,
+  label: string,
+  signal: AbortSignal,
+): Promise<string> {
+  assertContainedPath(root, directory, label);
+  const relativeSegments = path.relative(root, directory).split(path.sep).filter(Boolean);
+  let current = root;
+  for (const segment of relativeSegments) {
+    throwIfAborted(signal);
+    current = path.join(current, segment);
+    await withAbort(
+      fs.promises.mkdir(current).catch(() => undefined),
+      signal,
+    );
+    current = await withAbort(fs.promises.realpath(current), signal);
+    assertContainedPath(root, current, label);
+  }
+  return current;
+}
+
+async function collectArtifactReferences(
+  runtime: CodexPluginRuntime,
+  signal: AbortSignal,
+): Promise<CodexPluginArtifactReference[]> {
   const references: CodexPluginArtifactReference[] = [];
   if (!pathExists(runtime.artifactDir)) {
     return references;
   }
 
-  const collect = (directory: string): void => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+  const collect = async (directory: string): Promise<void> => {
+    for (const entry of await withAbort(
+      fs.promises.readdir(directory, { withFileTypes: true }),
+      signal,
+    )) {
+      throwIfAborted(signal);
       const entryPath = path.join(directory, entry.name);
-      const entryStat = fs.lstatSync(entryPath);
+      const entryStat = await withAbort(fs.promises.lstat(entryPath), signal);
       if (entryStat.isSymbolicLink()) {
         throw new Error('Codex plugin artifacts may not contain symlinks');
       }
       if (entryStat.isDirectory()) {
-        collect(entryPath);
+        await collect(entryPath);
         continue;
       }
       if (!entryStat.isFile() || entryStat.nlink !== 1) {
@@ -737,39 +766,51 @@ function collectArtifactReferences(runtime: CodexPluginRuntime): CodexPluginArti
       });
     }
   };
-  collect(runtime.artifactDir);
+  await collect(runtime.artifactDir);
   return references;
 }
 
-function exportArtifacts(
+async function exportArtifacts(
   runtime: CodexPluginRuntime,
   references: CodexPluginArtifactReference[],
   retainRuntime: boolean,
-): CodexPluginArtifactReference[] {
+  signal: AbortSignal,
+): Promise<CodexPluginArtifactReference[]> {
   if (!runtime.exportedArtifactDir) {
     return retainRuntime ? references : [];
   }
 
-  return references.map((reference) => {
-    const exportedPath = path.join(runtime.exportedArtifactDir!, reference.relativePath);
+  const exportedReferences: CodexPluginArtifactReference[] = [];
+  for (const reference of references) {
+    throwIfAborted(signal);
+    const exportedPath = path.join(runtime.exportedArtifactDir, reference.relativePath);
     assertContainedPath(
-      runtime.exportedArtifactDir!,
+      runtime.exportedArtifactDir,
       exportedPath,
       'Codex plugin artifact export path',
     );
-    const resolvedParent = ensureContainedDirectory(
-      runtime.exportedArtifactDir!,
+    const resolvedParent = await ensureContainedDirectoryAsync(
+      runtime.exportedArtifactDir,
       path.dirname(exportedPath),
       'Codex plugin artifact export path',
+      signal,
     );
     assertContainedPath(
-      runtime.exportedArtifactDir!,
+      runtime.exportedArtifactDir,
       resolvedParent,
       'Codex plugin artifact export path',
     );
-    fs.copyFileSync(reference.path, exportedPath, fs.constants.COPYFILE_EXCL);
-    return { path: exportedPath, relativePath: reference.relativePath, owner: 'caller-export' };
-  });
+    await withAbort(
+      fs.promises.copyFile(reference.path, exportedPath, fs.constants.COPYFILE_EXCL),
+      signal,
+    );
+    exportedReferences.push({
+      path: exportedPath,
+      relativePath: reference.relativePath,
+      owner: 'caller-export',
+    });
+  }
+  return exportedReferences;
 }
 
 async function exportArtifactsWithinDeadline(
@@ -782,7 +823,9 @@ async function exportArtifactsWithinDeadline(
     return await withDeadline(
       Promise.resolve().then(() => {
         throwIfAborted(controller.signal);
-        return exportArtifacts(runtime, collectArtifactReferences(runtime), retainRuntime);
+        return collectArtifactReferences(runtime, controller.signal).then((references) =>
+          exportArtifacts(runtime, references, retainRuntime, controller.signal),
+        );
       }),
       timeoutMs,
       'Codex plugin artifact collection/export',

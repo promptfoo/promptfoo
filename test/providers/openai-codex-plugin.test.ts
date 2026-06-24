@@ -364,12 +364,12 @@ while :; do sleep 1; done
     const provider = new OpenAICodexPluginProvider({
       config: { plugin: { path: pluginRoot }, workspace, artifacts_dir: exportedArtifacts },
     });
-    const originalCopyFileSync = fs.copyFileSync.bind(fs);
-    vi.spyOn(fs, 'copyFileSync').mockImplementation((...args: any[]) => {
+    const originalCopyFile = fs.promises.copyFile.bind(fs.promises);
+    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (...args: any[]) => {
       if (String(args[1]).includes(exportedArtifacts)) {
         throw new Error('sensitive-value=do-not-leak');
       }
-      return originalCopyFileSync(...(args as Parameters<typeof fs.copyFileSync>));
+      return originalCopyFile(...(args as Parameters<typeof fs.promises.copyFile>));
     });
     const result = await provider.callApi('Return JSON', context());
     expect(result.error).toBe('Codex plugin artifact export failed');
