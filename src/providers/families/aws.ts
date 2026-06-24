@@ -1,5 +1,6 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
+import { isBedrockMantleResponsesModel } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
@@ -10,6 +11,103 @@ export const awsProviderFactories: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+
+      // Mythos is only available through Bedrock's Anthropic-compatible
+      // Messages endpoint. Fable also supports that endpoint when explicitly
+      // selected, while its bare form continues through Bedrock Runtime below.
+      const isLegacyType = modelType === 'converse' || modelType === 'completion';
+      const anthropicModel =
+        modelType === 'messages'
+          ? modelName
+          : splits.length === 2
+            ? splits[1]
+            : isLegacyType
+              ? modelName
+              : undefined;
+      if (/^[^.]+\.anthropic\.claude-mythos-5$/.test(anthropicModel ?? '')) {
+        throw new Error(
+          `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
+            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
+        );
+      }
+      if (anthropicModel?.startsWith('anthropic.claude-')) {
+        const {
+          createBedrockAnthropicMessagesProvider,
+          isBedrockAnthropicMessagesModel,
+          requiresBedrockAnthropicMessagesModel,
+        } = await import('../bedrock/anthropicMessages');
+        if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
+          throw new Error(
+            `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
+              `${modelType === 'converse' ? 'Converse' : 'InvokeModel'}. Use ` +
+              `"bedrock:${anthropicModel}" or "bedrock:messages:${anthropicModel}".`,
+          );
+        }
+        if (
+          isBedrockAnthropicMessagesModel(anthropicModel) &&
+          (modelType === 'messages' || requiresBedrockAnthropicMessagesModel(anthropicModel))
+        ) {
+          return createBedrockAnthropicMessagesProvider(anthropicModel, {
+            ...providerOptions,
+            id: providerOptions.id ?? providerPath,
+          });
+        }
+      }
+      if (modelType === 'messages') {
+        throw new Error(
+          `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
+            `provider. Supported models: anthropic.claude-fable-5 and anthropic.claude-mythos-5.`,
+        );
+      }
+
+      // Bare and explicit Converse/InvokeModel aliases for OpenAI frontier models (gpt-5.x)
+      // and xAI Grok (grok-4.3) must route through Bedrock's OpenAI-compatible Responses API on
+      // the regional mantle endpoint — never the native InvokeModel/Converse APIs. Route those
+      // aliases before the per-type handlers so
+      // `bedrock:openai.gpt-5.5`, `bedrock:xai.grok-4.3`, and the explicit
+      // `bedrock:converse:`/`bedrock:completion:` forms all resolve correctly. Open-weight
+      // gpt-oss models fall through to InvokeModel/Converse below.
+      //
+      // Restrict Responses candidates to the bare id (`bedrock:openai.gpt-5.5`, exactly two
+      // segments) and the explicit `converse:`/`completion:` aliases. Responses ids contain no
+      // colon, so the bare form is always two segments. This prevents sub-typed forms whose id
+      // merely contains the prefix
+      // (`bedrock:kb:...openai...`, `:embeddings:`, `:agents:`, `:video:`, inference-profile
+      // ARNs, ...) from being hijacked here instead of reaching their own handlers below.
+      const candidateResponsesModel =
+        modelType === 'converse' || modelType === 'completion'
+          ? modelName
+          : splits.length === 2
+            ? splits[1]
+            : undefined;
+      const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
+      if (routedGrokModel?.includes('.xai.')) {
+        throw new Error(
+          `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. ` +
+            `Use the bare "bedrock:xai.grok-4.3" id instead.`,
+        );
+      }
+      // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
+      // ordinary bedrock: models do not load the Responses stack at construction. The predicate
+      // also excludes gpt-oss ids, which must fall through to InvokeModel below.
+      if (candidateResponsesModel && isBedrockMantleResponsesModel(candidateResponsesModel)) {
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
+      // Handle the OpenAI-compatible Chat Completions API on the mantle endpoint
+      // (`bedrock:mantle:<id>`). This is the only way to reach mantle Chat Completions models
+      // that the native InvokeModel/Converse APIs don't serve (e.g. zai.glm-4.6, deepseek.v3.1,
+      // google.gemma-4-*, the mantle-namespaced qwen *-instruct ids).
+      if (modelType === 'mantle') {
+        const { createBedrockMantleChatProvider } = await import('../bedrock/mantleChat');
+        return createBedrockMantleChatProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
 
       // Handle Converse API
       if (modelType === 'converse') {
@@ -68,7 +166,8 @@ export const awsProviderFactories: ProviderFactory[] = [
         const { AwsBedrockKnowledgeBaseProvider } = await import('../bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
-      // Reconstruct the full model name preserving the original format
+      // Reconstruct the full model name preserving the original format. Frontier OpenAI
+      // models were already routed to the Responses provider near the top of this factory.
       const fullModelName = splits.slice(1).join(':');
       return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },

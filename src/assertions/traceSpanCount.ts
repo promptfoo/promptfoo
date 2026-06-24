@@ -20,7 +20,12 @@ export const handleTraceSpanCount = ({
   }
 
   const value = assertion.value as TraceSpanCountValue;
-  if (!value || typeof value !== 'object' || typeof value.pattern !== 'string' || !value.pattern) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    typeof value.pattern !== 'string' ||
+    !value.pattern.trim()
+  ) {
     throw new Error('trace-span-count assertion must have a value object with pattern property');
   }
 

@@ -142,7 +142,7 @@ export function traceErrorSpansConfigError(value: unknown): string | undefined {
     return undefined;
   }
   const { pattern, requirePresence, max_count: maxCount, max_percentage: maxPercentage } = value;
-  if (pattern !== undefined && (typeof pattern !== 'string' || !pattern)) {
+  if (pattern !== undefined && (typeof pattern !== 'string' || !pattern.trim())) {
     return 'trace-error-spans assertion pattern must be a non-empty string';
   }
   if (requirePresence !== undefined && typeof requirePresence !== 'boolean') {

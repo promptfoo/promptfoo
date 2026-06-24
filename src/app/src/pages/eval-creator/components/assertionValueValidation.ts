@@ -286,6 +286,46 @@ function hasMatcherName(value: Record<string, unknown>): boolean {
   return hasNonBlankString(value.name) || hasNonBlankString(value.pattern);
 }
 
+const TRAJECTORY_STEP_TYPES = new Set([
+  'command',
+  'message',
+  'reasoning',
+  'search',
+  'span',
+  'tool',
+]);
+const TOOL_STEP_TYPES = new Set(['tool']);
+
+function getTrajectoryMatcherValueError(
+  value: Record<string, unknown>,
+  allowedTypes: ReadonlySet<string>,
+  requireName = true,
+): string | undefined {
+  const hasName = Object.prototype.hasOwnProperty.call(value, 'name');
+  const hasPattern = Object.prototype.hasOwnProperty.call(value, 'pattern');
+  if (
+    (hasName && !hasNonBlankString(value.name)) ||
+    (hasPattern && !hasNonBlankString(value.pattern))
+  ) {
+    return 'Enter non-empty strings for every trajectory matcher name and pattern.';
+  }
+  if (requireName && !hasName && !hasPattern) {
+    return 'Enter a trajectory matcher name or pattern.';
+  }
+
+  if (value.type !== undefined) {
+    const types = Array.isArray(value.type) ? value.type : [value.type];
+    if (
+      types.length === 0 ||
+      types.some((type) => typeof type !== 'string' || !allowedTypes.has(type))
+    ) {
+      return 'Select a valid trajectory matcher type.';
+    }
+  }
+
+  return undefined;
+}
+
 function isNonNegativeInteger(value: unknown): value is number {
   return (
     typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
@@ -322,7 +362,9 @@ function getTrajectoryToolSequenceSteps(value: unknown): unknown[] | undefined {
 }
 
 function isUsableTrajectorySequenceStep(step: unknown): boolean {
-  return typeof step === 'string' ? step.trim() !== '' : isRecord(step) && hasMatcherName(step);
+  return typeof step === 'string'
+    ? step.trim() !== ''
+    : isRecord(step) && getTrajectoryMatcherValueError(step, TOOL_STEP_TYPES) === undefined;
 }
 
 function getThresholdError(assertion: Assertion): string | undefined {
@@ -449,8 +491,12 @@ function getTraceSpanDurationValueError(value: unknown): string | undefined {
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || !hasMatcherName(value)) {
+  if (!isRecord(value)) {
     return 'Enter JSON with a tool name or pattern and expected args.';
+  }
+  const matcherError = getTrajectoryMatcherValueError(value, TOOL_STEP_TYPES);
+  if (matcherError) {
+    return matcherError;
   }
   if (!('args' in value) && !('arguments' in value)) {
     return 'Enter JSON with a tool name or pattern and expected args.';
@@ -465,6 +511,10 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || (value.min === undefined && value.max === undefined)) {
     return 'Enter JSON with a minimum or maximum trajectory step count.';
+  }
+  const matcherError = getTrajectoryMatcherValueError(value, TRAJECTORY_STEP_TYPES, false);
+  if (matcherError) {
+    return matcherError;
   }
   return trajectoryCountBoundsError(value, 'trajectory:step-count');
 }
@@ -697,6 +747,12 @@ function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
 }
 
 function getNamedMatcherValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') &&
+    isRecord(assertion.value)
+  ) {
+    return getTrajectoryMatcherValueError(assertion.value, TOOL_STEP_TYPES);
+  }
   if (
     NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&

@@ -38,7 +38,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
@@ -49,7 +49,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
@@ -60,7 +60,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is valid xml                                                |
+| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
@@ -137,6 +137,20 @@ assert:
 ```
 
 For case insensitive matching, use `icontains-any`.
+
+Use the structured assertion form in YAML configs:
+
+```yaml
+assert:
+  - type: contains-all
+    value:
+      - '1,000'
+      - in stock
+```
+
+This checks for the two values `1,000` and `in stock`.
+
+Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns use comma-separated values. Quote values containing commas; see [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for escaping details.
 
 ### Regex
 
@@ -259,12 +273,14 @@ It will fail for:
 
 ### Contains-Sql
 
-This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+This assertion ensures that the output is either valid SQL or contains a code block with valid SQL.
 
 ```yaml
 assert:
   - type: contains-sql
 ```
+
+Fenced SQL can use an optional `sql` language tag. MySQL backtick-quoted identifiers, such as ``SELECT `id` FROM `users`;``, are supported inside the fence.
 
 See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
 
@@ -373,7 +389,7 @@ assert:
 
 ### Is-XML
 
-The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+The `is-xml` assertion checks if the entire LLM output is a supported well-formed XML document. It can also verify the presence of specific elements within the XML structure.
 
 Example:
 
@@ -382,7 +398,7 @@ assert:
   - type: is-xml
 ```
 
-This basic usage checks if the output is valid XML.
+This basic usage checks if the output is a supported well-formed XML document.
 
 You can also specify required elements:
 
@@ -395,12 +411,12 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
 
 #### How it works
 
-1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
-2. If parsing succeeds, it's considered valid XML.
+1. The assertion validates that the entire output is one supported well-formed XML document, then parses it with fast-xml-parser.
+2. If validation and parsing succeed, it's considered valid XML for `is-xml`.
 3. If `value` is specified:
    - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
@@ -448,16 +464,18 @@ Fails for: `<root><parent><child></child></parent></root>` (missing grandchild e
 
 #### Inverse assertion
 
-You can use the `not-is-xml` assertion to check if the output is not valid XML:
+You can use the `not-is-xml` assertion to check if the output is not a supported well-formed XML document:
 
 ```yaml
 assert:
   - type: not-is-xml
 ```
 
-This will pass for non-XML content and fail for valid XML content.
+This will pass for non-XML content and XML outside Promptfoo's supported `is-xml` subset, and fail for supported well-formed XML content.
 
-Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+Note: The `is-xml` assertion requires the entire output to be a supported well-formed XML document. For checking XML content within a larger text, use the `contains-xml` assertion.
+
+`is-xml` rejects documents with a DTD internal subset because Promptfoo cannot safely validate the subset's declarations and entity replacement text. External resources are not loaded during validation.
 
 ### Contains-XML
 
@@ -473,7 +491,7 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 ### Is-SQL
 
-The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
 Example:
 
@@ -1285,6 +1303,10 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 - **Content coverage**: Check if the output mentions all required elements
 
 ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
+
+:::note
+ROUGE is scored case-insensitively (inputs are lowercased before comparison), consistent with the other text-overlap metrics (BLEU, GLEU, METEOR). A difference in capitalization — for example `The Cat Sat` vs `the cat sat` — does not lower the score.
+:::
 
 Example:
 

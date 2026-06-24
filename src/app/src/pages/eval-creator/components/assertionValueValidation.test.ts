@@ -216,6 +216,24 @@ describe('structured value assertions', () => {
     ).toMatch(/partial.*exact/);
   });
 
+  it('rejects malformed trajectory matcher fields and types', () => {
+    for (const value of [
+      { name: 'find', pattern: '   ', args: {} },
+      { name: 'find', type: 'bogus', args: {} },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'trajectory:tool-args-match', value: value as any }),
+        ),
+      ).toBeDefined();
+    }
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-count', value: { type: 'bogus', min: 1 } as any }),
+      ),
+    ).toBeDefined();
+  });
+
   it('rejects trajectory:step-count without min or max', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'trajectory:step-count', value: {} as any })),
@@ -259,6 +277,14 @@ describe('structured value assertions', () => {
         make({ type: 'trajectory:tool-sequence', value: { steps: [{ pattern: 'search.*' }] } }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-sequence',
+          value: { steps: [{ name: 'search', pattern: '   ' }] },
+        }),
+      ),
+    ).toBeDefined();
   });
 
   it('validates tokens-used budgets', () => {
@@ -475,6 +501,11 @@ describe('shared trace/trajectory hardening parity', () => {
         make({ type: 'trace-error-spans', value: { max_count: 2, pattern: 'db.*' } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { max_count: 0, pattern: '   ' } as any }),
+      ),
+    ).toMatch(/pattern must be a non-empty string/);
   });
 
   it('rejects trajectory:step-count and trajectory:tool-used bad bounds', () => {
@@ -751,6 +782,22 @@ describe('named matcher assertions', () => {
         make({ type: 'trajectory:tool-used', value: { name: 'search' } as any }),
       ),
     ).toBeUndefined();
+  });
+
+  it('rejects malformed tool-used object matchers', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'not-trajectory:tool-used',
+          value: { name: 'search', pattern: '   ' } as any,
+        }),
+      ),
+    ).toBeDefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', type: [] } as any }),
+      ),
+    ).toBeDefined();
   });
 
   it('uses the skill wording for skill-used', () => {

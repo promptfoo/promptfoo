@@ -798,6 +798,38 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it.each([
+      { name: 'search_orders', pattern: '   ' },
+      { name: 'search_orders', type: 'bogus' },
+    ])('rejects malformed inverse tool matchers before applying inversion', (value) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        inverse: true,
+        assertion: {
+          type: 'not-trajectory:tool-used',
+          value: value as any,
+        },
+        renderedValue: value as any,
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow();
+    });
+
+    it('rejects blank tool matcher list entries', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        inverse: true,
+        assertion: { type: 'not-trajectory:tool-used', value: ['   '] },
+        renderedValue: ['   '],
+      };
+
+      expect(() => handleTrajectoryToolUsed(params)).toThrow(
+        'trajectory:tool-used assertion step 1 pattern must be a non-empty string',
+      );
+    });
+
     it('fails inverse object assertions with max: 0 when the forbidden tool is present', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -3211,6 +3243,25 @@ describe('trajectory assertions', () => {
         reason: 'Trajectory step count did not satisfy the forbidden range',
         assertion: params.assertion,
       });
+    });
+
+    it.each([
+      { name: 'search_orders', pattern: '   ', min: 1 },
+      { type: 'bogus', min: 1 },
+      { type: [], min: 1 },
+    ])('rejects malformed inverse step matchers before applying inversion', (value) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        inverse: true,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: 'not-trajectory:step-count',
+          value: value as any,
+        },
+        renderedValue: value as any,
+      };
+
+      expect(() => handleTrajectoryStepCount(params)).toThrow();
     });
 
     it('rejects count assertions without min or max', () => {

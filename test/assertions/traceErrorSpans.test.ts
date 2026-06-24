@@ -342,6 +342,25 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 
+  it('should reject a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { pattern: '   ', max_count: 0 },
+      },
+      renderedValue: { pattern: '   ', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    expect(() => handleTraceErrorSpans(params)).toThrow(
+      'trace-error-spans assertion pattern must be a non-empty string',
+    );
+  });
+
   it('should handle simple number value for backwards compatibility', () => {
     const params: AssertionParams = {
       ...defaultParams,

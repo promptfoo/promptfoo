@@ -149,32 +149,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
-  }
-
   protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.modelName === 'codex-mini-latest' ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+    return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -399,13 +375,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
-    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
-    if ('max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
-    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
-    // The responses API uses max_output_tokens, never max_tokens.
+    // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it
+    // leaked in via passthrough or YAML anchors.
     if ('max_tokens' in body) {
       delete body.max_tokens;
     }
@@ -470,8 +441,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, config } = prepared;
 
-    // Validate deep research models have required tools
-    const isDeepResearchModel = this.modelName.includes('deep-research');
+    // Validate deep research models have required tools. Use the capability model name so
+    // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
+    // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
+    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
     if (isDeepResearchModel) {
       const hasWebSearchTool = config.tools?.some(
         (tool: any) => tool.type === 'web_search_preview',
@@ -495,7 +468,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
@@ -556,7 +529,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         },
         timeout,
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 
