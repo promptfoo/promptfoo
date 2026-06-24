@@ -138,6 +138,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
     id,
     cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
+    vertexCost: {
+      input: 0.075 / 1e6,
+      output: 0.3 / 1e6,
+      cacheRead: 0.01875 / 1e6,
+    },
   })),
   // Gemini 1.5 models
   {

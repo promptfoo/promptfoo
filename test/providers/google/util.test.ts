@@ -2926,6 +2926,46 @@ describe('util', () => {
       ).toBeCloseTo(0.01334, 10);
     });
 
+    it.each([
+      'gemini-2.0-flash-lite',
+      'gemini-2.0-flash-lite-001',
+    ])('should use Vertex-only cache pricing for %s', (modelName) => {
+      const textCacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'TEXT', tokenCount: 8000 }],
+      };
+      const audioCacheUsage = {
+        cachedContentTokenCount: 8000,
+        cacheTokensDetails: [{ modality: 'AUDIO', tokenCount: 8000 }],
+      };
+
+      // Google AI Studio has no published cache-read rate for these models.
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, false, textCacheUsage)).toBeCloseTo(
+        0.00225,
+        10,
+      );
+
+      // Vertex bills text and audio cache reads at the same scalar rate, so
+      // aggregate-only usage can also be priced safely.
+      expect(
+        calculateGoogleCost(modelName, {}, 10000, 5000, true, {
+          cachedContentTokenCount: 8000,
+        }),
+      ).toBeCloseTo(0.0018, 10);
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, true, textCacheUsage)).toBeCloseTo(
+        0.0018,
+        10,
+      );
+      expect(calculateGoogleCost(modelName, {}, 10000, 5000, true, audioCacheUsage)).toBeCloseTo(
+        0.0018,
+        10,
+      );
+
+      expect(
+        calculateGoogleCost(modelName, { inputCost: 1 / 1e6 }, 10000, 5000, true, textCacheUsage),
+      ).toBeCloseTo(0.0115, 10);
+    });
+
     it('should not discount aggregate-only cache usage when modality rates differ', () => {
       const full = calculateGoogleCost('gemini-2.5-flash', {}, 10000, 5000);
       expect(

@@ -167,6 +167,10 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
 }
 
 describe('VertexChatProvider.callApi tracing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('preserves cache-read and reasoning details for the GenAI span', async () => {
     const provider = new VertexChatProvider('gemini-2.5-flash');
     const tracedResult = vi.fn();
