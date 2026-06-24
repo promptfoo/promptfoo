@@ -59,6 +59,17 @@ function getRuntimeNoticeStorageKey(noticeId: string): string {
   return `${RUNTIME_NOTICE_STORAGE_PREFIX}${noticeId}`;
 }
 
+function getRuntimeNoticeReminderIntervalDays(
+  notice: RuntimeCompatibilityNotice,
+  now: number = Date.now(),
+): 1 | 7 {
+  const removalTimestamp = Date.parse(`${notice.removalDate}T00:00:00.000Z`);
+  if (Number.isNaN(removalTimestamp)) {
+    return notice.reminderIntervalDays;
+  }
+  return removalTimestamp - now <= FINAL_NOTICE_PHASE_MS ? 1 : 7;
+}
+
 function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
   const lastDismissedAt = localStorage.getItem(getRuntimeNoticeStorageKey(notice.id));
   if (!lastDismissedAt) {
@@ -68,7 +79,7 @@ function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
   const lastDismissedTimestamp = Date.parse(lastDismissedAt);
   return (
     !Number.isNaN(lastDismissedTimestamp) &&
-    Date.now() - lastDismissedTimestamp < notice.reminderIntervalDays * DAY_MS
+    Date.now() - lastDismissedTimestamp < getRuntimeNoticeReminderIntervalDays(notice) * DAY_MS
   );
 }
 
@@ -93,7 +104,8 @@ function getRuntimePolicyRefreshDelay(
     const lastDismissedAt = localStorage.getItem(getRuntimeNoticeStorageKey(notice.id));
     const lastDismissedTimestamp = lastDismissedAt ? Date.parse(lastDismissedAt) : Number.NaN;
     if (!Number.isNaN(lastDismissedTimestamp)) {
-      const snoozeExpiry = lastDismissedTimestamp + notice.reminderIntervalDays * DAY_MS;
+      const snoozeExpiry =
+        lastDismissedTimestamp + getRuntimeNoticeReminderIntervalDays(notice, now) * DAY_MS;
       if (snoozeExpiry > now) {
         pendingBoundaries.push(snoozeExpiry);
       }

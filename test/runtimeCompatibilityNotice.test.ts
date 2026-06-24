@@ -43,6 +43,7 @@ describe('runtime compatibility CLI notice', () => {
 
   afterEach(() => {
     consoleWarnSpy.mockRestore();
+    vi.resetAllMocks();
   });
 
   it('shows and persists the full notice for an interactive Node.js 20 run', () => {

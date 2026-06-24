@@ -94,6 +94,7 @@ describe('getLatestVersion', () => {
 
 describe('checkForUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let loggerWarnSpy: ReturnType<typeof vi.spyOn>;
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
   let restoreEnv: () => void;
 
@@ -102,11 +103,13 @@ describe('checkForUpdates', () => {
     vi.mocked(fetchWithTimeout).mockReset();
     restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
     loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    loggerWarnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     loggerInfoSpy.mockRestore();
+    loggerWarnSpy.mockRestore();
     consoleWarnSpy.mockRestore();
     restoreEnv();
   });
@@ -153,10 +156,11 @@ describe('checkForUpdates', () => {
     });
 
     expect(result).toBe(true);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
     );
     expect(loggerInfoSpy).not.toHaveBeenCalled();
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should keep normal update guidance for Node.js 20 before cutoff', async () => {
@@ -172,6 +176,7 @@ describe('checkForUpdates', () => {
 
     expect(result).toBe(true);
     expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest'));
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
@@ -190,6 +195,7 @@ describe('checkForUpdates', () => {
     expect(result).toBe(true);
     expect(consoleWarnSpy).not.toHaveBeenCalled();
     expect(loggerInfoSpy).not.toHaveBeenCalled();
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 });
 

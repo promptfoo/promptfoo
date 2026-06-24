@@ -6,13 +6,13 @@ import semverGt from 'semver/functions/gt.js';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
+import { isLatestUpdateBlockedByRuntime } from './runtimeCompatibility';
 import {
-  isLatestUpdateBlockedByRuntime,
   NODE_20_SUPPORT_END_DATE_LABEL,
   NODE_MINIMUM_UPGRADE_VERSION,
   NODE_RECOMMENDED_VERSION,
   NODE_RUNTIME_UPGRADE_GUIDE_URL,
-} from './runtimeCompatibility';
+} from './types/runtimeCompatibility';
 import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
@@ -60,7 +60,7 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
       if (options.suppressRuntimeBlockedWarning) {
         return true;
       }
-      console.warn(
+      logger.warn(
         `\n${border}
 ${chalk.yellow('⚠️')} A newer version of promptfoo is available, but Node.js 20 support ended ${NODE_20_SUPPORT_END_DATE_LABEL}.
 

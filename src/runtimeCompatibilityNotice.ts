@@ -5,11 +5,13 @@ import logger from './logger';
 import {
   getRuntimeCompatibilityNotice,
   hasNode20SupportEnded,
-  NODE_20_SUPPORT_END_DATE_LABEL,
-  type RuntimeCompatibilityNotice,
   shouldShowRuntimeNotice,
 } from './runtimeCompatibility';
 import telemetry from './telemetry';
+import {
+  NODE_20_SUPPORT_END_DATE_LABEL,
+  type RuntimeCompatibilityNotice,
+} from './types/runtimeCompatibility';
 
 interface RuntimeNoticeOptions {
   currentVersion?: string;

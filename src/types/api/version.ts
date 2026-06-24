@@ -4,7 +4,7 @@ import {
   NODE_20_SUPPORT_END_DATE,
   NODE_MINIMUM_UPGRADE_VERSION,
   NODE_RECOMMENDED_VERSION,
-} from '../../runtimeCompatibility';
+} from '../runtimeCompatibility';
 
 // GET /api/version
 

@@ -240,6 +240,47 @@ describe('useVersionCheck', () => {
     expect(result.current.dismissed).toBe(false);
   });
 
+  it('should shorten a stale snooze at the final notice boundary when refresh fails', async () => {
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-15T12:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 7 as const,
+    };
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-07-15T00:00:00.000Z',
+    );
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice,
+    });
+    rejectCallApiOnce(new Error('Policy refresh failed'));
+
+    const { result, unmount } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await timers.advanceByAsync(12 * 60 * 60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+    unmount();
+  });
+
   it('should re-enable a snoozed runtime notice without reloading the page', async () => {
     const timers = useTestTimers();
     timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
