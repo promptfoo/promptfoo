@@ -1,13 +1,16 @@
 import type { Server } from 'node:http';
 
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { updateSignalFile } from '../../src/database/signal';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import { ResultFailureReason } from '../../src/types';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -221,18 +224,53 @@ describe('eval routes', () => {
       expect(updatedEvalB.prompts[resultB.promptIdx].metrics).toEqual(originalEvalBMetrics);
     });
 
-    it('returns a JSON 500 response when rating storage fails', async () => {
-      const findByIdSpy = vi
-        .spyOn(EvalResult, 'findById')
-        .mockRejectedValueOnce(new Error('database unavailable'));
+    it('rolls back the result and metrics and skips notification when eval persistence fails', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const originalResult = {
+        gradingResult: structuredClone(result.gradingResult),
+        failureReason: result.failureReason,
+        score: result.score,
+        success: result.success,
+      };
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      const db = await getDb();
 
-      const res = await api
-        .post('/api/eval/eval-1/results/result-1/rating')
-        .send({ pass: true, score: 1 });
+      await db.run(sql.raw('DROP TRIGGER IF EXISTS fail_rating_eval_update'));
+      await db.run(
+        sql.raw(`
+          CREATE TRIGGER fail_rating_eval_update
+          BEFORE UPDATE OF prompts ON evals
+          BEGIN
+            SELECT RAISE(ABORT, 'forced eval update failure');
+          END
+        `),
+      );
+      vi.mocked(updateSignalFile).mockClear();
 
-      expect(res.status).toBe(500);
-      expect(res.body).toEqual({ error: 'Failed to submit rating' });
-      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+      try {
+        const res = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send(createManualRatingPayload(result, true));
+
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual({ error: 'Failed to submit rating' });
+
+        const persistedResult = await EvalResult.findById(result.id);
+        expect(persistedResult?.gradingResult).toEqual(originalResult.gradingResult);
+        expect(persistedResult?.failureReason).toBe(originalResult.failureReason);
+        expect(persistedResult?.score).toBe(originalResult.score);
+        expect(persistedResult?.success).toBe(originalResult.success);
+
+        const persistedEval = await Eval.findById(eval_.id);
+        expect(persistedEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
+        expect(updateSignalFile).not.toHaveBeenCalled();
+      } finally {
+        await db.run(sql.raw('DROP TRIGGER IF EXISTS fail_rating_eval_update'));
+      }
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -310,7 +348,7 @@ describe('eval routes', () => {
 
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createScoreOnlyRatingPayload(result, 0.4));
+        .send({ pass: result.success, score: 0.4 });
 
       expect(res.status).toBe(200);
       const updatedResult = await EvalResult.findById(result.id);
@@ -544,7 +582,7 @@ describe('eval routes', () => {
 
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createScoreOnlyRatingPayload(result, 0.4));
+        .send({ pass: result.success, score: 0.4 });
 
       expect(res.status).toBe(200);
       const updatedResult = await EvalResult.findById(result.id);
@@ -560,7 +598,7 @@ describe('eval routes', () => {
       expect(updatedMetrics?.testErrorCount).toBe(1);
     });
 
-    it('persists the rated result before notifying through the eval save', async () => {
+    it('notifies once after committing the result and aggregate metrics', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const results = await eval_.getResults();
@@ -568,17 +606,185 @@ describe('eval routes', () => {
       invariant(result.id, 'Result ID is required');
       const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
       const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
+      vi.mocked(updateSignalFile).mockClear();
 
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(createManualRatingPayload(result, true));
 
       expect(res.status).toBe(200);
-      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
-      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
-      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        evalSaveSpy.mock.invocationCallOrder[0],
+      expect(resultSaveSpy).not.toHaveBeenCalled();
+      expect(evalSaveSpy).not.toHaveBeenCalled();
+      expect(updateSignalFile).toHaveBeenCalledTimes(1);
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+
+      const persistedResult = await EvalResult.findById(result.id);
+      const persistedEval = await Eval.findById(eval_.id);
+      expect(persistedResult?.success).toBe(true);
+      expect(persistedEval?.prompts[result.promptIdx].metrics?.testPassCount).toBe(2);
+      expect(persistedEval?.prompts[result.promptIdx].metrics?.testFailCount).toBe(0);
+    });
+
+    it('keeps metrics consistent for concurrent and repeated ratings', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const passingResult = results[0];
+      const failingResult = results[1];
+      invariant(passingResult.id, 'Passing result ID is required');
+      invariant(failingResult.id, 'Failing result ID is required');
+      const passingPayload = createManualRatingPayload(passingResult, false);
+      const failingPayload = createManualRatingPayload(failingResult, true);
+
+      const responses = await Promise.all([
+        api.post(`/api/eval/${eval_.id}/results/${passingResult.id}/rating`).send(passingPayload),
+        api.post(`/api/eval/${eval_.id}/results/${failingResult.id}/rating`).send(failingPayload),
+        api.post(`/api/eval/${eval_.id}/results/${passingResult.id}/rating`).send(passingPayload),
+        api.post(`/api/eval/${eval_.id}/results/${failingResult.id}/rating`).send(failingPayload),
+      ]);
+
+      expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200]);
+      const persistedEval = await Eval.findById(eval_.id);
+      invariant(persistedEval, 'Eval is required');
+      const metrics = persistedEval.prompts[0].metrics;
+      expect(metrics).toMatchObject({
+        score: 1,
+        testPassCount: 1,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 2,
+        assertFailCount: 2,
+      });
+
+      const metricsBeforeRepeat = structuredClone(metrics);
+      const repeatedResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${passingResult.id}/rating`)
+        .send(passingPayload);
+      expect(repeatedResponse.status).toBe(200);
+      const evalAfterRepeat = await Eval.findById(eval_.id);
+      expect(evalAfterRepeat?.prompts[0].metrics).toEqual(metricsBeforeRepeat);
+    });
+
+    it('canonicalizes a minimal outcome flip as one manual component', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 0.75 });
+
+      expect(res.status).toBe(200);
+      const persistedResult = await EvalResult.findById(result.id);
+      const components = persistedResult?.gradingResult?.componentResults ?? [];
+      expect(components).toHaveLength(2);
+      expect(components.filter((component) => component.assertion?.type === 'human')).toHaveLength(
+        1,
       );
+      expect(components[0].assertion?.type).toBe('equals');
+      expect(persistedResult?.success).toBe(true);
+      expect(persistedResult?.score).toBe(0.75);
+      expect(persistedResult?.failureReason).toBe(ResultFailureReason.NONE);
+
+      const persistedEval = await Eval.findById(eval_.id);
+      expect(persistedEval?.prompts[0].metrics).toMatchObject({
+        score: 1.75,
+        testPassCount: 2,
+        testFailCount: 0,
+        assertPassCount: 2,
+        assertFailCount: 1,
+      });
+    });
+
+    it('canonicalizes a top-level human assertion without double counting it', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+        pass: true,
+        score: 0.6,
+        reason: 'Reviewed manually',
+        assertion: { type: 'human' },
+      });
+
+      expect(res.status).toBe(200);
+      const persistedResult = await EvalResult.findById(result.id);
+      expect(persistedResult?.gradingResult?.assertion).toBeUndefined();
+      expect(
+        persistedResult?.gradingResult?.componentResults?.filter(
+          (component) => component.assertion?.type === 'human',
+        ),
+      ).toHaveLength(1);
+      const persistedEval = await Eval.findById(eval_.id);
+      expect(persistedEval?.prompts[0].metrics).toMatchObject({
+        score: 0.6,
+        assertPassCount: 2,
+        assertFailCount: 1,
+        testPassCount: 1,
+        testFailCount: 1,
+      });
+    });
+
+    it('restores an error with zero components and a custom score on repeated clear', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.success = false;
+      result.score = 0.35;
+      result.failureReason = ResultFailureReason.ERROR;
+      result.gradingResult = {
+        pass: false,
+        score: 0.35,
+        reason: 'Original execution error',
+        componentResults: [],
+      };
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.score += 0.35;
+      prompt.metrics.testFailCount -= 1;
+      prompt.metrics.testErrorCount += 1;
+      prompt.metrics.assertFailCount -= 1;
+      await eval_.save();
+      const originalMetrics = structuredClone(prompt.metrics);
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(rateResponse.status).toBe(200);
+      const manuallyRatedResult = await EvalResult.findById(result.id);
+      invariant(manuallyRatedResult, 'Manually rated result is required');
+      const clearPayload = createClearManualRatingPayload(manuallyRatedResult);
+
+      const firstClear = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(clearPayload);
+      const repeatedClear = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(clearPayload);
+
+      expect(firstClear.status).toBe(200);
+      expect(repeatedClear.status).toBe(200);
+      const restoredResult = await EvalResult.findById(result.id);
+      expect(restoredResult?.success).toBe(false);
+      expect(restoredResult?.score).toBe(0.35);
+      expect(restoredResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(restoredResult?.gradingResult).toMatchObject({
+        pass: false,
+        score: 0.35,
+        reason: 'Original execution error',
+        componentResults: [],
+      });
+      const restoredEval = await Eval.findById(eval_.id);
+      expect(restoredEval?.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
