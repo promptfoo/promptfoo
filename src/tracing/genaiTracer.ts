@@ -12,7 +12,6 @@ import {
 import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { isSecretField } from '../util/sanitizer';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -204,6 +203,59 @@ export const PromptfooAttributes = {
 const MAX_BODY_LENGTH = 4096;
 
 const REDACTED_BODY_VALUE = '<REDACTED>';
+const SENSITIVE_BODY_FIELD_NAMES = new Set([
+  'password',
+  'passwd',
+  'pwd',
+  'secret',
+  'secrets',
+  'secretkey',
+  'credentials',
+  'apikey',
+  'apisecret',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'idtoken',
+  'bearertoken',
+  'authtoken',
+  'clientsecret',
+  'webhooksecret',
+  'anthropicapikey',
+  'awsbearertokenbedrock',
+  'authorization',
+  'auth',
+  'bearer',
+  'apikeyenvar',
+  'xapikey',
+  'xauthtoken',
+  'xaccesstoken',
+  'xauth',
+  'xsecret',
+  'xcsrftoken',
+  'xsessiondata',
+  'csrftoken',
+  'sessionid',
+  'session',
+  'cookie',
+  'setcookie',
+  'certificatepassword',
+  'keystorepassword',
+  'pfxpassword',
+  'privatekey',
+  'certkey',
+  'encryptionkey',
+  'signingkey',
+  'signature',
+  'sig',
+  'passphrase',
+  'certificatecontent',
+  'keystorecontent',
+  'pfx',
+  'pfxcontent',
+  'keycontent',
+  'certcontent',
+]);
 const API_KEY_VALUE_PATTERN = /\b(?:sk|pk)-[a-zA-Z0-9._~+/=-]{20,}/;
 const AWS_ACCESS_KEY_PATTERN = /\bAKIA[A-Z0-9]{16}\b/;
 
@@ -241,7 +293,9 @@ function getBodyRedactionMarker(value: unknown): string {
 }
 
 function isSensitiveBodyField(fieldName: string): boolean {
-  return fieldName.split(/[.\[\]]+/).some(isSecretField);
+  return fieldName
+    .split(/[.\[\]]+/)
+    .some((part) => SENSITIVE_BODY_FIELD_NAMES.has(part.toLowerCase().replace(/[-_\s=]/g, '')));
 }
 
 function sanitizeJsonBody(body: string): string {
@@ -400,6 +454,17 @@ function extractErrorMessage(rawError: unknown): string {
 }
 
 /**
+ * Read the status exposed by the OpenTelemetry SDK's recording span.
+ *
+ * The API-level Span interface intentionally omits readable state, so custom
+ * non-recording implementations may not expose it. In that case, callers must
+ * conservatively avoid assigning a success status that could mask an error.
+ */
+function getReadableSpanStatusCode(span: Span): SpanStatusCode | undefined {
+  return (span as Span & { status?: { code?: SpanStatusCode } }).status?.code;
+}
+
+/**
  * Execute a function within a GenAI span.
  *
  * This wrapper:
@@ -468,12 +533,6 @@ export async function withGenAISpan<T>(
 
   // Create the span within the parent context
   const spanCallback = async (span: Span): Promise<T> => {
-    // Preserve the historical explicit OK status unless the callback or wrapper
-    // later marks the call as an error. Current conventions leave success UNSET.
-    if (!useLatest) {
-      span.setStatus({ code: SpanStatusCode.OK });
-    }
-
     try {
       const value = await fn(span);
 
@@ -499,6 +558,11 @@ export async function withGenAISpan<T>(
           ATTR_ERROR_TYPE,
           extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
         );
+      } else if (!useLatest && getReadableSpanStatusCode(span) === SpanStatusCode.UNSET) {
+        // Preserve the historical explicit OK status for successful legacy
+        // spans. OpenTelemetry treats OK as terminal, so it must be assigned
+        // only after the callback has had a chance to mark the span as ERROR.
+        span.setStatus({ code: SpanStatusCode.OK });
       }
       return value;
     } catch (error) {

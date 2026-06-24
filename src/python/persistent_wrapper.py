@@ -40,7 +40,7 @@ _tracer = None
 _tracing_enabled = False
 
 
-def _get_otlp_traces_endpoint():
+def _get_otlp_traces_endpoint() -> str:
     """Resolve the standard OTLP/HTTP traces endpoint from the environment."""
     traces_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
     if traces_endpoint:

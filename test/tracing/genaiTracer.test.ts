@@ -17,6 +17,7 @@ import { mockProcessEnv } from '../util/utils';
 
 // Mock @opentelemetry/api
 const mockSpan = {
+  status: { code: 0 } as { code: number; message?: string },
   setAttribute: vi.fn(),
   setStatus: vi.fn(),
   end: vi.fn(),
@@ -58,6 +59,13 @@ vi.mock('@opentelemetry/api', async () => {
 describe('genaiTracer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSpan.status = { code: SpanStatusCode.UNSET };
+    mockSpan.setStatus.mockImplementation((status: { code: number; message?: string }) => {
+      if (status.code !== SpanStatusCode.UNSET && mockSpan.status.code !== SpanStatusCode.OK) {
+        mockSpan.status = { ...status };
+      }
+      return mockSpan;
+    });
   });
 
   afterEach(() => {
@@ -205,7 +213,6 @@ describe('genaiTracer', () => {
         });
 
         expect(mockSpan.setStatus.mock.calls).toEqual([
-          [{ code: SpanStatusCode.OK }],
           [{ code: SpanStatusCode.ERROR, message: 'aborted' }],
         ]);
       } finally {

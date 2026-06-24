@@ -129,6 +129,46 @@ describe('OpenTelemetry Tracing Integration', () => {
       expect(exceptionEvent).toBeDefined();
     });
 
+    it.each([
+      {
+        name: 'returned provider error',
+        run: () =>
+          withGenAISpan(
+            {
+              system: 'openai',
+              operationName: 'chat',
+              model: 'gpt-4',
+              providerId: 'openai:gpt-4',
+            },
+            async () => ({ error: 'provider rejected request' }),
+          ),
+        message: 'provider rejected request',
+      },
+      {
+        name: 'callback-set partial-result error',
+        run: () =>
+          withGenAISpan(
+            {
+              system: 'anthropic',
+              operationName: 'invoke_agent',
+              model: 'claude-agent',
+              providerId: 'anthropic:claude-agent',
+            },
+            async (span) => {
+              span.setStatus({ code: SpanStatusCode.ERROR, message: 'aborted: hook_stopped' });
+              return { output: 'partial result' };
+            },
+          ),
+        message: 'aborted: hook_stopped',
+      },
+    ])('should preserve ERROR for $name', async ({ run, message }) => {
+      await run();
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status).toEqual({ code: SpanStatusCode.ERROR, message });
+    });
+
     it('should work without result extractor', async () => {
       const spanContext: GenAISpanContext = {
         system: 'bedrock',

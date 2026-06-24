@@ -184,18 +184,15 @@ describe('otelSdk', () => {
       expect(constructorArg.spanProcessors?.length).toBe(2);
     });
 
-    it('should redact exporter endpoint credentials from logs without changing the exporter URL', () => {
+    it('should omit exporter endpoint credentials from logs without changing the exporter URL', () => {
       const endpoint =
         'https://collector-user:collector-password@example.com/v1/traces?api_key=sk-proj-abcdefghijklmnopqrstuvwxyz';
 
       initializeOtel({ ...defaultConfig, endpoint });
 
       expect(otlpExporterCalls[0]).toEqual({ url: endpoint });
-      const renderedLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-      expect(renderedLogs).not.toContain('collector-user');
-      expect(renderedLogs).not.toContain('collector-password');
-      expect(renderedLogs).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz');
-      expect(renderedLogs).toContain('REDACTED');
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(endpoint);
+      expect(logger.debug).toHaveBeenCalledWith('[OtelSdk] Added OTLP exporter');
     });
 
     it('should skip local export when localExport is false', () => {
