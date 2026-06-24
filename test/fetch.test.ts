@@ -1312,6 +1312,32 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ])('should use the default retry budget for non-finite value %s', async (maxRetries) => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, maxRetries)).rejects.toThrow(
+      'Request failed after 4 retries: Error: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+    expect(sleep).toHaveBeenCalledTimes(4);
+  });
+
+  it('should cap huge retry budgets', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      fetchWithRetries('https://example.com', {}, 1000, Number.MAX_SAFE_INTEGER),
+    ).rejects.toThrow('Request failed after 10 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(11);
+    expect(sleep).toHaveBeenCalledTimes(10);
+  });
+
   it('should honor retry context maxRetries when explicit argument is omitted', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1398,29 +1424,18 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
-  it('should retry recognized transient responses through the shared retry budget', async () => {
+  it('should return recognized transient responses unless the caller opts in', async () => {
     const transientResponse = createMockResponse({
       status: 503,
       statusText: 'Service Unavailable',
     });
-    const successResponse = createMockResponse({ ok: true });
-    vi.mocked(global.fetch)
-      .mockResolvedValueOnce(transientResponse)
-      .mockResolvedValueOnce(successResponse);
+    vi.mocked(global.fetch).mockResolvedValue(transientResponse);
 
     const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledTimes(1);
-    expect(result).toBe(successResponse);
-    expect(logger.debug).toHaveBeenCalledWith(
-      '[fetch] Transient HTTP response, retrying',
-      expect.objectContaining({
-        status: 503,
-        attempt: 1,
-        maxAttempts: 3,
-      }),
-    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toBe(transientResponse);
   });
 
   it('should not block retries while a response body cancellation is pending', async () => {
@@ -1441,7 +1456,12 @@ describe('fetchWithRetries', () => {
       .mockResolvedValueOnce(transientResponse)
       .mockResolvedValueOnce(successResponse);
 
-    const resultPromise = fetchWithRetries('https://example.com', {}, 1000, 1);
+    const resultPromise = fetchWithRetries(
+      'https://example.com',
+      { retryOnStatusCodes: [503] },
+      1000,
+      1,
+    );
     try {
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -1465,9 +1485,9 @@ describe('fetchWithRetries', () => {
       return transientResponse;
     });
 
-    await expect(fetchWithRetries(request, {}, 1000, 1)).rejects.toMatchObject({
-      name: 'AbortError',
-    });
+    await expect(
+      fetchWithRetries(request, { retryOnStatusCodes: [503] }, 1000, 1),
+    ).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(global.fetch).toHaveBeenCalledOnce();
   });
@@ -1479,7 +1499,12 @@ describe('fetchWithRetries', () => {
     });
     vi.mocked(global.fetch).mockResolvedValue(transientResponse);
 
-    const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { retryOnStatusCodes: [503] },
+      1000,
+      2,
+    );
 
     expect(global.fetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
@@ -1523,7 +1548,7 @@ describe('fetchWithRetries', () => {
     expect(finalResponse).toBe(notImplemented);
   });
 
-  it('should not automatically retry recognized transient responses for non-idempotent methods', async () => {
+  it('should not retry response statuses without explicit caller opt-in', async () => {
     const transientResponse = createMockResponse({
       status: 503,
       statusText: 'Service Unavailable',
@@ -1542,7 +1567,7 @@ describe('fetchWithRetries', () => {
     expect(result).toBe(transientResponse);
   });
 
-  it('should not retry recognized transient responses with one-shot request bodies', async () => {
+  it('should not retry caller-specified statuses with one-shot request bodies', async () => {
     const transientResponse = createMockResponse({
       status: 503,
       statusText: 'Service Unavailable',
@@ -1550,7 +1575,12 @@ describe('fetchWithRetries', () => {
     vi.mocked(global.fetch).mockResolvedValue(transientResponse);
     const body = new ReadableStream();
 
-    const result = await fetchWithRetries('https://example.com', { method: 'PUT', body }, 1000, 2);
+    const result = await fetchWithRetries(
+      'https://example.com',
+      { method: 'PUT', body, retryOnStatusCodes: [503] },
+      1000,
+      2,
+    );
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
@@ -1573,7 +1603,12 @@ describe('fetchWithRetries', () => {
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
     try {
-      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
 
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(sleep).toHaveBeenCalledTimes(1);
@@ -1597,7 +1632,12 @@ describe('fetchWithRetries', () => {
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
     try {
-      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
 
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(sleep).toHaveBeenCalledTimes(1);
@@ -1621,7 +1661,12 @@ describe('fetchWithRetries', () => {
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
     try {
-      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
 
       expect(sleep).toHaveBeenCalledOnce();
       expect(sleep).toHaveBeenCalledWith(59_500);
@@ -1644,7 +1689,12 @@ describe('fetchWithRetries', () => {
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
 
     try {
-      const result = await fetchWithRetries('https://example.com', {}, 1000, 1);
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503] },
+        1000,
+        1,
+      );
 
       expect(sleep).toHaveBeenCalledOnce();
       expect(sleep).toHaveBeenCalledWith(5000);
@@ -1667,7 +1717,7 @@ describe('fetchWithRetries', () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(transientResponse)
         .mockResolvedValueOnce(successResponse);
-      await fetchWithRetries('https://example.com', {}, 1000, 1);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
       expect(sleep).toHaveBeenLastCalledWith(60_000);
 
       vi.mocked(sleep).mockClear();
@@ -1676,7 +1726,7 @@ describe('fetchWithRetries', () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(transientResponse)
         .mockResolvedValueOnce(successResponse);
-      await fetchWithRetries('https://example.com', {}, 1000, 1);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
       expect(sleep).toHaveBeenLastCalledWith(59_500);
 
       randomSpy.mockReturnValue(0);
@@ -1686,7 +1736,7 @@ describe('fetchWithRetries', () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(transientResponse)
         .mockResolvedValueOnce(successResponse);
-      await fetchWithRetries('https://example.com', {}, 1000, 1);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
       expect(sleep).toHaveBeenLastCalledWith(5000);
 
       vi.mocked(sleep).mockClear();
@@ -1694,7 +1744,7 @@ describe('fetchWithRetries', () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(transientResponse)
         .mockResolvedValueOnce(successResponse);
-      await fetchWithRetries('https://example.com', {}, 1000, 1);
+      await fetchWithRetries('https://example.com', { retryOnStatusCodes: [503] }, 1000, 1);
       expect(sleep).toHaveBeenLastCalledWith(5000);
     } finally {
       randomSpy.mockRestore();
@@ -1714,7 +1764,12 @@ describe('fetchWithRetries', () => {
     });
 
     await expect(
-      fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 2),
+      fetchWithRetries(
+        'https://example.com',
+        { retryOnStatusCodes: [503], signal: abortController.signal },
+        1000,
+        2,
+      ),
     ).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);

@@ -300,6 +300,36 @@ describe('Plugins', () => {
       expect(fetchWithCache).toHaveBeenCalledOnce();
     });
 
+    it('should retain valid max-chars results when a replacement request fails', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            { vars: { testVar: 'short' } },
+            { vars: { testVar: 'this prompt is too long' } },
+          ]),
+        )
+        .mockResolvedValueOnce({
+          data: 'server error',
+          cached: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(result?.map((testCase) => testCase.vars?.testVar)).toEqual(['short']);
+    });
+
     it('should retain empty-result retries for local max-chars generation', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(false);
       vi.spyOn(mockProvider, 'callApi')

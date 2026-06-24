@@ -312,13 +312,27 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       }
 
       let retryInstructions: string | undefined;
+      let remoteGenerationFailed = false;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
+        if (remoteGenerationFailed) {
+          return [];
+        }
+
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
-        const generatedTestCases = await pluginFactory.action({
-          ...params,
-          n: Math.max(params.n - currentTestCases.length, 0),
-          config: retryConfig,
-        });
+        let generatedTestCases: TestCase[];
+        try {
+          generatedTestCases = await pluginFactory.action({
+            ...params,
+            n: Math.max(params.n - currentTestCases.length, 0),
+            config: retryConfig,
+          });
+        } catch (error) {
+          if (error instanceof RemoteGenerationFailure) {
+            remoteGenerationFailed = true;
+            return [];
+          }
+          throw error;
+        }
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -346,8 +360,11 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         return validTestCases;
       };
 
-      const testCases = await suppressRemoteGenerationFailure(() =>
-        retryWithDeduplication(generateValidTestCases, params.n, 2, dedupeTestCases),
+      const testCases = await retryWithDeduplication(
+        generateValidTestCases,
+        params.n,
+        2,
+        dedupeTestCases,
       );
 
       return testCases.map(stripRetryModifier);

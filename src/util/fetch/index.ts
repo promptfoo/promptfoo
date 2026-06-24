@@ -94,13 +94,12 @@ function shouldRetryHttpResponse(
   response: Response,
   disableTransientRetries: boolean | undefined,
   retryOnStatusCodes: readonly number[],
-  isIdempotent: boolean,
   hasReplayableBody: boolean,
 ): boolean {
   return (
     disableTransientRetries !== true &&
     hasReplayableBody &&
-    (retryOnStatusCodes.includes(response.status) || (isIdempotent && isTransientError(response)))
+    retryOnStatusCodes.includes(response.status)
   );
 }
 
@@ -114,13 +113,9 @@ function isReplayableRequestBody(body: RequestInit['body'] | null | undefined): 
   return !(typeof body === 'object' && Symbol.asyncIterator in body);
 }
 
-function getRequestRetryProperties(url: RequestInfo, options: RequestInit) {
+function hasReplayableRequestBody(url: RequestInfo, options: RequestInit): boolean {
   const request = url instanceof Request ? url : undefined;
-  const method = (options.method ?? request?.method ?? 'GET').toUpperCase();
-  return {
-    isIdempotent: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method),
-    hasReplayableBody: isReplayableRequestBody(options.body ?? request?.body),
-  };
+  return isReplayableRequestBody(options.body ?? request?.body);
 }
 
 function wasFetchAborted(signal: AbortSignal | null | undefined, error: unknown): boolean {
@@ -783,10 +778,7 @@ export async function fetchWithRetries(
   const signal = requestOptions.signal ?? (url instanceof Request ? url.signal : undefined);
   const effectiveRequestOptions = signal ? { ...requestOptions, signal } : requestOptions;
   maxRetries = resolveFetchRetryMaxRetries(maxRetries);
-  const { hasReplayableBody, isIdempotent } = getRequestRetryProperties(
-    url,
-    effectiveRequestOptions,
-  );
+  const hasReplayableBody = hasReplayableRequestBody(url, effectiveRequestOptions);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
@@ -810,7 +802,6 @@ export async function fetchWithRetries(
         response,
         options.disableTransientRetries,
         retryOnStatusCodes,
-        isIdempotent,
         hasReplayableBody,
       );
       if (isRetryableStatus && i < maxRetries) {

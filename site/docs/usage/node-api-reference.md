@@ -523,6 +523,9 @@ interface FetchOptions extends RequestInit {
 for non-idempotent methods when the request body is replayable. Use it only when an endpoint's
 contract makes replay safe.
 
+`maxRetries` is normalized to an integer from 0 through 10. Non-finite values fall back to the
+default of 4 retries.
+
 **Example:**
 
 ```typescript

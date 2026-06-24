@@ -100,7 +100,7 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 Promptfoo has two retry layers:
 
 1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times by default. If a provider config sets `maxRetries`, the scheduler uses that value (including `0` to disable scheduler retries entirely).
-2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set.
+2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set. The effective HTTP retry budget is normalized to an integer from 0 through 10; non-finite values fall back to the default.
 
 When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
 
@@ -135,10 +135,9 @@ PROMPTFOO_REQUEST_BACKOFF_MS=10000 PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
 The scheduler's retry handles most rate limiting automatically. The HTTP-level retry also handles
-network issues and recognized transient 502, 503, 504, and 524 responses for idempotent requests
-with replayable bodies. Endpoint-specific callers can explicitly opt non-idempotent requests into
-selected status retries. Set `PROMPTFOO_RETRY_5XX=true` only when every 5xx response from your
-provider is safe to retry.
+network issues using the historical shared retry budget. Endpoint-specific callers can explicitly
+opt requests with replayable bodies into selected HTTP status retries. Set
+`PROMPTFOO_RETRY_5XX=true` only when every 5xx response from your provider is safe to retry.
 
 ## Provider-Specific Notes
 
