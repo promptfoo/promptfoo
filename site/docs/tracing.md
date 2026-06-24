@@ -32,7 +32,7 @@ Tracing provides visibility into:
 
 ## Built-in Provider Instrumentation
 
-Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following the [primary OpenTelemetry GenAI span specification](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md). The GenAI conventions are still marked **Development**, so Promptfoo keeps its established telemetry contract by default and exposes current names through an explicit opt-in.
 
 ### Supported Providers
 
@@ -63,9 +63,10 @@ Each provider call creates a span with these attributes:
 **Request Attributes:**
 
 - `gen_ai.system` - Legacy provider system (default mode; e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.provider.name` - Latest OTEL provider identifier (opt-in mode; e.g., "openai", "gcp.vertex_ai")
-- `gen_ai.operation.name` - Operation type: "chat", "completion" or "text_completion", "embedding" or "embeddings" (see [Convention version](#convention-version) below)
+- `gen_ai.provider.name` - Current provider identifier (opt-in mode; e.g., "openai", "gcp.vertex_ai", "aws.bedrock", "x_ai")
+- `gen_ai.operation.name` - Legacy operation name in default mode; current operation name such as `chat`, `text_completion`, `embeddings`, `generate_content`, or `invoke_agent` in opt-in mode
 - `gen_ai.request.model` - Model name
+- `gen_ai.request.stream` - `true` for streaming calls in opt-in mode; omitted for non-streaming calls
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
 - `gen_ai.request.top_p` - Top-p setting
@@ -82,8 +83,12 @@ Each provider call creates a span with these attributes:
 - `gen_ai.usage.reasoning.output_tokens` - Reasoning token count in latest opt-in mode
 - `gen_ai.usage.cache_read.input_tokens` / `gen_ai.usage.cache_creation.input_tokens` - Cache detail counts in latest opt-in mode
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
+- `gen_ai.response.model` - Model reported by the provider, when available
+- `gen_ai.response.id` - Provider response identifier, when available
+- `gen_ai.conversation.id` - Agent conversation or thread identifier in opt-in mode
+- `error.type` - Stable OpenTelemetry error classification on failed calls
 
-**Promptfoo-specific Attributes:**
+**Promptfoo-specific Attributes and Extensions:**
 
 - `promptfoo.provider.id` - Provider identifier
 - `promptfoo.test.index` - Test case index
@@ -92,14 +97,22 @@ Each provider call creates a span with these attributes:
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
 
+`gen_ai.usage.total_tokens`, `gen_ai.usage.cached_tokens`, and prediction-detail token fields are Promptfoo extensions rather than current standard GenAI attributes. Their names remain stable across both modes. Request and response bodies are also Promptfoo extensions: common credential shapes are redacted and values are truncated, but arbitrary user data can still be sensitive or high-cardinality. Do not place secrets in prompts, responses, custom attributes, model names, agent names, conversation IDs, or tool arguments solely because tracing is enabled.
+
 ### Convention version
 
-Built-in instrumentation follows the [OpenTelemetry Gen AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Operation names and some attributes can be emitted in two modes:
+Built-in instrumentation follows the [current OpenTelemetry GenAI span specification](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md). Operation names and versioned attributes can be emitted in two modes:
 
-- **Default (legacy):** Existing instrumentation is unchanged: `gen_ai.system` is set and `gen_ai.operation.name` uses legacy operation names. This keeps existing dashboards and queries working.
-- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to replace deprecated `gen_ai.system` with `gen_ai.provider.name`, emit spec-aligned operation and span names such as "text_completion" and "embeddings", and use current dotted reasoning/cache usage attribute names.
+- **Default (legacy):** `gen_ai.system`, legacy operation/span names, and legacy reasoning/cache token names are retained so existing dashboards, stored traces, and queries continue to work. Failed spans also receive the stable `error.type` attribute.
+- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to replace `gen_ai.system` with `gen_ai.provider.name`, emit current operation and span names such as `text_completion`, `embeddings`, `generate_content`, and `invoke_agent`, and use current dotted reasoning/cache usage names. Agent calls may also emit `gen_ai.agent.*` and `gen_ai.conversation.id`; streaming calls emit `gen_ai.request.stream: true`.
 
-The built-in OTLP receiver accepts both naming styles and normalizes them for the UI.
+The opt-in token is the [transition mechanism documented by OpenTelemetry](https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md#L22-L40). It is a product gate for breaking telemetry renames: Promptfoo does not silently switch existing users to experimental names.
+
+Both modes use `CLIENT` spans for outbound model and remote-agent calls. Current-mode successful spans leave status `UNSET`, while failures use `ERROR` and `error.type`, following the [OpenTelemetry error recording rules](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/). Default mode preserves the historical explicit `OK` success status.
+
+The built-in OTLP receiver accepts and preserves both naming styles; it does not rewrite incoming attributes. Stored historical spans therefore keep their original schema. Promptfoo's trace UI and token-usage readers understand both the legacy and current token spellings. The local exporter also records the original span kind for parity with OTLP-received spans.
+
+Tool spans and framework-native events keep their existing provider-specific names. The latest opt-in aligns the shared model and agent call spans; it does not claim that every third-party tool/event schema has been migrated to the evolving GenAI conventions.
 
 ### Example Trace Output
 
@@ -303,6 +316,11 @@ External providers that wrap their own agent loops can adopt the same convention
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
+  # Optional exporter for Promptfoo's built-in provider spans
+  # endpoint: 'http://collector:4318/v1/traces'
+  # serviceName: 'promptfoo'
+  # localExport: true # Also retain spans in Promptfoo's local trace store
+  # debug: false
   # Abort the eval if the OTLP receiver can't start (default: false — log and continue without traces)
   failOnReceiverStartFailure: true
   # Extra tool names treated as command steps, merged with the built-ins (shell, exec_command, local_shell)
@@ -389,8 +407,11 @@ You can also configure tracing via environment variables:
 # Enable tracing
 export PROMPTFOO_TRACING_ENABLED=true
 
-# Configure OTLP endpoint (for providers)
+# Export Promptfoo's built-in provider spans over OTLP/HTTP. The standard base
+# endpoint gets the signal path appended automatically.
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+# Or set the exact trace URL:
+# export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://localhost:4318/v1/traces"
 
 # Set service name
 export OTEL_SERVICE_NAME="my-rag-application"
@@ -407,7 +428,17 @@ export OTEL_SEMCONV_STABILITY_OPT_IN="gen_ai_latest_experimental"
 
 ### Forwarding to External Collectors
 
-Forward traces to external observability platforms:
+To export Promptfoo's built-in provider spans directly, set `tracing.endpoint` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) to the collector's full OTLP/HTTP traces URL:
+
+```yaml
+tracing:
+  enabled: true
+  endpoint: 'http://jaeger:4318/v1/traces'
+  serviceName: 'my-eval'
+  localExport: true
+```
+
+`tracing.forwarding` is separate: it forwards spans received by Promptfoo's built-in OTLP receiver from instrumented applications or subprocesses.
 
 ```yaml
 tracing:
