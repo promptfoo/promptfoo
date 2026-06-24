@@ -27,7 +27,10 @@ import {
   buildRemoteMaterializedInputVariables,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
-import { throwIfTargetPromptViolatesCharLimits } from '../shared/promptLength';
+import {
+  getTargetPromptCharLimits,
+  throwIfTargetPromptViolatesCharLimits,
+} from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -218,10 +221,9 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
+    const contextCharLimits = getTargetPromptCharLimits(context);
     const getCharsPerMessageLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage') =>
-      this.config[key] ??
-      (context?.test?.metadata?.strategyConfig as Record<string, number> | undefined)?.[key] ??
-      (context?.test?.metadata?.pluginConfig as Record<string, number> | undefined)?.[key];
+      contextCharLimits[key] ?? this.config[key];
     const charLimits = {
       maxCharsPerMessage: getCharsPerMessageLimit('maxCharsPerMessage'),
       minCharsPerMessage: getCharsPerMessageLimit('minCharsPerMessage'),
