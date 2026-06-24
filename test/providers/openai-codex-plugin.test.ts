@@ -94,6 +94,9 @@ describe('OpenAICodexPluginProvider', () => {
     expect(sdkConfig.additional_directories).toEqual([
       sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR,
     ]);
+    expect(sdkConfig.cli_env.USERPROFILE).toBe(sdkConfig.cli_env.HOME);
+    expect(sdkConfig.cli_env.TMP).toBe(sdkConfig.cli_env.TMPDIR);
+    expect(sdkConfig.cli_env.TEMP).toBe(sdkConfig.cli_env.TMPDIR);
     expect(sdkConfig.cli_env.CODEX_HOME).toContain('promptfoo-codex-plugin-');
     expect(fs.existsSync(sdkConfig.cli_env.CODEX_HOME)).toBe(false);
     expect(result.latencyMs).toEqual(expect.any(Number));

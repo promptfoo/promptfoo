@@ -868,8 +868,11 @@ function withoutPluginConfig(
     cli_env: {
       ...(codexConfig.cli_env ?? {}),
       HOME: runtime.home,
+      USERPROFILE: runtime.home,
       CODEX_HOME: runtime.codexHome,
       TMPDIR: runtime.tmpDir,
+      TMP: runtime.tmpDir,
+      TEMP: runtime.tmpDir,
       [CODEX_PLUGIN_ARTIFACT_DIR_ENV]: runtime.artifactDir,
     },
     inherit_process_env: false,
