@@ -4,8 +4,10 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
+import { safeJsonStringify } from '../../../util/json';
+import { getProviderResponseGradingEvidence } from '../../util';
 
-import type { AssertionValue, AtomicTestCase } from '../../../types/index';
+import type { AssertionValue, AtomicTestCase, ProviderResponse } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';
 import type { CodingAgentPlugin } from '../../constants/codingAgents';
 import type { RedteamGradingContext } from '../../grading/types';
@@ -517,18 +519,6 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function parseProviderRaw(raw: unknown): unknown {
-  if (typeof raw !== 'string') {
-    return raw;
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
 function collectValuesByKey(
   value: unknown,
   keyNames: ReadonlySet<string>,
@@ -648,61 +638,77 @@ async function evidenceFromConfiguredFiles(
   return evidence;
 }
 
-function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
-  const parsed = parseProviderRaw(raw);
-  const object = getObject(parsed);
-  if (!object) {
+function evidenceFromProviderResponse(response: ProviderResponse | undefined): TargetEvidence[] {
+  if (!response) {
     return [];
   }
 
   const evidence: TargetEvidence[] = [];
-  const finalResponse = getString(object.finalResponse);
-  if (finalResponse) {
-    evidence.push({
-      evidenceSource: 'agent-response',
-      location: 'provider raw final response',
-      text: finalResponse,
-    });
-  }
-
-  const items = Array.isArray(object.items) ? object.items : [];
-  items.forEach((item, index) => {
-    const itemObject = getObject(item);
-    if (!itemObject) {
-      return;
-    }
-
-    const type = getString(itemObject.type);
-    if (type === 'agent_message') {
-      const text = getString(itemObject.text);
+  for (const item of getProviderResponseGradingEvidence(response)) {
+    const itemNumber = (item.index ?? 0) + 1;
+    const locationPrefix =
+      item.source === 'raw'
+        ? `provider raw item ${itemNumber}`
+        : `provider metadata tool call ${itemNumber}`;
+    if (item.type === 'final_response') {
+      const text = getString(item.details.text);
       if (text) {
         evidence.push({
           evidenceSource: 'agent-response',
-          location: `provider raw item ${index + 1} agent message`,
+          location: 'provider raw final response',
           text,
         });
       }
+      continue;
     }
-
-    if (type === 'command_execution') {
-      const command = getString(itemObject.command);
-      const commandOutput = getString(itemObject.aggregated_output);
+    if (item.type === 'agent_message') {
+      const text = getString(item.details.text);
+      if (text) {
+        evidence.push({
+          evidenceSource: 'agent-response',
+          location: `${locationPrefix} agent message`,
+          text,
+        });
+      }
+      continue;
+    }
+    if (item.type === 'command_execution') {
+      const command = getString(item.details.command);
+      const commandOutput = getString(item.details.aggregated_output);
       if (command) {
         evidence.push({
           evidenceSource: 'command',
-          location: `provider raw item ${index + 1} command`,
+          location: `${locationPrefix} command`,
           text: command,
         });
       }
       if (commandOutput) {
         evidence.push({
           evidenceSource: 'command-output',
-          location: `provider raw item ${index + 1} command output`,
+          location: `${locationPrefix} command output`,
           text: commandOutput,
         });
       }
+      continue;
     }
-  });
+
+    const { output, result, error, aggregated_output, ...actionDetails } = item.details;
+    if (Object.keys(actionDetails).length > 0) {
+      evidence.push({
+        evidenceSource: 'command',
+        location: `${locationPrefix} ${item.type}`,
+        text: safeJsonStringify({ type: item.type, ...actionDetails }) ?? item.type,
+      });
+    }
+    const resultDetails = { output, result, error, aggregated_output };
+    if (Object.values(resultDetails).some((value) => value !== undefined)) {
+      evidence.push({
+        evidenceSource: 'command-output',
+        location: `${locationPrefix} ${item.type} result`,
+        text: safeJsonStringify(resultDetails) ?? String(result ?? output ?? error ?? ''),
+      });
+    }
+  }
 
   return evidence;
 }
@@ -785,7 +791,7 @@ function targetEvidence(
           ? gradingContext.providerResponse.output
           : '',
     },
-    ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
+    ...evidenceFromProviderResponse(gradingContext?.providerResponse),
     ...evidenceFromTraceData(gradingContext?.traceData),
     ...evidenceFromTraceData(gradingContext?.traceContext),
   ];
