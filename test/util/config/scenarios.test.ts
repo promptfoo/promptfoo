@@ -182,6 +182,7 @@ describe('Scenario loading with glob patterns', () => {
   });
 
   it('should retain each declaring directory for recursive scenario globs', async () => {
+    const configBasePath = path.dirname('/test/path/config.yaml');
     const scenarioA = {
       config: [{ vars: { context: { report: 'file://data/report.txt' } } }],
       tests: [],
@@ -212,13 +213,13 @@ describe('Scenario loading with glob patterns', () => {
     expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
       scenarioA.config[0],
       path.resolve('/test/path/scenarios/a'),
-      path.resolve('/test/path'),
+      configBasePath,
       expect.any(WeakSet),
     );
     expect(rebaseTestCaseVarFileReferences).toHaveBeenCalledWith(
       scenarioB.config[0],
       path.resolve('/test/path/scenarios/b'),
-      path.resolve('/test/path'),
+      configBasePath,
       expect.any(WeakSet),
     );
   });
