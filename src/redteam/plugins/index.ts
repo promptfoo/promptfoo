@@ -5,6 +5,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { BaseAssertionTypesSchema, SpecialAssertionTypesSchema } from '../../types/index';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -413,6 +414,12 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
 
     const graderType = getRemoteRedteamGraderType(assertionType);
     if (!graderType.startsWith('promptfoo:redteam:')) {
+      const isSupportedBaseAssertion = BaseAssertionTypesSchema.safeParse(graderType).success;
+      const isSupportedSpecialAssertion =
+        SpecialAssertionTypesSchema.safeParse(assertionType).success;
+      if (!isSupportedBaseAssertion && !isSupportedSpecialAssertion) {
+        unsupportedAssertionTypes.add(assertionType);
+      }
       continue;
     }
     if (assertionType === 'promptfoo:redteam:rag-poisoning') {

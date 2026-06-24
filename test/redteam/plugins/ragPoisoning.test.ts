@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { RagPoisoningGrader } from '../../../src/redteam/plugins/ragPoisoning';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
 vi.mock('../../../src/matchers/llmGrading', () => ({
   matchesLlmRubric: vi.fn(),
 }));
 vi.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
-    getGradingProvider: vi.fn().mockResolvedValue({ id: () => 'test-grading-provider' }),
+    getGradingProvider: vi.fn(),
   },
 }));
 
@@ -15,6 +16,10 @@ describe('RagPoisoningGrader', () => {
   let grader: RagPoisoningGrader;
 
   beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue({
+      id: () => 'test-grading-provider',
+    } as any);
     grader = new RagPoisoningGrader();
   });
 

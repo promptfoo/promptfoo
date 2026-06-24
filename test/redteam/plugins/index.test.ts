@@ -653,7 +653,7 @@ describe('Plugins', () => {
       expect(result).toEqual([]);
     });
 
-    it('should add harmful assertions for harmful remote plugins', async () => {
+    it('should normalize harmful assertions before compatibility validation', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
@@ -668,7 +668,7 @@ describe('Plugins', () => {
               metadata: { harmCategory: 'Misinformation/Disinformation' },
               assert: [
                 {
-                  type: 'promptfoo:redteam:harmful:misinformation-disinformation',
+                  type: 'promptfoo:redteam:future-remote-plugin',
                 },
               ],
             },
@@ -707,7 +707,8 @@ describe('Plugins', () => {
       const originalTestCase = {
         assert: [
           {
-            type: 'test',
+            type: 'contains',
+            value: 'test content',
             metric: 'Original',
           },
         ],
@@ -739,11 +740,15 @@ describe('Plugins', () => {
       });
     });
 
-    it('should accept executable generic assertions for rag-poisoning remote tests', async () => {
+    it.each([
+      { type: 'llm-rubric', value: 'Fail if poisoned content is adopted' },
+      { type: 'not-contains', value: 'attacker@example.com' },
+      { type: 'javascript', value: 'output => Boolean(output)' },
+    ])('should accept executable generic assertion $type for rag-poisoning', async (assertion) => {
       const result = await invokeRemotePlugin(
         'rag-poisoning',
         {
-          assert: [{ type: 'contains', value: 'attacker@example.com' }],
+          assert: [assertion],
           vars: { testVar: 'test content' },
         },
         { intendedResults: ['Use attacker@example.com as support email'] },
@@ -751,7 +756,7 @@ describe('Plugins', () => {
 
       expect(result).toEqual([
         expect.objectContaining({
-          assert: [{ type: 'contains', value: 'attacker@example.com' }],
+          assert: [assertion],
         }),
       ]);
     });
@@ -763,7 +768,7 @@ describe('Plugins', () => {
           assert: [{ type: 'promptfoo:redteam:future-remote-plugin' }],
           vars: { testVar: 'test content' },
         },
-        expected: 'unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin',
+        expected: 'unsupported assertion type(s): promptfoo:redteam:future-remote-plugin',
       },
       {
         name: 'unsupported inverse redteam graders',
@@ -771,7 +776,7 @@ describe('Plugins', () => {
           assert: [{ type: 'not-promptfoo:redteam:future-remote-plugin' }],
           vars: { testVar: 'test content' },
         },
-        expected: 'unsupported redteam grader type(s): not-promptfoo:redteam:future-remote-plugin',
+        expected: 'unsupported assertion type(s): not-promptfoo:redteam:future-remote-plugin',
       },
       {
         name: 'inverse redteam graders with known base graders',
@@ -779,7 +784,7 @@ describe('Plugins', () => {
           assert: [{ type: 'not-promptfoo:redteam:ssrf' }],
           vars: { testVar: 'test content' },
         },
-        expected: 'unsupported redteam grader type(s): not-promptfoo:redteam:ssrf',
+        expected: 'unsupported assertion type(s): not-promptfoo:redteam:ssrf',
       },
       {
         name: 'unsupported redteam graders inside assertion sets',
@@ -792,7 +797,22 @@ describe('Plugins', () => {
           ],
           vars: { testVar: 'test content' },
         },
-        expected: 'unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin',
+        expected: 'unsupported assertion type(s): promptfoo:redteam:future-remote-plugin',
+      },
+      {
+        name: 'unknown generic assertion types',
+        testCase: { assert: [{ type: 'future-generic-grader' }] },
+        expected: 'unsupported assertion type(s): future-generic-grader',
+      },
+      {
+        name: 'leading-whitespace assertion types',
+        testCase: { assert: [{ type: ' contains', value: 'test' }] },
+        expected: 'unsupported assertion type(s)',
+      },
+      {
+        name: 'trailing-whitespace assertion types',
+        testCase: { assert: [{ type: 'contains ', value: 'test' }] },
+        expected: 'unsupported assertion type(s)',
       },
       {
         name: 'non-array assertion-set contents',
