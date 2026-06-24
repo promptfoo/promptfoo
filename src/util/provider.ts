@@ -1,5 +1,6 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
+import { sanitizeUrl } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -57,6 +58,18 @@ export function getProviderDescription(provider: ApiProvider): string {
     return `${label} (${id})`;
   }
   return id;
+}
+
+export function sanitizeProviderIdForLog(providerId: string): string {
+  const descriptionMatch = providerId.match(/^(\S+)(\s+\(.+\))$/);
+  if (descriptionMatch) {
+    const [, id, description] = descriptionMatch;
+    return `${sanitizeProviderIdForLog(id)}${description}`;
+  }
+
+  return providerId.includes('://') || providerId.startsWith('/')
+    ? sanitizeUrl(providerId)
+    : providerId;
 }
 
 /**
@@ -198,6 +211,7 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   xai: 'XAI_API_KEY',
   groq: 'GROQ_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
+  moonshot: 'MOONSHOT_API_KEY',
   perplexity: 'PERPLEXITY_API_KEY',
   hyperbolic: 'HYPERBOLIC_API_KEY',
   cerebras: 'CEREBRAS_API_KEY',

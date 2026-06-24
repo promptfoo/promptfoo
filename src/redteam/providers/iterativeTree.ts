@@ -25,6 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -73,6 +74,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -517,6 +519,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
   treeParams,
 }: {
   context: CallApiContextParams;
@@ -532,6 +535,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
   treeParams?: {
     maxDepth?: number;
     maxAttempts?: number;
@@ -683,6 +687,7 @@ async function runRedteamConversation({
             perTurnLayers,
             Strategies,
             {
+              targetId,
               evaluationId: context?.evaluationId,
               testCaseId: test?.metadata?.testCaseId as string | undefined,
               purpose: test?.metadata?.purpose as string | undefined,
@@ -881,19 +886,11 @@ async function runRedteamConversation({
               vars: iterationVars,
             };
 
-            // Build grading context with exfil tracking data
-            let gradingContext:
-              | {
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            // Build grading context with image outputs and exfil tracking data.
+            let gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: targetResponse,
+              ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+            };
 
             // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
             // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
@@ -916,6 +913,7 @@ async function runRedteamConversation({
                 const exfilData = await checkExfilTracking(webPageUuid, evalId);
                 if (exfilData) {
                   gradingContext = {
+                    ...gradingContext,
                     wasExfiltrated: exfilData.wasExfiltrated,
                     exfilCount: exfilData.exfilCount,
                     exfilRecords: exfilData.exfilRecords,
@@ -930,11 +928,15 @@ async function runRedteamConversation({
             }
 
             // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-            if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+            if (
+              gradingContext?.wasExfiltrated === undefined &&
+              targetResponse.metadata?.wasExfiltrated !== undefined
+            ) {
               logger.debug(
                 '[IterativeTree] Using exfil data from provider response metadata (fallback)',
               );
               gradingContext = {
+                ...gradingContext,
                 wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
                 exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
                 exfilRecords: [],
@@ -1321,11 +1323,13 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -1361,6 +1365,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
     });
   }
