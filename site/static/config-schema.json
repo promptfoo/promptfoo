@@ -3079,6 +3079,18 @@
         "enabled": {
           "type": "boolean"
         },
+        "serviceName": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "localExport": {
+          "type": "boolean"
+        },
+        "debug": {
+          "type": "boolean"
+        },
         "failOnReceiverStartFailure": {
           "type": "boolean"
         },

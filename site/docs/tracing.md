@@ -301,7 +301,7 @@ Codex SDK and app-server turn markers are still useful for correlating item span
 :::note Caveats
 
 - **Subagents emit their own turns.** For `anthropic:claude-agent-sdk`, every `assistant` message — including subagent rounds — emits a `gen_ai.turn` span and tags its tool spans with that subagent turn's index. Subagent turns carry `gen_ai.turn.is_subagent: true` (plus `gen_ai.turn.parent_tool_use_id` and `gen_ai.turn.subagent_type`); filter on those attributes when you need to reason about main-agent rounds only.
-- **Cache hits emit no turn span.** A cached response (e.g. `azure:foundry-agent` with caching enabled) still emits the parent `chat <model>` span, but performs no LLM round and therefore emits zero `gen_ai.turn` spans. Run with `--no-cache`, or scope `min`/`max` assertions to fresh responses, when counting turns.
+- **Cache hits emit no turn span.** A cached response (e.g. `azure:foundry-agent` with caching enabled) still emits its parent span (`chat <model>` in legacy mode or `invoke_agent <agent>` in latest mode), but performs no LLM round and therefore emits zero `gen_ai.turn` spans. Run with `--no-cache`, or scope `min`/`max` assertions to fresh responses, when counting turns.
 
 :::
 
