@@ -1792,9 +1792,7 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValueOnce(scenarios);
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1819,6 +1817,7 @@ describe('resolveConfigs', () => {
     const { config, testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/scenario.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledTimes(1);
     expect(readTests).toHaveBeenCalledWith(
       'file://scenarios/tests.yaml',
       path.dirname('config.json'),
