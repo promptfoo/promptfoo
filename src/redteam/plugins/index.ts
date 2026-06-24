@@ -128,6 +128,10 @@ async function evictCachedRemoteResponse(
   }
 }
 
+function isRemoteGeneratedTestCase(value: unknown): value is TestCase {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
  * Used to ensure modifiers are available for strategies when using remote generation.
@@ -492,13 +496,17 @@ async function fetchRemoteTestCases(
       throw new RemoteGenerationFailure(`Remote generation returned an error for ${key}`);
     }
 
-    if (!data || !Array.isArray(data.result)) {
+    if (
+      !data ||
+      !Array.isArray(data.result) ||
+      !Array.from(data.result).every(isRemoteGeneratedTestCase)
+    ) {
       await evictCachedRemoteResponse(cached, deleteFromCache);
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
         statusText,
-        resultType: Array.isArray(data?.result) ? 'array' : typeof data?.result,
+        resultType: Array.isArray(data?.result) ? 'invalid-array' : typeof data?.result,
       });
       throw new RemoteGenerationFailure(`Remote generation returned an invalid result for ${key}`);
     }
@@ -514,6 +522,7 @@ async function fetchRemoteTestCases(
     const ret = data.result;
     abortSignal?.throwIfAborted();
     await commitToCache?.();
+    abortSignal?.throwIfAborted();
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {

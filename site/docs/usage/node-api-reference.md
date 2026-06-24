@@ -534,7 +534,8 @@ contract makes replay safe.
 
 Set `deferCacheWrite` when the caller must validate a successful HTTP response before caching it.
 On a cache miss, call the returned `commitToCache()` only after validation succeeds. Existing cache
-hits are returned normally.
+hits are returned normally. If deferred requests for the same cache key overlap, a commit from an
+older request does not replace a newer committed response.
 
 **Example:**
 

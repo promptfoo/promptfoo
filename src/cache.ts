@@ -294,9 +294,13 @@ type SerializedFetchResponse = string;
 type PreparedFetchResponse = {
   response: SerializedFetchResponse;
   cacheable: boolean;
+  requestOrder?: number;
 };
 
 const inflightFetchResponses = new Map<string, Promise<PreparedFetchResponse>>();
+const fetchCacheMutationTails = new Map<string, Promise<void>>();
+const latestDeferredCommitOrder = new Map<string, number>();
+let nextFetchRequestOrder = 0;
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
@@ -563,6 +567,46 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
+async function withFetchCacheMutation<T>(
+  cacheKey: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = fetchCacheMutationTails.get(cacheKey) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  fetchCacheMutationTails.set(cacheKey, tail);
+
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (fetchCacheMutationTails.get(cacheKey) === tail) {
+      fetchCacheMutationTails.delete(cacheKey);
+    }
+  }
+}
+
+async function commitDeferredFetchResponse(
+  cache: Cache,
+  cacheKey: string,
+  preparedResponse: PreparedFetchResponse,
+): Promise<boolean> {
+  return withFetchCacheMutation(cacheKey, async () => {
+    const requestOrder = preparedResponse.requestOrder ?? 0;
+    const latestOrder = latestDeferredCommitOrder.get(cacheKey) ?? -1;
+    if (requestOrder < latestOrder) {
+      return false;
+    }
+    await cache.set(cacheKey, preparedResponse.response);
+    latestDeferredCommitOrder.set(cacheKey, requestOrder);
+    return true;
+  });
+}
+
 function getInflightFetchCacheKey(
   cacheKey: string,
   url: RequestInfo,
@@ -609,12 +653,14 @@ function deserializeFetchResponse<T>(
     latencyMs: parsedResponse.latencyMs,
     commitToCache,
     deleteFromCache: async () => {
-      const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
-      if (currentResponse !== response) {
-        return;
-      }
-      await cache.del(cacheKey);
-      logger.debug(`Evicted from cache: ${cacheKey}`);
+      await withFetchCacheMutation(cacheKey, async () => {
+        const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+        if (currentResponse !== response) {
+          return;
+        }
+        await cache.del(cacheKey);
+        logger.debug(`Evicted from cache: ${cacheKey}`);
+      });
     },
   };
 }
@@ -849,6 +895,7 @@ export async function fetchWithCache<T = unknown>(
   );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
+    const requestOrder = ++nextFetchRequestOrder;
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
@@ -859,12 +906,14 @@ export async function fetchWithCache<T = unknown>(
         format,
       );
       if (preparedResponse.cacheable && !deferCacheWrite) {
-        await cache.set(cacheKey, preparedResponse.response);
+        await withFetchCacheMutation(cacheKey, () =>
+          cache.set(cacheKey, preparedResponse.response),
+        );
         logger.debug('[Cache] Stored response in cache', {
           url: sanitizeUrl(getRequestUrlString(url)),
         });
       }
-      return preparedResponse;
+      return { ...preparedResponse, requestOrder };
     })().finally(() => {
       inflightFetchResponses.delete(inflightCacheKey);
     });
@@ -875,10 +924,12 @@ export async function fetchWithCache<T = unknown>(
   const commitToCache =
     deferCacheWrite && preparedResponse.cacheable
       ? async () => {
-          await cache.set(cacheKey, preparedResponse.response);
-          logger.debug('[Cache] Committed validated response to cache', {
-            url: sanitizeUrl(getRequestUrlString(url)),
-          });
+          const committed = await commitDeferredFetchResponse(cache, cacheKey, preparedResponse);
+          if (committed) {
+            logger.debug('[Cache] Committed validated response to cache', {
+              url: sanitizeUrl(getRequestUrlString(url)),
+            });
+          }
         }
       : undefined;
   return deserializeFetchResponse<T>(
@@ -936,6 +987,8 @@ export function disableCache() {
  */
 export async function clearCache() {
   inflightFetchResponses.clear();
+  fetchCacheMutationTails.clear();
+  latestDeferredCommitOrder.clear();
   namespacedCacheInstances.clear();
   return getCacheInstance().clear();
 }

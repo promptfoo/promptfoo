@@ -485,22 +485,79 @@ describe('fetchWithCache', () => {
       expect(cachedResult).toMatchObject({ cached: true, data: validResult.data });
     });
 
-    it('should not let a stale eviction callback delete a newer response', async () => {
+    it('should not let an older deferred response overwrite a newer commit', async () => {
+      const olderSignal = new AbortController().signal;
+      const newerSignal = new AbortController().signal;
       mockFetchWithRetries
-        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'))
-        .mockResolvedValueOnce(
-          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['valid'] })),
-        );
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'older', 'text/plain'))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'newer', 'text/plain'));
 
-      const invalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
-      const staleInvalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
-      await invalidResult.deleteFromCache?.();
-
-      const validResult = await fetchWithCache<string>(url, {}, 1000, 'text', {
+      const olderResult = await fetchWithCache<string>(url, { signal: olderSignal }, 1000, 'text', {
         deferCacheWrite: true,
       });
-      await validResult.commitToCache?.();
-      await staleInvalidResult.deleteFromCache?.();
+      const newerResult = await fetchWithCache<string>(url, { signal: newerSignal }, 1000, 'text', {
+        deferCacheWrite: true,
+      });
+
+      await newerResult.commitToCache?.();
+      await olderResult.commitToCache?.();
+
+      const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(cachedResult).toMatchObject({ cached: true, data: 'newer' });
+    });
+
+    it('should serialize stale eviction with a newer deferred commit', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, JSON.stringify({ result: ['valid'] })),
+        )
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, 'not-json', 'text/plain'));
+
+      const validResult = await fetchWithCache<string>(
+        url,
+        { signal: new AbortController().signal },
+        1000,
+        'text',
+        { deferCacheWrite: true },
+      );
+      await fetchWithCache<string>(url, {}, 1000, 'text');
+      const staleInvalidResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+      const cache = getCache();
+      const originalGet = cache.get;
+      const originalSet = cache.set;
+      let releaseGet: () => void = () => {};
+      let markGetStarted: () => void = () => {};
+      const getStarted = new Promise<void>((resolve) => {
+        markGetStarted = resolve;
+      });
+      const getBlocked = new Promise<void>((resolve) => {
+        releaseGet = resolve;
+      });
+      const getMock = vi.fn(async (key: string) => {
+        const value = await originalGet.call(cache, key);
+        markGetStarted();
+        await getBlocked;
+        return value;
+      });
+      const setMock = vi.fn((...args: Parameters<typeof cache.set>) =>
+        originalSet.apply(cache, args),
+      );
+      Object.assign(cache, { get: getMock, set: setMock });
+
+      try {
+        const staleEviction = staleInvalidResult.deleteFromCache?.();
+        await getStarted;
+        const setCallsBeforeCommit = setMock.mock.calls.length;
+        const validCommit = validResult.commitToCache?.();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(setMock).toHaveBeenCalledTimes(setCallsBeforeCommit);
+
+        releaseGet();
+        await Promise.all([staleEviction, validCommit]);
+      } finally {
+        Object.assign(cache, { get: originalGet, set: originalSet });
+      }
 
       const cachedResult = await fetchWithCache<string>(url, {}, 1000, 'text');
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);

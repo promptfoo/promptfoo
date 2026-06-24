@@ -945,6 +945,64 @@ describe('Plugins', () => {
       expect(commitToCache).not.toHaveBeenCalled();
     });
 
+    it.each([
+      null,
+      [],
+      'invalid',
+      1,
+    ])('should reject invalid remote result item %j before committing', async (invalidItem) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const commitToCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        cached: false,
+        commitToCache,
+        data: JSON.stringify({ result: [invalidItem] }),
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(commitToCache).not.toHaveBeenCalled();
+      expect(fetchWithCache).toHaveBeenCalledOnce();
+    });
+
+    it('should propagate cancellation that arrives during cache commit', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const abortController = new AbortController();
+      const abortReason = new DOMException('Cancelled', 'AbortError');
+      const commitToCache = vi.fn().mockImplementation(async () => {
+        abortController.abort(abortReason);
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockFetchResponse([{ vars: { testVar: 'valid' } }]),
+        commitToCache,
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+          abortSignal: abortController.signal,
+        }),
+      ).rejects.toBe(abortReason);
+      expect(commitToCache).toHaveBeenCalledOnce();
+    });
+
     it('should add harmful assertions for harmful remote plugins', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
