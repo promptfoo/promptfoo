@@ -160,10 +160,12 @@ export function getGeneratedPromptLengthViolation(
 }
 
 function getStringRecordValues(value: unknown): string[] | undefined {
-  if (!isRecord(value) || !Object.values(value).every((entry) => typeof entry === 'string')) {
+  if (!isRecord(value)) {
     return undefined;
   }
-  return Object.values(value) as string[];
+  return Object.values(value).map((entry) =>
+    typeof entry === 'object' && entry !== null ? JSON.stringify(entry) : String(entry),
+  );
 }
 
 function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar: string): string[] {
