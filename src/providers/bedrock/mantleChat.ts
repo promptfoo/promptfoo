@@ -1,3 +1,4 @@
+import { renderVarsInObject } from '../../util/index';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
@@ -82,9 +83,14 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     // model detection does not recognize its Bedrock model id.
     if (
       this.modelName.startsWith('google.gemma-4-') &&
-      result.config.reasoning_effort !== undefined
+      result.config.isReasoningModel !== false &&
+      result.config.reasoning_effort !== undefined &&
+      result.body.reasoning_effort === undefined
     ) {
-      result.body.reasoning_effort = result.config.reasoning_effort;
+      result.body.reasoning_effort = renderVarsInObject(
+        result.config.reasoning_effort,
+        context?.vars,
+      );
     }
     if (isBedrockGrokModel(this.modelName)) {
       delete result.body.presence_penalty;

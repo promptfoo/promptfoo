@@ -174,6 +174,41 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(body.reasoning_effort).toBe('high');
     });
 
+    it('does not re-add Gemma reasoning effort after an explicit false override', async () => {
+      const provider = createBedrockMantleChatProvider('google.gemma-4-31b', {
+        config: {
+          apiKey: 'bedrock-key',
+          isReasoningModel: false,
+          reasoning_effort: 'high',
+          max_tokens: 33,
+          temperature: 0.5,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello');
+
+      expect(body).toMatchObject({ max_tokens: 33, temperature: 0.5 });
+      expect(body.reasoning_effort).toBeUndefined();
+    });
+
+    it('preserves the rendered Gemma reasoning effort for an explicit true override', async () => {
+      const provider = createBedrockMantleChatProvider('google.gemma-4-31b', {
+        config: {
+          apiKey: 'bedrock-key',
+          isReasoningModel: true,
+          reasoning_effort: '{{ effort }}' as any,
+          max_completion_tokens: 44,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('hello', {
+        vars: { effort: 'low' },
+        prompt: { raw: 'hello', label: 'hello' },
+      });
+
+      expect(body).toMatchObject({ max_completion_tokens: 44, reasoning_effort: 'low' });
+    });
+
     it('calls the mantle chat endpoint and tracks token usage', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
