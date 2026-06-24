@@ -76,8 +76,8 @@ function getRuntimePolicyRefreshDelay(
   supportEndDate: string,
   notice: RuntimeCompatibilityNotice | null | undefined,
   noticeDismissed: boolean,
-  now = Date.now(),
 ): number | null {
+  const now = Date.now();
   const removalTimestamp = Date.parse(`${supportEndDate}T00:00:00.000Z`);
   if (Number.isNaN(removalTimestamp)) {
     return null;
@@ -176,12 +176,7 @@ export function useVersionCheck(): UseVersionCheckResult {
       return;
     }
 
-    const delay = getRuntimePolicyRefreshDelay(
-      supportEndDate,
-      notice,
-      runtimeNoticeDismissed,
-      runtimePolicyUpdatedAt,
-    );
+    const delay = getRuntimePolicyRefreshDelay(supportEndDate, notice, runtimeNoticeDismissed);
     if (delay === null) {
       return;
     }
@@ -209,14 +204,7 @@ export function useVersionCheck(): UseVersionCheckResult {
     return () => {
       window.clearTimeout(refreshTimer);
     };
-  }, [
-    checkVersion,
-    clearRuntimePolicyRetry,
-    runtimeNoticeDismissed,
-    runtimePolicyUpdatedAt,
-    versionInfo?.runtimeNotice,
-    versionInfo?.runtimePolicy?.supportEndDate,
-  ]);
+  }, [checkVersion, clearRuntimePolicyRetry, runtimeNoticeDismissed, versionInfo]);
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {

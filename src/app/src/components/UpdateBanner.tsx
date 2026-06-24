@@ -46,8 +46,10 @@ export default function UpdateBanner() {
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
-  const runtimeSupportEnded = runtimeNotice
-    ? hasRuntimeSupportEnded(runtimeNotice.removalDate, runtimePolicyUpdatedAt)
+  const runtimeSupportEndDate =
+    runtimeNotice?.removalDate ?? versionInfo?.runtimePolicy?.supportEndDate;
+  const runtimeSupportEnded = runtimeSupportEndDate
+    ? hasRuntimeSupportEnded(runtimeSupportEndDate, runtimePolicyUpdatedAt)
     : false;
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||

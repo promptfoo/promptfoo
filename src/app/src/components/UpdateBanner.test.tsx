@@ -274,6 +274,70 @@ describe('UpdateBanner', () => {
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });
 
+  it('should fail closed after the cutoff when runtime notices are disabled', () => {
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: null,
+        runtimePolicy: { supportEndDate: '2026-07-30' },
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimePolicyUpdatedAt: Date.parse('2026-07-29T23:59:00.000Z'),
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
+
+    mockUseVersionCheck.mockReturnValue({
+      ...versionCheckResult,
+      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
+    });
+    rerender(<UpdateBanner />);
+
+    expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+  });
+
+  it('should preserve Docker updates after the cutoff when runtime notices are disabled', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        updateBlockedByRuntime: false,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: null,
+        runtimePolicy: { supportEndDate: '2026-07-30' },
+        updateCommands: {
+          primary: 'docker pull promptfoo/promptfoo:latest',
+          alternative: null,
+        },
+        commandType: 'docker',
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toBeInTheDocument();
+  });
+
   it('should still show a Docker update after runtime support ends', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
