@@ -22,6 +22,7 @@ import {
   ResultFailureReason,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
@@ -541,6 +542,7 @@ const ManualRatingStateSchema = z.object({
       .nullable(),
   }),
   clearRequestHash: z.string().optional(),
+  lastLegacyUpdateHash: z.string().optional(),
 });
 
 type ManualRatingState = z.infer<typeof ManualRatingStateSchema>;
@@ -569,12 +571,14 @@ function getLegacyClearRequestHash(gradingResult: GradingResult): string | undef
   ) {
     return undefined;
   }
-  return JSON.stringify([
-    gradingResult.pass,
-    gradingResult.score,
-    hasOwn(gradingResult, 'comment'),
-    gradingResult.comment,
-  ]);
+  return sha256(
+    JSON.stringify([
+      gradingResult.pass,
+      gradingResult.score,
+      hasOwn(gradingResult, 'comment'),
+      gradingResult.comment,
+    ]),
+  );
 }
 
 function parseManualRatingState(value: unknown): ManualRatingState | undefined {
@@ -704,6 +708,28 @@ function applyExplicitRatingUpdate(
   return updated;
 }
 
+function applyLegacyClearedRatingUpdate(
+  previous: GradingResult | null,
+  submitted: GradingResult,
+  previousSuccess: boolean,
+  previousScore: number,
+): GradingResult {
+  // Old clients submit the entire grading result without an intent field. Once a clear
+  // tombstone exists, accept only the score or comment they could have edited and keep every
+  // other field server-owned so a modified delayed clear cannot restore stale grading data.
+  const previousHasComment = previous ? hasOwn(previous, 'comment') : false;
+  const submittedHasComment = hasOwn(submitted, 'comment');
+  const commentChanged =
+    previousHasComment !== submittedHasComment || previous?.comment !== submitted.comment;
+  return applyExplicitRatingUpdate(
+    previous,
+    submitted,
+    previousSuccess,
+    previousScore,
+    commentChanged ? 'comment' : 'score',
+  );
+}
+
 function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
@@ -818,15 +844,18 @@ function matchesLegacyRepeatedClear(
   legacyClearRequestHash: string | undefined,
   ratingAction: SubmitRatingAction | undefined,
 ): boolean {
-  const storedClearRequestHash = existingState?.clearRequestHash;
+  const storedRequestHashes = [
+    existingState?.clearRequestHash,
+    existingState?.lastLegacyUpdateHash,
+  ].filter((value): value is string => value !== undefined);
   return (
     ratingAction === undefined &&
     legacyClearRequestHash !== undefined &&
-    (storedClearRequestHash === undefined
+    (storedRequestHashes.length === 0
       ? existingState !== undefined &&
         submittedGradingResult.pass === existingState.original.success &&
         submittedGradingResult.score === existingState.original.score
-      : storedClearRequestHash === legacyClearRequestHash)
+      : storedRequestHashes.includes(legacyClearRequestHash))
   );
 }
 
@@ -946,6 +975,21 @@ function resolveRatingTransition(
   metadata: PersistedEvalResult['metadata'];
 } {
   const previousHasManualRating = hasManualRating(result.gradingResult);
+  const existingState = parseManualRatingState(result.manualRatingState);
+  const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
+  const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
+    submittedGradingResult,
+    existingState,
+    legacyClearRequestHash,
+    ratingAction,
+  );
+  const isLegacyClearedUpdate =
+    ratingAction === undefined &&
+    !previousHasManualRating &&
+    existingState?.status === 'cleared' &&
+    legacyClearRequestHash !== undefined &&
+    !isLegacyRepeatedClear &&
+    submittedGradingResult.pass === result.success;
   const effectiveSubmission =
     ratingAction === 'update'
       ? applyExplicitRatingUpdate(
@@ -955,20 +999,19 @@ function resolveRatingTransition(
           result.score,
           ratingUpdate ?? 'comment',
         )
-      : submittedGradingResult;
+      : isLegacyClearedUpdate
+        ? applyLegacyClearedRatingUpdate(
+            result.gradingResult,
+            submittedGradingResult,
+            result.success,
+            result.score,
+          )
+        : submittedGradingResult;
   const normalized = normalizeRatingSubmission(
     result.gradingResult,
     effectiveSubmission,
     result.success,
     result.score,
-    ratingAction,
-  );
-  const existingState = parseManualRatingState(result.manualRatingState);
-  const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
-  const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
-    submittedGradingResult,
-    existingState,
-    legacyClearRequestHash,
     ratingAction,
   );
   const stateToRestore = getRestorableManualRatingState(
@@ -1043,6 +1086,9 @@ function resolveRatingTransition(
       }),
       status: 'cleared',
       clearRequestHash: existingState.clearRequestHash,
+      lastLegacyUpdateHash: isLegacyClearedUpdate
+        ? legacyClearRequestHash
+        : existingState.lastLegacyUpdateHash,
     };
   } else if (!previousHasManualRating && normalized.hasManualRating) {
     nextState = captureManualRatingState(result);

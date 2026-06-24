@@ -1254,7 +1254,13 @@ describe('eval routes', () => {
         .from(evalResultsTable)
         .where(eq(evalResultsTable.id, result.id))
         .get();
-      expect(firstClearState?.manualRatingState).toMatchObject({ status: 'cleared' });
+      expect(firstClearState?.manualRatingState).toMatchObject({
+        status: 'cleared',
+        clearRequestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(JSON.stringify(firstClearState?.manualRatingState)).not.toContain(
+        'Stale client comment',
+      );
       vi.mocked(updateSignalFile).mockClear();
 
       const retryResponse = await api
@@ -1302,6 +1308,63 @@ describe('eval routes', () => {
         .send(clearPayload);
       expect(delayedClearResponse.status).toBe(200);
       expect(delayedClearResponse.body.gradingResult?.comment).toBe('Updated by a legacy client');
+      expect(updateSignalFile).not.toHaveBeenCalled();
+
+      const scoreResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          ...delayedClearResponse.body.gradingResult,
+          pass: false,
+          score: 0.4,
+        });
+      expect(scoreResponse.status).toBe(200);
+      expect(scoreResponse.body.score).toBe(0.4);
+      const scoreUpdatedMetrics = structuredClone(
+        (await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics,
+      );
+
+      const changedDelayedClearPayload = {
+        ...clearPayload,
+        comment: 'Changed stale clear comment',
+        metadata: { source: 'poisoned retry' },
+        tokensUsed: { total: 9999 },
+      };
+      const changedDelayedClearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(changedDelayedClearPayload);
+      expect(changedDelayedClearResponse.status).toBe(200);
+      expect(changedDelayedClearResponse.body).toMatchObject({
+        score: 0.4,
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: {
+          comment: 'Changed stale clear comment',
+          metadata: { source: 'server' },
+          score: 0.4,
+          tokensUsed: { total: 7 },
+        },
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        scoreUpdatedMetrics,
+      );
+      const updatedRatingState = await db
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(JSON.stringify(updatedRatingState?.manualRatingState)).not.toContain(
+        'Changed stale clear comment',
+      );
+
+      vi.mocked(updateSignalFile).mockClear();
+      const repeatedChangedClearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(changedDelayedClearPayload);
+      expect(repeatedChangedClearResponse.status).toBe(200);
+      expect(repeatedChangedClearResponse.body).toEqual(changedDelayedClearResponse.body);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        scoreUpdatedMetrics,
+      );
       expect(updateSignalFile).not.toHaveBeenCalled();
     });
 
