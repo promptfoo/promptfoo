@@ -105,6 +105,153 @@ describe('programmatic scenario config expansion', () => {
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
   });
 
+  it('loads config-row and test-row providers relative to an external scenario file', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioDir = path.join(tmpDir, 'scenarios');
+    fs.mkdirSync(scenarioDir, { recursive: true });
+    const providerSource = `
+      const fs = require('node:fs');
+      const path = require('node:path');
+      module.exports = class FixtureProvider {
+        constructor(options = {}) { this.options = options; }
+        id() { return this.options.id || 'fixture-provider'; }
+        async callApi() {
+          const ref = this.options.config.payload;
+          const rawPath = ref.startsWith('file://') ? ref.slice(7) : ref;
+          const payloadPath = path.isAbsolute(rawPath) ? rawPath : path.join(__dirname, rawPath);
+          const payload = fs.readFileSync(payloadPath, 'utf8').trim();
+          fs.appendFileSync(path.join(__dirname, 'calls.log'), payload + '\\n');
+          return { output: payload };
+        }
+      };
+    `;
+    fs.writeFileSync(path.join(tmpDir, 'provider.cjs'), providerSource);
+    fs.writeFileSync(path.join(tmpDir, 'payload.txt'), 'parent-decoy');
+    fs.writeFileSync(path.join(scenarioDir, 'provider.cjs'), providerSource);
+    fs.writeFileSync(path.join(scenarioDir, 'payload.txt'), 'scenario-provider');
+    fs.writeFileSync(path.join(scenarioDir, 'vars.yaml'), 'extra: from-vars-file\n');
+    const scenarioPath = path.join(scenarioDir, 'scenario.json');
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify([
+        {
+          config: [
+            {
+              vars: { source: 'config-row' },
+              provider: {
+                id: 'file://provider.cjs',
+                label: 'scenario-config-provider',
+                config: { payload: 'file://payload.txt' },
+              },
+            },
+          ],
+          tests: [{}],
+        },
+        {
+          config: [{ vars: { source: 'test-row' } }],
+          tests: [
+            {
+              vars: 'file://vars.yaml',
+              provider: {
+                id: 'file://provider.cjs',
+                label: 'scenario-test-provider',
+                config: { payload: 'file://payload.txt' },
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    const originalCwd = process.cwd();
+    const suiteProvider = createMockProvider('suite-provider');
+
+    let record: Awaited<ReturnType<typeof evaluate>>;
+    try {
+      process.chdir(tmpDir);
+      record = await evaluate({
+        prompts: ['{{source}} {{extra}}'],
+        providers: [suiteProvider],
+        scenarios: [`file://${scenarioPath}`],
+        writeLatestResults: false,
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+    const summary = await record.toEvaluateSummary();
+    const serializedConfig = JSON.stringify(record.config);
+
+    expect(summary.results.map((result) => result.response?.output)).toEqual([
+      'scenario-provider',
+      'scenario-provider',
+    ]);
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(scenarioDir, 'calls.log'), 'utf8').trim().split('\n')).toEqual(
+      ['scenario-provider', 'scenario-provider'],
+    );
+    expect(fs.existsSync(path.join(tmpDir, 'calls.log'))).toBe(false);
+    expect(serializedConfig).toContain(`file://${path.join(scenarioDir, 'provider.cjs')}`);
+    expect(serializedConfig).toContain(`file://${path.join(scenarioDir, 'payload.txt')}`);
+    expect(serializedConfig).not.toContain(`file://${path.join(tmpDir, 'provider.cjs')}`);
+  });
+
+  it('does not fall back to a parent provider or expose its options when a scenario provider is missing', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioDir = path.join(tmpDir, 'scenarios');
+    fs.mkdirSync(scenarioDir, { recursive: true });
+    const parentCallsPath = path.join(tmpDir, 'parent-calls.log');
+    fs.writeFileSync(
+      path.join(tmpDir, 'provider.cjs'),
+      `module.exports = class ParentDecoy {
+        id() { return 'parent-decoy'; }
+        async callApi() {
+          require('node:fs').writeFileSync(${JSON.stringify(parentCallsPath)}, 'called');
+          return { output: 'parent-decoy' };
+        }
+      };`,
+    );
+    const secret = 'provider-option-secret-sentinel';
+    const scenarioPath = path.join(scenarioDir, 'scenario.json');
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify([
+        {
+          config: [
+            {
+              provider: {
+                id: 'file://provider.cjs',
+                config: { apiKey: secret },
+              },
+            },
+          ],
+          tests: [{}],
+        },
+      ]),
+    );
+    const originalCwd = process.cwd();
+    const suiteProvider = createMockProvider('suite-provider');
+
+    let error: unknown;
+    try {
+      process.chdir(tmpDir);
+      await evaluate({
+        prompts: ['Prompt'],
+        providers: [suiteProvider],
+        scenarios: [`file://${scenarioPath}`],
+        writeLatestResults: false,
+      });
+    } catch (caught) {
+      error = caught;
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    expect(error).toBeDefined();
+    expect(String(error)).toContain(path.join(scenarioDir, 'provider.cjs'));
+    expect(String(error)).not.toContain(secret);
+    expect(fs.existsSync(parentCallsPath)).toBe(false);
+    expect(suiteProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('rejects empty programmatic scenario files instead of returning zero results', async () => {
     const tmpDir = makeTmpDir();
     const scenarioPath = path.join(tmpDir, 'empty-scenarios.json');

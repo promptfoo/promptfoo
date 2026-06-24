@@ -122,8 +122,8 @@ export function resolveFileRefFromBase(
 }
 
 /**
- * Resolve `$values` matrix refs in a scenario's config rows against the directory
- * of the file that declared them, so later expansion is location-independent.
+ * Resolve file refs in a scenario's config rows against the directory of the
+ * file that declared them, so later expansion is location-independent.
  */
 export function resolveScenarioConfigValuesRefs(
   basePath: string,
@@ -139,7 +139,7 @@ export function resolveScenarioConfigValuesRefs(
     config: scenario.config.map((entry) =>
       isScenarioConfigValuesRef(entry)
         ? { ...entry, $values: resolveFileRefFromBase(basePath, entry.$values, envOverrides) }
-        : entry,
+        : resolveScenarioConfigRowProvider(basePath, entry, envOverrides),
     ),
   };
 }
@@ -154,33 +154,33 @@ function resolveScenarioTestsRefs(
     if (typeof test === 'string') {
       return resolveFileRefFromBase(basePath, test, envOverrides);
     }
-    if (
-      test &&
-      typeof test === 'object' &&
-      !Array.isArray(test) &&
-      typeof (test as { path?: unknown }).path === 'string'
-    ) {
-      const generatorConfig = (test as { config?: unknown }).config;
-      return {
-        ...test,
-        path: resolveFileRefFromBase(basePath, (test as { path: string }).path, envOverrides),
-        ...(generatorConfig === undefined
-          ? {}
-          : { config: resolveNestedFileRefs(basePath, generatorConfig, envOverrides) }),
-      };
+    if (!test || typeof test !== 'object' || Array.isArray(test)) {
+      return test;
     }
-    if (test && typeof test === 'object' && !Array.isArray(test)) {
-      const vars = (test as { vars?: unknown }).vars;
-      if (typeof vars === 'string' || Array.isArray(vars)) {
-        return {
-          ...test,
-          vars: Array.isArray(vars)
-            ? vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
-            : resolveScenarioVarsRef(basePath, vars, envOverrides),
-        };
+    const record = test as Record<string, unknown>;
+    const generatorPath = typeof record.path === 'string' ? record.path : undefined;
+    const isGenerator = generatorPath !== undefined;
+    const prototype = Object.getPrototypeOf(test);
+    if (!isGenerator && prototype !== Object.prototype && prototype !== null) {
+      return test;
+    }
+
+    const resolved: Record<string, unknown> = { ...record };
+    if (generatorPath !== undefined) {
+      resolved.path = resolveFileRefFromBase(basePath, generatorPath, envOverrides);
+      if (record.config !== undefined) {
+        resolved.config = resolveNestedFileRefs(basePath, record.config, envOverrides);
       }
     }
-    return test;
+    if (Object.prototype.hasOwnProperty.call(record, 'provider')) {
+      resolved.provider = resolveScenarioProviderRef(basePath, record.provider, envOverrides);
+    }
+    if (typeof record.vars === 'string' || Array.isArray(record.vars)) {
+      resolved.vars = Array.isArray(record.vars)
+        ? record.vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
+        : resolveScenarioVarsRef(basePath, record.vars, envOverrides);
+    }
+    return resolved;
   };
 
   if (tests === undefined || tests === null) {

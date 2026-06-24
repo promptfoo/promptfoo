@@ -134,6 +134,7 @@ export class PromptSuggestionsRejectedError extends Error {
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+const scenarioTargetOverrideTests = new WeakSet<AtomicTestCase>();
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
@@ -2140,6 +2141,24 @@ async function resolveRuntimeTargetProviderReference(
   });
 }
 
+async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase['provider'] }>(
+  rows: T[],
+  env?: EnvOverrides,
+): Promise<T[]> {
+  let changed = false;
+  const resolvedRows = [];
+  for (const row of rows) {
+    if (!row.provider || isApiProvider(row.provider)) {
+      resolvedRows.push(row);
+      continue;
+    }
+    const provider = await resolveRuntimeTargetProviderReference(row.provider, env);
+    changed ||= provider !== row.provider;
+    resolvedRows.push(provider === row.provider ? row : { ...row, provider });
+  }
+  return changed ? resolvedRows : rows;
+}
+
 async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.scenarios) {
     return testSuite;
@@ -2148,20 +2167,11 @@ async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Pr
   let scenariosChanged = false;
   const resolvedScenarios = [];
   for (const scenario of testSuite.scenarios) {
-    let configChanged = false;
-    const resolvedConfig = [];
-    for (const row of scenario.config) {
-      if (!row.provider || isApiProvider(row.provider)) {
-        resolvedConfig.push(row);
-        continue;
-      }
-      const provider = await resolveRuntimeTargetProviderReference(row.provider, testSuite.env);
-      configChanged ||= provider !== row.provider;
-      resolvedConfig.push(provider === row.provider ? row : { ...row, provider });
-    }
-    if (configChanged) {
+    const resolvedConfig = await resolveScenarioProviderRows(scenario.config, testSuite.env);
+    const resolvedTests = await resolveScenarioProviderRows(scenario.tests, testSuite.env);
+    if (resolvedConfig !== scenario.config || resolvedTests !== scenario.tests) {
       scenariosChanged = true;
-      resolvedScenarios.push({ ...scenario, config: resolvedConfig });
+      resolvedScenarios.push({ ...scenario, config: resolvedConfig, tests: resolvedTests });
     } else {
       resolvedScenarios.push(scenario);
     }
@@ -2225,7 +2235,7 @@ function mergeScenarioTest(
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
-  return {
+  const mergedTest = {
     ...(defaultTest || {}),
     ...scenarioData,
     ...test,
@@ -2242,6 +2252,12 @@ function mergeScenarioTest(
     assert: [...(scenarioData.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
+
+  if ((scenarioData.provider || test.provider) && isApiProvider(mergedTest.provider)) {
+    scenarioTargetOverrideTests.add(mergedTest);
+  }
+
+  return mergedTest;
 }
 
 async function prepareTestVariables(
@@ -2524,6 +2540,9 @@ function appendRunEvalOptionsForVars({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
+  const scenarioOverridePromptIndexes = scenarioTargetOverrideTests.has(testCase)
+    ? new Set<number>()
+    : undefined;
   for (const provider of testSuite.providers) {
     if (!isProviderAllowed(provider, testCase.providers)) {
       continue;
@@ -2547,6 +2566,7 @@ function appendRunEvalOptionsForVars({
       testIdx,
       testSuite,
       vars,
+      scenarioOverridePromptIndexes,
     });
   }
 }
@@ -2570,6 +2590,7 @@ function appendRunEvalOptionsForProvider({
   testIdx,
   testSuite,
   vars,
+  scenarioOverridePromptIndexes,
 }: {
   concurrency: number;
   conversations: EvalConversations;
@@ -2589,9 +2610,13 @@ function appendRunEvalOptionsForProvider({
   testIdx: number;
   testSuite: TestSuite;
   vars: Vars | undefined;
+  scenarioOverridePromptIndexes?: Set<number>;
 }) {
   const providerKey = provider.label || provider.id();
-  for (const prompt of testSuite.prompts) {
+  for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
+    if (scenarioOverridePromptIndexes?.has(promptIndex)) {
+      continue;
+    }
     if (!shouldRunPromptForTest(prompt, providerKey, testCase, testSuite)) {
       continue;
     }
@@ -2625,6 +2650,7 @@ function appendRunEvalOptionsForProvider({
         vars,
       }),
     );
+    scenarioOverridePromptIndexes?.add(promptIndex);
   }
 }
 

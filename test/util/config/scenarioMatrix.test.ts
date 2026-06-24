@@ -562,6 +562,25 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(tests?.map((test) => test.vars?.name)).toEqual(['generated-one', 'generated-two']);
     });
 
+    it('executes programmatic class-instance generator descriptors', async () => {
+      const generatorPath = write(
+        'class-generate.cjs',
+        'module.exports = ({ prefix }) => [{ vars: { name: `${prefix}-generated` } }];\n',
+      );
+      class GeneratorDescriptor {
+        path = `file://${generatorPath}`;
+        config = { prefix: 'class' };
+      }
+
+      const scenarios = await loadScenarioConfigs(
+        [{ config: [{}], tests: new GeneratorDescriptor() as never }],
+        tmpDir,
+      );
+      const tests = await readScenarioTests(scenarios?.[0].tests, tmpDir);
+
+      expect(tests?.map((test) => test.vars?.name)).toEqual(['class-generated']);
+    });
+
     it('rejects malformed or empty generator contributions', async () => {
       const emptyGeneratorPath = write('empty.cjs', 'module.exports = () => [];\n');
       const objectGeneratorPath = write(
@@ -841,6 +860,53 @@ describe('scenarioMatrix (real filesystem)', () => {
       const loaded = await loadScenarioConfigs([`file://${exactPath}`], tmpDir);
 
       expect(loaded?.[0].config).toEqual([{ vars: { source: 'exact' } }]);
+    });
+
+    it('resolves inline provider refs against the external scenario directory', async () => {
+      const scenarioPath = write(
+        'scenarios/scenario.yaml',
+        `- config:
+    - vars:
+        source: config
+      provider:
+        id: file://provider.cjs
+        config:
+          payload: file://config-payload.txt
+  tests:
+    - vars: file://vars.yaml
+      provider:
+        id: file://provider.cjs
+        config:
+          payload: file://test-payload.txt
+`,
+      );
+
+      const loaded = await loadScenarioConfigs([`file://${scenarioPath}`], tmpDir);
+      const scenarioDir = path.join(tmpDir, 'scenarios');
+      const configRow = loaded?.[0].config[0];
+      const configProvider =
+        configRow && !('$values' in configRow)
+          ? (configRow.provider as { id: string; config: { payload: string } })
+          : undefined;
+      const scenarioTests = loaded?.[0].tests;
+      const test = (Array.isArray(scenarioTests) ? scenarioTests[0] : undefined) as
+        | {
+            vars: string;
+            provider: { id: string; config: { payload: string } };
+          }
+        | undefined;
+
+      expect(configProvider).toEqual({
+        id: `file://${path.join(scenarioDir, 'provider.cjs')}`,
+        config: { payload: `file://${path.join(scenarioDir, 'config-payload.txt')}` },
+      });
+      expect(test).toEqual({
+        vars: path.join(scenarioDir, 'vars.yaml'),
+        provider: {
+          id: `file://${path.join(scenarioDir, 'provider.cjs')}`,
+          config: { payload: `file://${path.join(scenarioDir, 'test-payload.txt')}` },
+        },
+      });
     });
 
     it('expands scenario globs beneath literal base directories with glob characters', async () => {

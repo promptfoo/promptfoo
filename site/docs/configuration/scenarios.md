@@ -123,6 +123,8 @@ tests:
       count: 10
 ```
 
+Inline `provider` overrides in `config` or `tests` rows follow the same rule. Provider IDs and nested provider option refs resolve relative to the external scenario file. A scenario provider override runs once per eligible prompt without multiplying across suite-provider slots; rows without an override continue to run across every eligible suite provider.
+
 You can also keep large `config` matrices in separate files with `$values`:
 
 ```yaml
