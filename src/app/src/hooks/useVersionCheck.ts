@@ -127,6 +127,7 @@ export function useVersionCheck(): UseVersionCheckResult {
 
         clearRuntimePolicyRetry();
         if (isMountedRef.current) {
+          setRuntimePolicyUpdatedAt(Date.now());
           setVersionInfo(data);
           setRuntimeNoticeDismissed(
             data.runtimeNotice ? isRuntimeNoticeSnoozed(data.runtimeNotice) : false,

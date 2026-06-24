@@ -17,6 +17,7 @@ describe('UpdateBanner', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-22T12:00:00.000Z'));
     mockUseTelemetry.mockReturnValue({
       identifyUser: vi.fn(),
       isInitialized: true,
@@ -117,7 +118,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
         updateAvailable: true,
@@ -150,7 +151,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should report ended support for a post-cutoff Docker deployment', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
         updateAvailable: true,
@@ -274,7 +275,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should still show a Docker update after runtime support ends', () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
         updateAvailable: true,

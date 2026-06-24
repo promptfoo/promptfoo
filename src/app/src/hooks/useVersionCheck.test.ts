@@ -1,4 +1,5 @@
 import {
+  createMockResponse,
   mockCallApiResponse,
   mockCallApiResponseOnce,
   rejectCallApi,
@@ -64,6 +65,49 @@ describe('useVersionCheck', () => {
     expect(result.current.error).toBeNull();
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(callApi).toHaveBeenCalledWith('/version');
+  });
+
+  it('should refresh runtime policy time when the initial response crosses the cutoff', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-29T23:59:59.900Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      reminderIntervalDays: 1 as const,
+    };
+    let resolveVersion!: (response: Response) => void;
+    vi.mocked(callApi).mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveVersion = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useVersionCheck());
+    expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-29T23:59:59.900Z'));
+
+    vi.setSystemTime(new Date('2026-07-30T00:00:00.100Z'));
+    await act(async () => {
+      resolveVersion(
+        createMockResponse({
+          currentVersion: '1.0.0',
+          latestVersion: '1.1.0',
+          updateAvailable: true,
+          updateBlockedByRuntime: false,
+          runtimeNotice,
+        }),
+      );
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-30T00:00:00.100Z'));
   });
 
   it('should set dismissed=true if the latest version matches the value in localStorage', async () => {
