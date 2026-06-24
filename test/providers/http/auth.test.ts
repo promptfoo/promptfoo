@@ -1475,7 +1475,10 @@ describe('HttpProvider - File Auth', () => {
     );
   });
 
-  it('should load Python auth files using get_auth by default', async () => {
+  it.each([
+    'get-token.py',
+    'get-token.PY',
+  ])('should load Python auth file %s using get_auth by default', async (authFile) => {
     vi.mocked(runPython).mockResolvedValue({
       token: 'python-token',
     });
@@ -1488,7 +1491,7 @@ describe('HttpProvider - File Auth', () => {
         },
         auth: {
           type: 'file',
-          path: './auth/get-token.py',
+          path: `./auth/${authFile}`,
         },
       },
     });
@@ -1499,7 +1502,7 @@ describe('HttpProvider - File Auth', () => {
     });
 
     expect(runPython).toHaveBeenCalledWith(
-      path.resolve('/mock/base/path', './auth/get-token.py'),
+      path.resolve('/mock/base/path', `./auth/${authFile}`),
       'get_auth',
       [
         expect.objectContaining({

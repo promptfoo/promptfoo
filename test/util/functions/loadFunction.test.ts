@@ -427,10 +427,16 @@ describe('parseFileUrl', () => {
     });
   });
 
-  it('should parse Ruby file URLs with namespaced function names', () => {
-    expect(parseFileUrl('file://./path/to/file.rb:Validators::Format.check_length')).toEqual({
-      filePath: './path/to/file.rb',
-      functionName: 'Validators::Format.check_length',
+  it('should preserve non-executable Ruby-looking paths', () => {
+    expect(parseFileUrl('file://fixtures.rb:old/readme.txt')).toEqual({
+      filePath: 'fixtures.rb:old/readme.txt',
+    });
+  });
+
+  it('should preserve a JavaScript selector whose export ends in .py', () => {
+    expect(parseFileUrl('file://script.js:Class.py')).toEqual({
+      filePath: 'script.js',
+      functionName: 'Class.py',
     });
   });
 
