@@ -40,16 +40,16 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input               | Description                                                      | Default                     |
-| ------------------- | ---------------------------------------------------------------- | --------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app` |
-| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
-| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
-| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
-| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
-| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                     |
-| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                        |
+| Input               | Description                                                                                                                              | Default                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `api-host`          | Promptfoo API host URL                                                                                                                   | `https://api.promptfoo.app` |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                                                         | `medium`                    |
+| `minimum-severity`  | Alias for `min-severity`. Takes effect only when `min-severity` is unset; if both are set, `min-severity` wins and a warning is emitted. | None                        |
+| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                                                                                          | Auto-detected               |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])                                                                                   | None                        |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])                                                                              | None                        |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                             | `false`                     |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                             | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
@@ -80,7 +80,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    min-severity: medium # Report medium, high and critical severity issues only (if omitted, all severity levels are reported)
+    min-severity: medium # Report medium, high and critical issues (also the default when omitted)
 ```
 
 **Use custom guidance:**

@@ -2,8 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as blobs from '../../src/blobs';
+import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
-import { createTempDir, removeTempDir } from './utils';
+import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -84,6 +86,130 @@ describe('JSON export with improved error handling', () => {
       expect(parsed).toHaveProperty('config', { testConfig: true });
       expect(parsed).toHaveProperty('shareableUrl', 'https://share.url');
       expect(parsed).toHaveProperty('metadata');
+    });
+
+    it('should export persisted vars and runtime options for round-trip imports', async () => {
+      mockEval.vars = ['topic', 'tone'];
+      mockEval.runtimeOptions = { cache: false, maxConcurrency: 2 };
+
+      await writeOutput(tempFilePath, mockEval, null);
+
+      const content = fs.readFileSync(tempFilePath, 'utf8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed).toHaveProperty('vars', ['topic', 'tone']);
+      expect(parsed).toHaveProperty('runtimeOptions', { cache: false, maxConcurrency: 2 });
+    });
+
+    it('should embed referenced blob bytes only when media export is enabled', async () => {
+      const hash = 'a'.repeat(64);
+      const data = Buffer.from('portable image');
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        prompts: mockEval.prompts,
+        results: [{ response: { output: `promptfoo://blob/${hash}` } }],
+        stats: { successes: 1, failures: 0 },
+      });
+      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+        data,
+        metadata: {
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          provider: 'filesystem',
+          key: hash,
+        },
+      });
+
+      await writeOutput(tempFilePath, mockEval, null);
+      expect(JSON.parse(fs.readFileSync(tempFilePath, 'utf8'))).not.toHaveProperty('blobAssets');
+
+      await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+      const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+      expect(parsed.blobAssets).toEqual([
+        {
+          hash,
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          data: data.toString('base64'),
+        },
+      ]);
+    });
+
+    it('should embed blob bytes referenced only by exported traces', async () => {
+      const hash = 'b'.repeat(64);
+      const data = Buffer.from('portable trace image');
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'trace-media-export',
+          evaluationId: mockEval.id,
+          testCaseId: 'trace-media-case',
+          metadata: { attachment: `promptfoo://blob/${hash}` },
+          spans: [],
+        },
+      ]);
+      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+        data,
+        metadata: {
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          provider: 'filesystem',
+          key: hash,
+        },
+      });
+
+      try {
+        await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+
+        const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+        expect(parsed.traces[0].metadata.attachment).toBe(`promptfoo://blob/${hash}`);
+        expect(parsed.blobAssets).toEqual([
+          {
+            hash,
+            mimeType: 'image/png',
+            sizeBytes: data.length,
+            data: data.toString('base64'),
+          },
+        ]);
+      } finally {
+        traceSpy.mockRestore();
+      }
+    });
+
+    it('should not embed response blob bytes when response output stripping is enabled', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+      const hash = 'c'.repeat(64);
+      const getBlobSpy = vi.spyOn(blobs, 'getBlobByHash');
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        prompts: mockEval.prompts,
+        results: [
+          {
+            response: {
+              output: '[output stripped]',
+              metadata: { blobUris: [`promptfoo://blob/${hash}`] },
+            },
+          },
+        ],
+        stats: { successes: 1, failures: 0 },
+      });
+
+      try {
+        await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+
+        const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+        expect(parsed.results.results[0].response.metadata.blobUris).toEqual([
+          `promptfoo://blob/${hash}`,
+        ]);
+        expect(parsed).not.toHaveProperty('blobAssets');
+        expect(getBlobSpy).not.toHaveBeenCalled();
+      } finally {
+        getBlobSpy.mockRestore();
+        restoreEnv();
+      }
     });
 
     it('should handle null shareableUrl', async () => {

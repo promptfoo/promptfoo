@@ -435,6 +435,86 @@ describe('response handling', () => {
     expect(result.raw).toEqual(mockData);
   });
 
+  it('should redact sensitive request body fields from debug metadata', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: {
+          message: '{{ prompt }}',
+          password: '{{ password }}',
+          nested: {
+            apiKey: '{{ apiKey }}',
+          },
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: 'success' },
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await provider.callApi('hello', {
+      debug: true,
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: {
+        password: 'plain-secret',
+        apiKey: 'sk-123456789012345678901234567890',
+      },
+    });
+
+    expect(result.metadata?.finalRequestBody).toEqual({
+      message: 'hello',
+      password: '[REDACTED]',
+      nested: {
+        apiKey: '[REDACTED]',
+      },
+    });
+  });
+
+  it('should redact sensitive transformed request object fields from debug metadata', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: { message: '{{ prompt }}' },
+        transformRequest: () => ({
+          message: 'hello',
+          password: 'plain-secret',
+          nested: {
+            apiKey: 'sk-123456789012345678901234567890',
+          },
+        }),
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { result: 'success' },
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await provider.callApi('hello', {
+      debug: true,
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: {},
+    });
+
+    expect(result.metadata?.transformedRequest).toEqual({
+      message: 'hello',
+      password: '[REDACTED]',
+      nested: {
+        apiKey: '[REDACTED]',
+      },
+    });
+  });
+
   it('should handle plain text non-JSON responses', async () => {
     const mockUrl = 'http://example.com/api';
     const mockData = 'Not a JSON response';
