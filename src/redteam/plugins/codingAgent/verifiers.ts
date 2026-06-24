@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
-import { getRemoteGeneratedTestProvenance } from '../../util';
+import { getRemoteGeneratedTestProvenance } from '../../remoteTestProvenance';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
 import type { TraceData } from '../../../types/tracing';

@@ -47,6 +47,11 @@ import {
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
 import {
+  getRemoteGeneratedTestProvenance,
+  type RemoteGeneratedTestProvenance,
+  setRemoteGeneratedTestProvenance,
+} from './remoteTestProvenance';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -58,10 +63,7 @@ import { RemoteRedteamAssertionContractError } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
-  getRemoteGeneratedTestProvenance,
   getShortPluginId,
-  type RemoteGeneratedTestProvenance,
-  setRemoteGeneratedTestProvenance,
 } from './util';
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
@@ -125,15 +127,11 @@ function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
   const provenance =
     getRemoteGeneratedTestProvenance(metadata) ??
     (typeof pluginId === 'string' ? source.byPlugin.get(pluginId) : source.fallback);
-  if (!provenance) {
-    return metadata;
-  }
-
   const strategyVarNames = Object.keys(vars ?? {});
   return setRemoteGeneratedTestProvenance(metadata, {
-    ...provenance,
-    ...(provenance.vars.length > 0 ? { vars: strategyVarNames } : {}),
-    ...(provenance.unsafeRenderVars?.length ? { unsafeRenderVars: strategyVarNames } : {}),
+    metadata: provenance?.metadata ?? [],
+    unsafeRenderVars: strategyVarNames,
+    vars: provenance?.vars.length ? strategyVarNames : [],
   });
 }
 

@@ -2,7 +2,6 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
-import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
@@ -19,80 +18,12 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
-
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
  * Used to extract prompt content from LLM-generated outputs.
  */
 const PROMPT_TAG_REGEX = /<Prompt>([\s\S]*?)<\/Prompt>/i;
 const PROMPT_TAG_REGEX_GLOBAL = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
-
-export const REMOTE_GENERATED_TEST_METADATA_KEY = '__promptfooRemoteGenerated';
-
-export type RemoteGeneratedTestProvenance = {
-  metadata: string[];
-  unsafeRenderVars?: string[];
-  vars: string[];
-};
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-export function getRemoteGeneratedTestProvenance(
-  metadata: Record<string, unknown> | undefined,
-): RemoteGeneratedTestProvenance | undefined {
-  const value = metadata?.[REMOTE_GENERATED_TEST_METADATA_KEY];
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const provenance = value as Record<string, unknown>;
-  const strings = (field: string) =>
-    Array.isArray(provenance[field])
-      ? provenance[field].filter((item): item is string => typeof item === 'string')
-      : [];
-  const unsafeRenderVars = strings('unsafeRenderVars');
-
-  return {
-    metadata: strings('metadata'),
-    vars: strings('vars'),
-    ...(unsafeRenderVars.length > 0 ? { unsafeRenderVars } : {}),
-  };
-}
-
-export function setRemoteGeneratedTestProvenance<T extends Record<string, unknown>>(
-  metadata: T,
-  provenance: RemoteGeneratedTestProvenance,
-): T {
-  const unsafeRenderVars = uniqueStrings(provenance.unsafeRenderVars ?? []);
-  return {
-    ...metadata,
-    [REMOTE_GENERATED_TEST_METADATA_KEY]: {
-      metadata: uniqueStrings(provenance.metadata),
-      vars: uniqueStrings(provenance.vars),
-      ...(unsafeRenderVars.length > 0 ? { unsafeRenderVars } : {}),
-    },
-  } as T;
-}
-
-export function trustRemoteGeneratedTestVars<T extends Record<string, unknown>>(
-  metadata: T,
-  trustedVarNames: string[],
-): T {
-  const provenance = getRemoteGeneratedTestProvenance(metadata);
-  if (!provenance || trustedVarNames.length === 0) {
-    return metadata;
-  }
-
-  const trusted = new Set(trustedVarNames);
-  return setRemoteGeneratedTestProvenance(metadata, {
-    ...provenance,
-    vars: provenance.vars.filter((name) => !trusted.has(name)),
-    unsafeRenderVars: provenance.unsafeRenderVars?.filter((name) => !trusted.has(name)),
-  });
-}
 
 /**
  * Extracts the content from the first <Prompt> tag in a string.
@@ -480,29 +411,4 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
-}
-
-function toSessionIdString(value: any): string | undefined {
-  if (value === undefined || value === null || value === '') {
-    return undefined;
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  // Stringify non-string values (numbers, objects, arrays, etc.)
-  try {
-    return safeJsonStringify(value);
-  } catch (error) {
-    logger.debug(`Failed to stringify sessionId: ${value}`, { error });
-    return undefined;
-  }
-}
-
-export function getSessionId(
-  response: ProviderResponse | undefined | null,
-  context: Pick<CallApiContextParams, 'vars'> | undefined,
-): string | undefined {
-  return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
 }

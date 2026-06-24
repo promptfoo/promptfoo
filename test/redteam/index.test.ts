@@ -1205,6 +1205,67 @@ describe('synthesize', () => {
       });
     });
 
+    it('should mark fresh strategy materialization variables as unsafe render data', async () => {
+      const attack = '{{ range.constructor("return process.version")() }}';
+      const inputs = {
+        document: { description: 'Document text', type: 'text' },
+        question: { description: 'Question text', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            pluginConfig: { inputs },
+            pluginId: 'test-plugin',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: 'safe document', question: 'safe' }),
+            document: 'safe document',
+            question: 'safe',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: JSON.stringify({ document: attack, question: 'safe' }),
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:composite',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Review a document',
+        strategies: [{ id: 'jailbreak:composite' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:composite',
+      );
+      expect(strategyTestCase?.vars?.document).toBe(attack);
+      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+        metadata: [],
+        unsafeRenderVars: [MULTI_INPUT_VAR, 'document', 'question'],
+        vars: [],
+      });
+    });
+
     it('should fall back to base strategy ID for custom variants', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

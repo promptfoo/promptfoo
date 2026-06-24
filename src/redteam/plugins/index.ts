@@ -37,6 +37,10 @@ import {
   requiresRemoteMaterialization,
 } from '../remoteMaterialization';
 import {
+  REMOTE_GENERATED_TEST_METADATA_KEY,
+  setRemoteGeneratedTestProvenance,
+} from '../remoteTestProvenance';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
@@ -46,11 +50,7 @@ import {
   PluginConfigSchema,
   UnsupportedRemoteRedteamAssertionsError,
 } from '../types';
-import {
-  getShortPluginId,
-  REMOTE_GENERATED_TEST_METADATA_KEY,
-  setRemoteGeneratedTestProvenance,
-} from '../util';
+import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
@@ -932,6 +932,17 @@ function normalizeRemoteTestMetadata(
       key,
       'test case',
       `remote test metadata may not contain ${unsafeMetadataReference}`,
+    );
+  }
+  if (
+    key === 'ascii-smuggling' &&
+    (typeof sanitizedMetadata?.asciiSmugglingTestString !== 'string' ||
+      sanitizedMetadata.asciiSmugglingTestString.trim().length === 0)
+  ) {
+    throw new InvalidRemoteRedteamAssertionPayloadError(
+      key,
+      'test case',
+      'expected `metadata.asciiSmugglingTestString` to be a non-empty string',
     );
   }
   return {

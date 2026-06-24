@@ -1,20 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
+  getRemoteGeneratedTestProvenance,
+  getSessionId,
+  setRemoteGeneratedTestProvenance,
+  trustRemoteGeneratedTestVars,
+} from '../../src/redteam/remoteTestProvenance';
+import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
-  getRemoteGeneratedTestProvenance,
-  getSessionId,
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
   normalizeApostrophes,
   removePrefix,
-  setRemoteGeneratedTestProvenance,
-  trustRemoteGeneratedTestVars,
 } from '../../src/redteam/util';
 import { mockProcessEnv } from '../util/utils';
 

@@ -76,6 +76,10 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: mockIsBasicRefusal,
+}));
+
+vi.mock('../../../../src/redteam/remoteTestProvenance', async () => ({
+  ...(await vi.importActual('../../../../src/redteam/remoteTestProvenance')),
   getSessionId: mockGetSessionId,
 }));
 
@@ -1844,7 +1848,7 @@ describe('HydraProvider', () => {
 
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
-      const { getSessionId } = await import('../../../../src/redteam/util');
+      const { getSessionId } = await import('../../../../src/redteam/remoteTestProvenance');
       vi.mocked(getSessionId).mockReturnValue('session-123');
 
       mockAgentProvider.callApi.mockResolvedValue({

@@ -26,6 +26,7 @@ import {
   buildRemoteMaterializationContextVars,
   buildRemoteMaterializedInputVariables,
 } from '../remoteMaterialization';
+import { getRemoteGeneratedRenderSkipVars, getSessionId } from '../remoteTestProvenance';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -34,7 +35,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -422,7 +423,7 @@ export async function runRedteamConversation({
       updatedVars,
       filters,
       targetProvider,
-      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      getRemoteGeneratedRenderSkipVars(test?.metadata, [injectVar]),
     );
 
     const iterationStart = Date.now();

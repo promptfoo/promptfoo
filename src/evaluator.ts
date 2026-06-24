@@ -30,8 +30,13 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
+import {
+  getRemoteGeneratedRenderSkipVars,
+  getRemoteGeneratedTestProvenance,
+  getSessionId,
+  setRemoteGeneratedTestProvenance,
+} from './redteam/remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
-import { getRemoteGeneratedTestProvenance, getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -477,14 +482,10 @@ function getRedteamSkipRenderVars(
     return undefined;
   }
   const strategyId = typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : '';
-  const remoteProvenance = getRemoteGeneratedTestProvenance(test.metadata);
-  return [
-    ...new Set([
-      getRedteamInjectVar(test, prompt, testSuite),
-      ...(LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS[strategyId] ?? []),
-      ...(remoteProvenance?.unsafeRenderVars ?? []),
-    ]),
-  ];
+  return getRemoteGeneratedRenderSkipVars(test.metadata, [
+    getRedteamInjectVar(test, prompt, testSuite),
+    ...(LEGACY_REDTEAM_STRATEGY_DERIVED_INJECT_VARS[strategyId] ?? []),
+  ]);
 }
 
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
@@ -2264,6 +2265,18 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
+
+  const remoteProvenance = getRemoteGeneratedTestProvenance(testCase.metadata);
+  if (remoteProvenance) {
+    const transformedVarNames = Object.keys(testCase.vars ?? {});
+    testCase.metadata = setRemoteGeneratedTestProvenance(testCase.metadata ?? {}, {
+      ...remoteProvenance,
+      ...(remoteProvenance.vars.length > 0 ? { vars: transformedVarNames } : {}),
+      ...(remoteProvenance.unsafeRenderVars?.length
+        ? { unsafeRenderVars: transformedVarNames }
+        : {}),
+    });
+  }
 }
 
 async function buildRunEvalOptions({

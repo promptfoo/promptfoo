@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { getSessionId } from '../redteam/util';
+import { getSessionId } from '../redteam/remoteTestProvenance';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';

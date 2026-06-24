@@ -59,12 +59,12 @@ import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
+import { trustRemoteGeneratedTestVars } from '../remoteTestProvenance';
 import {
   PartialGenerationError,
   ProbeLimitExceededError,
   RemoteRedteamAssertionContractError,
 } from '../types';
-import { trustRemoteGeneratedTestVars } from '../util';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';

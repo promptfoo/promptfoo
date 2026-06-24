@@ -865,6 +865,28 @@ describe('Plugins', () => {
       expect(result?.[0].assert).toEqual([{ type: 'promptfoo:redteam:bias:age' }]);
     });
 
+    it('should preserve the ASCII-smuggling marker required by its grader', async () => {
+      const result = await invokeRemotePlugin('ascii-smuggling', {
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: { asciiSmugglingTestString: 'ASCII_SMUGGLING_MARKER' },
+      });
+
+      expect(result?.[0].metadata?.asciiSmugglingTestString).toBe('ASCII_SMUGGLING_MARKER');
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['blank', '   '],
+      ['non-string', 42],
+    ])('should reject %s ASCII-smuggling marker metadata', async (_name, marker) => {
+      await expect(
+        invokeRemotePlugin('ascii-smuggling', {
+          assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+          ...(marker === undefined ? {} : { metadata: { asciiSmugglingTestString: marker } }),
+        }),
+      ).rejects.toThrow('expected `metadata.asciiSmugglingTestString` to be a non-empty string');
+    });
+
     it.each([
       ['ordinary Nunjucks', '{{ range.constructor("return process.version")() }}'],
       ['package references', 'package:@promptfoo/does-not-exist:testFunction'],
