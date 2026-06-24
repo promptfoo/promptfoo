@@ -894,7 +894,7 @@ function buildServerOwnedClearGradingResult(
 ): GradingResult {
   const automatedComponents = Array.isArray(normalized.componentResults)
     ? normalized.componentResults.filter(
-        (componentResult) => !isHumanGradingResult(componentResult),
+        (componentResult) => !isHumanAssertion(componentResult.assertion),
       )
     : [];
   const componentScores = automatedComponents
