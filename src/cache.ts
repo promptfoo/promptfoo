@@ -12,7 +12,7 @@ import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
-import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import { type FetchOptions, fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
   getCloudBearerToken,
   getCloudTaskTeamId,
@@ -482,7 +482,7 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   return { cacheable: false, identity: undefined };
 }
 
-function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown) {
+function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown) {
   const identity: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(options).sort(([keyA], [keyB]) =>
@@ -494,6 +494,18 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
 
     if (key === 'body') {
       identity.body = bodyIdentity;
+      continue;
+    }
+
+    if (key === 'retryOnStatusCodes') {
+      if (value == null) {
+        identity.retryOnStatusCodes = value;
+        continue;
+      }
+      if (!Array.isArray(value) || !value.every((status) => Number.isInteger(status))) {
+        return { cacheable: false, identity: undefined };
+      }
+      identity.retryOnStatusCodes = [...new Set(value)].sort((a, b) => a - b);
       continue;
     }
 
@@ -514,7 +526,7 @@ function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown)
 
 function getFetchCacheKey(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   method: string,
   format: 'json' | 'text',
   repeatIndex?: number,
@@ -748,7 +760,7 @@ async function prepareFetchResponse(
  */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,

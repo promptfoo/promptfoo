@@ -11,7 +11,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
@@ -24,6 +24,67 @@ import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
+
+const DEFAULT_REQUEST_BACKOFF_MS = 5000;
+const MAX_RETRY_DELAY_MS = 60_000;
+
+function getAbortError(signal: AbortSignal, fallback: unknown): unknown {
+  if (signal.reason instanceof Error) {
+    return signal.reason;
+  }
+  if (fallback instanceof Error && fallback.name === 'AbortError') {
+    return fallback;
+  }
+  return new DOMException('The operation was aborted', 'AbortError');
+}
+
+async function sleepForRetry(ms: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(ms);
+    return;
+  }
+
+  try {
+    await sleepWithAbort(ms, signal);
+  } catch (error) {
+    if (signal.aborted) {
+      throw getAbortError(signal, error);
+    }
+    throw error;
+  }
+}
+
+function getRetryDelayMs(attempt: number, configuredBackoffMs: number): number {
+  const backoffMs =
+    Number.isFinite(configuredBackoffMs) && configuredBackoffMs >= 0
+      ? Math.min(configuredBackoffMs, MAX_RETRY_DELAY_MS)
+      : DEFAULT_REQUEST_BACKOFF_MS;
+  const delayMs = Math.pow(2, attempt) * (backoffMs + 1000 * Math.random());
+  return Number.isFinite(delayMs) ? Math.min(delayMs, MAX_RETRY_DELAY_MS) : MAX_RETRY_DELAY_MS;
+}
+
+async function discardResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch (error) {
+    logger.debug('[fetch] Failed to discard retryable response body', { error });
+  }
+}
+
+function shouldRetryHttpResponse(
+  response: Response,
+  disableTransientRetries: boolean | undefined,
+  retryOnStatusCodes: readonly number[],
+): boolean {
+  return (
+    disableTransientRetries !== true &&
+    (isTransientError(response) || retryOnStatusCodes.includes(response.status))
+  );
+}
+
+function wasFetchAborted(signal: AbortSignal | null | undefined, error: unknown): boolean {
+  return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
+}
 
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
@@ -275,7 +336,7 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleep(backoffMs);
+      await sleepForRetry(backoffMs, combinedSignal);
       continue;
     }
 
@@ -377,14 +438,14 @@ const RATE_LIMIT_JITTER_MS = 1000;
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+export async function handleRateLimit(response: Response, signal?: AbortSignal): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleep(totalWait);
+  await sleepForRetry(totalWait, signal);
 }
 
 /**
@@ -565,6 +626,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -604,7 +666,7 @@ async function handleRateLimitedResponse(
   logger.debug(
     `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response);
+  await handleRateLimit(response, signal);
 }
 
 function formatFetchErrorMessage(error: unknown): string {
@@ -628,11 +690,12 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
+  const { retryOnStatusCodes = [], ...requestOptions } = options;
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
-  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -640,24 +703,50 @@ export async function fetchWithRetries(
       // Disable transient retries in fetchWithProxy to avoid double-retrying
       response = await fetchWithTimeout(
         url,
-        { ...options, disableTransientRetries: true },
+        { ...requestOptions, disableTransientRetries: true },
         timeout,
       );
+
+      const isRetryableStatus = shouldRetryHttpResponse(
+        response,
+        options.disableTransientRetries,
+        retryOnStatusCodes,
+      );
+      if (isRetryableStatus && i < maxRetries) {
+        const waitTime = getRetryDelayMs(i, backoff);
+        await discardResponseBody(response);
+        logger.debug('[fetch] Transient HTTP response, retrying', {
+          url: urlForLog(url),
+          status: response.status,
+          statusText: response.statusText,
+          attempt: i + 1,
+          maxAttempts: maxRetries + 1,
+          waitTime,
+        });
+        await sleepForRetry(waitTime, requestOptions.signal);
+        continue;
+      }
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(
+          response,
+          url,
+          i,
+          maxRetries,
+          requestOptions.signal ?? undefined,
+        );
         continue;
       }
 
       return response;
     } catch (error) {
       // Don't retry on abort - propagate immediately
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
+      if (wasFetchAborted(requestOptions.signal, error)) {
+        throw requestOptions.signal?.aborted ? getAbortError(requestOptions.signal, error) : error;
       }
 
       // Structured rate-limit errors are already final (quota fail-fast or
@@ -673,8 +762,8 @@ export async function fetchWithRetries(
         `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
       );
       if (i < maxRetries) {
-        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
+        const waitTime = getRetryDelayMs(i, backoff);
+        await sleepForRetry(waitTime, requestOptions.signal);
       }
       lastErrorMessage = errorMessage;
     }

@@ -8,8 +8,14 @@ export interface FetchOptions extends RequestInit {
   compress?: boolean;
 
   /**
-   * Whether to disable automatic retries on transient errors (502, 503, 504).
+   * Whether to disable automatic retries on transient errors (502, 503, 504, 524).
    * Used by fetchWithRetries to prevent double-retrying.
    */
   disableTransientRetries?: boolean;
+
+  /**
+   * Additional HTTP status codes to retry through fetchWithRetries.
+   * Callers should use this only for endpoint-specific transient contracts.
+   */
+  retryOnStatusCodes?: readonly number[];
 }

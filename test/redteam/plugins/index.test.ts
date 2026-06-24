@@ -50,9 +50,9 @@ vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
 });
 
 // Helper function to create mock fetch responses
-function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
+function mockFetchResponse(result: any[]): FetchWithCacheResult<string> {
   return {
-    data: { result },
+    data: JSON.stringify({ result }),
     cached: false,
     status: 200,
     statusText: 'OK',
@@ -286,7 +286,7 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
-        data: { result: [{ test: 'case' }] },
+        data: JSON.stringify({ result: [{ test: 'case' }] }),
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -295,6 +295,7 @@ describe('Plugins', () => {
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const abortController = new AbortController();
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -302,6 +303,7 @@ describe('Plugins', () => {
         n: 1,
         config: {},
         delayMs: 0,
+        abortSignal: abortController.signal,
         targetId: 'cloud-target-123',
       });
 
@@ -310,6 +312,8 @@ describe('Plugins', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          retryOnStatusCodes: [500],
+          signal: abortController.signal,
           body: JSON.stringify({
             config: {},
             injectVar: 'testVar',
@@ -322,6 +326,7 @@ describe('Plugins', () => {
           }),
         }),
         expect.any(Number),
+        'text',
       );
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
@@ -337,7 +342,7 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
-        data: { result: [{ vars: { testVar: 'test content' } }] },
+        data: JSON.stringify({ result: [{ vars: { testVar: 'test content' } }] }),
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -384,7 +389,7 @@ describe('Plugins', () => {
       });
 
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+        data: JSON.stringify({
           materializationHandled: true,
           result: [
             {
@@ -403,7 +408,7 @@ describe('Plugins', () => {
               },
             },
           ],
-        },
+        }),
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -466,7 +471,7 @@ describe('Plugins', () => {
       });
 
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+        data: JSON.stringify({
           result: [
             {
               vars: {
@@ -474,7 +479,7 @@ describe('Plugins', () => {
               },
             },
           ],
-        },
+        }),
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -501,12 +506,13 @@ describe('Plugins', () => {
         }),
       ).resolves.toEqual([]);
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Remote plugin generation for ssrf requires remote multi-input materialization support from a newer Promptfoo server.',
-        ),
-      );
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
+      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for ssrf', {
+        error: expect.objectContaining({
+          message: expect.stringMatching(
+            /requires remote multi-input materialization support.*http:\/\/test-url/,
+          ),
+        }),
+      });
     });
 
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
@@ -584,7 +590,9 @@ describe('Plugins', () => {
         return true;
       });
 
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      const networkError = new Error('Network error');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockRejectedValue(networkError);
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
       const result = await plugin?.action({
@@ -597,94 +605,43 @@ describe('Plugins', () => {
       });
 
       expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
+        error: networkError,
+      });
     });
 
-    it('retries transient 5xx remote generation failures and recovers', async () => {
+    it('should propagate remote generation cancellation', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      vi.mocked(fetchWithCache)
-        .mockResolvedValueOnce({
-          data: undefined,
-          cached: false,
-          status: 503,
-          statusText: 'Service Unavailable',
-        } as FetchWithCacheResult<unknown>)
-        .mockResolvedValueOnce(mockFetchResponse([{ vars: { testVar: 'recovered' } }]));
+      const abortController = new AbortController();
+      abortController.abort();
+      vi.mocked(fetchWithCache).mockRejectedValue(abortController.signal.reason);
 
-      vi.useFakeTimers();
-      try {
-        const plugin = Plugins.find((p) => p.key === 'ssrf');
-        const promise = plugin!.action({
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      await expect(
+        plugin?.action({
           provider: mockProvider,
           purpose: 'test',
           injectVar: 'testVar',
           n: 1,
           config: {},
           delayMs: 0,
-        });
-        await vi.runAllTimersAsync();
-        const result = await promise;
-
-        expect(fetchWithCache).toHaveBeenCalledTimes(2);
-        expect(result).toEqual([
-          {
-            vars: { testVar: 'recovered' },
-            metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } },
-          },
-        ]);
-      } finally {
-        vi.useRealTimers();
-      }
+          abortSignal: abortController.signal,
+        }),
+      ).rejects.toBe(abortController.signal.reason);
     });
 
-    it('returns no tests after exhausting retries on persistent 5xx failures', async () => {
+    it('should log invalid remote responses without including their body', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(neverGenerateRemote).mockReturnValue(false);
-
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: undefined,
-        cached: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      } as FetchWithCacheResult<unknown>);
-
-      vi.useFakeTimers();
-      try {
-        const plugin = Plugins.find((p) => p.key === 'ssrf');
-        const promise = plugin!.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-        });
-        await vi.runAllTimersAsync();
-        const result = await promise;
-
-        // Default 3 retries => 4 total attempts.
-        expect(fetchWithCache).toHaveBeenCalledTimes(4);
-        expect(result).toEqual([]);
-        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('after 4 attempts'));
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('does not retry on non-transient 4xx remote generation failures', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(neverGenerateRemote).mockReturnValue(false);
-
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { error: 'bad config' },
+        data: JSON.stringify({ apiKey: 'must-not-appear' }),
         cached: false,
         status: 400,
         statusText: 'Bad Request',
       } as FetchWithCacheResult<unknown>);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const plugin = Plugins.find((p) => p.key === 'contracts');
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -694,8 +651,41 @@ describe('Plugins', () => {
         delayMs: 0,
       });
 
-      expect(fetchWithCache).toHaveBeenCalledTimes(1);
       expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
+        status: 400,
+        statusText: 'Bad Request',
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
+    });
+
+    it('should not include malformed successful response bodies in logs', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: 'must-not-appear',
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
+        status: 200,
+        statusText: 'OK',
+        responseFormat: 'invalid-json',
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
@@ -706,14 +696,14 @@ describe('Plugins', () => {
         return false;
       });
       const mockResponse: FetchWithCacheResult<unknown> = {
-        data: {
+        data: JSON.stringify({
           result: [
             {
               vars: { testVar: 'test content' },
               metadata: { harmCategory: 'Misinformation/Disinformation' },
             },
           ],
-        },
+        }),
         cached: false,
         status: 200,
         statusText: 'OK',

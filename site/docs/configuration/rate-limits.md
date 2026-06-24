@@ -120,10 +120,10 @@ Environment variables for the scheduler:
 
 Environment variables for HTTP-level retry:
 
-| Environment Variable           | Description                       | Default |
-| ------------------------------ | --------------------------------- | ------- |
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base delay for HTTP retry backoff | 5000ms  |
-| `PROMPTFOO_RETRY_5XX`          | Retry on HTTP 500 errors          | false   |
+| Environment Variable           | Description                                           | Default |
+| ------------------------------ | ----------------------------------------------------- | ------- |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base delay for HTTP retry backoff (capped at 60000ms) | 5000ms  |
+| `PROMPTFOO_RETRY_5XX`          | Retry all HTTP 5xx responses                          | false   |
 
 Example:
 
@@ -131,7 +131,9 @@ Example:
 PROMPTFOO_REQUEST_BACKOFF_MS=10000 PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
-The scheduler's retry handles most rate limiting automatically. The HTTP-level retry provides additional resilience for network issues.
+The scheduler's retry handles most rate limiting automatically. The HTTP-level retry also
+handles network issues and recognized transient 502, 503, 504, and 524 responses. Set
+`PROMPTFOO_RETRY_5XX=true` only when every 5xx response from your provider is safe to retry.
 
 ## Provider-Specific Notes
 

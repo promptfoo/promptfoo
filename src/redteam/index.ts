@@ -1377,6 +1377,7 @@ export async function synthesize({
           injectVar,
           n: plugin.numTests,
           delayMs: delay || 0,
+          abortSignal,
           targetId: cloudTargetId,
           redteamGenerationContext,
           config: {

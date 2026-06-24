@@ -224,6 +224,8 @@ export interface PluginActionParams {
   n: number;
   delayMs: number;
   config?: PluginConfig;
+  /** Cancels in-flight generation and retry backoff for this plugin action. */
+  abortSignal?: AbortSignal;
   /** Cloud target database ID used by remote task handlers to resolve target context. */
   targetId?: string;
   redteamGenerationContext?: RedteamGenerationContext;

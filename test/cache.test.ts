@@ -1183,6 +1183,35 @@ describe('fetchWithCache', () => {
       });
     });
 
+    it('should cache requests with canonicalized retry status policies', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'retry-policy' }),
+      );
+
+      const firstResult = await fetchWithCache(url, { retryOnStatusCodes: [503, 500, 503] }, 1000);
+      const secondResult = await fetchWithCache(url, { retryOnStatusCodes: [500, 503] }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(firstResult.cached).toBe(false);
+      expect(secondResult).toMatchObject({
+        cached: true,
+        data: { data: 'retry-policy' },
+      });
+    });
+
+    it('should isolate cached responses by retry status policy', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: '500 policy' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: '501 policy' }));
+
+      const firstResult = await fetchWithCache(url, { retryOnStatusCodes: [500] }, 1000);
+      const secondResult = await fetchWithCache(url, { retryOnStatusCodes: [501] }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult).toMatchObject({ cached: false, data: { data: '500 policy' } });
+      expect(secondResult).toMatchObject({ cached: false, data: { data: '501 policy' } });
+    });
+
     it('should isolate cached responses by requested response format', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'json data' }))
