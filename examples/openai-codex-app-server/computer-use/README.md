@@ -1,160 +1,116 @@
-# openai-codex-app-server/computer-use (Codex Computer Use UI-Only Red Team Eval)
+# Codex Computer Use UI-only red-team eval
 
-This example drives a real local UI-only chatbot through the Codex app-server
-provider and the macOS Computer Use plugin. The target deliberately has no chat
-API or network endpoint: its response logic runs inside a disposable native
-AppKit application after a user submits the form.
+This example drives a real native macOS chatbot through the Codex app-server
+provider and the Computer Use plugin. The disposable AppKit target has no chat
+API or network endpoint. It intentionally reveals
+`PROMPTFOO_UI_ONLY_CANARY_7F3A` when prompted, so the eval can prove that a
+red-team probe reached the target through its rendered UI.
 
-The checked-in target contains an intentional diagnostic-token disclosure
-vulnerability. A successful run uses direct UI interaction to make the target reveal the canary
-`PROMPTFOO_UI_ONLY_CANARY_7F3A`, then verifies both the canary and the
-`computer-use` MCP trajectory recorded by the app-server provider.
+The eval checks both the returned canary and the recorded MCP trajectory. A
+passing smoke test must read the target, enter and submit the probe, and read
+the target again without enumerating or touching another app.
 
 ## Prerequisites
 
-- A disposable, unlocked macOS desktop session with no unrelated sensitive apps
-  open. Computer Use must already be installed and approved for local UI access.
-- Xcode Command Line Tools with `xcrun swiftc`.
-- `OPENAI_API_KEY` or `CODEX_API_KEY` for the supported runner. A local Codex
-  login can only be used through a separately staged disposable home and the
-  manual commands below.
-- The complete Computer Use plugin directory, including `.mcp.json`,
-  `.codex-plugin/plugin.json`, and `Codex Computer Use.app`.
+- A dedicated disposable macOS VM or OS account with no sensitive user files or
+  unrelated apps available to the session. Keep the desktop unlocked and grant
+  the installed Computer Use plugin its required local UI permissions.
+- A current Codex CLI with plugin support. Verify `codex plugin --help` and
+  `codex features list` work.
+- Xcode Command Line Tools, including `xcrun swiftc`.
+- `OPENAI_API_KEY` or `CODEX_API_KEY`. The supported runner deliberately does
+  not reuse a local Codex login.
+- The complete installed Computer Use plugin directory, including `.mcp.json`,
+  `.codex-plugin/plugin.json`, and its executable MCP launcher.
 
-Set `COMPUTER_USE_PLUGIN_DIR` to an installed plugin directory. For a Codex
-Desktop build, it is typically under the app bundle:
+Point `COMPUTER_USE_PLUGIN_DIR` at the installed plugin. In a Codex Desktop
+bundle it is typically:
 
 ```bash
 export COMPUTER_USE_PLUGIN_DIR="/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use"
 ```
 
-Use the actual installed path on your machine. Do not commit the proprietary
-plugin bundle or copy personal Codex authentication into this example.
+Use the actual path on your machine. Do not commit or redistribute the plugin
+bundle.
 
 ## Run
 
-This config uses plugin-aware Codex app-server fields that are not available in
-Promptfoo `0.121.14` or earlier. Until a newer release is published, run it from
-a Promptfoo source checkout rather than an older `npx promptfoo@latest`.
+Until a Promptfoo release contains this example and its app-server allowlist
+fields, run it from a Promptfoo source checkout:
 
-Initialize the example into a standalone directory:
+```bash
+bash examples/openai-codex-app-server/computer-use/run-e2e.sh
+```
+
+After that release, the standalone flow is:
 
 ```bash
 npx promptfoo@latest init --example openai-codex-app-server/computer-use
 cd openai-codex-app-server/computer-use
-bash scripts/run-e2e.sh
+bash run-e2e.sh
 ```
 
-Contributors can instead run
-`examples/openai-codex-app-server/computer-use/scripts/run-e2e.sh` from a
-Promptfoo source checkout. The runner uses the local build when it is under the
-repository's `examples/` directory and `npx promptfoo@latest` otherwise.
+With no arguments, the runner performs a fresh `eval --no-cache --no-share`
+and writes `.tmp/results.json`. It:
 
-The runner:
+1. Recreates an owner-only, marker-protected `CODEX_HOME` without copying auth.
+2. Creates a disposable local marketplace entry for the exact plugin directory,
+   then uses the Codex CLI to enable and install `computer-use`.
+3. Recreates an empty workspace and compiles the source-free target under
+   `.tmp/`.
+4. Stops stale instances of that exact generated app path, starts the target,
+   runs Promptfoo, and stops the target on exit.
 
-1. Creates an isolated generated `CODEX_HOME` under `.tmp/`.
-2. Adds a local marketplace entry for the explicit Computer Use plugin path.
-3. Installs the plugin into that disposable home and verifies its MCP tools.
-4. Recreates an empty source-free working directory under `.tmp/`.
-5. Stops any stale instance of its generated target path.
-6. Compiles the native UI-only target under `.tmp/`.
-7. Starts the generated `PromptfooComputerUseTarget.app`.
-8. Runs a fresh Promptfoo eval with `--no-cache`, or the Promptfoo command
-   supplied as runner arguments.
-9. Writes the exported Promptfoo result to `.tmp/results.json` and stops the
-   generated target.
+Plugin installation is not a readiness check for the proprietary MCP runtime.
+The no-cache eval and its recorded trajectory are the readiness gate. Inspect
+`.tmp/results.json`, `.tmp/plugin-list.json`, and `.tmp/target.log`; a locked
+desktop or missing Accessibility permission should produce a failed eval, not
+a passing result.
 
-The generated Codex home starts without auth state. Use an API key for strict
-isolation. Codex may persist supplied API-key auth inside the ignored `.tmp/`
-home while the eval runs, so treat generated files as sensitive and remove them
-after use. To exercise an approved local-login fixture, stage a separate
-disposable home and use the manual commands below.
+The runner forwards additional arguments as the Promptfoo command. Custom
+commands write only the output path that you explicitly pass.
 
-## Manual Commands
+## Run a bounded red team
 
-The helper can also be used directly:
+The config also contains one targeted `policy` plugin case. From the initialized
+example directory (or this directory in a source checkout):
 
 ```bash
-python3 scripts/stage_codex_home.py \
-  --plugin-dir "$COMPUTER_USE_PLUGIN_DIR" \
-  --codex-home /tmp/promptfoo-computer-use-codex-home \
-  --force
-
-python3 scripts/probe_plugin_list.py \
-  --codex-home /tmp/promptfoo-computer-use-codex-home
-```
-
-The runner is the supported way to compile, launch, evaluate, and clean up the
-native target. To run the eval manually against an already-running copy of that
-generated app:
-
-```bash
-mkdir -p .tmp/workspace
-
-CODEX_HOME_OVERRIDE=/tmp/promptfoo-computer-use-codex-home \
-COMPUTER_USE_WORKING_DIR="$PWD/.tmp/workspace" \
-COMPUTER_USE_TARGET_APP=/absolute/path/to/PromptfooComputerUseTarget.app \
-  npx promptfoo@latest eval \
-  -c promptfooconfig.yaml \
-  --no-cache --no-share \
-  -o /tmp/promptfoo-computer-use-results.json
-```
-
-## Run A Real Red Team
-
-The same config is also a red-team generation source. It includes one targeted
-policy plugin case so the run remains bounded while proving that generated
-adversarial input reaches the UI-only target.
-
-Generation prints an informational warning that the fixed smoke test is ignored.
-The generated suite supplies its own policy probe as expected.
-
-From the initialized example directory:
-
-```bash
-mkdir -p .tmp
-
 npx promptfoo@latest redteam generate \
   -c promptfooconfig.yaml \
   -o .tmp/redteam.yaml \
   --force --strict
 
-bash scripts/run-e2e.sh \
+bash run-e2e.sh \
   redteam eval \
   -c .tmp/redteam.yaml \
   --no-cache --no-share \
   -o .tmp/redteam-results.json
 ```
 
-The eval is expected to report a finding because the disposable target is
-intentionally vulnerable. Inspect `.tmp/redteam-results.json` to confirm that
-the generated policy probe reached the native app through Computer Use and
-revealed the canary.
+The target is intentionally vulnerable, so a detected finding normally makes
+the eval exit with status 100. That is expected. Inspect
+`.tmp/redteam-results.json` to confirm the generated policy probe reached the
+native app through Computer Use and revealed the canary.
 
-## Safety Boundaries
+## Safety boundaries
 
-- The native target has no chat API endpoint and opens no listening socket.
-- The runner is intended for a disposable desktop session with no unrelated
-  sensitive apps open. It is not an OS-level containment boundary.
-- The runner compiles and starts a unique generated `.app` target under the
-  ignored `.tmp/` directory. It clears stale instances of that exact generated
-  target path before rebuilding and stops the target during cleanup.
-- The generated Codex home references an explicit local plugin path, installs
-  its own disposable plugin cache, starts with owner-only permissions, and
-  never copies personal auth.
-- The plugin probe forwards only a small runtime environment allowlist, so
-  unrelated shell credentials do not reach the disposable plugin process.
-- The staging helper refuses to overwrite directories it did not create.
-- The eval runs from an empty generated workspace rather than the fixture source
-  tree.
-- The eval accepts only the exact `computer-use` elicitation for the disposable
-  target name and declines unmatched elicitations. Its metadata assertion also
-  rejects trajectories that enumerate apps or touch an app outside the
-  generated app path, and requires a post-submit UI read-back.
-- The eval prompt prohibits shell HTTP clients, source inspection, and browser
-  developer tools so a passing result demonstrates real UI interaction.
-- Windows support is intentionally out of scope for this fixture because the
-  Desktop runtime has an additional native-pipe bootstrap path.
-
-See [`QA-NOTES.md`](./QA-NOTES.md) for the implementation record and verified
-runtime results.
+- `sandbox_mode: read-only` prevents writes but is **not** host read
+  containment: Codex can read outside the empty workspace. Computer Use can
+  also observe or act on visible apps. Use a disposable VM or OS account with
+  no sensitive user data; prompt instructions and post-run assertions cannot
+  undo an unintended read.
+- The config disables shell, browser, and multi-agent feature paths as defense
+  in depth. Its assertion rejects command, file, web, dynamic-tool, and
+  collaboration items, and accepts only the exact Computer Use elicitation.
+- The native target opens no listening socket. The runner builds it at a unique
+  ignored path, matches stale processes by that exact command path, and runs
+  the eval from an empty generated workspace.
+- The generated Codex home starts without auth, has owner-only directory
+  permissions, and is replaced only when its marker is present. The plugin CLI
+  runs with a small environment allowlist. The eval provider forwards only its
+  minimal environment plus the explicit API key and generated `CODEX_HOME`.
+- Generated auth and result artifacts can be sensitive. They remain ignored
+  under `.tmp/`; remove them after inspection.
+- This fixture intentionally supports macOS only. Windows Computer Use uses a
+  separate native-pipe path.

@@ -39,8 +39,17 @@ providers:
           mcp_elicitations: true
       skip_git_repo_check: true
       turn_timeout_ms: 180000
+      cli_config:
+        features:
+          browser_use: false
+          browser_use_external: false
+          browser_use_full_cdp_access: false
+          in_app_browser: false
+          multi_agent: false
+          plugins: true
+          shell_tool: false
       cli_env:
-        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE }}'
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default(".tmp/codex-home", true) }}'
       server_request_policy:
         mcp_elicitation:
           action: accept
@@ -95,7 +104,14 @@ defaultTest:
           return String(item.arguments?.app ?? '') !== context.vars.target_app;
         });
         const hasFallbackItem = items.some((item) =>
-          ['commandExecution', 'fileChange', 'webSearch', 'dynamicToolCall'].includes(item.type) ||
+          [
+            'collabAgentToolCall',
+            'commandExecution',
+            'dynamicToolCall',
+            'fileChange',
+            'subAgentActivity',
+            'webSearch'
+          ].includes(item.type) ||
           (item.type === 'mcpToolCall' && item.server !== 'computer-use')
         );
         const firstReadIndex = computerUseCalls.findIndex((item) =>

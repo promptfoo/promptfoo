@@ -483,6 +483,50 @@ describe('init command', () => {
           ),
         );
       });
+
+      it('should defer to the README when an example has a custom runner', async () => {
+        const directoryResponse = createMockResponse({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                download_url: 'https://example.com/README.md',
+                name: 'README.md',
+                type: 'file',
+              },
+              {
+                download_url: 'https://example.com/promptfooconfig.yaml',
+                name: 'promptfooconfig.yaml',
+                type: 'file',
+              },
+              {
+                download_url: 'https://example.com/run-e2e.sh',
+                name: 'run-e2e.sh',
+                type: 'file',
+              },
+            ]),
+        });
+        const fileResponse = createMockResponse({
+          ok: true,
+          text: () => Promise.resolve('fixture'),
+        });
+        mockFetchWithProxy.mockImplementation(async (url) =>
+          url.toString().includes('/contents/examples/') ? directoryResponse : fileResponse,
+        );
+        vi.mocked(fs.readdir).mockResolvedValue([
+          'README.md',
+          'promptfooconfig.yaml',
+          'run-e2e.sh',
+        ] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
+        vi.mocked(fs.access).mockResolvedValue(undefined);
+
+        await init.handleExampleDownload('.', 'custom-runner');
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('View the README file at custom-runner/README.md'),
+        );
+        expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('promptfoo eval'));
+      });
     });
 
     describe('when download fails', () => {

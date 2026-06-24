@@ -1443,6 +1443,28 @@ describe('OpenAICodexAppServerProvider', () => {
     ]);
   });
 
+  it.each([
+    [
+      'server-name',
+      { allowed_server_names: ['forms'] },
+      { serverName: 'forms', message: 'Any message' },
+    ],
+    [
+      'message',
+      { allowed_messages: ['Provide project metadata'] },
+      { serverName: 'any-server', message: 'Provide project metadata' },
+    ],
+  ])('applies a standalone %s elicitation allowlist', (_name, allowlist, params) => {
+    const provider = new OpenAICodexAppServerProvider({});
+
+    expect(
+      (provider as any).buildMcpElicitationResponse(params, {
+        action: 'accept',
+        ...allowlist,
+      }),
+    ).toEqual({ action: 'accept', content: null, _meta: null });
+  });
+
   it('uses thread/resume and normalizes structured prompt input items', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
