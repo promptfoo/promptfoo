@@ -16,6 +16,7 @@ import {
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
+  PLUGIN_CATEGORIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
@@ -247,12 +248,36 @@ function strategyTargetsPlugin(
 }
 
 function pluginMatchesTarget(pluginId: string, targetPlugin: string): boolean {
-  if (pluginIdsOverlap(pluginId, targetPlugin)) {
-    return true;
-  }
-  return Object.values(ALIASED_PLUGIN_MAPPINGS[pluginId] ?? {}).some(({ plugins }) =>
-    plugins.some((aliasedPlugin) => pluginIdsOverlap(aliasedPlugin, targetPlugin)),
+  return getExpandedPluginIds(pluginId).some((expandedPluginId) =>
+    pluginIdsOverlap(expandedPluginId, targetPlugin),
   );
+}
+
+function getExpandedPluginIds(pluginId: string): string[] {
+  if (ALIASED_PLUGIN_MAPPINGS[pluginId]) {
+    return Object.values(ALIASED_PLUGIN_MAPPINGS[pluginId]).flatMap(({ plugins }) =>
+      plugins.flatMap(getExpandedPluginIds),
+    );
+  }
+  if (COLLECTIONS.includes(pluginId as Collection)) {
+    return getCollectionPluginIds(pluginId as Collection);
+  }
+  const aliasedMapping = Object.values(ALIASED_PLUGIN_MAPPINGS).find((mapping) =>
+    Object.keys(mapping).includes(pluginId),
+  );
+  return aliasedMapping?.[pluginId].plugins.flatMap(getExpandedPluginIds) ?? [pluginId];
+}
+
+function getCollectionPluginIds(collection: Collection): string[] {
+  const collectionPlugins: Record<Collection, readonly string[]> = {
+    ...PLUGIN_CATEGORIES,
+    foundation: [...FOUNDATION_PLUGINS],
+    default: [...REDTEAM_DEFAULT_PLUGINS],
+    'guardrails-eval': [...GUARDRAILS_EVALUATION_PLUGINS],
+    'coding-agent:core': [...CODING_AGENT_CORE_PLUGINS],
+    'coding-agent:all': [...CODING_AGENT_PLUGINS],
+  };
+  return [...collectionPlugins[collection]];
 }
 
 function pluginIdsOverlap(pluginId: string, targetPlugin: string): boolean {

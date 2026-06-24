@@ -226,11 +226,15 @@ export abstract class RedteamPluginBase {
       if (rejectedPromptLengths.length > 0) {
         const comparison = rejectedPromptKind === 'min' ? 'below' : 'above';
         const requiredDirection = rejectedPromptKind === 'min' ? 'at least' : 'at most';
+        const rejectedPromptLengthDescription =
+          rejectedPromptKind === 'min'
+            ? `The shortest rejected prompt was ${Math.min(...rejectedPromptLengths)} characters.`
+            : `The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.`;
         retryInstructions = dedent`
           Your previous response included ${rejectedPromptLengths.length} generated prompt${
             rejectedPromptLengths.length === 1 ? '' : 's'
           } that were ${comparison} the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The most recently rejected prompt length was ${rejectedPromptLengths[rejectedPromptLengths.length - 1]} characters.
+          ${rejectedPromptLengthDescription}
           Generate replacement prompts only, and keep every user message ${requiredDirection} the character limit.
         `.trim();
       } else {
