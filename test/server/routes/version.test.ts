@@ -3,6 +3,7 @@ import semverValid from 'semver/functions/valid.js';
 import { describe, expect, it } from 'vitest';
 import {
   getRuntimeNoticeForVersionResponse,
+  getRuntimePolicyForVersionResponse,
   isUpdateAvailableForRuntime,
 } from '../../../src/server/routes/versionUtils';
 
@@ -134,6 +135,18 @@ describe('getRuntimeNoticeForVersionResponse', () => {
       currentMajor: 20,
       id: 'node20-removal-2026-07-30',
     });
+  });
+});
+
+describe('getRuntimePolicyForVersionResponse', () => {
+  it('should retain cutoff metadata when runtime warnings are disabled', () => {
+    expect(getRuntimePolicyForVersionResponse('v20.20.2')).toEqual({
+      supportEndDate: '2026-07-30',
+    });
+  });
+
+  it('should omit cutoff metadata for unaffected runtimes', () => {
+    expect(getRuntimePolicyForVersionResponse('v22.22.0')).toBeNull();
   });
 });
 

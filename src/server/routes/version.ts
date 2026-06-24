@@ -9,7 +9,11 @@ import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
-import { getRuntimeNoticeForVersionResponse, isUpdateAvailableForRuntime } from './versionUtils';
+import {
+  getRuntimeNoticeForVersionResponse,
+  getRuntimePolicyForVersionResponse,
+  isUpdateAvailableForRuntime,
+} from './versionUtils';
 import type { Request, Response } from 'express';
 
 /**
@@ -101,6 +105,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       process.version,
       getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
     );
+    const runtimePolicy = getRuntimePolicyForVersionResponse(process.version);
     const updateBlockedByRuntime = isUpdateBlockedByRuntime(updateCommands.commandType);
 
     const response = {
@@ -112,6 +117,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       ),
       updateBlockedByRuntime,
       runtimeNotice,
+      runtimePolicy,
       selfHosted,
       isNpx,
       updateCommands,
@@ -128,6 +134,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       process.version,
       getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
     );
+    const runtimePolicy = getRuntimePolicyForVersionResponse(process.version);
 
     res.status(500).json({
       error: 'Failed to check version',
@@ -136,6 +143,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       updateAvailable: false,
       updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
       runtimeNotice,
+      runtimePolicy,
       selfHosted,
       isNpx,
       updateCommands,

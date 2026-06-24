@@ -32,6 +32,19 @@ describe('VersionSchemas.Response', () => {
     ).toMatchObject({ runtimeNotice: null, updateBlockedByRuntime: false });
   });
 
+  it('accepts cutoff policy metadata without an active runtime notice', () => {
+    expect(
+      VersionSchemas.Response.parse({
+        ...baseResponse,
+        runtimeNotice: null,
+        runtimePolicy: { supportEndDate: '2026-07-30' },
+      }),
+    ).toMatchObject({
+      runtimeNotice: null,
+      runtimePolicy: { supportEndDate: '2026-07-30' },
+    });
+  });
+
   it('accepts the Node.js 20 compatibility notice', () => {
     expect(
       VersionSchemas.Response.parse({

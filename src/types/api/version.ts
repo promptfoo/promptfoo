@@ -21,12 +21,17 @@ export const RuntimeCompatibilityNoticeSchema = z.object({
   reminderIntervalDays: z.union([z.literal(1), z.literal(7)]),
 });
 
+export const RuntimeCompatibilityPolicySchema = z.object({
+  supportEndDate: z.literal(NODE_20_SUPPORT_END_DATE),
+});
+
 export const VersionResponseSchema = z.object({
   currentVersion: z.string(),
   latestVersion: z.string(),
   updateAvailable: z.boolean(),
   updateBlockedByRuntime: z.boolean().optional(),
   runtimeNotice: RuntimeCompatibilityNoticeSchema.nullable().optional(),
+  runtimePolicy: RuntimeCompatibilityPolicySchema.nullable().optional(),
   selfHosted: z.boolean(),
   isNpx: z.boolean(),
   updateCommands: z.object({

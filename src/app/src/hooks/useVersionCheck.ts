@@ -15,12 +15,17 @@ export interface RuntimeCompatibilityNotice {
   reminderIntervalDays: 1 | 7;
 }
 
+export interface RuntimeCompatibilityPolicy {
+  supportEndDate: string;
+}
+
 export interface VersionInfo {
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
   updateBlockedByRuntime?: boolean;
   runtimeNotice?: RuntimeCompatibilityNotice | null;
+  runtimePolicy?: RuntimeCompatibilityPolicy | null;
   selfHosted?: boolean;
   isNpx?: boolean;
   updateCommands?: {
@@ -67,36 +72,39 @@ function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
   );
 }
 
-function getRuntimeNoticeRefreshDelay(
-  notice: RuntimeCompatibilityNotice,
+function getRuntimePolicyRefreshDelay(
+  supportEndDate: string,
+  notice: RuntimeCompatibilityNotice | null | undefined,
   noticeDismissed: boolean,
+  now = Date.now(),
 ): number | null {
-  const now = Date.now();
-  const removalTimestamp = Date.parse(`${notice.removalDate}T00:00:00.000Z`);
+  const removalTimestamp = Date.parse(`${supportEndDate}T00:00:00.000Z`);
   if (Number.isNaN(removalTimestamp)) {
     return null;
   }
 
-  const futureBoundaries = [removalTimestamp - FINAL_NOTICE_PHASE_MS, removalTimestamp].filter(
-    (timestamp) => timestamp > now,
-  );
+  const futureBoundaries = [removalTimestamp];
+  if (notice) {
+    futureBoundaries.push(removalTimestamp - FINAL_NOTICE_PHASE_MS);
+  }
+  const pendingBoundaries = futureBoundaries.filter((timestamp) => timestamp > now);
 
-  if (noticeDismissed) {
+  if (notice && noticeDismissed) {
     const lastDismissedAt = localStorage.getItem(getRuntimeNoticeStorageKey(notice.id));
     const lastDismissedTimestamp = lastDismissedAt ? Date.parse(lastDismissedAt) : Number.NaN;
     if (!Number.isNaN(lastDismissedTimestamp)) {
       const snoozeExpiry = lastDismissedTimestamp + notice.reminderIntervalDays * DAY_MS;
       if (snoozeExpiry > now) {
-        futureBoundaries.push(snoozeExpiry);
+        pendingBoundaries.push(snoozeExpiry);
       }
     }
   }
 
-  if (futureBoundaries.length === 0) {
+  if (pendingBoundaries.length === 0) {
     return null;
   }
 
-  return Math.min(Math.min(...futureBoundaries) - now, MAX_TIMER_DELAY_MS);
+  return Math.min(Math.min(...pendingBoundaries) - now, MAX_TIMER_DELAY_MS);
 }
 
 export function useVersionCheck(): UseVersionCheckResult {
@@ -163,11 +171,17 @@ export function useVersionCheck(): UseVersionCheckResult {
 
   useEffect(() => {
     const notice = versionInfo?.runtimeNotice;
-    if (!notice) {
+    const supportEndDate = versionInfo?.runtimePolicy?.supportEndDate ?? notice?.removalDate;
+    if (!supportEndDate) {
       return;
     }
 
-    const delay = getRuntimeNoticeRefreshDelay(notice, runtimeNoticeDismissed);
+    const delay = getRuntimePolicyRefreshDelay(
+      supportEndDate,
+      notice,
+      runtimeNoticeDismissed,
+      runtimePolicyUpdatedAt,
+    );
     if (delay === null) {
       return;
     }
@@ -180,7 +194,7 @@ export function useVersionCheck(): UseVersionCheckResult {
       // The refresh may fail without changing any request state. Advance this clock first so
       // consumers still re-evaluate time-based cutoff policy when the boundary is crossed.
       setRuntimePolicyUpdatedAt(Date.now());
-      setRuntimeNoticeDismissed(isRuntimeNoticeSnoozed(notice));
+      setRuntimeNoticeDismissed(notice ? isRuntimeNoticeSnoozed(notice) : false);
       const succeeded = await checkVersion(true);
       if (!succeeded && isMountedRef.current) {
         clearRuntimePolicyRetry();
@@ -195,7 +209,14 @@ export function useVersionCheck(): UseVersionCheckResult {
     return () => {
       window.clearTimeout(refreshTimer);
     };
-  }, [checkVersion, clearRuntimePolicyRetry, runtimeNoticeDismissed, versionInfo?.runtimeNotice]);
+  }, [
+    checkVersion,
+    clearRuntimePolicyRetry,
+    runtimeNoticeDismissed,
+    runtimePolicyUpdatedAt,
+    versionInfo?.runtimeNotice,
+    versionInfo?.runtimePolicy?.supportEndDate,
+  ]);
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {

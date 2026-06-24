@@ -318,6 +318,57 @@ describe('useVersionCheck', () => {
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
+  it('should refetch cutoff policy when runtime warnings are disabled', async () => {
+    const timers = useTestTimers();
+    const startTime = Date.parse('2026-06-22T00:00:00.000Z');
+    const cutoffTime = Date.parse('2026-07-30T00:00:00.000Z');
+    const maxTimerDelay = 2_147_000_000;
+    timers.setSystemTime(new Date(startTime));
+    const runtimePolicy = { supportEndDate: '2026-07-30' };
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: null,
+      runtimePolicy,
+    });
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: null,
+      runtimePolicy,
+    });
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: false,
+      updateBlockedByRuntime: true,
+      runtimeNotice: null,
+      runtimePolicy,
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
+
+    await act(async () => {
+      await timers.advanceByAsync(maxTimerDelay);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
+
+    await act(async () => {
+      await timers.advanceByAsync(cutoffTime - startTime - maxTimerDelay);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(3);
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
+  });
+
   it('should advance runtime policy time when the cutoff refresh fails', async () => {
     const timers = useTestTimers();
     timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));

@@ -55,8 +55,10 @@ describe('Version Route', () => {
     expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
     if (process.versions.node.startsWith('20.')) {
       expect(response.body.runtimeNotice).toMatchObject({ currentMajor: 20, runtime: 'node' });
+      expect(response.body.runtimePolicy).toEqual({ supportEndDate: '2026-07-30' });
     } else {
       expect(response.body.runtimeNotice).toBeNull();
+      expect(response.body.runtimePolicy).toBeNull();
     }
   });
 
