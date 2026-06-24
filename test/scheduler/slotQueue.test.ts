@@ -95,6 +95,23 @@ describe('SlotQueue', () => {
 
       await expect(promise2).rejects.toThrow('timed out after 1000ms in queue');
     });
+
+    it('should remove a queued request when its signal is aborted', async () => {
+      queue = new SlotQueue({
+        maxConcurrency: 1,
+        minConcurrency: 1,
+      });
+      await queue.acquire('active');
+      const abortController = new AbortController();
+
+      const queued = queue.acquire('cancelled', abortController.signal);
+      expect(queue.getQueueDepth()).toBe(1);
+      abortController.abort();
+
+      await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+      expect(queue.getQueueDepth()).toBe(0);
+      expect(queue.getActiveCount()).toBe(1);
+    });
   });
 
   describe('acquire/release - basic slot allocation', () => {
@@ -640,6 +657,27 @@ describe('SlotQueue', () => {
       // but we can verify that advancing time doesn't cause issues
       vi.advanceTimersByTime(10000);
       expect(queue.getQueueDepth()).toBe(0);
+    });
+
+    it('should clear the reset timer when the last quota waiter is aborted', async () => {
+      queue = new SlotQueue({
+        maxConcurrency: 1,
+        minConcurrency: 1,
+        queueTimeoutMs: 0,
+      });
+      queue.updateRateLimitState({
+        remainingRequests: 0,
+        resetAt: Date.now() + 5000,
+      });
+      const abortController = new AbortController();
+      const promise = queue.acquire('cancelled', abortController.signal);
+      expect(vi.getTimerCount()).toBe(1);
+
+      abortController.abort();
+
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(queue.getQueueDepth()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

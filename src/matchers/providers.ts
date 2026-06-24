@@ -83,7 +83,7 @@ export function callProviderWithContext(
         executionContext.rateLimitRegistry.execute(
           provider,
           callApi,
-          createProviderRateLimitOptions(),
+          createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
         ),
         executionContext.queuedCallAbortSignal,
       );
