@@ -134,7 +134,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
