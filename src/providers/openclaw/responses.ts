@@ -1,5 +1,6 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
+  buildOpenClawHeaders,
   buildOpenClawModelName,
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
@@ -15,6 +16,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
+import type { OpenClawConfig } from './types';
 
 function inferHiddenCachedInputTokensFromOpenClawUsage(usage: any): number {
   const inputTokens = usage?.input_tokens;
@@ -140,6 +142,16 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     if ('text' in result.body) {
       delete (result.body as Record<string, unknown>).text;
     }
-    return result;
+    return {
+      ...result,
+      body: {
+        ...result.body,
+        model: this.modelName,
+      },
+      config: {
+        ...result.config,
+        headers: buildOpenClawHeaders(this.agentId, result.config as OpenClawConfig),
+      },
+    };
   }
 }

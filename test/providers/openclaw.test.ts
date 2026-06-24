@@ -742,6 +742,17 @@ describe('OpenClaw Provider', () => {
       expect(invalid.config.headers?.['x-openclaw-agent-id']).toBe('missing agent');
     });
 
+    it('should not let passthrough override the configured-default agent route', async () => {
+      const provider = new OpenClawChatProvider(undefined, {
+        config: { passthrough: { model: 'openclaw/other' } },
+      });
+
+      const result = await provider.getOpenAiBody('test prompt');
+
+      expect(result.body.model).toBe('openclaw/default');
+      expect(result.config.passthrough).toEqual({});
+    });
+
     it('should return correct string representation', () => {
       const provider = new OpenClawChatProvider('coding-agent', {});
       expect(provider.toString()).toBe('[OpenClaw Provider coding-agent]');
@@ -797,6 +808,15 @@ describe('OpenClaw Provider', () => {
       );
     });
 
+    it('should reject session keys scoped to a different explicit agent', () => {
+      expect(
+        () =>
+          new OpenClawChatProvider('main', {
+            config: { session_key: 'agent:other:shared-session' },
+          }),
+      ).toThrow('session key targets agent "other" but the provider targets "main"');
+    });
+
     it('should not set session key header when not provided', () => {
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.config.headers?.['x-openclaw-session-key']).toBeUndefined();
@@ -850,11 +870,51 @@ describe('OpenClaw Provider', () => {
         },
       });
       const explicitProvider = new OpenClawChatProvider('main', {
-        config: { headers: { 'X-OpenClaw-Agent-Id': 'stale-agent' } },
+        config: {
+          session_key: 'expected-session',
+          headers: {
+            'X-OpenClaw-Agent-Id': 'stale-agent',
+            'X-OpenClaw-Session-Key': 'agent:other:stale-session',
+          },
+        },
       });
 
       expect(defaultProvider.config.headers).toEqual({ 'x-custom': 'value' });
-      expect(explicitProvider.config.headers).toEqual({ 'x-openclaw-agent-id': 'main' });
+      expect(explicitProvider.config.headers).toEqual({
+        'x-openclaw-agent-id': 'main',
+        'x-openclaw-session-key': 'agent:main:expected-session',
+      });
+      expect(Object.fromEntries(new Headers(explicitProvider.config.headers).entries())).toEqual({
+        'x-openclaw-agent-id': 'main',
+        'x-openclaw-session-key': 'agent:main:expected-session',
+      });
+    });
+
+    it('should reapply routing headers after merging prompt-level config', async () => {
+      const provider = new OpenClawChatProvider('main', {
+        config: { session_key: 'provider-session' },
+      });
+
+      const result = await provider.getOpenAiBody('test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: {
+            headers: {
+              'X-OpenClaw-Agent-Id': 'other-agent',
+              'X-OpenClaw-Session-Key': 'agent:other:prompt-session',
+              'x-custom': 'prompt',
+            },
+          },
+        },
+      });
+
+      expect(result.config.headers).toEqual({
+        'x-custom': 'prompt',
+        'x-openclaw-agent-id': 'main',
+        'x-openclaw-session-key': 'agent:main:provider-session',
+      });
     });
 
     it('should set OpenClaw context headers from typed config', () => {
@@ -963,6 +1023,49 @@ describe('OpenClaw Provider', () => {
       });
       expect(provider.config.headers?.['x-openclaw-session-key']).toBe('agent:main:my-session');
       expect(provider.config.headers?.['x-openclaw-thinking-level']).toBeUndefined();
+    });
+
+    it('should scope prompt-level session config without allowing agent-header overrides', async () => {
+      const provider = new OpenClawResponsesProvider('main', {
+        config: { session_key: 'provider-session' },
+      });
+
+      const result = await provider.getOpenAiBody('test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: {
+            session_key: 'prompt-session',
+            headers: {
+              'x-openclaw-agent': 'other-agent',
+              'x-openclaw-session-key': 'agent:other:header-session',
+              'x-custom': 'prompt',
+            },
+          },
+        },
+      });
+
+      expect(result.config.headers).toEqual({
+        'x-custom': 'prompt',
+        'x-openclaw-agent-id': 'main',
+        'x-openclaw-session-key': 'agent:main:prompt-session',
+      });
+    });
+
+    it('should not let prompt passthrough override the configured-default agent route', async () => {
+      const provider = new OpenClawResponsesProvider(undefined, {});
+
+      const result = await provider.getOpenAiBody('test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: { passthrough: { model: 'openclaw/other' } },
+        },
+      });
+
+      expect(result.body.model).toBe('openclaw/default');
     });
 
     it('should strip text field from request body in getOpenAiBody', async () => {
@@ -1312,6 +1415,26 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/embeddings');
       expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
       expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe('openclaw/main');
+    });
+
+    it('should not let passthrough override the configured-default embedding route', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { data: [{ embedding: [0.1] }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+      const provider = new OpenClawEmbeddingProvider(undefined, {
+        config: {
+          gateway_url: 'http://test:18789',
+          passthrough: { model: 'openclaw/other' },
+        },
+      });
+
+      await provider.callEmbeddingApi('embed this');
+
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe('openclaw/default');
     });
 
     it('should send backend embedding model override as an OpenClaw header', async () => {
@@ -2269,6 +2392,20 @@ describe('OpenClaw Provider', () => {
       );
 
       await promise;
+    });
+
+    it('should reject configured sessions scoped to another WS agent', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: {
+          gateway_url: 'http://test:18789',
+          session_key: 'agent:other:my-session',
+        },
+      });
+
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        'session key targets agent "other" but the provider targets "dev"',
+      );
+      expect(websocketMocks.WebSocketMock).not.toHaveBeenCalled();
     });
 
     it('should include channel and account context when configured', async () => {

@@ -374,15 +374,22 @@ function normalizeHeaderValue(value: string | undefined): string | undefined {
  */
 export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey: string): string {
   const trimmedSessionKey = sessionKey.trim();
-  if (
-    !trimmedSessionKey ||
-    !agentId?.trim() ||
-    trimmedSessionKey.toLowerCase().startsWith('agent:')
-  ) {
+  const trimmedAgentId = agentId?.trim();
+  if (!trimmedSessionKey || !trimmedAgentId) {
     return trimmedSessionKey;
   }
 
-  return `agent:${agentId.trim()}:${trimmedSessionKey}`;
+  if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
+    const scopedAgentId = trimmedSessionKey.split(':', 2)[1];
+    if (scopedAgentId?.toLowerCase() !== trimmedAgentId.toLowerCase()) {
+      throw new Error(
+        `OpenClaw session key targets agent "${scopedAgentId || '(missing)'}" but the provider targets "${trimmedAgentId}"`,
+      );
+    }
+    return trimmedSessionKey;
+  }
+
+  return `agent:${trimmedAgentId}:${trimmedSessionKey}`;
 }
 
 /**
@@ -433,11 +440,25 @@ export function buildOpenClawHeaders(
   config?: OpenClawConfig,
 ): Record<string, string> {
   const headers: Record<string, string> = {};
+  let headerSessionKey: string | undefined;
+  for (const [name, value] of Object.entries(config?.headers ?? {})) {
+    const normalizedName = name.toLowerCase();
+    if (normalizedName === 'x-openclaw-agent-id' || normalizedName === 'x-openclaw-agent') {
+      continue;
+    }
+    if (normalizedName === 'x-openclaw-session-key') {
+      headerSessionKey = value;
+      continue;
+    }
+    headers[name] = value;
+  }
+
   if (agentId) {
     headers['x-openclaw-agent-id'] = agentId;
   }
-  if (config?.session_key) {
-    headers['x-openclaw-session-key'] = buildOpenClawSessionKey(agentId, config.session_key);
+  const sessionKey = config?.session_key ?? headerSessionKey;
+  if (sessionKey?.trim()) {
+    headers['x-openclaw-session-key'] = buildOpenClawSessionKey(agentId, sessionKey);
   }
   return {
     ...headers,
@@ -460,25 +481,23 @@ export function buildOpenClawProviderOptions(
     config as { auth_password?: string; auth_token?: string },
     env,
   );
-  const customHeaders = Object.fromEntries(
-    Object.entries((config.headers as Record<string, string> | undefined) ?? {}).filter(
-      ([name]) => !['x-openclaw-agent-id', 'x-openclaw-agent'].includes(name.toLowerCase()),
-    ),
-  );
+  const passthrough = config.passthrough;
+  const sanitizedPassthrough =
+    passthrough && typeof passthrough === 'object' && !Array.isArray(passthrough)
+      ? Object.fromEntries(Object.entries(passthrough).filter(([name]) => name !== 'model'))
+      : passthrough;
 
   return {
     ...providerOptions,
     config: {
       ...config,
+      ...(passthrough && { passthrough: sanitizedPassthrough }),
       apiBaseUrl: `${gatewayUrl}/v1`,
       // Only set apiKey if we resolved an OpenClaw token; don't clobber user-supplied keys
       ...(authToken && { apiKey: authToken }),
       // Prevent OpenAI base class from falling back to OPENAI_API_KEY
       apiKeyRequired: false,
-      headers: {
-        ...customHeaders,
-        ...buildOpenClawHeaders(agentId, config as OpenClawConfig),
-      },
+      headers: buildOpenClawHeaders(agentId, config as OpenClawConfig),
     },
   };
 }

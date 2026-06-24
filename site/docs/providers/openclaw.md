@@ -90,6 +90,12 @@ Only an omitted agent selector means configured default. For example, `openclaw:
 targets an agent whose ID is `default`; the same rule applies to Responses, Embeddings, and WS Agent
 provider forms.
 
+:::note[Compatibility]
+Older Promptfoo versions routed bare OpenClaw provider forms to `main` and reported provider IDs
+ending in `:main`. Use an explicit `:main` suffix to retain that routing. Bare forms now appear with
+bare provider IDs in results, so update any filters or reporting keyed to the old IDs.
+:::
+
 ### Responses
 
 Uses the OpenResponses-compatible `/v1/responses` endpoint. This endpoint is also disabled by
@@ -218,7 +224,7 @@ providers:
 | message_channel      | -                         | Channel context sent as `x-openclaw-message-channel` and WS `channel`                    |
 | account_id           | -                         | Account context sent as `x-openclaw-account-id` and WS `accountId`                       |
 | scopes               | -                         | WS operator scopes and optional HTTP `x-openclaw-scopes` context                         |
-| session_key          | -                         | Session identifier; explicit-agent keys are scoped automatically                         |
+| session_key          | -                         | Session identifier; unscoped keys for explicit agents are scoped automatically           |
 | thinking_level       | -                         | WS Agent reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive` |
 | extra_system_prompt  | -                         | WS Agent-only extra system prompt injected as `extraSystemPrompt`                        |
 | device_identity_path | -                         | WS Agent device keypair path (default: promptfoo config directory)                       |

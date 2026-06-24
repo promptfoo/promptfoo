@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
+  buildOpenClawHeaders,
   buildOpenClawModelName,
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
@@ -8,8 +9,13 @@ import {
   resolveOpenClawBillingModelName,
 } from './shared';
 
-import type { ProviderOptions } from '../../types/providers';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
+import type { OpenClawConfig } from './types';
 
 /**
  * OpenClaw chat provider extends OpenAI chat completion provider.
@@ -58,6 +64,25 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL
   getApiUrl(): string {
     return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    return {
+      ...result,
+      body: {
+        ...result.body,
+        model: this.modelName,
+      },
+      config: {
+        ...result.config,
+        headers: buildOpenClawHeaders(this.agentId, result.config as OpenClawConfig),
+      },
+    };
   }
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
