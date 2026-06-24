@@ -157,6 +157,35 @@ describe('ModelAuditResultLatestPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to fetch latest scan')).toBeInTheDocument();
     });
+
+    expect(screen.getByText('Unable to load latest scan')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+  });
+
+  it('should retry loading the latest scan from the error state', async () => {
+    const user = userEvent.setup();
+
+    mockCallApi
+      .mockResolvedValueOnce({
+        ok: false,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scans: [], total: 0 }),
+      } as Response);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Try Again' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No Model Scans Yet')).toBeInTheDocument();
+    });
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 
   it('should link to setup page from empty state', async () => {

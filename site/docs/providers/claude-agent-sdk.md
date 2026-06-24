@@ -141,7 +141,7 @@ prompts:
 | `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
-| `fallback_model`                     | string           | Fallback model if primary fails                                                                              | Claude Agent SDK default |
+| `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
 | `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number           | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number           | Maximum cost budget in USD for the agent execution                                                           | None                     |
@@ -400,7 +400,7 @@ providers:
       plugins:
         - type: local
           path: ./my-plugin
-      append_allowed_tools: ['Skill', 'Read']
+      skills: all
 ```
 
 :::note
@@ -469,7 +469,7 @@ providers:
       skills: all # Or: ['code-review', 'test-generator']
 ```
 
-If you don't set `skills`, you must add `'Skill'` to allowed tools manually for the model to invoke them:
+For SDK versions before 0.2.120, omit `skills` and add `'Skill'` manually instead:
 
 ```yaml
 providers:
@@ -549,7 +549,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project'] # Only team-shared skills, exclude personal
-      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Bash']
       permission_mode: 'acceptEdits'
 ```
 
@@ -563,7 +564,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Write', 'Bash']
       permission_mode: 'acceptEdits'
 
 prompts:
@@ -1075,9 +1077,40 @@ providers:
       forward_subagent_text: true
 ```
 
+## Error Diagnostics
+
+When the SDK reports a model-call failure, the provider surfaces it in two places so assertions can branch on the underlying cause instead of the generic terminal subtype:
+
+- `metadata.assistantErrors` — array of `{ error, uuid, parentToolUseId, request_id?, subagent_type?, task_description? }` entries collected from `SDKAssistantMessage.error`. The `error` field uses the SDK's discriminated codes (`'model_not_found'`, `'rate_limit'`, `'overloaded'`, `'authentication_failed'`, `'billing_error'`, `'oauth_org_not_allowed'`, `'server_error'`, `'invalid_request'`, `'max_output_tokens'`, `'unknown'`). The `model_not_found` code requires `@anthropic-ai/claude-agent-sdk` 0.3.144 or newer (older SDKs collapse it into `'invalid_request'`), and `overloaded` requires 0.3.161 or newer.
+- `metadata.apiErrorStatus` — HTTP status code reported on successful result messages when an upstream API call hit a transient error (e.g., `529` during overload). Only present when the SDK populates it.
+
+When a run ends in a non-success subtype and the stream included an assistant error, the provider appends the code to the error string: `Claude Agent SDK call failed: error_during_execution (model_not_found)`. Example assertion:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const errors = context.providerResponse?.metadata?.assistantErrors || [];
+      // Treat model unavailability as a skip rather than a real failure
+      return !errors.some(e => e.error === 'model_not_found');
+```
+
 ## Tracing
 
 When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+
+The provider also emits a `gen_ai.turn N` marker span per LLM round-trip (one per `assistant` message from the SDK stream). Each tool span is tagged with the `gen_ai.turn.index` of the assistant message that emitted it. This lets you assert on agent batching with [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count):
+
+```yaml
+assert:
+  # Agent finished within at most 3 LLM round-trips.
+  - type: trace-span-count
+    value:
+      pattern: 'gen_ai.turn *'
+      max: 3
+```
+
+Turn spans include `gen_ai.turn.index`, `gen_ai.system`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
 
 The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
 

@@ -1,17 +1,15 @@
-// Note: This file is in the process of being deconstructed into `types/` and `validators/`
-// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { BaseTokenUsageSchema } from '../types/shared';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { BaseTokenUsageSchema } from '../contracts/shared';
+import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { parseFilterRange } from '../util/filterRange';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
 export {
   EVENT_SOURCES,
@@ -21,14 +19,15 @@ export {
 } from './eventSource';
 
 import type { BlobRef } from '../blobs/types';
+import type { EnvOverrides } from '../contracts/env';
+import type { Prompt, PromptFunction } from '../contracts/prompts';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -37,10 +36,6 @@ import type {
   ProviderResponse,
   ProvidersConfig,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
-
-export type { VarValue } from './shared';
-
 import type { TraceData } from './tracing';
 
 /**
@@ -133,8 +128,10 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
+  filterSampleSeed: z.coerce.number().int().safe().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
@@ -312,6 +309,12 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
 
+/** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Normalized value of --filter-providers or --filter-targets. */
+  providerFilter?: string;
+};
+
 const PromptMetricsSchema = z.object({
   score: z.number(),
   testPassCount: z.number(),
@@ -400,6 +403,14 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -582,6 +593,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 export const BaseAssertionTypesSchema = z.enum([
+  'agent-rubric',
   'answer-relevance',
   'bleu',
   'classifier',
@@ -711,7 +723,7 @@ export const AssertionSchema = z.object({
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
+  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
@@ -745,6 +757,8 @@ export interface AssertionValueFunctionContext {
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
   trace?: TraceData;
+  /** Shortcut to providerResponse?.metadata for convenience */
+  metadata?: ProviderResponse['metadata'];
 }
 
 export type AssertionValueFunction = (
@@ -893,6 +907,9 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
+
+      // Number of times to repeat this specific test case.
+      repeat: z.number().int().positive().safe().optional(),
     })
     .catchall(z.any())
     .optional(),
@@ -1097,6 +1114,8 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1105,6 +1124,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1117,7 +1137,11 @@ export const TestSuiteSchema = z.object({
         .optional(),
       storage: z
         .object({
-          type: z.string(),
+          // Mirror TestSuiteConfigSchema's prefault so a resolved suite that sets `storage`
+          // with `retentionDays` but omits `type` doesn't fail validation (sqlite is the
+          // only supported store). Without this the prefault on the config schema never
+          // reaches resolved-suite validation and emits a spurious error.
+          type: z.string().prefault('sqlite'),
           retentionDays: z.number(),
         })
         .optional(),
@@ -1236,6 +1260,16 @@ export const TestSuiteConfigSchema = z.object({
     .object({
       enabled: z.boolean().prefault(false),
 
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().optional(),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
+
       // OTLP receiver configuration
       otlp: z
         .object({
@@ -1243,8 +1277,11 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1352,6 +1389,8 @@ export interface ResultsFile {
   config: Partial<UnifiedConfig>;
   author: string | null;
   prompts?: CompletedPrompt[];
+  /** Persisted display order for table variable columns. */
+  vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }
@@ -1389,6 +1428,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1396,6 +1442,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: EvalRuntimeOptions;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

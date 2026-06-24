@@ -151,6 +151,16 @@ describe('RedteamConfigSchema', () => {
     expect(result.plugins?.[0].numTests).toBe(5);
   });
 
+  it('should inherit top-level numTests for object plugins that omit numTests', () => {
+    const config = {
+      numTests: 17,
+      plugins: [{ id: 'file://test-plugin.js' }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+    expect(result.plugins?.[0].numTests).toBe(17);
+  });
+
   it('should use default numTests when not specified', () => {
     const config = {
       plugins: [

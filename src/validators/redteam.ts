@@ -67,7 +67,10 @@ export const RedteamContextSchema = z.object({
   id: z.string().describe('Unique identifier for the context'),
   purpose: z
     .string()
-    .describe('Purpose/context for this context - used for generation and grading'),
+    .optional()
+    .describe(
+      'Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank',
+    ),
   vars: z
     .record(z.string(), z.string())
     .optional()
@@ -115,6 +118,10 @@ export const RedteamPluginObjectSchema = z.object({
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
+const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
+  numTests: z.int().positive().optional().describe('Number of tests to generate for this plugin'),
+});
+
 /**
  * Schema for individual redteam plugins or their shorthand.
  */
@@ -139,7 +146,7 @@ export const RedteamPluginSchema = z.union([
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
-  RedteamPluginObjectSchema,
+  RedteamConfigPluginObjectSchema,
 ]);
 
 export const strategyIdSchema = z.union([
@@ -215,6 +222,8 @@ export const RedteamGenerateOptionsSchema = z.object({
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
+  filterProviders: z.string().optional().describe('Regex used to select providers'),
+  filterTargets: z.string().optional().describe('Regex used to select targets'),
   force: z.boolean().describe('Whether to force generation').prefault(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z
@@ -303,7 +312,7 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .prefault(['default']),
+      .default(['default']),
     maxConcurrency: z
       .int()
       .positive()
@@ -450,7 +459,10 @@ export const RedteamConfigSchema = z
       const pluginObj: RedteamPluginObject =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+          : {
+              ...plugin,
+              numTests: plugin.numTests ?? data.numTests ?? DEFAULT_NUM_TESTS_PER_PLUGIN,
+            };
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {

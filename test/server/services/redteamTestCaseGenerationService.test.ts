@@ -31,6 +31,10 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   }));
   vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
     getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    getRemoteGenerationHeaders: vi.fn((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    })),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   }));
   vi.doMock('../../../src/providers/shared', () => ({

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { OpenAiGenericProvider } from '../../../src/providers/openai/index';
+import {
+  DEFAULT_OPENAI_ORIGINATOR,
+  OPENAI_ORIGINATOR_HEADER,
+  OpenAiGenericProvider,
+} from '../../../src/providers/openai/index';
 import { mockProcessEnv } from '../../util/utils';
 
 describe('OpenAI Provider', () => {
@@ -41,6 +45,62 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ OPENAI_ORGANIZATION: 'env-org' });
       const envProvider = new OpenAiGenericProvider('test-model');
       expect(envProvider.getOrganization()).toBe('env-org');
+    });
+
+    it('should include the default originator header and allow explicit overrides', () => {
+      expect(provider.getOpenAiRequestHeaders()).toEqual({
+        [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR,
+        'OpenAI-Organization': 'test-org',
+      });
+
+      expect(
+        provider.getOpenAiRequestHeaders({
+          [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+        }),
+      ).toMatchObject({
+        [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
+    });
+
+    // These two cases assert the FULL header object with toEqual on purpose: the bug
+    // being guarded is a *duplicate* case-variant header sneaking into the output, so
+    // the test must fail if any extra key (e.g. a second canonical-case header) appears.
+    // toMatchObject would allow such an extra key through and miss the regression.
+    it('should treat originator overrides case-insensitively', () => {
+      expect(
+        provider.getOpenAiRequestHeaders({
+          'x-openai-originator': 'custom-originator',
+        }),
+      ).toEqual({
+        'x-openai-originator': 'custom-originator',
+        'OpenAI-Organization': 'test-org',
+      });
+    });
+
+    it('should treat organization header overrides case-insensitively', () => {
+      expect(
+        provider.getOpenAiRequestHeaders({
+          'openai-organization': 'custom-org',
+        }),
+      ).toEqual({
+        'X-OpenAI-Originator': 'promptfoo',
+        'openai-organization': 'custom-org',
+      });
+    });
+
+    it('should not attribute compatible endpoints unless explicitly configured', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/openai' },
+      });
+
+      expect(customProvider.getOpenAiRequestHeaders()).not.toHaveProperty(OPENAI_ORIGINATOR_HEADER);
+      expect(
+        customProvider.getOpenAiRequestHeaders({
+          [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+        }),
+      ).toMatchObject({
+        [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
     });
 
     it('should get API key', () => {

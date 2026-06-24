@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google ADK conversational agent with native tracing
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - id: file://provider.py:call_api
+    label: google-adk-conversation
+    config:
+      otlp_endpoint: http://localhost:4318
+
+tests:
+  - description: Multi-turn trip note uses state, callback, plugin, artifact, and tools
+    vars:
+      task: Help me with a short London trip note.
+      steps_json: |
+        [
+          "What's the weather in London?",
+          "Save a short trip note for that city.",
+          "Which city did we discuss earlier?"
+        ]
+    metadata:
+      tracingEnabled: true
+      testCaseId: google-adk-multi-turn-note
+    assert:
+      - type: contains
+        value: '"last_city": "London"'
+      - type: contains
+        value: '"last_saved_artifact": "london-trip-note.md"'
+      - type: contains
+        value: '"artifact_names": ["london-trip-note.md"]'
+      - type: contains
+        value: '"callback_invocations": 3'
+      - type: contains
+        value: before_run
+      - type: contains
+        value: after_run
+      - type: trajectory:tool-used
+        value:
+          - get_weather
+          - save_trip_note
+      - type: trajectory:tool-args-match
+        value:
+          name: get_weather
+          args:
+            city: London
+          mode: partial
+      - type: trajectory:tool-args-match
+        value:
+          name: save_trip_note
+          args:
+            city: London
+          mode: partial
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - get_weather
+            - save_trip_note
+      - type: trace-span-count
+        value:
+          pattern: 'invoke_agent weather_agent'
+          min: 3
+      - type: trace-span-count
+        value:
+          pattern: 'call_llm'
+          min: 3
+      - type: trace-span-count
+        value:
+          pattern: 'execute_tool *'
+          min: 2
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json', 'protobuf']

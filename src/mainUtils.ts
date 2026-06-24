@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getGlobalDispatcher } from 'undici';
+import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
 import telemetry from './telemetry';
@@ -90,6 +91,34 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
   }
 }
 
+export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+
+    if (arg === '--') {
+      return false;
+    }
+
+    if (arg === '--env-file' || arg === '--env-path') {
+      index += 1;
+      continue;
+    }
+
+    if (
+      arg === '-v' ||
+      arg === '--verbose' ||
+      arg.startsWith('--env-file=') ||
+      arg.startsWith('--env-path=')
+    ) {
+      continue;
+    }
+
+    return arg === 'code-scans';
+  }
+
+  return false;
+}
+
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
   if (!processArgv1) {
     return false;
@@ -140,7 +169,11 @@ export function addCommonOptionsRecursively(command: Command) {
   }
 
   command.hook('preAction', (thisCommand, actionCommand) => {
-    if (thisCommand.opts().verbose) {
+    const keepStructuredCodeScanOutputMuted = requestsStructuredCodeScanOutput(
+      process.argv.slice(2),
+    );
+
+    if (thisCommand.opts().verbose && !keepStructuredCodeScanOutputMuted) {
       setLogLevel('debug');
       logger.debug('Verbose mode enabled via --verbose flag');
     }
@@ -213,7 +246,7 @@ export const shutdownGracefully = async (): Promise<void> => {
     // Can't log since logger might be closed.
   }
 
-  closeDbIfOpen();
+  await closeDbIfOpen();
   clearAgentCache();
 
   try {

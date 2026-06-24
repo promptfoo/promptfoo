@@ -1,9 +1,9 @@
-import * as fsPromises from 'fs/promises';
+import * as fsPromises from 'node:fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -21,6 +21,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
@@ -33,8 +34,8 @@ import type { FetchOptions } from './types';
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Agent> = new Map();
-const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+const cachedAgents: Map<number, Dispatcher> = new Map();
+const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -72,7 +73,7 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
+function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const existing = cachedAgents.get(concurrency);
   if (existing) {
@@ -84,7 +85,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  });
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -93,7 +96,7 @@ function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
   return `${proxyUrl}::${concurrency}`;
 }
 
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
+function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
   const existing = cachedProxyAgents.get(cacheKey);
@@ -108,7 +111,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  });
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -344,22 +349,21 @@ export function computeRateLimitWaitMs(response: Response): number {
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000;
-
   if (openaiReset) {
     const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
-      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
-  } else if (rateLimitReset) {
-    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
-    const now = new Date();
-    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-  } else if (retryAfter) {
-    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  return waitTime;
+  if (rateLimitReset) {
+    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
+    if (Number.isFinite(resetAt) && resetAt >= 0) {
+      return Math.max(resetAt - Date.now() + 1000, 0);
+    }
+  }
+
+  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
 }
 
 /**
@@ -544,6 +548,18 @@ export type { FetchOptions } from './types';
  * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
  * {@link handleRateLimit} and returns so the caller can `continue` the loop.
  */
+/**
+ * Returns a string form of a {@link RequestInfo} suitable for log output.
+ * Strips basic-auth credentials and known sensitive query parameters (api_key,
+ * token, password, signature, …) via {@link sanitizeUrl} so providers that
+ * embed credentials in the URL (e.g. n8n webhooks, HTTP providers with
+ * `?api_key=…`) do not leak them into retry diagnostics.
+ */
+function urlForLog(url: RequestInfo): string {
+  const raw = typeof url === 'string' ? url : url.url;
+  return sanitizeUrl(raw);
+}
+
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
@@ -559,13 +575,14 @@ async function handleRateLimitedResponse(
   const { body, code } = isHardRateLimit
     ? await peekRateLimitBody(response)
     : { body: undefined, code: undefined };
+  const safeUrl = urlForLog(url);
 
   // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
     logger.debug(
-      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -575,7 +592,7 @@ async function handleRateLimitedResponse(
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
-        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
@@ -585,7 +602,7 @@ async function handleRateLimitedResponse(
   }
 
   logger.debug(
-    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
   await handleRateLimit(response);
 }
@@ -652,7 +669,9 @@ export async function fetchWithRetries(
 
       const errorMessage = formatFetchErrorMessage(error);
 
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      logger.debug(
+        `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
+      );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);

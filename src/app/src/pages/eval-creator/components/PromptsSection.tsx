@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -11,18 +12,40 @@ import {
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import PromptDialog from './PromptDialog';
 
-const PromptsSection = () => {
+interface PromptsSectionProps {
+  onOpenYamlEditor?: () => void;
+}
+
+const getManagedPromptsLabel = (prompts: unknown): string => {
+  if (typeof prompts === 'string') {
+    return prompts;
+  }
+
+  if (Array.isArray(prompts)) {
+    return `${prompts.length} YAML prompt entr${prompts.length === 1 ? 'y' : 'ies'}`;
+  }
+
+  return 'YAML prompt map';
+};
+
+const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
   const { config, updateConfig } = useStore();
-  const prompts = (config.prompts || []) as string[];
+  const { showToast } = useToast();
+  const rawPrompts = config.prompts;
+  const canEditInlinePrompts =
+    rawPrompts === undefined ||
+    (Array.isArray(rawPrompts) && rawPrompts.every((prompt) => typeof prompt === 'string'));
+  const prompts = canEditInlinePrompts ? ((rawPrompts || []) as string[]) : [];
   const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,9 +69,19 @@ const PromptsSection = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const text = e.target?.result?.toString();
-        if (text) {
-          setPrompts([...prompts, text]);
+        if (!text || text.trim() === '') {
+          showToast('The file appears to be empty. Please select a file with content.', 'error');
+          event.target.value = '';
+          return;
         }
+
+        setPrompts([...prompts, text]);
+        showToast('Prompt imported successfully', 'success');
+        event.target.value = '';
+      };
+      reader.onerror = () => {
+        showToast('Failed to read file', 'error');
+        event.target.value = '';
       };
       reader.readAsText(file);
     }
@@ -88,7 +121,10 @@ const PromptsSection = () => {
     const truncated = text.length > 250 ? text.slice(0, 250) + ' ...' : text;
     return truncated.split(/({{\w+}})/g).map((part: string, i: number) =>
       /{{\s*(\w+)\s*}}/g.test(part) ? (
-        <span key={i} className="bg-primary/20 text-primary px-1 py-0.5 rounded font-mono text-xs">
+        <span
+          key={i}
+          className="rounded border border-primary/20 bg-primary/10 px-1 py-0.5 font-mono text-xs text-foreground"
+        >
           {part}
         </span>
       ) : (
@@ -99,144 +135,190 @@ const PromptsSection = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Prompts</h2>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <label className="cursor-pointer" aria-label="Upload prompt from file">
-                <Button variant="ghost" size="icon" asChild>
-                  <span>
-                    <UploadIcon className="size-4" />
-                  </span>
-                </Button>
-                <input
-                  type="file"
-                  accept=".txt,.md"
-                  onChange={handleAddPromptFromFile}
-                  className="hidden"
-                  aria-label="Upload prompt from file"
-                />
-              </label>
-            </TooltipTrigger>
-            <TooltipContent>Upload prompt from file</TooltipContent>
-          </Tooltip>
-
-          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
-
-          {prompts.length === 0 && (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                const examplePrompt =
-                  'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
-                setPrompts([...prompts, examplePrompt]);
-              }}
-            >
-              Add Example
+      {!canEditInlinePrompts && (
+        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
+          <AlertContent>
+            <AlertTitle>Managed in YAML</AlertTitle>
+            <AlertDescription>
+              This prompt configuration is loaded from{' '}
+              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
+                {getManagedPromptsLabel(rawPrompts)}
+              </code>
+              . Use the YAML editor to update it.
+            </AlertDescription>
+          </AlertContent>
+          {onOpenYamlEditor && (
+            <Button variant="outline" size="sm" onClick={onOpenYamlEditor}>
+              Edit YAML
             </Button>
+          )}
+        </Alert>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-xl font-semibold">Prompts</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {canEditInlinePrompts && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="cursor-pointer" aria-label="Upload prompt from file">
+                    <Button variant="ghost" size="icon" asChild>
+                      <span>
+                        <UploadIcon className="size-4" />
+                      </span>
+                    </Button>
+                    <input
+                      type="file"
+                      accept=".txt,.md"
+                      onChange={handleAddPromptFromFile}
+                      className="hidden"
+                      aria-label="Upload prompt from file"
+                    />
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent>Upload prompt from file</TooltipContent>
+              </Tooltip>
+
+              <Button
+                onClick={() => setPromptDialogOpen(true)}
+                className="dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                Add Prompt
+              </Button>
+
+              {prompts.length === 0 && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const examplePrompt =
+                      'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
+                    setPrompts([...prompts, examplePrompt]);
+                  }}
+                >
+                  Add Example
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Prompts List */}
       <div className="rounded-lg border border-border overflow-hidden">
-        {prompts.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">No prompts added yet.</div>
-        ) : (
-          <div className="divide-y divide-border">
-            {prompts.map((prompt, index) => (
-              <div
-                key={index}
-                onClick={() => handleEditPrompt(index)}
-                className={cn(
-                  'flex items-center justify-between p-4 cursor-pointer',
-                  'hover:bg-muted/50 transition-colors',
-                )}
-              >
-                <p className="text-sm flex-1 mr-4">
-                  <span className="text-muted-foreground font-medium">Prompt #{index + 1}: </span>
-                  {highlightVars(prompt)}
-                </p>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditPrompt(index);
-                        }}
-                      >
-                        <EditIcon className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit</TooltipContent>
-                  </Tooltip>
+        {canEditInlinePrompts ? (
+          prompts.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">No prompts added yet.</div>
+          ) : (
+            <div className="divide-y divide-border">
+              {prompts.map((prompt, index) => (
+                <div
+                  key={index}
+                  onClick={() => handleEditPrompt(index)}
+                  className={cn(
+                    'flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between',
+                    'hover:bg-muted/50 transition-colors',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleEditPrompt(index);
+                    }}
+                    aria-label={`Open prompt ${index + 1} for editing`}
+                    className="flex-1 rounded-sm text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mr-4"
+                  >
+                    <span className="text-muted-foreground font-medium">Prompt #{index + 1}: </span>
+                    {highlightVars(prompt)}
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditPrompt(index);
+                          }}
+                          aria-label={`Edit prompt ${index + 1}`}
+                        >
+                          <EditIcon className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit</TooltipContent>
+                    </Tooltip>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(event) => handleDuplicatePrompt(event, index)}
-                        aria-label={`Duplicate prompt ${index + 1}`}
-                      >
-                        <ContentCopyIcon className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Duplicate</TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(event) => handleDuplicatePrompt(event, index)}
+                          aria-label={`Duplicate prompt ${index + 1}`}
+                        >
+                          <ContentCopyIcon className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Duplicate</TooltipContent>
+                    </Tooltip>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(event) => handleRemovePrompt(event, index)}
-                        aria-label={`Delete prompt ${index + 1}`}
-                      >
-                        <DeleteIcon className="size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Delete</TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(event) => handleRemovePrompt(event, index)}
+                          aria-label={`Delete prompt ${index + 1}`}
+                        >
+                          <DeleteIcon className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Delete</TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )
+        ) : (
+          <div className="p-8 text-center text-muted-foreground">
+            Prompt entries from YAML are not editable in the UI editor.
           </div>
         )}
       </div>
 
       {/* Prompt Dialog */}
-      <PromptDialog
-        open={promptDialogOpen}
-        prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
-        index={editingPromptIndex === null ? 0 : editingPromptIndex}
-        isEditing={editingPromptIndex !== null}
-        onAdd={(newPrompt) => {
-          if (editingPromptIndex === null) {
-            setPrompts([...prompts, newPrompt]);
-          } else {
-            handleChangePrompt(editingPromptIndex, newPrompt);
-          }
-          setEditingPromptIndex(null);
-        }}
-        onCancel={() => {
-          setEditingPromptIndex(null);
-          setPromptDialogOpen(false);
-        }}
-      />
+      {canEditInlinePrompts && (
+        <PromptDialog
+          open={promptDialogOpen}
+          prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
+          index={editingPromptIndex === null ? 0 : editingPromptIndex}
+          isEditing={editingPromptIndex !== null}
+          onAdd={(newPrompt) => {
+            if (editingPromptIndex === null) {
+              setPrompts([...prompts, newPrompt]);
+            } else {
+              handleChangePrompt(editingPromptIndex, newPrompt);
+            }
+            setEditingPromptIndex(null);
+          }}
+          onCancel={() => {
+            setEditingPromptIndex(null);
+            setPromptDialogOpen(false);
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Prompt</DialogTitle>
+            <DialogTitle>Delete prompt?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this prompt? This action cannot be undone.
+              This removes the prompt from this evaluation. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

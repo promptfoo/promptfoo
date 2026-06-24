@@ -47,6 +47,11 @@ describe('ApiSettingsModal', () => {
     expect(screen.getByText('API and Sharing Settings')).toBeInTheDocument();
   });
 
+  it('keeps space for the close control beside the title', () => {
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    expect(screen.getByText('API and Sharing Settings')).toHaveClass('pr-8');
+  });
+
   it('shows current API URL in text field', () => {
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL') as HTMLInputElement;

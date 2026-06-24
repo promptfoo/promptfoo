@@ -258,7 +258,7 @@ export default function SuggestionsDialog({
                           <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word rounded bg-muted/50 p-4 pr-12 font-mono text-sm">
                             {suggestion.value}
                           </pre>
-                          <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                          <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                             <CopyButton value={suggestion.value} />
                           </div>
                         </div>

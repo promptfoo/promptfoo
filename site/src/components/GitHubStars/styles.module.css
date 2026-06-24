@@ -32,3 +32,9 @@
     display: none;
   }
 }
+
+@media screen and (max-width: 1280px) {
+  :global(.docs-wrapper) .githubStars {
+    display: none;
+  }
+}

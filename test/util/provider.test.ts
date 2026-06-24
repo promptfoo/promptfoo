@@ -11,6 +11,7 @@ import {
   isOpenAiProvider,
   isProviderAllowed,
   providerToIdentifier,
+  sanitizeProviderIdForLog,
 } from '../../src/util/provider';
 import {
   canonicalizeProviderId,
@@ -337,6 +338,28 @@ describe('getProviderDescription', () => {
   });
 });
 
+describe('sanitizeProviderIdForLog', () => {
+  it('redacts credentials in URL provider IDs', () => {
+    expect(
+      sanitizeProviderIdForLog(
+        'http://example.com/api?cursor=sk-123456789012345678901234567890&safe=ok',
+      ),
+    ).toBe('http://example.com/api?cursor=%5BREDACTED%5D&safe=ok');
+  });
+
+  it('leaves non-URL provider IDs unchanged', () => {
+    expect(sanitizeProviderIdForLog('openai:gpt-4.1')).toBe('openai:gpt-4.1');
+  });
+
+  it('preserves provider descriptions while sanitizing URL IDs', () => {
+    expect(
+      sanitizeProviderIdForLog(
+        'http://example.com/api?cursor=sk-123456789012345678901234567890 (HttpProvider)',
+      ),
+    ).toBe('http://example.com/api?cursor=%5BREDACTED%5D (HttpProvider)');
+  });
+});
+
 describe('doesProviderRefMatch', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
     createMockProvider({ id, label });
@@ -546,6 +569,15 @@ describe('checkProviderApiKeys', () => {
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(1);
     expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+  });
+
+  it('uses descriptions only when requested for user-facing error output', () => {
+    const provider = providerWithKey('openai:gpt-4', { label: 'primary' });
+
+    expect(checkProviderApiKeys([provider]).get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+    expect(
+      checkProviderApiKeys([provider], { useDescriptions: true }).get('OPENAI_API_KEY'),
+    ).toEqual(['primary (openai:gpt-4)']);
   });
 
   it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {

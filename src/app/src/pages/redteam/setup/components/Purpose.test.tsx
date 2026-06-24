@@ -148,6 +148,16 @@ describe('Purpose Component', () => {
     expect(descriptionElement).toBeInTheDocument();
   });
 
+  it('should keep application detail accordion headers responsive on small screens', () => {
+    renderComponent({ onNext: vi.fn() });
+
+    const coreDetailsHeading = screen.getByText('Core Application Details');
+    const headerGroup = coreDetailsHeading.parentElement;
+
+    expect(headerGroup).toHaveClass('flex-col', 'items-start', 'sm:flex-row', 'sm:items-center');
+    expect(coreDetailsHeading).toHaveClass('text-left');
+  });
+
   it("should display the description 'Describe the foundation model so we can generate targeted tests.' when testMode is set to 'model'", async () => {
     const user = userEvent.setup();
     renderComponent({ onNext: vi.fn() });

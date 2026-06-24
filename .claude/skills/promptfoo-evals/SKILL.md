@@ -1,9 +1,11 @@
 ---
 name: promptfoo-evals
 description: >
-  Creates or updates promptfoo evaluation suites (promptfooconfig.yaml, prompts,
-  tests, assertions, providers). Use when adding eval coverage, debugging
-  regressions, or scaffolding a new eval matrix.
+  Write, refine, run, and QA promptfoo evaluation suites:
+  promptfooconfig.yaml, prompts, providers, vars, tests, assertions, model-graded
+  rubrics, transforms, datasets, exports, and CI gates. Use for non-redteam eval
+  coverage, regression tests, or new eval matrices. Do not use for adversarial
+  redteam plugin or strategy setup.
 ---
 
 # Writing Promptfoo Evals
@@ -168,10 +170,8 @@ during development to avoid stale results. Only run eval if credentials are
 available and safe to call.
 
 ```bash
-npx promptfoo@latest validate -c <config>
-npx promptfoo@latest eval -c <config> --no-cache
-npx promptfoo@latest eval -c <config> -o output.json --no-cache
-npx promptfoo@latest view
+npx promptfoo@latest validate config -c <config>
+npx promptfoo@latest eval -c <config> -o output.json --no-cache --no-share
 ```
 
 For CI/non-UI workflows, prefer the `-o output.json` command and inspect
@@ -180,9 +180,13 @@ For CI/non-UI workflows, prefer the `-o output.json` command and inspect
 If working in the promptfoo repo itself, prefer the local build:
 
 ```bash
-npm run local -- validate -c <config>
-npm run local -- eval -c <config> --no-cache --env-file .env
+source ~/.nvm/nvm.sh && nvm use
+npm run local -- validate config -c <config>
+npm run local -- eval -c <config> -o output.json --no-cache --no-share
 ```
+
+Add `--env-file .env` only when the eval needs local credentials and that file
+exists.
 
 Do not run `npm run local -- view` unless explicitly asked.
 

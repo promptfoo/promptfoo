@@ -43,7 +43,7 @@ promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10+
-- Node.js 20.20+ or 22.22+
+- Node.js `^20.20.0` or `>=22.22.0`
 - OpenAI API access (for GPT-5, GPT-5-mini, or other models)
 - An OpenAI API key
 
@@ -77,7 +77,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js 20.20+ or 22.22+.
+In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`.
 
 **Why do we need these?**
 

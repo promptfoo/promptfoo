@@ -19,30 +19,39 @@ const defaultProps = {
 };
 
 describe('MediaFilters', () => {
-  describe('type filter tabs', () => {
-    it('renders all type filter tabs', () => {
+  describe('type filter controls', () => {
+    it('renders all type filter controls', () => {
       render(<MediaFilters {...defaultProps} />);
 
-      expect(screen.getByRole('tab', { name: /All/i })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: /Images/i })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: /Videos/i })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: /Audio/i })).toBeInTheDocument();
-      expect(screen.getByRole('tab', { name: /Other/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Images' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Audio' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Other' })).toBeInTheDocument();
+    });
+
+    it('keeps compact type-filter labels available to assistive technology', () => {
+      render(<MediaFilters {...defaultProps} />);
+
+      expect(screen.getByRole('tab', { name: 'Videos' }).querySelector('span')).toHaveClass(
+        'sr-only',
+        'sm:not-sr-only',
+      );
     });
 
     it('shows the current type filter as selected', () => {
       render(<MediaFilters {...defaultProps} typeFilter="image" />);
 
-      const imagesTab = screen.getByRole('tab', { name: /Images/i });
-      expect(imagesTab).toHaveAttribute('data-state', 'active');
+      const imagesTab = screen.getByRole('tab', { name: 'Images' });
+      expect(imagesTab).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('calls onTypeFilterChange when a tab is clicked', async () => {
+    it('calls onTypeFilterChange when a control is clicked', async () => {
       const user = userEvent.setup();
       const onTypeFilterChange = vi.fn();
       render(<MediaFilters {...defaultProps} onTypeFilterChange={onTypeFilterChange} />);
 
-      await user.click(screen.getByRole('tab', { name: /Videos/i }));
+      await user.click(screen.getByRole('tab', { name: 'Videos' }));
 
       expect(onTypeFilterChange).toHaveBeenCalledWith('video');
     });

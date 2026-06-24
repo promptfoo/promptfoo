@@ -162,6 +162,17 @@ describe('Plugins - State Management Unit Tests', () => {
       expect(pluginsTab.textContent).toContain('Plugins (3)');
     });
 
+    it('lets the tab strip wrap on narrow screens', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tablist')).toHaveClass(
+        'max-w-full',
+        'justify-start',
+        'flex-wrap',
+        'overflow-visible',
+      );
+    });
+
     it('should derive set with object plugins from config', () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {

@@ -128,6 +128,13 @@ function isZeroSpanId(id: string): boolean {
   return /^0+$/.test(id) || BASE64_ZERO_SPAN_ID.test(id);
 }
 
+// OTEL trace_id is 32 hex chars / 16 bytes. Its base64 representation is
+// 22 `A` characters followed by optional `==` padding.
+const BASE64_ZERO_TRACE_ID = /^A{22}(?:==)?$/;
+function isZeroTraceId(id: string): boolean {
+  return /^0+$/.test(id) || BASE64_ZERO_TRACE_ID.test(id);
+}
+
 function randomSpanId(): string {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -156,8 +163,22 @@ function resolveLogSpanName(attributes: Record<string, any>, bodyValue: unknown)
 
 type OTLPFormat = 'json' | 'protobuf';
 
+export interface OTLPReceiverTracePolicy {
+  evaluationId: string;
+  /** Tool names whose tool-call spans should be normalized as command steps. */
+  commandToolNames?: string[];
+  /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
+  redactAttributes?: string[];
+}
+
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
+  /** Tool names whose tool-call spans should be normalized as command steps. */
+  commandToolNames?: string[];
+  /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
+  redactAttributes?: string[];
+  /** Per-evaluation policy for receiver-created traces emitted while this receiver is shared. */
+  tracePolicy?: OTLPReceiverTracePolicy;
 }
 
 interface TraceInfo {
@@ -168,6 +189,11 @@ interface TraceInfo {
 interface GroupedTraces {
   spansByTrace: Map<string, SpanData[]>;
   traceInfoById: Map<string, TraceInfo>;
+}
+
+interface RegisteredTracePolicy {
+  commandToolNames?: string[];
+  redactAttributePatterns: string[];
 }
 
 const SPAN_KIND_MAP: Record<number, string> = {
@@ -188,6 +214,47 @@ const OTLP_CONTENT_TYPES: Record<OTLPFormat, string> = {
 function normalizeAcceptFormats(acceptFormats?: OTLPFormat[]): OTLPFormat[] {
   const normalized = [...new Set(acceptFormats ?? DEFAULT_ACCEPT_FORMATS)];
   return normalized.length > 0 ? normalized : [...DEFAULT_ACCEPT_FORMATS];
+}
+
+function normalizeRedactAttributePatterns(redactAttributes?: string[]): string[] {
+  return [
+    ...new Set(
+      (redactAttributes ?? [])
+        .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
+        .filter((pattern) => pattern.length > 0),
+    ),
+  ];
+}
+
+function normalizeCommandToolNames(commandToolNames?: string[]): string[] | undefined {
+  const normalized = [
+    ...new Set(
+      (commandToolNames ?? [])
+        .map((name) => (typeof name === 'string' ? name.trim() : ''))
+        .filter((name) => name.length > 0),
+    ),
+  ];
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeTracePolicy(policy: OTLPReceiverTracePolicy): RegisteredTracePolicy {
+  return {
+    commandToolNames: normalizeCommandToolNames(policy.commandToolNames),
+    redactAttributePatterns: normalizeRedactAttributePatterns(policy.redactAttributes),
+  };
+}
+
+function metadataFromTracePolicy(
+  policy: RegisteredTracePolicy,
+): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {};
+  if (policy.commandToolNames) {
+    metadata.commandToolNames = policy.commandToolNames;
+  }
+  if (policy.redactAttributePatterns.length > 0) {
+    metadata.otlpHttpRedactAttributes = policy.redactAttributePatterns;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 function getRequestFormat(contentType: string | string[] | undefined): OTLPFormat | null {
@@ -211,14 +278,113 @@ export class OTLPReceiver {
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
+  private commandToolNames?: string[];
+  private redactAttributePatterns: string[] = [];
+  private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
+    this.setCommandToolNames(options.commandToolNames);
+    this.setRedactAttributes(options.redactAttributes);
+    this.registerTracePolicy(options.tracePolicy);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
+  }
+
+  setRedactAttributes(redactAttributes?: string[]): void {
+    this.redactAttributePatterns = normalizeRedactAttributePatterns(redactAttributes);
+  }
+
+  setCommandToolNames(commandToolNames?: string[]): void {
+    this.commandToolNames = normalizeCommandToolNames(commandToolNames);
+  }
+
+  registerTracePolicy(policy?: OTLPReceiverTracePolicy): void {
+    if (!policy?.evaluationId) {
+      return;
+    }
+    this.tracePoliciesByEvaluationId.set(policy.evaluationId, normalizeTracePolicy(policy));
+  }
+
+  // Drop a finished evaluation's policy so the map can't grow unbounded on a long-lived
+  // (shared) receiver. No-op if the receiver already stopped — the singleton is discarded.
+  deregisterTracePolicy(evaluationId?: string): void {
+    if (evaluationId) {
+      this.tracePoliciesByEvaluationId.delete(evaluationId);
+    }
+  }
+
+  private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
+    if (redactAttributePatterns.length === 0) {
+      return false;
+    }
+    const lowered = key.toLowerCase();
+    return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
+  }
+
+  private redactAttributeValue(value: unknown, redactAttributePatterns: string[]): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.redactAttributeValue(item, redactAttributePatterns));
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        this.shouldRedactAttribute(key, redactAttributePatterns)
+          ? '[REDACTED]'
+          : this.redactAttributeValue(nestedValue, redactAttributePatterns),
+      ]),
+    );
+  }
+
+  redactAttributes(
+    attributes: Record<string, unknown> | undefined,
+    redactAttributePatterns = this.redactAttributePatterns,
+  ): Record<string, unknown> {
+    if (!attributes || redactAttributePatterns.length === 0) {
+      return attributes ?? {};
+    }
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
+        ? '[REDACTED]'
+        : this.redactAttributeValue(value, redactAttributePatterns);
+    }
+    return redacted;
+  }
+
+  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
+    if (redactAttributePatterns.length === 0) {
+      return span;
+    }
+    const attributes = span.attributes ?? {};
+    // Collect the values of attributes whose KEY will be redacted. A span `name` or
+    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
+    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
+    // credential into an error message) must be scrubbed too — otherwise the secret leaks
+    // through a span field the operator believes `redactAttributes` covers.
+    const redactedSourceValues = new Set<string>();
+    for (const [key, value] of Object.entries(attributes)) {
+      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
+        redactedSourceValues.add(value);
+      }
+    }
+    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
+    const scrubEcho = <T extends string | undefined>(value: T): T =>
+      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
+
+    return {
+      ...span,
+      name: scrubEcho(span.name),
+      statusMessage: scrubEcho(span.statusMessage),
+      attributes: this.redactAttributes(attributes, redactAttributePatterns),
+    };
   }
 
   private setupMiddleware(): void {
@@ -420,17 +586,23 @@ export class OTLPReceiver {
 
   private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
     await this.createTraceRecords(traceInfoById);
-    await this.storeSpans(spansByTrace);
+    await this.storeSpans(spansByTrace, traceInfoById);
   }
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
     for (const [traceId, info] of traceInfoById) {
+      if (!info.evaluationId || !info.testCaseId) {
+        logger.debug(`[OtlpReceiver] Skipping trace record creation for unlinked trace ${traceId}`);
+        continue;
+      }
+
       try {
         logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
         await this.traceStore.createTrace({
           traceId,
-          evaluationId: info.evaluationId || '',
-          testCaseId: info.testCaseId || '',
+          evaluationId: info.evaluationId,
+          testCaseId: info.testCaseId,
+          metadata: this.getTraceMetadata(info),
         });
       } catch (error) {
         // Trace might already exist, which is fine
@@ -439,11 +611,56 @@ export class OTLPReceiver {
     }
   }
 
-  private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
+  private getRegisteredTracePolicy(info?: TraceInfo): RegisteredTracePolicy | undefined {
+    return info?.evaluationId ? this.tracePoliciesByEvaluationId.get(info.evaluationId) : undefined;
+  }
+
+  private getFallbackTracePolicy(): RegisteredTracePolicy {
+    return {
+      commandToolNames: this.commandToolNames,
+      redactAttributePatterns: this.redactAttributePatterns,
+    };
+  }
+
+  private getTraceMetadata(info?: TraceInfo): Record<string, unknown> | undefined {
+    return metadataFromTracePolicy(
+      this.getRegisteredTracePolicy(info) ?? this.getFallbackTracePolicy(),
+    );
+  }
+
+  private async storeSpans(
+    spansByTrace: Map<string, SpanData[]>,
+    traceInfoById: Map<string, TraceInfo>,
+  ): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+      const redactAttributePatterns = await this.getRedactAttributePatterns(
+        traceId,
+        traceInfoById.get(traceId),
+      );
+      const sanitized =
+        redactAttributePatterns.length > 0
+          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
+          : spans;
+      await this.traceStore.addSpans(traceId, sanitized, {
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
+      });
     }
+  }
+
+  private async getRedactAttributePatterns(traceId: string, info?: TraceInfo): Promise<string[]> {
+    const metadata = await this.traceStore.getTraceMetadata(traceId);
+    if (metadata === undefined) {
+      return (
+        this.getRegisteredTracePolicy(info)?.redactAttributePatterns ??
+        this.getFallbackTracePolicy().redactAttributePatterns
+      );
+    }
+
+    return Array.isArray(metadata.otlpHttpRedactAttributes)
+      ? normalizeRedactAttributePatterns(metadata.otlpHttpRedactAttributes)
+      : [];
   }
 
   private handleProcessingError(error: unknown, res: express.Response): void {
@@ -552,11 +769,13 @@ export class OTLPReceiver {
   ): ParsedTrace | null {
     // Prefer an inline traceId on the log record (set when the SDK propagated
     // TRACEPARENT into its logs context). Fall back to the resource attribute
-    // promptfoo.trace_id — the claude-agent-sdk provider injects this via
-    // OTEL_RESOURCE_ATTRIBUTES because Claude Code's logs signal does not
-    // inherit TRACEPARENT. Without either, we can't link anywhere useful.
-    const rawTraceId =
-      log.traceId ?? getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_TRACE_ID);
+    // promptfoo.trace_id — agent providers inject this via
+    // OTEL_RESOURCE_ATTRIBUTES because some log signals do not inherit
+    // TRACEPARENT. Without either, we can't link anywhere useful.
+    const hasValidInlineTraceId = !!log.traceId && !isZeroTraceId(log.traceId);
+    const rawTraceId = hasValidInlineTraceId
+      ? log.traceId
+      : getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_TRACE_ID);
     if (!rawTraceId) {
       logger.debug(
         `[OtlpReceiver] Dropping log: no traceId and no ${PROMPTFOO_RESOURCE_ATTR_TRACE_ID} resource attribute (scope=${scopeLog.scope?.name ?? 'unknown'}). Ensure TRACEPARENT is propagated or OTEL_RESOURCE_ATTRIBUTES is set by the provider.`,
@@ -826,13 +1045,26 @@ export class OTLPReceiver {
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 
     return new Promise((resolve, reject) => {
-      this.server = this.app.listen(port, host, () => {
+      let settled = false;
+      const server = this.app.listen(port, host, () => {
+        // Express invokes this callback even when the bind fails (e.g. EADDRINUSE), with
+        // `server.listening === false`. Only resolve once the socket is truly bound; otherwise
+        // let the 'error' handler reject so `failOnReceiverStartFailure` startup actually fails.
+        if (settled || !server.listening) {
+          return;
+        }
+        settled = true;
         logger.info(`[OtlpReceiver] Listening on http://${host}:${port}`);
         logger.debug('[OtlpReceiver] Receiver fully initialized and ready to accept traces');
         resolve();
       });
+      this.server = server;
 
-      this.server.on('error', (error: Error) => {
+      server.on('error', (error: Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
         logger.error(`[OtlpReceiver] Failed to start: ${error}`);
         reject(error);
       });
@@ -879,6 +1111,9 @@ let otlpReceiver: OTLPReceiver | null = null;
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
     otlpReceiver.setAcceptFormats(options?.acceptFormats);
+    otlpReceiver.setCommandToolNames(options?.commandToolNames);
+    otlpReceiver.setRedactAttributes(options?.redactAttributes);
+    otlpReceiver.registerTracePolicy(options?.tracePolicy);
     return otlpReceiver;
   }
 
@@ -890,10 +1125,31 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
+  extra?: {
+    commandToolNames?: string[];
+    redactAttributes?: string[];
+    tracePolicy?: OTLPReceiverTracePolicy;
+  },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  const receiver = getOTLPReceiver({ acceptFormats });
-  await receiver.listen(port, host);
+  const receiver = getOTLPReceiver({ acceptFormats, ...extra });
+  try {
+    await receiver.listen(port, host);
+  } catch (error) {
+    // A receiver that never bound must not dictate options for a later retry.
+    if (otlpReceiver === receiver) {
+      otlpReceiver = null;
+    }
+    throw error;
+  }
+}
+
+export function registerOTLPReceiverTracePolicy(policy?: OTLPReceiverTracePolicy): void {
+  otlpReceiver?.registerTracePolicy(policy);
+}
+
+export function deregisterOTLPReceiverTracePolicy(evaluationId?: string): void {
+  otlpReceiver?.deregisterTracePolicy(evaluationId);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {

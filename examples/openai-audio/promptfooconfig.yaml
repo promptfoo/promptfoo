@@ -4,10 +4,10 @@ prompts:
   - file://audio-input.json
 
 providers:
-  - id: openai:chat:gpt-4o-audio-preview
+  - id: openai:chat:gpt-audio-1.5
     config:
       modalities: ['text', 'audio']
-  - id: openai:chat:gpt-4o-mini-audio-preview
+  - id: openai:chat:gpt-audio-mini
     config:
       modalities: ['text']
 

@@ -18,6 +18,7 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 
 // Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+const mockGetSessionId = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
@@ -75,7 +76,7 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: mockIsBasicRefusal,
-  getSessionId: vi.fn(),
+  getSessionId: mockGetSessionId,
 }));
 
 vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal) => {
@@ -114,6 +115,9 @@ describe('HydraProvider', () => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
+    mockGetSessionId.mockReset().mockImplementation((response, context) => {
+      return response?.sessionId ?? context?.vars?.sessionId;
+    });
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = createMockProvider({ id: 'mock-agent', delay: 0 });
@@ -241,12 +245,13 @@ describe('HydraProvider', () => {
     });
 
     it('should create agent provider with correct config', () => {
-      new HydraProvider({ injectVar: 'input' });
+      new HydraProvider({ injectVar: 'input', targetId: 'cloud-target-123' });
 
       expect(PromptfooChatCompletionProvider).toHaveBeenCalledWith({
         task: 'hydra-decision',
         jsonOnly: true,
         preferSmallModel: false,
+        targetId: 'cloud-target-123',
       });
     });
   });
@@ -484,6 +489,71 @@ describe('HydraProvider', () => {
       expect(secondCall[1]).toMatchObject({
         sessionId: 'session-123',
       });
+    });
+
+    it('should reuse a client-generated sessionId while sending only the latest turn', async () => {
+      vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (_prompt, vars) =>
+        String(vars.input),
+      );
+
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Remember violet.',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        })
+        .mockResolvedValueOnce({
+          output: 'What did I ask you to remember?',
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+      const targetSessions = new Map<string, string[]>();
+      mockTargetProvider.callApi.mockImplementation(async (prompt, targetContext) => {
+        const sessionId = String(targetContext?.vars?.sessionId);
+        const turns = targetSessions.get(sessionId) ?? [];
+        const output =
+          prompt === 'What did I ask you to remember?' && turns[0] === 'Remember violet.'
+            ? 'violet'
+            : 'stored';
+        turns.push(prompt as string);
+        targetSessions.set(sessionId, turns);
+        return {
+          output,
+          tokenUsage: { total: 50, prompt: 25, completion: 25 },
+        };
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal', sessionId: 'client-session-123' },
+        prompt: { raw: '{{input}}', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockTargetProvider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual([
+        'Remember violet.',
+        'What did I ask you to remember?',
+      ]);
+      expect(
+        mockTargetProvider.callApi.mock.calls.map(([, targetContext]) => targetContext?.vars),
+      ).toEqual([
+        expect.objectContaining({ sessionId: 'client-session-123' }),
+        expect.objectContaining({ sessionId: 'client-session-123' }),
+      ]);
+      expect(result.output).toBe('violet');
+      expect(result.metadata?.sessionId).toBe('client-session-123');
+      expect(result.metadata?.hydraRoundsCompleted).toBe(2);
     });
 
     it('should escape nunjucks syntax in stateful mode', async () => {
@@ -1198,7 +1268,7 @@ describe('HydraProvider', () => {
       });
     });
 
-    it('passes target provider raw response into the grader', async () => {
+    it('passes target response evidence and image outputs into the grader', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -1206,7 +1276,8 @@ describe('HydraProvider', () => {
 
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
       });
 
       const provider = new HydraProvider({
@@ -1227,9 +1298,16 @@ describe('HydraProvider', () => {
       await provider.callApi('', context);
 
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
-        providerResponse?: { raw?: unknown };
+        imageOutputs?: Array<{ data?: string; mimeType?: string }>;
+        providerResponse?: { output?: unknown; raw?: unknown };
       };
-      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+      expect(gradingContext.imageOutputs).toEqual([
+        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+      ]);
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+      });
     });
   });
 

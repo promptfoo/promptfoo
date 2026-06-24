@@ -360,10 +360,8 @@ defaultTest:
 Always use `--no-cache` during development to avoid stale results.
 
 ```bash
-npx promptfoo@latest validate -c path/to/promptfooconfig.yaml
-npx promptfoo@latest eval -c path/to/promptfooconfig.yaml --no-cache
-npx promptfoo@latest eval -c path/to/promptfooconfig.yaml -o output.json --no-cache
-npx promptfoo@latest view
+npx promptfoo@latest validate config -c path/to/promptfooconfig.yaml
+npx promptfoo@latest eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
 ```
 
 For CI/non-UI workflows, use `-o output.json` and check `success`, `score`, and
@@ -372,8 +370,12 @@ For CI/non-UI workflows, use `-o output.json` and check `success`, `score`, and
 Inside the promptfoo repo, use the local build:
 
 ```bash
-npm run local -- validate -c path/to/promptfooconfig.yaml
-npm run local -- eval -c path/to/promptfooconfig.yaml --no-cache --env-file .env
+source ~/.nvm/nvm.sh && nvm use
+npm run local -- validate config -c path/to/promptfooconfig.yaml
+npm run local -- eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
 ```
+
+Add `--env-file .env` only when the eval needs local credentials and that file
+exists.
 
 Do not run `npm run local -- view` unless explicitly asked.

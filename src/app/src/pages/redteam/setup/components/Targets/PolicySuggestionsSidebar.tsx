@@ -94,6 +94,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Dismiss suggestion ${policy.name}`}
                           className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();

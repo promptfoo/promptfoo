@@ -212,6 +212,7 @@ export function LogViewer({ logs }: LogViewerProps) {
         {showScrollButton && !isFullscreen && (
           <Button
             size="icon"
+            aria-label="Scroll to bottom"
             className="absolute bottom-4 right-4 size-8 rounded-full shadow-md"
             onClick={() => scrollToBottom(logsContainerRef)}
           >
@@ -247,6 +248,7 @@ export function LogViewer({ logs }: LogViewerProps) {
             {showScrollButton && isFullscreen && (
               <Button
                 size="icon"
+                aria-label="Scroll to bottom"
                 className="fixed bottom-4 right-4 size-8 rounded-full shadow-md"
                 onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
               >

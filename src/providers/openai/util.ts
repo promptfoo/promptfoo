@@ -24,6 +24,7 @@ type OpenAIModelCost = {
 
 type OpenAIModelInfo = {
   id: string;
+  type?: string;
   cost?: OpenAIModelCost;
 };
 
@@ -131,29 +132,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 1.1 / 1e6,
       output: 4.4 / 1e6,
-    },
-  })),
-  ...[
-    'gpt-4o-audio-preview',
-    'gpt-4o-audio-preview-2024-12-17',
-    'gpt-4o-audio-preview-2024-10-01',
-    'gpt-4o-audio-preview-2025-06-03',
-  ].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
-  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
     },
   })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
@@ -462,6 +440,32 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   })),
 ];
 
+const RETIRED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
+  ...[
+    'gpt-4o-audio-preview',
+    'gpt-4o-audio-preview-2024-12-17',
+    'gpt-4o-audio-preview-2024-10-01',
+    'gpt-4o-audio-preview-2025-06-03',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  })),
+  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  })),
+];
+
 // Deep research models for Responses API
 export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
@@ -497,6 +501,23 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   },
 ];
 
+/**
+ * Realtime model IDs that exist on a different endpoint family from the conversational
+ * Realtime API and therefore must NOT be routed through `openai:realtime:<model>`.
+ *
+ * - `gpt-realtime-translate` uses a dedicated translation-session endpoint.
+ * - `gpt-realtime-whisper` is a transcription-only model intended to be passed as
+ *   `input_audio_transcription.model` inside a conversational session, not used as a
+ *   standalone provider.
+ *
+ * Used by the provider routing layer to fail-fast with a clear error rather than
+ * silently exchanging an empty response over the wrong wire shape.
+ */
+export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
+  'gpt-realtime-translate',
+  'gpt-realtime-whisper',
+]);
+
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models
@@ -510,7 +531,43 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 64 / 1e6,
     },
   })),
-  // Legacy gpt-4o realtime preview models
+  {
+    id: 'gpt-realtime-2',
+    type: 'chat',
+    cost: {
+      input: 4 / 1e6,
+      output: 24 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
+  // Deprecated preview snapshot that remains available until July 23, 2026.
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  // gpt-realtime-mini models
+  ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
+    (model) => ({
+      id: model,
+      type: 'chat',
+      cost: {
+        input: 0.6 / 1e6,
+        output: 2.4 / 1e6,
+        audioInput: 10 / 1e6,
+        audioOutput: 20 / 1e6,
+      },
+    }),
+  ),
+];
+
+const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-4o-realtime-preview',
     type: 'chat',
@@ -541,7 +598,6 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 200 / 1e6,
     },
   },
-  // gpt-4o-mini realtime models
   {
     id: 'gpt-4o-mini-realtime-preview',
     type: 'chat',
@@ -552,29 +608,16 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 20 / 1e6,
     },
   },
-  {
-    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    type: 'chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  },
-  // gpt-realtime-mini models
-  ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
-    (model) => ({
-      id: model,
-      type: 'chat',
-      cost: {
-        input: 0.6 / 1e6,
-        output: 2.4 / 1e6,
-        audioInput: 10 / 1e6,
-        audioOutput: 20 / 1e6,
-      },
-    }),
-  ),
+];
+
+export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
+  ...OPENAI_CHAT_MODELS,
+  ...RETIRED_OPENAI_AUDIO_MODELS,
+  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_REALTIME_MODELS,
+  ...RETIRED_OPENAI_REALTIME_MODELS,
+  ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
@@ -627,13 +670,7 @@ export function calculateOpenAICost(
   audioCompletionTokens?: number,
 ): number | undefined {
   if (!audioPromptTokens && !audioCompletionTokens) {
-    return calculateCost(modelName, config, promptTokens, completionTokens, [
-      ...OPENAI_CHAT_MODELS,
-      ...OPENAI_COMPLETION_MODELS,
-      ...OPENAI_REALTIME_MODELS,
-      ...OPENAI_RESPONSES_ONLY_MODELS,
-      ...OPENAI_DEEP_RESEARCH_MODELS,
-    ]);
+    return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
   // Calculate with audio tokens
@@ -650,13 +687,7 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  const model = [
-    ...OPENAI_CHAT_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-    ...OPENAI_REALTIME_MODELS,
-    ...OPENAI_RESPONSES_ONLY_MODELS,
-    ...OPENAI_DEEP_RESEARCH_MODELS,
-  ].find((m) => m.id === modelName);
+  const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }

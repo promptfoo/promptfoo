@@ -26,7 +26,10 @@ const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
       {varsList.length > 0 ? (
         <div className="space-y-3">
           {Object.keys(vars).map((varName) => (
-            <div key={varName} className="grid grid-cols-[200px_1fr] gap-4 items-center">
+            <div
+              key={varName}
+              className="grid gap-2 sm:grid-cols-[minmax(8rem,12.5rem)_1fr] sm:items-center sm:gap-4"
+            >
               <Label htmlFor={`var-${varName}`} className="font-medium">
                 {varName}
               </Label>

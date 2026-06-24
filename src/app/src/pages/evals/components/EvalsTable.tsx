@@ -27,6 +27,7 @@ interface EvalsTableProps {
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
+  focusedDatasetId?: string | null;
   deletionEnabled?: boolean;
 }
 
@@ -35,6 +36,7 @@ export default function EvalsTable({
   focusedEvalId,
   showUtilityButtons = false,
   filterByDatasetId = false,
+  focusedDatasetId,
   deletionEnabled = false,
 }: EvalsTableProps) {
   if (filterByDatasetId) {
@@ -50,26 +52,33 @@ export default function EvalsTable({
   const location = useLocation();
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+        const query =
+          filterByDatasetId && focusedDatasetId
+            ? `?datasetId=${encodeURIComponent(focusedDatasetId)}`
+            : '';
+        const response = await callApi(`/results${query}`, { cache: 'no-store', signal });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as { data: EvalSummary[] };
+        setEvals(body.data);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [filterByDatasetId, focusedDatasetId],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -174,7 +183,11 @@ export default function EvalsTable({
         cell: ({ getValue }) => {
           const evalId = getValue<string>();
           if (evalId === focusedEvalId) {
-            return <span className="font-mono text-sm">{evalId}</span>;
+            return (
+              <span title={evalId} className="block truncate font-mono text-sm">
+                {evalId}
+              </span>
+            );
           }
           return (
             <Link
@@ -183,7 +196,8 @@ export default function EvalsTable({
                 e.preventDefault();
                 onEvalSelected(evalId);
               }}
-              className="text-primary hover:underline font-mono text-sm"
+              title={evalId}
+              className="block truncate font-mono text-sm text-primary hover:underline"
             >
               {evalId}
             </Link>
@@ -232,7 +246,11 @@ export default function EvalsTable({
           ]
         : []),
       {
-        accessorKey: 'description',
+        id: 'description',
+        // accessorFn (not accessorKey) ensures every row is searched. TanStack Table
+        // infers column types from the first row, so a leading row with description:
+        // null would silently drop this column from global search.
+        accessorFn: (row) => row.description || row.label,
         header: 'Description',
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;
@@ -321,6 +339,7 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
+        globalFilterLabel="Search evaluations"
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}

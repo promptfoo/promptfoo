@@ -11,6 +11,7 @@ interface SettingsState {
   showPrompts: boolean;
   showPassFail: boolean;
   showPassReasons: boolean;
+  showMetricPills: boolean;
   stickyHeader: boolean;
   maxImageWidth: number;
   maxImageHeight: number;
@@ -35,6 +36,8 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPassFail,
     showPassReasons,
     setShowPassReasons,
+    showMetricPills,
+    setShowMetricPills,
     stickyHeader,
     setStickyHeader,
     maxImageWidth,
@@ -62,6 +65,7 @@ export const useSettingsState = (isOpen: boolean) => {
     showPrompts,
     showPassFail,
     showPassReasons,
+    showMetricPills,
     stickyHeader,
     maxImageWidth,
     maxImageHeight,
@@ -78,6 +82,7 @@ export const useSettingsState = (isOpen: boolean) => {
         showPrompts,
         showPassFail,
         showPassReasons,
+        showMetricPills,
         stickyHeader,
         maxImageWidth,
         maxImageHeight,
@@ -93,6 +98,7 @@ export const useSettingsState = (isOpen: boolean) => {
     showPrompts,
     showPassFail,
     showPassReasons,
+    showMetricPills,
     stickyHeader,
     maxImageWidth,
     maxImageHeight,
@@ -109,6 +115,7 @@ export const useSettingsState = (isOpen: boolean) => {
       showPrompts !== initialState.showPrompts ||
       showPassFail !== initialState.showPassFail ||
       showPassReasons !== initialState.showPassReasons ||
+      showMetricPills !== initialState.showMetricPills ||
       stickyHeader !== initialState.stickyHeader ||
       maxImageWidth !== initialState.maxImageWidth ||
       maxImageHeight !== initialState.maxImageHeight
@@ -122,6 +129,7 @@ export const useSettingsState = (isOpen: boolean) => {
     showPrompts,
     showPassFail,
     showPassReasons,
+    showMetricPills,
     stickyHeader,
     maxImageWidth,
     maxImageHeight,
@@ -147,6 +155,7 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPrompts(false);
     setShowPassFail(true);
     setShowPassReasons(false);
+    setShowMetricPills(true);
     setShowInferenceDetails(true);
     setMaxTextLength(500);
     setLocalMaxTextLength(500);
@@ -160,6 +169,7 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPrompts,
     setShowPassFail,
     setShowPassReasons,
+    setShowMetricPills,
     setShowInferenceDetails,
     setMaxTextLength,
     setMaxImageWidth,

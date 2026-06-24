@@ -64,6 +64,18 @@ describe('TestCaseForm', () => {
     expect(screen.queryByRole('button', { name: 'Add Another' })).toBeNull();
   });
 
+  it('keeps dialog actions visible while the test case form scrolls independently', () => {
+    renderComponent();
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('test-case-dialog-scroll-body');
+    const footer = screen.getByTestId('test-case-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
   it("should call onAdd with form data and onCancel when 'Add Test Case' button is clicked", async () => {
     renderComponent();
 

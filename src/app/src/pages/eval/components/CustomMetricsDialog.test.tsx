@@ -1,3 +1,4 @@
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +53,7 @@ const mockTableData: EvaluateTable = {
 describe('MetricsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useCustomPoliciesMap).mockReturnValue({});
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableData,
       config: {
@@ -79,7 +81,9 @@ describe('MetricsTable', () => {
     const row = metricText.closest('tr');
     expect(row).not.toBeNull();
 
-    const filterButton = within(row as HTMLElement).getByRole('button');
+    const filterButton = within(row as HTMLElement).getByRole('button', {
+      name: 'Filter results by accuracy',
+    });
     await user.click(filterButton);
 
     expect(mockAddFilter).toHaveBeenCalledTimes(1);
@@ -124,6 +128,116 @@ describe('MetricsTable', () => {
     const dataTable = await screen.findByRole('table');
 
     expect(dataTable).toBeInTheDocument();
+  });
+
+  it('should label a single prompt group without rendering multi-prompt summary columns', async () => {
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findByText('Prompt 1')).toBeInTheDocument();
+    expect(screen.getByText('Test Provider')).toBeInTheDocument();
+    expect(screen.getByText('Pass')).toBeInTheDocument();
+    expect(screen.getByText('Score')).toBeInTheDocument();
+    expect(screen.getByText('Count')).toBeInTheDocument();
+    expect(screen.queryByText('Summary')).not.toBeInTheDocument();
+    expect(screen.queryByText('Spread')).not.toBeInTheDocument();
+  });
+
+  it('should render summary metrics when multiple prompt columns are present', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          prompts: [
+            {
+              raw: 'Prompt A',
+              label: 'Prompt A',
+              provider: 'Shared Provider',
+              metrics: {
+                namedScores: {
+                  accuracy: 80,
+                },
+                namedScoresCount: {
+                  accuracy: 100,
+                },
+                cost: 0,
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {},
+              },
+            },
+            {
+              raw: 'Prompt B',
+              label: 'Prompt B',
+              provider: 'Shared Provider',
+              metrics: {
+                namedScores: {
+                  accuracy: 60,
+                },
+                namedScoresCount: {
+                  accuracy: 100,
+                },
+                cost: 0,
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {},
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [],
+      },
+      config: {
+        redteam: {
+          plugins: [],
+        },
+      },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+          metadata: [],
+        },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findAllByText('Shared Provider')).toHaveLength(2);
+    expect(screen.getByText('Summary')).toBeInTheDocument();
+    expect(screen.getByText('Avg. Pass')).toBeInTheDocument();
+    expect(screen.getByText('Spread')).toBeInTheDocument();
+    expect(screen.getByText('70.00%')).toBeInTheDocument();
+    expect(screen.getByText('20.00 pts')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    expect(
+      await screen.findByRole('menuitemcheckbox', {
+        name: 'Prompt 1 - Shared Provider - Pass',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: 'Prompt 2 - Shared Provider - Count' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: 'Summary - Avg. Pass' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: 'prompt_0_group' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Pass' })).not.toBeInTheDocument();
   });
 
   it('should return null when promptMetricNames is empty', () => {

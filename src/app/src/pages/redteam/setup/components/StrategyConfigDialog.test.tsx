@@ -616,7 +616,7 @@ describe('StrategyConfigDialog', () => {
 
     expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
     const statefulSwitch = screen.getByRole('switch', {
-      name: /Enable when your target maintains server-side sessions/,
+      name: /Use target-managed session memory/,
     });
     expect(statefulSwitch).not.toBeChecked();
   });
@@ -644,7 +644,7 @@ describe('StrategyConfigDialog', () => {
     await user.paste('8');
 
     const statefulSwitch = screen.getByRole('switch', {
-      name: /Enable when your target maintains server-side sessions/,
+      name: /Use target-managed session memory/,
     });
     await user.click(statefulSwitch);
 

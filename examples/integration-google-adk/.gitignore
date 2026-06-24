@@ -1,8 +1,7 @@
 # Promptfoo result files
 *-results.json
-*.json
 
-# ADK session data
+# Python
 __pycache__/
 *.pyc
 *.pyo

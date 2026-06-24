@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { categoryDescriptions } from '@promptfoo/redteam/constants';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,6 +67,37 @@ describe('RiskCategories', () => {
 
     // Should render Security & Access Control category (contains sql-injection and rbac)
     expect(screen.getByText('Security & Access Control')).toBeInTheDocument();
+  });
+
+  it('keeps category rows compact on narrow screens', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    const categoryButton = screen.getByRole('button', { name: /Security & Access Control/i });
+    const description = screen.getByText(categoryDescriptions['Security & Access Control']);
+
+    expect(categoryButton).toHaveClass('gap-2', 'sm:gap-4');
+    expect(description).toHaveClass('hidden', 'sm:block');
+  });
+
+  it('stacks the heading summary on narrow screens', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    expect(screen.getByText('Risk Categories').parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
   });
 
   it('should display correct pass rate for categories', () => {

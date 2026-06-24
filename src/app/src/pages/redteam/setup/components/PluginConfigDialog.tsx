@@ -11,6 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -242,6 +243,7 @@ export default function PluginConfigDialog({
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove ${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                     onClick={() => removeArrayItem(arrayKey, index)}
                   >
                     <Minus className="size-4" />
@@ -343,17 +345,17 @@ export default function PluginConfigDialog({
     if (plugin === 'intent') {
       return 'View Custom Intents';
     }
-    return `Configure ${plugin}`;
+    return `Configure ${getPluginDisplayName(plugin)}`;
   };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{getDialogTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="py-4">{renderConfigInputs()}</div>
-        <DialogFooter>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">{renderConfigInputs()}</div>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
@@ -363,6 +365,14 @@ export default function PluginConfigDialog({
     </Dialog>
   );
 }
+
+const getPluginDisplayName = (plugin: Plugin | null) => {
+  if (!plugin) {
+    return '';
+  }
+
+  return displayNameOverrides[plugin] || categoryAliases[plugin] || plugin;
+};
 
 const arrayKeyToLabel = (key: string) => {
   switch (key) {

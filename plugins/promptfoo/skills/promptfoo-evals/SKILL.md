@@ -1,11 +1,13 @@
 ---
 name: promptfoo-evals
 description: >
-  Write, refine, run, and QA promptfoo eval configs for LLM applications:
-  prompts, providers, vars, test cases, assertions, model-graded rubrics,
-  transforms, datasets, output exports, filters, and CI gates. Use for
-  non-redteam evaluation suites and regression tests. Do not use for initial
-  provider connection work or for redteam plugin/strategy setup.
+  Write, refine, run, and QA non-redteam promptfoo eval suites after the target
+  or provider already works: prompts, vars, test cases, assertions,
+  model-graded rubrics, transforms, datasets, output exports, filters, and CI
+  gates. Use for regression tests and eval-suite authoring. Do not use for
+  connecting a new target/provider, mapping HTTP requests or auth, smoke-testing
+  an endpoint, or redteam plugin/strategy setup; use `promptfoo-provider-setup`
+  for connection work instead.
 ---
 
 # Promptfoo Evals

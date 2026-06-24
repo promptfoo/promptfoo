@@ -54,12 +54,12 @@ function CommandBlock({ fileName, helpText, isDownloaded, onCopy }: CommandBlock
           )}
         </div>
       )}
-      <div className="flex items-center bg-white/80 dark:bg-black/40 border border-black/15 dark:border-white/15 rounded-md p-3">
+      <div className="flex flex-col items-stretch gap-2 rounded-md border border-black/15 bg-white/80 p-3 dark:border-white/15 dark:bg-black/40 sm:flex-row sm:items-center">
         <code className="flex-1 font-mono text-sm font-medium">{commandText}</code>
         <button
           type="button"
           onClick={() => onCopy(commandText)}
-          className="ml-2 p-1 text-primary hover:bg-primary/15 rounded transition-colors"
+          className="self-end rounded p-1 text-primary transition-colors hover:bg-primary/15 sm:ml-2 sm:self-auto"
           aria-label="Copy command"
         >
           <Copy className="size-4" />

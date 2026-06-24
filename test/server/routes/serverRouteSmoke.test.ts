@@ -7,7 +7,10 @@ import {
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
+import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
+
+const REQUEST_TIMEOUT_MS = 2000;
 
 const mocks = vi.hoisted(() => ({
   checkEmailStatus: vi.fn(),
@@ -95,7 +98,7 @@ vi.mock('../../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: mocks.isBlobStorageEnabled,
 }));
 
-vi.mock('../../../src/commands/modelScan', () => ({
+vi.mock('../../../src/util/modelAuditInstall', () => ({
   checkModelAuditInstalled: mocks.checkModelAuditInstalled,
 }));
 
@@ -130,10 +133,8 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: mocks.cloudConfig,
 }));
 
-vi.mock('../../../src/index', () => ({
-  default: {
-    evaluate: mocks.promptfooEvaluate,
-  },
+vi.mock('../../../src/node', () => ({
+  evaluate: mocks.promptfooEvaluate,
 }));
 
 vi.mock('../../../src/models/eval', () => ({
@@ -220,7 +221,7 @@ vi.mock('../../../src/util/promptfooCommand', () => ({
   isRunningUnderNpx: mocks.isRunningUnderNpx,
 }));
 
-vi.mock('../../../src/validators/testProvider', () => ({
+vi.mock('../../../src/node/testProvider', () => ({
   testProviderConnectivity: mocks.testProviderConnectivity,
   testProviderSession: mocks.testProviderSession,
 }));
@@ -229,7 +230,7 @@ vi.mock('../../../src/server/config/serverConfig', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
 }));
 
-const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
 
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
@@ -246,9 +247,12 @@ type SmokeCase = {
 class MockSocket extends Duplex {
   remoteAddress = '127.0.0.1';
 
-  _read() {}
+  _read() {
+    // This test double never emits readable data; IncomingMessage only needs the stream shape.
+  }
 
   _write(_chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    // Accept and discard smoke-test transport writes.
     callback();
   }
 }
@@ -264,8 +268,7 @@ function createThenableQuery(rows: unknown[] = []) {
     offset: vi.fn(() => query),
     orderBy: vi.fn(() => query),
     // biome-ignore lint/suspicious/noThenProperty: Drizzle select builders are thenables, and config routes await them directly.
-    then: (resolve: (value: unknown[]) => void, reject: (reason: unknown) => void) =>
-      Promise.resolve(rows).then(resolve, reject),
+    then: (...args: Parameters<Promise<unknown[]>['then']>) => Promise.resolve(rows).then(...args),
     where: vi.fn(() => query),
   };
 
@@ -775,14 +778,14 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
 
   res.write = ((chunk: unknown, encoding?: BufferEncoding | ((error?: Error) => void)) => {
     if (chunk !== undefined) {
-      chunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(String(chunk)));
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     }
     return write(chunk as never, encoding as never);
   }) as typeof res.write;
 
   res.end = ((chunk?: unknown, encoding?: BufferEncoding | (() => void), callback?: () => void) => {
     if (chunk !== undefined) {
-      chunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(String(chunk)));
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     }
     return end(chunk as never, encoding as never, callback);
   }) as typeof res.end;
@@ -795,7 +798,7 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   }>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`${routeKey(testCase)} did not finish`));
-    }, 2000);
+    }, REQUEST_TIMEOUT_MS);
 
     res.once('finish', () => {
       clearTimeout(timeout);
@@ -828,7 +831,7 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   return response;
 }
 
-describe.sequential('server route end-to-end smoke coverage', () => {
+describe('server route end-to-end smoke coverage', { concurrent: false }, () => {
   let app: Express;
 
   beforeAll(() => {
@@ -838,10 +841,14 @@ describe.sequential('server route end-to-end smoke coverage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
+    // by one test cannot leak into another.
+    promptCacheService.invalidate();
     setupDefaultMocks();
   });
 
   afterEach(() => {
+    promptCacheService.invalidate();
     vi.resetAllMocks();
   });
 
@@ -859,13 +866,10 @@ describe.sequential('server route end-to-end smoke coverage', () => {
 
     const response = await sendRequest(app, testCase);
 
-    if (response.status !== testCase.expectedStatus) {
-      throw new Error(
-        `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${
-          response.text
-        }`,
-      );
-    }
+    expect(
+      response.status,
+      `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
+    ).toBe(testCase.expectedStatus);
 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');

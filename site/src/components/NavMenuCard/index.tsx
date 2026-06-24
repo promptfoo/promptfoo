@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 
 import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
@@ -26,6 +26,7 @@ export default function NavMenuCard({
 }: NavMenuCardProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownId = useId();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -35,15 +36,30 @@ export default function NavMenuCard({
       }
     }
 
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    }
+
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
       };
     }
   }, [isOpen]);
 
+  const canHover = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
   const handleToggle = () => {
+    if (canHover()) {
+      setIsOpen(true);
+      return;
+    }
+
     setIsOpen(!isOpen);
   };
   // Group items by section
@@ -79,18 +95,30 @@ export default function NavMenuCard({
         ];
 
   return (
-    <div className={styles.navMenuCard} ref={menuRef}>
-      <div
-        className={`${styles.navMenuCardButton} navbar__link`}
+    <div
+      className={styles.navMenuCard}
+      ref={menuRef}
+      onMouseEnter={() => {
+        if (canHover()) {
+          setIsOpen(true);
+        }
+      }}
+      onMouseLeave={() => {
+        if (canHover()) {
+          setIsOpen(false);
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (!menuRef.current?.contains(event.relatedTarget as Node)) {
+          setIsOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        className={`${styles.navMenuCardButton} ${isOpen ? styles.navMenuCardButtonOpen : ''} navbar__link`}
         onClick={handleToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleToggle();
-          }
-        }}
-        role="button"
-        tabIndex={0}
+        aria-controls={dropdownId}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -109,9 +137,10 @@ export default function NavMenuCard({
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
-      </div>
+      </button>
 
       <div
+        id={dropdownId}
         className={`${styles.navMenuCardDropdown} ${isOpen ? styles.navMenuCardDropdownOpen : ''}`}
       >
         <div className={styles.navMenuCardContainer}>

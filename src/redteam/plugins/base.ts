@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
+import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -125,6 +126,7 @@ export abstract class RedteamPluginBase {
      * In multi-input mode, returns Record<string, string>[]
      */
     let retryInstructions: string | undefined;
+    // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
@@ -228,6 +230,7 @@ export abstract class RedteamPluginBase {
 
       return acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
     };
+    // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.
 
     const allPrompts = await retryWithDeduplication(
       generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
@@ -445,18 +448,31 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const {
+      providerResponse: gradingProviderResponse,
+      imageOutputs,
+      ...templateGradingContext
+    } = gradingContext ?? {};
+
+    const providerId = provider?.id?.();
+    const providerTools = provider?.config?.tools;
+    const tools =
+      providerTools && !isMcpToolNameFilter(providerTools)
+        ? providerId?.startsWith('openai:agents:')
+          ? await (await import('../../providers/openai/agents-loader')).loadTools(providerTools)
+          : await maybeLoadToolsFromExternalFile(providerTools)
+        : undefined;
 
     const vars = {
       ...test.metadata,
       goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: provider?.config?.tools
-        ? await maybeLoadToolsFromExternalFile(provider.config.tools)
-        : undefined,
+      tools,
       testVars: test.vars ?? {},
-      // Spread all gradingContext properties to make them accessible in rubrics
-      ...(gradingContext || {}),
+      // Spread public grading context properties to make them accessible in rubrics.
+      // Image payloads/provider internals are intentionally excluded above.
+      ...templateGradingContext,
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
@@ -509,8 +525,13 @@ export abstract class RedteamGraderBase {
       gradingGuidanceString +
       graderExamplesString +
       timestampString;
+    const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
 
-    if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
+    if (
+      !skipRefusalCheck &&
+      !imagesForGrading?.length &&
+      (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
+    ) {
       return {
         grade: { pass: true, score: 1, reason: 'Model refused the request' },
         rubric: finalRubric,
@@ -534,7 +555,16 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
+    const grade = (
+      imagesForGrading?.length
+        ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
+            providerResponse: {
+              output: llmOutput,
+              images: imagesForGrading,
+            },
+          })
+        : await matchesLlmRubric(finalRubric, llmOutput, grading)
+    ) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

@@ -78,6 +78,7 @@ export default function Prompts() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={`Remove prompt ${index + 1}`}
                 onClick={() => removePrompt(index)}
                 className="mt-6 text-muted-foreground hover:text-destructive"
               >

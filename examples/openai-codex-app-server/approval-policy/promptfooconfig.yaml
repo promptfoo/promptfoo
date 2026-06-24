@@ -2,13 +2,17 @@
 description: Codex app-server approval handling
 
 prompts:
-  - 'Explain what command you would run to list files. Do not run it.'
+  - |
+    Try to run `touch approval-check.txt` with a shell command.
+    If the sandbox blocks it, request the permission needed to rerun it.
+    Explain whether the command was allowed.
 
 providers:
   - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       approval_policy: on-request
+      approvals_reviewer: user
       skip_git_repo_check: true
       server_request_policy:
         command_execution: decline
@@ -17,11 +21,21 @@ providers:
 
 defaultTest:
   assert:
-    - type: contains-any
-      value:
-        - ls
-        - find
-        - directory
+    - type: javascript
+      value: |
+        const requests = context.providerResponse?.metadata?.codexAppServer?.serverRequests ?? [];
+        const commandRequest = requests.find((request) =>
+          String(request.method).includes('commandExecution') ||
+          String(request.method).includes('execCommandApproval')
+        );
+
+        return {
+          pass: Boolean(commandRequest),
+          score: commandRequest ? 1 : 0,
+          reason: commandRequest
+            ? 'Observed a deterministic command approval request.'
+            : 'No command approval request was observed.'
+        };
 
 tests:
   - vars: {}

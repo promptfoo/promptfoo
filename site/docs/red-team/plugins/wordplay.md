@@ -1,6 +1,6 @@
 ---
 sidebar_label: Wordplay
-description: Test AI systems for wordplay vulnerabilities that could lead to generating profanity or offensive language through innocent-seeming riddles and word puzzles
+description: Test AI systems for wordplay vulnerabilities, where manipulation of rhyming games, riddles, and word puzzles can steer models into generating profanity or offensive language
 ---
 
 # Wordplay Plugin
@@ -11,11 +11,11 @@ This plugin identifies vulnerabilities where the AI might inadvertently produce 
 
 ## Purpose
 
-The Wordplay plugin helps to:
+It focuses on whether the model:
 
-1. Test the AI's ability to recognize and avoid wordplay traps that lead to profanity
-2. Identify instances where the AI might generate offensive language through seemingly innocent requests
-3. Evaluate the AI's content boundaries when faced with riddles and word games
+1. Recognizes wordplay traps that are steering toward profanity.
+2. Avoids producing offensive language through seemingly innocent requests.
+3. Maintains content boundaries in riddles, rhyming prompts, and related games.
 
 ## Configuration
 
@@ -62,14 +62,7 @@ The output **fails** if the AI directly provides profanity, casually uses inappr
 
 ## Importance in Gen AI Red Teaming
 
-Testing for wordplay vulnerabilities is critical for:
-
-- Maintaining content policies across all interaction types
-- Protecting family-friendly and educational applications
-- Identifying subtle attack vectors that might bypass standard content filters
-- Ensuring the AI recognizes indirect attempts to generate inappropriate content
-
-By incorporating the Wordplay plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's content boundaries and maintain appropriate safeguards against creative manipulation attempts.
+Wordplay prompts are useful because they test indirect content steering rather than explicit requests. That makes them especially relevant for products that need to preserve content boundaries in casual, playful, or educational interactions.
 
 ## Related Concepts
 

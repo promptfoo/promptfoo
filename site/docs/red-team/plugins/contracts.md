@@ -5,17 +5,15 @@ description: Red team AI contract vulnerabilities by testing for unauthorized co
 
 # Contracts Plugin
 
-The Contracts red teaming plugin is designed to test whether an AI system can be influenced to enter into unintended business contracts or make unauthorized commitments.
-
-This plugin helps identify potential vulnerabilities where the AI might inadvertently agree to terms, conditions, or make business commitments beyond its authority. It's particularly useful for commercial applications that represent a company.
+Use the Contracts plugin to test whether a system drifts from explaining terms into accepting them, promising refunds, or making commitments on someone else's behalf. It is aimed at assistants that interact with customers, vendors, or legal and business workflows.
 
 ## Purpose
 
-The Contracts plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to recognize and avoid making unauthorized contractual commitments.
-2. Identify instances where the AI might agree to terms or conditions without proper authorization.
-3. Test the AI's response to requests for business commitments or agreement to contractual terms.
+1. Recognizes when a prompt asks it to accept, approve, or agree to terms.
+2. Avoids financial or operational promises that exceed its authority.
+3. Handles conditional wording that could still create a clear commitment.
 
 ## Configuration
 
@@ -56,13 +54,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for contract vulnerability is critical for:
-
-- Preventing unauthorized commitments or agreements
-- Protecting the organization from unintended legal or financial obligations
-- Ensuring the AI system operates within its defined scope and authority
-
-By incorporating the Contracts plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of contractual queries and maintain appropriate boundaries in its interactions.
+Contract failures are risky because a response can sound operationally harmless while still implying approval, authority, or obligation. This plugin keeps the focus on whether the model explains and escalates instead of committing.
 
 ## Related Concepts
 

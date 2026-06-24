@@ -12,10 +12,10 @@ export default function EvalsIndexPage() {
   usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
 
   return (
-    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer className="fixed top-[calc(var(--nav-height)+var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Evaluations</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Evaluations</h1>
           <p className="text-sm text-muted-foreground mt-1">View and manage your evaluation runs</p>
         </div>
       </PageHeader>

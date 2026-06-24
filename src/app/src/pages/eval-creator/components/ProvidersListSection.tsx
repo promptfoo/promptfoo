@@ -3,7 +3,14 @@ import { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
-import { cn } from '@app/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
 import { Plus, Settings, Trash2 } from 'lucide-react';
 import AddProviderDialog from './AddProviderDialog';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -66,6 +73,7 @@ function getProviderType(provider: ProviderOptions): string {
 export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
 
   const handleAddProvider = (provider: ProviderOptions) => {
     onChange([...providers, provider]);
@@ -79,8 +87,15 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
     setEditingIndex(null);
   };
 
-  const handleRemoveProvider = (index: number) => {
-    onChange(providers.filter((_, i) => i !== index));
+  const confirmDeleteProvider = () => {
+    if (providerToDelete !== null) {
+      onChange(providers.filter((_, index) => index !== providerToDelete));
+    }
+    setProviderToDelete(null);
+  };
+
+  const cancelDeleteProvider = () => {
+    setProviderToDelete(null);
   };
 
   return (
@@ -95,16 +110,13 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
             return (
               <Card
                 key={`${provider.id}-${index}`}
-                className={cn(
-                  'p-4 flex items-center justify-between hover:bg-muted/30 transition-colors',
-                  'bg-white dark:bg-zinc-900',
-                )}
+                className="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-medium truncate">{label}</p>
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="text-xs dark:text-foreground/80">
                         {type}
                       </Badge>
                     </div>
@@ -114,20 +126,22 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 self-end sm:ml-4 sm:self-auto">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditingIndex(index)}
                     className="size-8 p-0"
+                    aria-label={`Edit ${label}`}
                   >
                     <Settings className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleRemoveProvider(index)}
+                    onClick={() => setProviderToDelete(index)}
                     className="size-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    aria-label={`Delete ${label}`}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -137,19 +151,27 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           })}
         </div>
       ) : (
-        <Card className="p-8 text-center bg-muted/30 border-dashed">
-          <p className="text-sm text-muted-foreground mb-4">No providers configured yet</p>
-          <p className="text-xs text-muted-foreground">
-            Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate
-          </p>
-        </Card>
+        <div className="space-y-4">
+          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
+            <Plus className="size-4 mr-2" />
+            Add Provider
+          </Button>
+          <Card className="p-8 text-center bg-muted/30 border-dashed">
+            <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
+            <p className="text-xs text-muted-foreground">
+              Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate.
+            </p>
+          </Card>
+        </div>
       )}
 
       {/* Add provider button */}
-      <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-        <Plus className="size-4 mr-2" />
-        Add Provider
-      </Button>
+      {providers.length > 0 && (
+        <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
+          <Plus className="size-4 mr-2" />
+          Add Provider
+        </Button>
+      )}
 
       {/* Add provider dialog */}
       <AddProviderDialog
@@ -167,6 +189,28 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           initialProvider={providers[editingIndex]}
         />
       )}
+
+      <Dialog
+        open={providerToDelete !== null}
+        onOpenChange={(open) => !open && cancelDeleteProvider()}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete provider?</DialogTitle>
+            <DialogDescription>
+              This removes the provider from this evaluation. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeleteProvider}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteProvider}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

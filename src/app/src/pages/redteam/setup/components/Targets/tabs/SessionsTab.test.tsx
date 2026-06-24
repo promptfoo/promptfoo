@@ -91,6 +91,13 @@ describe('SessionsTab', () => {
         const headerKeyInputs = screen.getAllByPlaceholderText('Header name');
         const headerValueInputs = screen.getAllByPlaceholderText('Header value');
 
+        expect(headerKeyInputs[0].parentElement).toHaveClass(
+          'flex-col',
+          'items-stretch',
+          'sm:flex-row',
+          'sm:items-center',
+        );
+
         await user.click(headerKeyInputs[0]);
         await user.keyboard('{Control>}a{/Control}');
         await user.paste('Authorization');
@@ -207,10 +214,7 @@ describe('SessionsTab', () => {
           />,
         );
 
-        const removeButtons = screen.getAllByRole('button', { name: '' }).filter((btn) => {
-          const svg = btn.querySelector('svg');
-          return svg?.classList.contains('lucide-trash-2');
-        });
+        const removeButtons = screen.getAllByRole('button', { name: /remove header/i });
 
         const initialCount = removeButtons.length;
 
@@ -241,10 +245,7 @@ describe('SessionsTab', () => {
           />,
         );
 
-        const removeButtons = screen.getAllByRole('button', { name: '' }).filter((btn) => {
-          const svg = btn.querySelector('svg');
-          return svg?.classList.contains('lucide-trash-2');
-        });
+        const removeButtons = screen.getAllByRole('button', { name: /remove header/i });
 
         await user.click(removeButtons[0]);
 

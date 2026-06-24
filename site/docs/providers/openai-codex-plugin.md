@@ -11,8 +11,8 @@ providers:
   - id: openai:codex-plugin
     config:
       plugin:
-        path: ./plugins/codex-security
-      skill: security-scan
+        path: ./plugins/demo-plugin
+      skill: demo-skill
       workspace: ./repo-under-test
       output_schema:
         type: object
@@ -30,9 +30,9 @@ workspace, terminal status, duration, trace identity, and artifact references.
 Plugins can write provider-owned artifacts under
 `PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR`; set `artifacts_dir` to copy those files to
 a trusted caller-owned directory before runtime cleanup. Promptfoo does not
-copy ambient Codex config, plugins, skills, memories, or sessions. It copies
-only `auth.json` by default when present; set `copy_auth: false` to require API
-key auth or an explicitly empty runtime.
+copy ambient Codex config, plugins, skills, memories, or sessions. Use the same
+public Codex SDK authentication options as `openai:codex-sdk`, such as `apiKey`,
+`OPENAI_API_KEY`, or `CODEX_API_KEY`.
 
 Plugin packages and paths are executable inputs. Evaluate only trusted sources.
 Promptfoo rejects plugin trees with symlinks, packs npm packages with scripts

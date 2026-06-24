@@ -263,7 +263,7 @@ agent = Agent(
 
 Evaluate that agent through the same Python provider pattern. The example tracing bridge exposes Codex command execution spans as `command` and `codex.command`, so Promptfoo's trajectory assertions can verify that Codex actually inspected files or ran commands.
 
-If Codex itself is the system under test, prefer Promptfoo's dedicated [`openai:codex-sdk`](/docs/providers/openai-codex-sdk) or [`openai:codex-app-server`](/docs/providers/openai-codex-app-server) providers. The app-server provider supports `approvals_reviewer: guardian_subagent`; the Python `openai-agents` SDK 0.14.1 package does not expose a public `Guardian`/`guardian` API.
+If Codex itself is the system under test, prefer Promptfoo's dedicated [`openai:codex-sdk`](/docs/providers/openai-codex-sdk) or [`openai:codex-app-server`](/docs/providers/openai-codex-app-server) providers. The app-server provider supports `approvals_reviewer: auto_review` (`guardian_subagent` remains a legacy alias); the Python `openai-agents` SDK 0.14.1 package does not expose a public automatic-review API.
 
 ## Red Team The Agent
 

@@ -105,6 +105,17 @@ describe('VarsForm', () => {
     expect(ageInput).toHaveValue('');
   });
 
+  it('stacks labels above inputs on narrow screens', () => {
+    const onAddMock = vi.fn();
+
+    render(<VarsForm onAdd={onAddMock} varsList={['name']} initialValues={{ name: '' }} />);
+
+    expect(screen.getByLabelText('name').parentElement).toHaveClass(
+      'grid',
+      'sm:grid-cols-[minmax(8rem,12.5rem)_1fr]',
+    );
+  });
+
   it('should maintain existing values when varsList changes to include new variables', async () => {
     const onAddMock = vi.fn();
     const initialVarsList = ['name', 'location'];

@@ -41,8 +41,16 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, _config?: any) =>
-        calculateAzureCost(modelName, usage) ?? 0,
+      // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
+      // expects (modelName, config, promptTokens, completionTokens) — extract the token counts from
+      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
+      costCalculator: (modelName: string, usage: any, config?: any) =>
+        calculateAzureCost(
+          modelName,
+          config,
+          usage?.prompt_tokens ?? usage?.input_tokens,
+          usage?.completion_tokens ?? usage?.output_tokens,
+        ) ?? 0,
     });
 
     if (this.config.mcp?.enabled) {

@@ -106,7 +106,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
           {selectedTarget.config?.signatureAuth?.certificateType === 'pem' && (
             <div className="space-y-4">
               <Label>PEM Key Input Method</Label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div
                   className={cn(
                     'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',

@@ -3,6 +3,14 @@ import path from 'node:path';
 
 import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
+
+type PackageManifest = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+};
 
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
@@ -10,7 +18,9 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const EXPECTED_SHARP_VERSION = '^0.34.5';
+const EXPECTED_SHARP_VERSION = '^0.35.1';
+const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
+const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -31,7 +41,124 @@ function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   return results;
 }
 
+function collectPackageJsonFiles(rootDir: string): string[] {
+  const results: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') {
+        continue;
+      }
+
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name === 'package.json') {
+        results.push(full);
+      }
+    }
+  };
+
+  walk(rootDir);
+  return results.sort();
+}
+
+function getDependencyRange(
+  packageJson: PackageManifest,
+  dependencyName: (typeof OPENAI_PACKAGE_NAMES)[number],
+): string | undefined {
+  return (
+    packageJson.dependencies?.[dependencyName] ??
+    packageJson.devDependencies?.[dependencyName] ??
+    packageJson.optionalDependencies?.[dependencyName] ??
+    packageJson.peerDependencies?.[dependencyName]
+  );
+}
+
+function findExtensionUnsafeRelativeSpecifiers(sourceText: string, filePath: string): string[] {
+  return extractModuleSpecifiers(sourceText, filePath).filter((specifier) => {
+    if (!specifier.startsWith('.')) {
+      return false;
+    }
+
+    const extension = path.posix.extname(specifier);
+    return !extension || TYPESCRIPT_SOURCE_EXTENSIONS.has(extension);
+  });
+}
+
 describe('package manifests', () => {
+  it('publishes the lightweight contracts subpath', () => {
+    const packageJson = readPackageJson<{
+      exports?: Record<string, unknown>;
+      typesVersions?: Record<string, Record<string, string[]>>;
+    }>('package.json');
+
+    expect(packageJson.exports?.['./contracts']).toEqual({
+      import: {
+        types: './dist/src/contracts.d.ts',
+        default: './dist/src/contracts.js',
+      },
+      require: {
+        types: './dist/src/contracts.d.cts',
+        default: './dist/src/contracts.cjs',
+      },
+    });
+    expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
+  });
+
+  it('keeps the contracts subpath extension-safe for emitted ESM', () => {
+    const contractsDir = path.join(process.cwd(), 'src', 'contracts');
+    const files = [
+      path.join(process.cwd(), 'src', 'contracts.ts'),
+      ...collectSourceFiles(contractsDir, new Set()),
+    ];
+    const offenders = files.flatMap((file) => {
+      const contents = fs.readFileSync(file, 'utf8');
+      return findExtensionUnsafeRelativeSpecifiers(contents, file).map(
+        (specifier) => `${path.relative(process.cwd(), file)}: ${specifier}`,
+      );
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('detects extension-unsafe relative specifiers across module syntax', () => {
+    // The contracts files are dominated by type-only imports/exports, so the detector that the
+    // extension-safety guard relies on MUST catch those forms, not just runtime imports.
+    expect(
+      findExtensionUnsafeRelativeSpecifiers(
+        `
+          import './side-effect';
+          export { value } from './exported';
+          import('./dynamic');
+          import type { A } from './type-import';
+          export type { B } from './type-export';
+          import { type C, D } from './inline-type';
+          import type Default from './default-type';
+          export { schema } from './schema.json';
+        `,
+        'fixture.ts',
+      ),
+    ).toEqual([
+      './side-effect',
+      './exported',
+      './dynamic',
+      './type-import',
+      './type-export',
+      './inline-type',
+      './default-type',
+    ]);
+  });
+
+  it('pins root TypeScript compilation to noEmit', () => {
+    const tsconfig = readPackageJson<{
+      compilerOptions?: {
+        noEmit?: boolean;
+      };
+    }>('tsconfig.json');
+
+    expect(tsconfig.compilerOptions?.noEmit).toBe(true);
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
@@ -81,5 +208,36 @@ describe('package manifests', () => {
 
     expect(sitePackageJson.devDependencies?.sharp).toBeUndefined();
     expect(sitePackageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+  });
+
+  it('keeps OpenAI example dependency ranges aligned with the root manifest', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const rootRanges = new Map(
+      OPENAI_PACKAGE_NAMES.map((dependencyName) => [
+        dependencyName,
+        getDependencyRange(rootPackageJson, dependencyName),
+      ]),
+    );
+    const examplesDir = path.join(process.cwd(), 'examples');
+    const mismatches = collectPackageJsonFiles(examplesDir).flatMap((packageJsonPath) => {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as PackageManifest;
+      const relativePath = path.relative(process.cwd(), packageJsonPath);
+
+      return OPENAI_PACKAGE_NAMES.flatMap((dependencyName) => {
+        const exampleRange = getDependencyRange(packageJson, dependencyName);
+        if (!exampleRange) {
+          return [];
+        }
+
+        const rootRange = rootRanges.get(dependencyName);
+        if (exampleRange === rootRange) {
+          return [];
+        }
+
+        return [`${relativePath}: ${dependencyName}=${exampleRange} (root: ${rootRange})`];
+      });
+    });
+
+    expect(mismatches).toEqual([]);
   });
 });

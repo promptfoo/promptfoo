@@ -185,6 +185,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                 <button
                   type="button"
                   onClick={() => toggleSpan(span.spanId)}
+                  aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${span.name}`}
                   className={cn(
                     'mr-1 p-1 rounded hover:bg-muted transition-colors',
                     !hasAttributes && 'invisible',
@@ -249,10 +250,10 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
               {/* Expandable attributes panel */}
               <CollapsibleContent>
-                <div className="ml-10 mt-2 mb-4 p-4 bg-muted/50 rounded border-l-[3px] border-primary">
+                <div className="mb-4 mt-2 rounded border-l-[3px] border-primary bg-muted/50 p-4 sm:ml-10">
                   <h4 className="text-sm font-semibold mb-2">Span Details</h4>
 
-                  <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
                       <p className="text-xs text-muted-foreground">Span ID</p>
                       <p className="text-sm font-mono text-[11px]">{span.spanId}</p>
@@ -291,11 +292,11 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                           <div
                             key={key}
                             className={cn(
-                              'flex gap-2 py-1',
+                              'flex flex-col gap-1 py-1 sm:flex-row sm:gap-2',
                               attrIndex < arr.length - 1 && 'border-b border-border',
                             )}
                           >
-                            <span className="font-mono text-[11px] text-primary min-w-[200px] break-all">
+                            <span className="min-w-0 break-all font-mono text-[11px] text-primary sm:min-w-[200px]">
                               {key}
                             </span>
                             <span className="font-mono text-[11px] break-all whitespace-pre-wrap">

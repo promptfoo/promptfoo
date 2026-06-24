@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
@@ -490,10 +490,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
             : ['openai:gpt-5-mini', 'openai:gpt-5'],
       },
       {
-        name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
+        name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-opus-4-6',
-          'anthropic:messages:claude-sonnet-4-5-20250929',
+          'anthropic:messages:claude-fable-5',
+          'anthropic:messages:claude-opus-4-8',
+          'anthropic:messages:claude-sonnet-4-6',
           'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
@@ -730,7 +731,7 @@ export async function initializeProject(directory: string | null, interactive: b
 
     return telemetryDetails;
   } catch (err) {
-    if (err instanceof ExitPromptError) {
+    if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
       const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
@@ -742,7 +743,8 @@ export async function initializeProject(directory: string | null, interactive: b
           chalk.green('https://www.promptfoo.dev/contact/'),
       );
       await recordOnboardingStep('early exit');
-      process.exit(130);
+      process.exitCode = 130;
+      return;
     } else {
       throw err;
     }

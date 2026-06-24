@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Agents SDK advanced TypeScript features
+
+prompts:
+  - '{{query}}'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+providers:
+  - id: openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      session:
+        type: memory
+        sessionId: support-demo
+      tracing: true
+      maxTurns: 8
+
+tests:
+  - description: Store a remembered code word
+    vars:
+      query: 'Remember this code word exactly: violet.'
+    assert:
+      - type: contains
+        value: violet
+
+  - description: Reuse session history and traced tool calls
+    vars:
+      query: What code word did I tell you earlier? Then look up order 123.
+    assert:
+      - type: contains
+        value: violet
+      - type: contains
+        value: shipped
+      - type: trajectory:tool-used
+        value: lookup_order
+      - type: trajectory:tool-args-match
+        value:
+          name: lookup_order
+          args:
+            order_id: '123'
+
+  - description: Read Promptfoo vars through SDK local context
+    vars:
+      customer_tier: gold
+      query: What customer tier am I on?
+    assert:
+      - type: contains
+        value: gold
+      - type: trajectory:tool-used
+        value: lookup_customer_context

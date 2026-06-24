@@ -35,6 +35,20 @@ This example shows Claude Agent SDK in its simplest form - running in a temporar
 (cd basic && promptfoo eval)
 ```
 
+#### Counting LLM turns with trace markers
+
+`./basic/promptfooconfig.tracing.yaml` enables OTEL tracing and uses
+`trace-span-count` over the `gen_ai.turn *` marker spans the provider emits (one
+per `assistant` message / LLM round) to assert how many rounds a task took. See
+[Turn marker spans](https://www.promptfoo.dev/docs/tracing/#per-llm-turn-spans)
+for the per-provider table and the subagent/cache-hit caveats.
+
+```bash
+# Use --no-cache so the turn-marker spans are re-emitted on every run; a cached
+# response would short-circuit before the tracing code and fail the turn-count assertions.
+(cd basic && promptfoo eval -c promptfooconfig.tracing.yaml --no-cache)
+```
+
 ### Working Directory
 
 This example provides Claude Agent SDK with read-only access to a sample project containing Python, TypeScript, and JavaScript files with intentional bugs for analysis. Because the `working_dir` is set, Claude Agent SDK has access to the following read-only tools:
@@ -182,7 +196,7 @@ This example compares two versions of the same Claude Agent SDK skill against id
 This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.
 
 - **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
-- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Skill filtering**: Uses `skills: all` to load plugin skills and auto-allow the `Skill` tool
 - **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A standards-check skill verifies the project has a README.md
 

@@ -567,4 +567,24 @@ describe('CustomPoliciesSection', () => {
       });
     });
   });
+
+  describe('policy actions', () => {
+    it('labels edit actions by row', async () => {
+      const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Policy text one' } },
+            { id: 'policy', config: { policy: 'Policy text two' } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent();
+
+      expect(await screen.findByRole('button', { name: 'Edit policy 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit policy 2' })).toBeInTheDocument();
+    });
+  });
 });

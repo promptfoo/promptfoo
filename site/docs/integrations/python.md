@@ -76,6 +76,7 @@ defaultTest:
 client = OpenAI()
 
 def call_api(prompt, options, context):
+    # The Responses API exposes combined text through output_text.
     response = client.responses.create(
         model="gpt-5.1-mini",
         input=prompt,
@@ -236,7 +237,7 @@ Test Python agent frameworks by wrapping them as providers:
 | **CrewAI**         | [`crewai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-crewai)                     | [Evaluate CrewAI agents](/docs/guides/evaluate-crewai)                 |
 | **OpenAI Agents**  | [`openai-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents)                   | [OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python) |
 | **PydanticAI**     | [`pydantic-ai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-pydantic-ai)           | Type-safe agents with Pydantic                                         |
-| **Google ADK**     | [`integration-google-adk`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-adk) | Google Agent Development Kit                                           |
+| **Google ADK**     | [`integration-google-adk`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-adk) | [Evaluate Google ADK agents](/docs/guides/evaluate-google-adk)         |
 | **Strands Agents** | [`strands-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-strands-agents)     | AWS open-source agent framework                                        |
 
 To get started with any example:

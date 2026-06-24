@@ -110,6 +110,12 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
+      expect(screen.getByText('Agentic Strategies').parentElement?.parentElement).toHaveClass(
+        'flex-col',
+        'items-start',
+        'sm:flex-row',
+        'sm:items-center',
+      );
     });
 
     it('renders parent description', () => {

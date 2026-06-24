@@ -35,7 +35,7 @@ This agentic approach catches subtle security issues that span multiple files, w
 
 ### GitHub Action
 
-Automatically scan pull requests with findings posted as review comments. This is the recommended way to use the scanner if your code is on GitHub. [Set up the GitHub Action →](./github-action.md)
+Automatically scan pull requests with findings posted as review comments, and optionally publish alerts to GitHub Code Scanning and the repository Security tab. This is the recommended way to use the scanner if your code is on GitHub. [Set up the GitHub Action →](./github-action.md)
 
 ### VS Code Extension (Enterprise)
 

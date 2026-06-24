@@ -52,7 +52,7 @@ For OpenAI-compatible Realtime targets (including proxies and local/dev deployme
 
 ```yaml
 providers:
-  - id: openai:realtime:gpt-4o-realtime-preview
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       apiBaseUrl: 'http://localhost:8080/v1' # → ws://localhost:8080/v1/realtime
       modalities: ['text']

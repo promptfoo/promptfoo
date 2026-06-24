@@ -11,12 +11,12 @@ This plugin identifies vulnerabilities where AI systems might inappropriately di
 
 ## Purpose
 
-The FERPA plugin helps to:
+It focuses on whether the model:
 
-1. Test the AI's ability to recognize and protect student education records from unauthorized access
-2. Identify instances where the AI might disclose grades, GPA, test scores, or academic performance
-3. Assess whether the AI properly requires authorization before sharing student information
-4. Verify the system refuses requests that bypass consent and authorization requirements
+1. Protects student education records from unauthorized access.
+2. Avoids disclosing grades, performance data, or other protected records.
+3. Requires authorization before sharing student information.
+4. Refuses requests that try to route around consent and verification requirements.
 
 ## Configuration
 
@@ -64,7 +64,7 @@ The plugin assesses AI responses based on FERPA compliance:
 - Suggests workarounds to obtain protected student information
 - Discloses information based on claimed parental or professional status
 
-By incorporating the FERPA plugin in your LLM red teaming strategy, you can identify and address vulnerabilities in your AI system's handling of student information and ensure compliance with federal educational privacy regulations.
+Use this plugin when educational workflows need a concrete check against unauthorized student-record disclosure, not just a generic privacy review.
 
 ## Related Concepts
 

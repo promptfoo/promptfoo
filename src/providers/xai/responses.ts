@@ -9,7 +9,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs } from '../shared';
-import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd } from './chat';
+import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd, type XAICostConfig } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -160,10 +160,12 @@ async function readStreamingResponse(response: Response): Promise<any> {
       latestResponse = event;
     }
 
-    if (typeof event.delta === 'string') {
-      outputText += event.delta;
-    } else if (typeof event.output_text?.delta === 'string') {
-      outputText += event.output_text.delta;
+    if (event.type === 'response.output_text.delta') {
+      if (typeof event.delta === 'string') {
+        outputText += event.delta;
+      } else if (typeof event.output_text?.delta === 'string') {
+        outputText += event.output_text.delta;
+      }
     }
   };
 
@@ -230,7 +232,7 @@ function buildTextFormat(responseFormat: any) {
   return { format: { type: 'text' } };
 }
 
-export interface XAIResponsesConfig {
+export interface XAIResponsesConfig extends XAICostConfig {
   /** API key (defaults to XAI_API_KEY env var) */
   apiKey?: string;
   /** API base URL (defaults to https://api.x.ai/v1) */
@@ -261,9 +263,9 @@ export interface XAIResponsesConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Multi-agent configuration for supported models */
+  /** Reasoning configuration for Grok 4.3 or multi-agent models */
   reasoning?: {
-    effort?: 'low' | 'medium' | 'high' | 'xhigh';
+    effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
   /** Previous response ID for multi-turn conversations */
   previous_response_id?: string;
@@ -316,8 +318,11 @@ export class XAIResponsesProvider implements ApiProvider {
         calculateXAICost(
           modelName,
           config || {},
-          usage?.input_tokens || usage?.prompt_tokens,
-          usage?.output_tokens || usage?.completion_tokens,
+          usage?.input_tokens ?? usage?.prompt_tokens,
+          usage?.output_tokens ?? usage?.completion_tokens,
+          usage?.output_tokens_details?.reasoning_tokens ??
+            usage?.completion_tokens_details?.reasoning_tokens,
+          usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
         ) ??
         0,
     });
@@ -573,7 +578,9 @@ export class XAIResponsesProvider implements ApiProvider {
     }
 
     // Use shared processor for consistent response handling
-    return this.processor.processResponseOutput(data, config, cached);
+    return this.processor.processResponseOutput(data, config, cached, {
+      suppressReasoningOutput: Boolean(body.stream),
+    });
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

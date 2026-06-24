@@ -24,6 +24,15 @@ export const FileChangeStatus = {
 } as const;
 export type FileChangeStatus = (typeof FileChangeStatus)[keyof typeof FileChangeStatus];
 
+export const CodeScanOutputFormat = {
+  TEXT: 'text',
+  JSON: 'json',
+  SARIF: 'sarif',
+} as const;
+export type CodeScanOutputFormat = (typeof CodeScanOutputFormat)[keyof typeof CodeScanOutputFormat];
+
+export const CodeScanOutputFormatSchema = z.enum(['text', 'json', 'sarif']);
+
 // ============================================================================
 // Severity Utility Types
 // ============================================================================
@@ -258,6 +267,7 @@ export const ScanResponseSchema = z.object({
   commentsPosted: z.boolean().optional(), // True if server posted comments, false if action should post them
   batchCount: z.number().optional(),
   error: z.string().optional(),
+  skipReason: z.string().optional(), // Set when the scan was intentionally skipped (e.g. fork PR awaiting maintainer approval)
 });
 
 // ============================================================================

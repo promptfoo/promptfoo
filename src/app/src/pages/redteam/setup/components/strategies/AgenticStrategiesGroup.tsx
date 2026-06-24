@@ -44,7 +44,7 @@ export function AgenticStrategiesGroup({
   return (
     <div className="mb-8">
       {/* Parent header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold">Agentic Strategies</h3>
           <p className="mt-1 text-sm text-muted-foreground">

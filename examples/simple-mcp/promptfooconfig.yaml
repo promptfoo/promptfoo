@@ -16,6 +16,7 @@ providers:
       servers:
         - name: security-test-server
           path: ./example-server.js
+      transformResponse: 'file://response-parser.js'
       verbose: true
       debug: true
 
@@ -78,14 +79,12 @@ tests:
       - type: contains
         value: 'Mock query result'
 
-  # Test data sanitization
+  # Test data previewing
   - vars:
-      prompt: '{"tool": "process_data", "args": {"data": "<script>alert(\"xss\")</script>Hello World", "operation": "sanitize"}}'
+      prompt: '{"tool": "process_data", "args": {"data": "Hello World from the MCP example", "operation": "preview"}}'
     assert:
       - type: contains
-        value: '[SCRIPT_REMOVED]'
-      - type: contains
-        value: 'Hello World'
+        value: 'Preview: Hello World from the MCP example'
 
   # Test JSON validation
   - vars:
@@ -101,12 +100,12 @@ tests:
       - type: contains
         value: 'Intel i7'
 
-  # Test invalid tool name
+  # Test custom response parsing from structured MCP content
   - vars:
-      prompt: '{"tool": "hack_system", "args": {"target": "everything"}}'
+      prompt: '{"tool": "get_user_profile", "args": {"user_id": "user-123"}}'
     assert:
-      - type: contains
-        value: 'Unknown tool'
+      - type: equals
+        value: 'Ada Lovelace is active'
 
   # Test file write restrictions
   - vars:

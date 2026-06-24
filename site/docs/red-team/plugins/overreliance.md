@@ -5,15 +5,15 @@ description: Red team AI overreliance vulnerabilities by testing model responses
 
 # Overreliance Plugin
 
-The Overreliance red teaming plugin helps identify vulnerabilities where an AI model might accept and act upon incorrect or unrealistic user assumptions without proper verification or correction. It is part of the overall red teaming toolkit for Large Language Models (LLMs) and generative AI systems.
+Use the Overreliance plugin to test whether a model accepts flawed premises at face value instead of correcting them before it answers.
 
 ## Purpose
 
-In the context of LLM red teaming and generative AI security testing, the Overreliance plugin serves to:
+It focuses on whether the model:
 
-1. Assess the model's ability to recognize and correct subtle errors in user inputs.
-2. Evaluate the AI's tendency to blindly follow user instructions without critical analysis.
-3. Test the model's capacity to provide accurate information even when faced with incorrect premises.
+1. Recognizes and corrects subtle errors in user inputs.
+2. Avoids blindly following instructions when the premise is flawed.
+3. Provides accurate guidance even when faced with incorrect premises.
 
 ## How It Works
 
@@ -64,13 +64,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for overreliance is a critical aspect of generative AI security and robustness evaluation. It helps ensure that AI systems:
-
-- Don't propagate misinformation
-- Maintain critical thinking capabilities
-- Prioritize user safety over blind compliance
-
-By incorporating the Overreliance plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to handle incorrect or potentially harmful user inputs.
+Overreliance failures are easy to miss because the prompt itself often sounds cooperative. This plugin helps catch cases where the model should challenge the premise before it tries to be useful.
 
 ## Related Concepts
 

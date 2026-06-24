@@ -196,6 +196,74 @@ describe('PromptDialog', () => {
     expect(row).toHaveTextContent('-');
   });
 
+  it('stacks long titles above the prompt id badge on narrow screens', () => {
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={vi.fn()}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: new RegExp(mockSelectedPrompt.prompt.label) }),
+    ).toHaveClass('flex-col', 'items-start', 'text-left', 'sm:flex-row', 'sm:items-center');
+  });
+
+  it('keeps actions visible while long prompt content scrolls independently', () => {
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={vi.fn()}
+          selectedPrompt={mockSelectedPromptThreeEvals}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('prompt-dialog-scroll-body');
+    const historyTable = screen.getByRole('table');
+    const footer = screen.getByTestId('prompt-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(historyTable).toHaveClass('min-w-[720px]');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
+  it('keeps eval history rows distinct when repeated eval ids are present', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const duplicateEvalPrompt: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      evals: [mockSelectedPrompt.evals[0], mockSelectedPrompt.evals[0]],
+    };
+
+    try {
+      render(
+        <MemoryRouter>
+          <PromptDialog
+            openDialog={true}
+            handleClose={vi.fn()}
+            selectedPrompt={duplicateEvalPrompt}
+            showDatasetColumn={true}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getAllByText(mockSelectedPrompt.evals[0].id)).toHaveLength(2);
+      expect(consoleErrorSpy.mock.calls.flat().join(' ')).not.toContain(
+        'Encountered two children with the same key',
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);

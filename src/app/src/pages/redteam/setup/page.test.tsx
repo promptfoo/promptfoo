@@ -101,8 +101,33 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
 
-      const fallbackTitle = screen.getByText(/New Configuration/i);
-      expect(fallbackTitle).toBeInTheDocument();
+      expect(screen.getAllByText(/New Configuration/i).length).toBeGreaterThan(0);
+    });
+
+    it('keeps the sidebar off the mobile layout path', () => {
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByTestId('redteam-setup-sidebar')).toHaveClass('hidden', 'md:flex');
+    });
+
+    it('keeps config management reachable on mobile', async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByTestId('redteam-setup-mobile-actions')).toHaveClass('md:hidden');
+
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+
+      expect(screen.getByRole('heading', { name: 'Save Configuration' })).toBeInTheDocument();
     });
   });
 

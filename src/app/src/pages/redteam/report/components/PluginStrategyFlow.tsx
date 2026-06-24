@@ -328,46 +328,48 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
   }
 
   return (
-    <div className="h-[400px] w-full">
-      <ResponsiveContainer>
-        <Sankey
-          data={data}
-          nodePadding={50}
-          nodeWidth={15}
-          margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
-          link={<CustomLink />}
-          node={<CustomNode />}
-        >
-          <Tooltip
-            content={({ payload }) => {
-              if (!payload?.[0]) {
-                return null;
-              }
-              const entry = payload[0];
-              const entryPayload: Record<string, unknown> | undefined = entry.payload;
-              const source = entryPayload?.source;
-              const target = entryPayload?.target;
-              // Link hover: source and target are resolved SankeyNode objects
-              if (isNode(source) && isNode(target)) {
+    <div className="overflow-x-auto">
+      <div className="h-[400px] min-w-[520px]">
+        <ResponsiveContainer>
+          <Sankey
+            data={data}
+            nodePadding={50}
+            nodeWidth={15}
+            margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
+            link={<CustomLink />}
+            node={<CustomNode />}
+          >
+            <Tooltip
+              content={({ payload }) => {
+                if (!payload?.[0]) {
+                  return null;
+                }
+                const entry = payload[0];
+                const entryPayload: Record<string, unknown> | undefined = entry.payload;
+                const source = entryPayload?.source;
+                const target = entryPayload?.target;
+                // Link hover: source and target are resolved SankeyNode objects
+                if (isNode(source) && isNode(target)) {
+                  return (
+                    <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                      <strong>
+                        {getDisplayName(source.name)} → {getDisplayName(target.name)}
+                      </strong>
+                      : {entry.value} tests
+                    </div>
+                  );
+                }
+                // Node hover
                 return (
                   <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                    <strong>
-                      {getDisplayName(source.name)} → {getDisplayName(target.name)}
-                    </strong>
-                    : {entry.value} tests
+                    <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
                   </div>
                 );
-              }
-              // Node hover
-              return (
-                <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                  <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
-                </div>
-              );
-            }}
-          />
-        </Sankey>
-      </ResponsiveContainer>
+              }}
+            />
+          </Sankey>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 };

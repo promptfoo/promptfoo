@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -22,53 +22,58 @@ export default function ModelAuditResultLatestPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFilesDialog, setShowFilesDialog] = useState(false);
+  const activeRequestRef = useRef<AbortController | null>(null);
   const startNewScan = useModelAuditConfigStore((state) => state.startNewScan);
 
-  useEffect(() => {
+  const fetchLatestScan = useCallback(async () => {
+    activeRequestRef.current?.abort();
     const abortController = new AbortController();
+    activeRequestRef.current = abortController;
 
-    const fetchLatestScan = async () => {
-      setIsLoading(true);
-      setError(null);
+    setIsLoading(true);
+    setError(null);
 
-      try {
-        const response = await callApi('/model-audit/scans?limit=1&sort=createdAt&order=desc', {
-          signal: abortController.signal,
-        });
+    try {
+      const response = await callApi('/model-audit/scans?limit=1&sort=createdAt&order=desc', {
+        signal: abortController.signal,
+      });
 
-        if (abortController.signal.aborted) {
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch latest scan');
-        }
-
-        const data = await response.json();
-        const scans = data.scans || [];
-
-        if (scans.length > 0) {
-          setLatestScan(scans[0]);
-        } else {
-          setLatestScan(null);
-        }
-      } catch (err) {
-        if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
-          return;
-        }
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load latest scan';
-        setError(errorMessage);
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoading(false);
-        }
+      if (abortController.signal.aborted) {
+        return;
       }
-    };
 
-    fetchLatestScan();
+      if (!response.ok) {
+        throw new Error('Failed to fetch latest scan');
+      }
 
-    return () => abortController.abort();
+      const data = await response.json();
+      const scans = data.scans || [];
+
+      if (scans.length > 0) {
+        setLatestScan(scans[0]);
+      } else {
+        setLatestScan(null);
+      }
+    } catch (err) {
+      if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
+        return;
+      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load latest scan';
+      setError(errorMessage);
+    } finally {
+      if (!abortController.signal.aborted) {
+        setIsLoading(false);
+      }
+      if (activeRequestRef.current === abortController) {
+        activeRequestRef.current = null;
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    fetchLatestScan();
+    return () => activeRequestRef.current?.abort();
+  }, [fetchLatestScan]);
 
   const severityCounts = useSeverityCounts(latestScan?.results?.issues);
   const hasFindings = latestScan
@@ -89,12 +94,21 @@ export default function ModelAuditResultLatestPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
+          <div className="mb-4">
+            <h1 className="text-xl font-semibold">Unable to load latest scan</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              We could not fetch the most recent result. Try again, or start a new scan from setup.
+            </p>
+          </div>
           <Alert variant="destructive" className="mb-6">
             <AlertContent>
               <AlertDescription>{error}</AlertDescription>
             </AlertContent>
           </Alert>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Button type="button" onClick={fetchLatestScan}>
+              Try Again
+            </Button>
             <Button asChild>
               <RouterLink to={MODEL_AUDIT_ROUTES.SETUP} onClick={startNewScan}>
                 Go to Setup
@@ -128,7 +142,7 @@ export default function ModelAuditResultLatestPage() {
                   href="https://www.promptfoo.dev/docs/model-audit/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-primary underline underline-offset-2 hover:no-underline"
                 >
                   Learn more
                 </a>

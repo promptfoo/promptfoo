@@ -1,7 +1,7 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-import { Agent, ProxyAgent } from 'undici';
+import { Agent, interceptors, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
@@ -56,33 +56,42 @@ vi.mock('../src/logger', () => ({
 }));
 
 vi.mock('../src/globalConfig/cloud', () => ({
-  CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
+    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
 vi.mock('undici', () => {
-  // Use regular functions instead of arrow functions for constructors
-  const ProxyAgent = vi.fn(function (this: any, options: any) {
-    return {
+  const createMockDispatcher = (options: any) => {
+    const dispatcher = {
       options,
       addRequest: vi.fn(),
+      close: vi.fn(),
       destroy: vi.fn(),
+      compose: vi.fn(),
     };
+    dispatcher.compose.mockReturnValue(dispatcher);
+    return dispatcher;
+  };
+
+  // Use regular functions instead of arrow functions for constructors
+  const ProxyAgent = vi.fn(function (this: any, options: any) {
+    return createMockDispatcher(options);
   });
 
   const Agent = vi.fn(function (this: any, options: any) {
-    return {
-      options,
-      addRequest: vi.fn(),
-      destroy: vi.fn(),
-    };
+    return createMockDispatcher(options);
   });
 
   return {
     ProxyAgent,
     Agent,
+    interceptors: {
+      decompress: vi.fn(() => ({ name: 'decompress' })),
+    },
   };
 });
 
@@ -136,13 +145,6 @@ vi.mock('../src/envars', () => {
   };
 });
 
-vi.mock('node:fs', () => ({
-  default: {
-    readFileSync: vi.fn(),
-  },
-  readFileSync: vi.fn(),
-}));
-
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
 }));
@@ -161,6 +163,7 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -863,6 +866,14 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
 
+  it('should compose default Agent dispatchers with response decompression', async () => {
+    await fetchWithProxy('https://example.com/api');
+
+    const agent = vi.mocked(Agent).mock.results[0]?.value as { compose: ReturnType<typeof vi.fn> };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(agent.compose).toHaveBeenCalledWith({ name: 'decompress' });
+  });
+
   it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
     mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
@@ -891,6 +902,18 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
+  });
+
+  it('should compose ProxyAgent dispatchers with response decompression', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
+
+    await fetchWithProxy('https://example.com/api');
+
+    const proxyAgent = vi.mocked(ProxyAgent).mock.results[0]?.value as {
+      compose: ReturnType<typeof vi.fn>;
+    };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(proxyAgent.compose).toHaveBeenCalledWith({ name: 'decompress' });
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
@@ -1228,6 +1251,17 @@ describe('computeRateLimitWaitMs', () => {
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
   });
+
+  it('falls back to Retry-After when a reset header is non-finite', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': 'Infinity',
+        'Retry-After': '7',
+      }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
 });
 
 describe('fetchWithRetries', () => {
@@ -1290,6 +1324,22 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('redacts URL credentials and sensitive query values in retry failure logs', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    const url =
+      'https://webhook-user:webhook-password@n8n.example.com/webhook/agent?token=webhook-secret';
+
+    await expect(fetchWithRetries(url, {}, 1000, 0)).rejects.toThrow(
+      'Request failed after 0 retries: Error: Network error',
+    );
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).not.toContain('webhook-user');
+    expect(debugLogs).not.toContain('webhook-password');
+    expect(debugLogs).not.toContain('webhook-secret');
+  });
+
   it('should not sleep after the final attempt', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1347,6 +1397,24 @@ describe('fetchWithRetries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('redacts sensitive URL query values in rate-limit logs', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+      }),
+    );
+
+    await expect(
+      fetchWithRetries('https://n8n.example.com/webhook/agent?token=webhook-secret', {}, 1000, 0),
+    ).rejects.toThrow(/Rate limit exceeded/);
+
+    const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(debugLogs).toContain('n8n.example.com');
+    expect(debugLogs).not.toContain('webhook-secret');
   });
 
   it('should respect maximum retry count', async () => {

@@ -179,7 +179,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     this.fal.fal.config({
       credentials: this.apiKey,
       ...this.clientConfig,
-    });
+    } as Parameters<typeof this.fal.fal.config>[0]);
 
     if (!response) {
       response = await this.runInference(input);

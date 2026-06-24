@@ -59,7 +59,7 @@ function ThemeSelector() {
           onClick={handleThemePreferenceChange}
           aria-label={`Theme preference: ${currentStateLabel}. Switch to ${nextThemeLabel}.`}
           className={cn(
-            'relative rounded-full text-foreground/60 transition-all duration-200 hover:rotate-[15deg] hover:text-foreground',
+            'relative size-11 rounded-full text-foreground/60 transition-all duration-200 hover:rotate-[15deg] hover:text-foreground sm:size-9',
             '[&_svg]:size-5',
           )}
         >

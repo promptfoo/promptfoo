@@ -41,6 +41,15 @@ function getPostHogClient(): PostHog | null {
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
+function getRuntimeMetadata() {
+  return {
+    nodeVersion: process.version,
+    nodeMajor: Number.parseInt(process.versions.node, 10),
+    platform: process.platform,
+    arch: process.arch,
+  };
+}
+
 export class Telemetry {
   private telemetryDisabledRecorded = false;
   private id: string;
@@ -106,6 +115,7 @@ export class Telemetry {
       ...properties,
       packageVersion: VERSION,
       isRunningInCi: ciFlag,
+      ...getRuntimeMetadata(),
     };
 
     const client = getPostHogClient();

@@ -73,6 +73,16 @@ describe('Overview', () => {
     });
   });
 
+  it('uses a breakpoint-aware severity card grid', () => {
+    const { container } = renderOverview({}, []);
+
+    expect(container.firstElementChild).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+      'lg:grid-cols-5',
+    );
+  });
+
   it('should display the correct issue counts for each severity when pass rates are below the threshold', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.8,

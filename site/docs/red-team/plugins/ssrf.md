@@ -5,17 +5,15 @@ description: Red team server-side request forgery (SSRF) vulnerabilities by test
 
 # Server-Side Request Forgery (SSRF) Plugin
 
-The SSRF (Server-Side Request Forgery) red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to make the server-side application fetch resources from unexpected or unauthorized destinations.
-
-This plugin helps identify potential security breaches where an attacker might exploit the system to access internal resources or exfiltrate data. It is based on the [OWASP API Top 10](https://owasp.org/www-project-api-security/) (API7).
+Use the SSRF plugin to test whether an AI-connected system can be manipulated into fetching attacker-chosen resources, including internal hosts and local files. It targets [OWASP API7](https://owasp.org/www-project-api-security/) style behavior where a seemingly ordinary retrieval task becomes a server-side access path.
 
 ## Purpose
 
-The SSRF plugin helps to:
+It focuses on whether the system:
 
-1. Assess the AI's ability to validate and sanitize user-supplied URLs or resource identifiers.
-2. Identify potential vulnerabilities where the system might be tricked into fetching resources from malicious sources.
-3. Test the AI's response to attempts to access internal or unauthorized resources.
+1. Rejects unsafe URLs and resource identifiers.
+2. Avoids treating internal, local, or attacker-controlled destinations as normal retrieval targets.
+3. Handles URL-fetch requests without leaking network or architecture details.
 
 ## Configuration
 
@@ -93,13 +91,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for SSRF vulnerabilities is critical for:
-
-- Preventing unauthorized access to internal resources
-- Protecting against data exfiltration
-- Maintaining the integrity and security of the system's architecture
-
-By incorporating the SSRF plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of resource requests and URL processing.
+SSRF matters because the dangerous action may be delegated to an otherwise legitimate tool, browser, or backend fetcher. This plugin is useful when the model can initiate retrieval workflows and you need to verify that natural-language framing does not bypass destination controls.
 
 ## Related Concepts
 

@@ -27,6 +27,11 @@ export type Message = LoadedMessage | LoadingMessage;
 const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
+  const roleLabel = {
+    user: 'User',
+    assistant: 'Assistant',
+    system: 'System',
+  }[message.role];
 
   const bubbleClasses = cn(
     'p-3 max-w-[70%] overflow-hidden shadow-sm',
@@ -61,7 +66,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
         return (
           <div>
-            <audio controls style={{ width: '500px' }} data-testid="audio">
+            <audio controls className="w-full max-w-[500px]" data-testid="audio">
               <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
               Your browser does not support the audio element.
             </audio>
@@ -77,16 +82,22 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         return (
           <div
             role="img"
+            aria-label={`${roleLabel} message image`}
             data-testid="image"
-            className="w-full min-w-[500px] min-h-[300px] bg-contain bg-no-repeat bg-left"
+            className="min-h-[180px] w-[min(500px,70vw)] max-w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
             style={{ backgroundImage: `url(${imageSrc})` }}
           />
         );
       }
       case 'video': {
         return (
-          <div className="w-[500px] flex justify-center">
-            <video controls style={{ maxHeight: '200px' }} data-testid="video">
+          <div className="flex w-full max-w-[500px] justify-center">
+            <video
+              controls
+              className="max-w-full"
+              style={{ maxHeight: '200px' }}
+              data-testid="video"
+            >
               <source
                 src={
                   loadedMessage?.content.startsWith('data:')

@@ -7,6 +7,7 @@ describe('InfoBox', () => {
     ['info', 'bg-blue-50', 'border-blue-200', 'text-blue-700'],
     ['tip', 'bg-amber-50', 'border-amber-200', 'text-amber-700'],
     ['help', 'bg-purple-50', 'border-purple-200', 'text-purple-700'],
+    ['subtle', 'bg-muted/30', 'border-border', 'text-muted-foreground'],
   ] as const)('renders %s variant with correct styling', (variant, bgClass, borderClass, textClass) => {
     render(<InfoBox variant={variant}>Test message</InfoBox>);
 

@@ -497,9 +497,10 @@ interface Cache {
 
 ---
 
-### `fetchWithCache(url, options?, timeout?, format?, bust?, maxRetries?)`
+### `fetchWithCache(url, options?, timeout?, format?, bustOrOptions?, maxRetries?)`
 
 Fetch with caching enabled.
+The fifth argument accepts either the legacy boolean cache-bust flag or an options object.
 
 ```typescript
 export async function fetchWithCache<T>(
@@ -507,7 +508,7 @@ export async function fetchWithCache<T>(
   options?: RequestInit,
   timeout?: number,
   format?: 'json' | 'text',
-  bust?: boolean,
+  bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
 ```

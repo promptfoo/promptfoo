@@ -126,6 +126,11 @@ describe('FrameworkCard', () => {
     // These plugins appear in categories 1, 2, and 5
     expect(screen.getByText(/Broken Object Level Authorization/)).toBeInTheDocument();
 
+    expect(screen.getByText(/Broken Object Level Authorization/).parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
+
     // Verify plugins are displayed (some appear in multiple categories, so use getAllByText)
     expect(screen.getAllByText('bola').length).toBeGreaterThan(0);
     expect(screen.getAllByText('bfla').length).toBeGreaterThan(0);

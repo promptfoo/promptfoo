@@ -10,6 +10,11 @@ The Hydra strategy (`jailbreak:hydra`) runs a multi-turn attacker agent that ada
 
 Unlike single-turn jailbreaks that retry variations of one payload, Hydra continuously reasons about prior turns, retries with fresh context, and shares learnings across every test in the same scan.
 
+Hydra has two target-delivery modes:
+
+- **Replay mode** (`stateful: false`, default): Hydra sends the full conversation transcript to the target on every turn. Use this when the target is stateless or expects the entire message history in each request.
+- **Target-managed session mode** (`stateful: true`): Hydra sends only the newest turn. Your provider must preserve earlier turns for the same session, for example with cookies, a server session, or an [OpenAI Agents session factory](/docs/providers/openai-agents/#stateful-red-team-runs).
+
 ## Implementation
 
 Add the strategy to your `promptfooconfig.yaml` to enable multi-turn adaptive testing:
@@ -37,21 +42,21 @@ Hydra relies on Promptfoo Cloud to coordinate the attacker agent, maintain scan-
 
 ## Configuration Options
 
-| Option          | Default | Description                                                                                                                                                           |
-| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                         |
-| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`.                                          |
-| `stateful`      | `false` | When `true`, Hydra sends only the latest turn alongside the session identifier. Keep `false` (stateless mode) if your target expects the full conversation each time. |
+| Option          | Default | Description                                                                                                                                                                                                 |
+| --------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxTurns`      | `10`    | Maximum conversation turns Hydra will take with the target before stopping. Increase for deeper explorations.                                                                                               |
+| `maxBacktracks` | `10`    | Number of times Hydra can roll back the last turn when it detects a refusal. Set to `0` automatically when `stateful: true`.                                                                                |
+| `stateful`      | `false` | When `true`, use target-managed session mode: Hydra sends only the newest turn, and the target provider must preserve earlier turns for that session. Keep `false` to replay the full transcript each time. |
 
 ::::tip
-Hydra automatically manages backtracking and session handling. In Promptfoo Cloud, it derives session support from the target’s configuration. When using the open-source CLI/UI, set `stateful: true` in the Hydra configuration if your provider expects persistent sessions.
+Hydra manages attacker-side history and backtracking. Your target provider manages target-side persistence in `stateful: true` mode. In Promptfoo Cloud, Hydra can derive the mode from the target configuration. In the open-source CLI/UI, set `stateful: true` only after you configure sessions in the provider. See [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions).
 ::::
 
 ## How It Works
 
 1. **Goal selection** – Hydra pulls the red team goal from the plugin metadata or injected variable.
 2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
-3. **Target probing** – The selected message is rendered (stateless or stateful) and sent to your target provider.
+3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
 
@@ -78,4 +83,5 @@ Hydra is most effective when paired with plugin suites like `harmful`, `pii`, or
 - [Iterative Jailbreaks](iterative.md) – Baseline single-turn optimization strategy
 - [Meta-Agent Jailbreaks](meta.md) – Strategic taxonomy builder for complex single-turn attacks
 - [Multi-turn Jailbreaks](multi-turn.md) – Overview of conversational attacker agents
+- [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions) – Configure real target-side conversation state
 - [Tree-based Jailbreaks](tree.md) – Branching exploration without multi-turn conversations

@@ -125,7 +125,8 @@ export default function History({
         cell: ({ getValue }) => (
           <Link
             to={EVAL_ROUTES.DETAIL(getValue<string>() || '')}
-            className="text-primary hover:underline font-mono text-sm"
+            title={getValue<string>()}
+            className="block truncate font-mono text-sm text-primary hover:underline"
           >
             {getValue<string>()}
           </Link>
@@ -252,10 +253,10 @@ export default function History({
   );
 
   return (
-    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer className="fixed top-[calc(var(--nav-height)+var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Evaluation History</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Evaluation History</h1>
           <p className="text-sm text-muted-foreground mt-1">View and compare all evaluation runs</p>
         </div>
       </PageHeader>

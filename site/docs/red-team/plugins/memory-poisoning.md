@@ -82,6 +82,8 @@ redteam:
       numTests: 30
 ```
 
+If you are testing the built-in JavaScript [`openai:agents:*` provider](/docs/providers/openai-agents), use its [stateful red-team session pattern](/docs/providers/openai-agents/#stateful-red-team-runs) so each attack keeps turn history without leaking memory into unrelated tests.
+
 ## Working With Results
 
 The test results will show:
@@ -105,6 +107,8 @@ To protect against memory poisoning attacks:
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
+- [Stateful OpenAI Agents Sessions](/docs/providers/openai-agents/#stateful-red-team-runs)
+- [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions)
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
 - [Hijacking](/docs/red-team/plugins/hijacking)

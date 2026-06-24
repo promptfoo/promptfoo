@@ -41,7 +41,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
       {/* Advanced Configuration Section */}
       <div className="mt-8">
         <Tabs defaultValue={TabValue.SessionManagement}>
-          <TabsList className="w-full justify-start overflow-x-auto">
+          <TabsList className="grid !h-auto w-full grid-cols-2 gap-1 overflow-visible md:grid-cols-3 xl:inline-flex xl:!h-10 xl:w-auto xl:gap-0">
             <TabsTrigger value={TabValue.SessionManagement}>Session Management</TabsTrigger>
             <TabsTrigger value={TabValue.Authorization}>Authorization</TabsTrigger>
             <TabsTrigger value={TabValue.RequestTransform}>Request Transform</TabsTrigger>

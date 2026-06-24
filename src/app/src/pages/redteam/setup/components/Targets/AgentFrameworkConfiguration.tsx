@@ -192,14 +192,14 @@ export default function AgentFrameworkConfiguration({
 
       {/* Template Modal */}
       <Dialog open={templateModalOpen} onOpenChange={(open) => !open && handleCloseTemplateModal()}>
-        <DialogContent className="min-h-[80vh] sm:max-w-4xl">
+        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {frameworkDetails.name} Template - {templateFilename}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
             <Alert variant="warning">
               <AlertTriangle className="size-4" />
               <AlertContent>
@@ -241,7 +241,7 @@ export default function AgentFrameworkConfiguration({
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="shrink-0 gap-2">
             <Button variant="outline" onClick={handleCopyTemplate} disabled={copied}>
               <Copy className="mr-2 size-4" />
               {copied ? 'Copied!' : 'Copy Template'}

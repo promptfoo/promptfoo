@@ -38,18 +38,22 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
+- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI frontier models (GPT-5.5 and GPT-5.4) with native reasoning effort
+- [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (requires `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
+- [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
-- [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
 - [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 - [`promptfooconfig.converse.yaml`](promptfooconfig.converse.yaml) - Converse API with extended thinking (ultrathink)
+- [`promptfooconfig.converse-mcp.yaml`](promptfooconfig.converse-mcp.yaml) - Converse API with Model Context Protocol (MCP) tools
 
 ## Converse API Example
 
@@ -81,6 +85,46 @@ Run the Converse API example with:
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse.yaml
 ```
+
+## Converse MCP Example
+
+The Converse MCP example (`promptfooconfig.converse-mcp.yaml`) demonstrates how to attach Model Context Protocol (MCP) servers to a Bedrock Converse provider. MCP tools are discovered from the configured server, converted to Bedrock Converse tool definitions, and executed when the model requests a tool call.
+
+### Configuration
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 with MCP
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      mcp:
+        enabled: true
+        servers:
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+        tools:
+          - ask_question
+      toolChoice: auto
+```
+
+Run the Converse MCP example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse-mcp.yaml
+```
+
+Replace the `servers` entry with a local `command`/`args`, `path`, or another remote `url` to use your own MCP server.
+
+> **Note:** When the model emits `tool_use`, the provider executes the requested
+> MCP tool and returns the **raw tool result** as the eval output. There is no
+> follow-up Converse turn that feeds the tool result back to the model for a
+> synthesized answer, so the assertions in this example match substrings present
+> in the MCP server's response. If you need a model-summarized answer, wrap the
+> provider in an agent harness or run a second eval over the captured tool
+> output.
 
 ## Knowledge Base Example
 
@@ -152,6 +196,12 @@ providers:
 - `titan` - Amazon Titan models
 - `deepseek` - DeepSeek models (with thinking capability)
 - `openai` - OpenAI GPT-OSS models
+- `zai` - Z.AI GLM models
+- `minimax` - MiniMax models
+- `moonshot` - Moonshot Kimi models
+- `nvidia` - NVIDIA Nemotron models
+- `writer` - Writer Palmyra models
+- `gemma` - Google Gemma models
 
 ### Running the Examples
 
@@ -198,6 +248,33 @@ Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
+```
+
+## OpenAI Frontier Models Example
+
+The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenAI's GPT-5.x frontier models on Bedrock:
+
+- **openai.gpt-5.5** - Flagship frontier reasoning model (available in `us-east-2`)
+- **openai.gpt-5.4** - Frontier reasoning model (available in `us-east-2` and `us-west-2`)
+
+### Key Features
+
+- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (the mantle endpoint), not `InvokeModel`. promptfoo routes `bedrock:openai.gpt-5.x` there automatically, so output matches the `openai:responses` provider.
+- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+
+  ```bash
+  export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
+  ```
+
+- **Native Reasoning Effort**: `reasoning_effort` supports `none`, `low`, `medium`, `high`, and `xhigh` (`minimal` is not supported by these Bedrock models).
+- **Region-gated**: Request model access in a supported region before running.
+
+These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
+
+Run the frontier example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-frontier.yaml
 ```
 
 ## New Converse API Features (SDK 3.943+)

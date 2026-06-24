@@ -125,6 +125,7 @@ const BrowserAutomationConfiguration = ({
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={`Remove step ${index + 1}`}
                   onClick={() => {
                     const newSteps = selectedTarget.config.steps?.filter(
                       (_: BrowserStep, i: number) => i !== index,

@@ -57,8 +57,6 @@ const OpenAICodexPluginConfigSchema = z
     timeout_ms: z.number().int().positive().optional(),
     artifacts_dir: z.string().min(1).optional(),
     retain_runtime: z.boolean().optional(),
-    copy_auth: z.boolean().optional(),
-    codex_home: z.string().min(1).optional(),
   })
   .passthrough()
   .superRefine((config, context) => {
@@ -84,8 +82,6 @@ export interface OpenAICodexPluginConfig extends OpenAICodexSDKConfig {
   timeout_ms?: number;
   artifacts_dir?: string;
   retain_runtime?: boolean;
-  copy_auth?: boolean;
-  codex_home?: string;
 }
 
 interface PluginManifest {
@@ -632,38 +628,6 @@ function resolveArtifactExportDir(
   return resolvedArtifactExportDir;
 }
 
-function getCodexAuthSource(config: OpenAICodexPluginConfig): string {
-  return path.join(
-    config.codex_home
-      ? path.resolve(config.codex_home)
-      : process.env.CODEX_HOME || path.join(os.homedir(), '.codex'),
-    'auth.json',
-  );
-}
-
-function copyCodexAuthIfConfigured(config: OpenAICodexPluginConfig, codexHome: string): boolean {
-  if (config.copy_auth === false) {
-    return false;
-  }
-
-  const authSource = getCodexAuthSource(config);
-  if (!pathExists(authSource)) {
-    return false;
-  }
-  const resolvedAuthSource = fs.realpathSync(authSource);
-  const authStat = fs.statSync(resolvedAuthSource);
-  if (!authStat.isFile()) {
-    throw new Error('Codex auth source must resolve to a regular file');
-  }
-
-  fs.copyFileSync(
-    resolvedAuthSource,
-    path.join(codexHome, 'auth.json'),
-    fs.constants.COPYFILE_EXCL,
-  );
-  return true;
-}
-
 async function makeRuntimeRemovable(root: string): Promise<void> {
   if (!pathExists(root)) {
     return;
@@ -701,12 +665,7 @@ async function makeRuntimeRemovable(root: string): Promise<void> {
   await fs.promises.chmod(root, 0o700).catch(() => undefined);
 }
 
-function deleteRuntimeAuth(root: string): void {
-  fs.rmSync(path.join(root, 'home', '.codex', 'auth.json'), { force: true });
-}
-
 async function removeRuntime(root: string): Promise<void> {
-  deleteRuntimeAuth(root);
   try {
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch (error) {
@@ -821,8 +780,6 @@ function withoutPluginConfig(
     timeout_ms: _timeoutMs,
     artifacts_dir: _artifactsDir,
     retain_runtime: _retainRuntime,
-    copy_auth: _copyAuth,
-    codex_home: _codexHome,
     ...codexConfig
   } = config;
 
@@ -944,7 +901,6 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         `[features]\nplugins = true\n\n[plugins.${tomlString(`${manifest.name}@${CODEX_PLUGIN_MARKETPLACE}`)}]\nenabled = true\n\n[projects.${tomlString(workspace)}]\ntrust_level = "trusted"\n`,
       );
       throwIfAborted(signal);
-      const copiedAuth = copyCodexAuthIfConfigured(config, codexHome);
       writeJson(path.join(root, 'runtime.json'), {
         plugin: {
           name: manifest.name,
@@ -955,7 +911,6 @@ export class OpenAICodexPluginProvider implements ApiProvider {
           gitCommit: pluginGitCommit ?? null,
         },
         workspace,
-        copiedAuth,
       });
 
       return {
@@ -977,7 +932,6 @@ export class OpenAICodexPluginProvider implements ApiProvider {
         pluginGitCommit,
       };
     } catch (error) {
-      deleteRuntimeAuth(root);
       await withDeadline(
         removeRuntime(root),
         cleanupTimeoutMs(config),
@@ -1036,7 +990,6 @@ export class OpenAICodexPluginProvider implements ApiProvider {
       logger.warn('[CodexPlugin] Unable to collect or export plugin artifacts', { error });
     } finally {
       if (!config.retain_runtime) {
-        deleteRuntimeAuth(runtime.root);
         try {
           await withDeadline(
             removeRuntime(runtime.root),

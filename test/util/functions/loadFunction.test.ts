@@ -139,6 +139,51 @@ describe('loadFunction', () => {
       expect(result1).toBe(mockFn);
     });
 
+    it('should keep cached functions isolated by resolved path', async () => {
+      const mockFn1 = vi.fn();
+      const mockFn2 = vi.fn();
+      mockResolve.mockImplementation((basePath, filePath) => `${basePath}/${filePath}`);
+      vi.mocked(importModule).mockResolvedValueOnce(mockFn1).mockResolvedValueOnce(mockFn2);
+
+      const result1 = await loadFunction({
+        filePath: 'function.js',
+        basePath: '/base/one',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.js',
+        basePath: '/base/two',
+        useCache: true,
+      });
+
+      expect(importModule).toHaveBeenCalledTimes(2);
+      expect(importModule).toHaveBeenNthCalledWith(1, '/base/one/function.js', undefined);
+      expect(importModule).toHaveBeenNthCalledWith(2, '/base/two/function.js', undefined);
+      expect(result1).toBe(mockFn1);
+      expect(result2).toBe(mockFn2);
+    });
+
+    it('should keep cached functions isolated by default function name', async () => {
+      const mockFn1 = vi.fn();
+      const mockFn2 = vi.fn();
+      vi.mocked(importModule).mockResolvedValue({ first: mockFn1, second: mockFn2 });
+
+      const result1 = await loadFunction({
+        filePath: 'function.js',
+        defaultFunctionName: 'first',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.js',
+        defaultFunctionName: 'second',
+        useCache: true,
+      });
+
+      expect(importModule).toHaveBeenCalledTimes(2);
+      expect(result1).toBe(mockFn1);
+      expect(result2).toBe(mockFn2);
+    });
+
     it('should not use cache when disabled', async () => {
       const mockFn1 = vi.fn();
       const mockFn2 = vi.fn();
@@ -187,6 +232,27 @@ describe('loadFunction', () => {
       expect(typeof result).toBe('function');
       await result('test input');
       expect(runPython).toHaveBeenCalledWith(TEST_PY_PATH, 'func', ['test input']);
+    });
+
+    it('should keep cached Python functions isolated by default function name', async () => {
+      const result1 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'first',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'second',
+        useCache: true,
+      });
+
+      expect(result1).not.toBe(result2);
+
+      await result1('first input');
+      await result2('second input');
+
+      expect(runPython).toHaveBeenNthCalledWith(1, TEST_PY_PATH, 'first', ['first input']);
+      expect(runPython).toHaveBeenNthCalledWith(2, TEST_PY_PATH, 'second', ['second input']);
     });
   });
 
@@ -242,10 +308,77 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should handle standard Windows file URLs on Windows', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: 'C:/path/to/file.js',
+      });
+      expect(parseFileUrl('file:///C:/path/to/file.js:functionName')).toEqual({
+        filePath: 'C:/path/to/file.js',
+        functionName: 'functionName',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('should preserve standard Windows-looking file URLs as POSIX paths on POSIX', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: '/C:/path/to/file.js',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
   it('should handle relative paths', () => {
     const result = parseFileUrl('file://./path/to/file.js:functionName');
     expect(result).toEqual({
       filePath: './path/to/file.js',
+      functionName: 'functionName',
+    });
+  });
+
+  it('should parse Python file URLs with function names', () => {
+    const result = parseFileUrl('file://./path/to/file.py:function_name');
+    expect(result).toEqual({
+      filePath: './path/to/file.py',
+      functionName: 'function_name',
+    });
+  });
+
+  it('should preserve colons in default-export file paths', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
+    });
+  });
+
+  it('should parse named exports from file paths that contain colons', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js:functionName');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
+      functionName: 'functionName',
+    });
+  });
+
+  it('should parse named exports from directory paths that contain colons', () => {
+    const result = parseFileUrl('file://path:with:colons/hooks.js:functionName');
+    expect(result).toEqual({
+      filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
     });
   });

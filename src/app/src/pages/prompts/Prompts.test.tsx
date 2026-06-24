@@ -295,6 +295,31 @@ describe('Prompts', () => {
     expect(cells.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('keeps fallback labels compact when raw prompt text is long', () => {
+    const longRawPrompt =
+      'You are an internal corporate chatbot. Respond to this query using only the supplied context.';
+    const mockPromptsWithLongFallbackLabel: ServerPromptWithMetadata[] = [
+      {
+        id: 'prompt:long-fallback-label',
+        prompt: {
+          raw: longRawPrompt,
+          label: '',
+        },
+        count: 1,
+        recentEvalDate: '2023-10-27T10:00:00.000Z',
+        recentEvalId: 'eval-123',
+        evals: [],
+      },
+    ];
+
+    renderWithProviders({ data: mockPromptsWithLongFallbackLabel });
+
+    const matchingCells = screen.getAllByText(longRawPrompt);
+    const fallbackLabel = matchingCells.find((cell) => cell.classList.contains('line-clamp-2'));
+
+    expect(fallbackLabel).toHaveClass('line-clamp-2', 'break-words');
+  });
+
   it('should render the Label column in DataGrid on very narrow viewport widths', () => {
     Object.defineProperty(window, 'innerWidth', {
       writable: true,

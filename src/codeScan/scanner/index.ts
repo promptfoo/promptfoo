@@ -8,7 +8,13 @@ import path from 'path';
 import type { ChildProcess } from 'child_process';
 
 import cliState from '../../cliState';
-import logger, { getLogLevel } from '../../logger';
+import logger, { getLogLevel, setLogLevel } from '../../logger';
+import {
+  CodeScanOutputFormat,
+  CodeScanOutputFormatSchema,
+  type PullRequestContext,
+  type ScanResponse,
+} from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import {
   loadConfigOrDefault,
@@ -27,7 +33,6 @@ import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
-import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
 import type { SocketIoMcpBridge } from '../mcp/transport';
 
@@ -43,11 +48,25 @@ export interface ScanOptions {
   base?: string;
   compare?: string;
   json?: boolean;
+  format?: string;
   githubPr?: string;
   minimumSeverity?: string;
   minSeverity?: string;
   guidance?: string;
   guidanceFile?: string;
+}
+
+export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat {
+  const parsed = CodeScanOutputFormatSchema.safeParse(options.format ?? CodeScanOutputFormat.TEXT);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid output format "${options.format}". Expected one of: text, json, sarif`,
+    );
+  }
+  if (options.json && parsed.data === CodeScanOutputFormat.SARIF) {
+    throw new Error('Cannot combine --json with --format sarif');
+  }
+  return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
 /**
@@ -70,35 +89,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
-
-  const startTime = Date.now();
-
-  // Load and merge configuration
-  const baseConfig: Config = loadConfigOrDefault(options.config);
-  const config = mergeConfigWithOptions(baseConfig, options);
-
-  // Resolve guidance (CLI options take precedence)
-  const guidance = resolveGuidance(options, config);
-
-  // Resolve repository path
+  const originalLogLevel = getLogLevel();
+  const structuredOutputRequested =
+    options.json === true ||
+    options.format === CodeScanOutputFormat.JSON ||
+    options.format === CodeScanOutputFormat.SARIF;
   const absoluteRepoPath = path.resolve(repoPath);
-
-  // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
-  if (!options.json) {
-    logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
-    logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-    if (config.diffsOnly) {
-      logger.info(`  Mode: diffs only`);
-    } else {
-      logger.info(`  Mode: diffs + tracing into repo`);
-    }
-    logger.info('');
-  }
-
-  logger.debug(`Repository: ${absoluteRepoPath}`);
-
-  // Create mutable refs for cleanup handlers
-  // This allows signal handlers to access resources even if created later
   const cleanupRefs: CleanupRefs = {
     repoPath: absoluteRepoPath,
     socket: null,
@@ -107,25 +103,60 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     spinner: null,
     abortController: null,
   };
+  let outputFormat: CodeScanOutputFormat | null = null;
+  let spinner: ReturnType<typeof createSpinner> | undefined;
+  let showSpinner = false;
 
-  // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
-  registerCleanupHandlers(cleanupRefs);
-
-  // Initialize spinner (hide in JSON mode, but still show logger.info status)
-  const isWebUI = Boolean(cliState.webUI);
-  const spinner = createSpinner({
-    json: options.json || false,
-    isWebUI,
-    logLevel: getLogLevel(),
-  });
-
-  if (spinner) {
-    cleanupRefs.spinner = spinner; // Update ref for signal handlers
-  }
-
-  const showSpinner = Boolean(spinner);
+  const startTime = Date.now();
 
   try {
+    outputFormat = resolveOutputFormat(options);
+    // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
+    // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
+    // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
+    // (e.g., library consumers calling executeScan directly).
+    if (outputFormat !== CodeScanOutputFormat.TEXT) {
+      setLogLevel('error');
+    }
+
+    // Load and merge configuration
+    const baseConfig: Config = loadConfigOrDefault(options.config);
+    const config = mergeConfigWithOptions(baseConfig, options);
+
+    // Resolve guidance (CLI options take precedence)
+    const guidance = resolveGuidance(options, config);
+
+    // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
+    if (outputFormat === CodeScanOutputFormat.TEXT) {
+      logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
+      logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+      if (config.diffsOnly) {
+        logger.info(`  Mode: diffs only`);
+      } else {
+        logger.info(`  Mode: diffs + tracing into repo`);
+      }
+      logger.info('');
+    }
+
+    logger.debug(`Repository: ${absoluteRepoPath}`);
+
+    // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
+    registerCleanupHandlers(cleanupRefs);
+
+    // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
+    const isWebUI = Boolean(cliState.webUI);
+    spinner = createSpinner({
+      format: outputFormat,
+      isWebUI,
+      logLevel: getLogLevel(),
+    });
+
+    if (spinner) {
+      cleanupRefs.spinner = spinner; // Update ref for signal handlers
+    }
+
+    showSpinner = Boolean(spinner);
+
     // Create AbortController for cancelling the scan
     const abortController = new AbortController();
     cleanupRefs.abortController = abortController; // Update ref for signal handlers
@@ -212,10 +243,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
 
-      // In JSON mode, output a proper JSON response for programmatic consumption
-      if (options.json) {
+      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
+      if (outputFormat !== CodeScanOutputFormat.TEXT) {
         const response: ScanResponse = { success: true, comments: [], review: msg };
-        logger.info(JSON.stringify(response, null, 2));
+        displayScanResults(response, Date.now() - startTime, {
+          format: outputFormat,
+          githubPr: options.githubPr,
+        });
       } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
@@ -278,16 +312,40 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Display results
     displayScanResults(scanResponse, duration, {
-      json: options.json || false,
+      format: outputFormat,
       githubPr: options.githubPr,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Handle fork PR auth rejection as success (helpful comment posted to PR)
+    // Handle fork PR auth rejection as success for interactive and JSON consumers — the
+    // server has already posted a helpful PR comment. SARIF is different: an empty SARIF
+    // report would look like a completed clean scan if a workflow uploads it.
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
-      if (showSpinner && spinner) {
+      if (outputFormat === CodeScanOutputFormat.JSON) {
+        // commentsPosted is intentionally omitted — the scanner has no signal that the
+        // server actually posted the PR comment, only that authorization was rejected.
+        // Consumers should branch on skipReason instead.
+        const response: ScanResponse = {
+          success: true,
+          comments: [],
+          skipReason: msg,
+        };
+        displayScanResults(response, Date.now() - startTime, {
+          format: outputFormat,
+          githubPr: options.githubPr,
+        });
+      } else if (outputFormat === CodeScanOutputFormat.SARIF) {
+        console.error(
+          `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
+        );
+        cliState.postActionCallback = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          process.exitCode = 1;
+        };
+        return;
+      } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
@@ -303,6 +361,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
+    } else if (structuredOutputRequested) {
+      // Structured modes reserve stdout for the payload, so errors go to stderr. This
+      // covers both resolved formats (JSON/SARIF) and requests that failed before the
+      // format resolved (e.g. an invalid --json + --format sarif combination).
+      console.error(msg);
     } else {
       logger.error(msg);
     }
@@ -333,6 +396,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (client) {
       client.disconnect();
       logger.debug('Agent client disconnected');
+    }
+
+    if (
+      outputFormat !== null &&
+      outputFormat !== CodeScanOutputFormat.TEXT &&
+      getLogLevel() !== originalLogLevel
+    ) {
+      setLogLevel(originalLogLevel);
     }
   }
 }

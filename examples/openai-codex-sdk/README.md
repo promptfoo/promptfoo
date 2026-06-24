@@ -17,7 +17,7 @@ Install the OpenAI Codex SDK:
 npm install @openai/codex-sdk
 ```
 
-**Requirements**: Node.js 20.20+ or 22.22+
+**Requirements**: Node.js `^20.20.0` or `>=22.22.0`
 
 Authenticate with Codex using one of these options:
 
@@ -128,6 +128,20 @@ This example runs Codex in `read-only` mode and asks it to create a file. The as
 ```
 
 If you run this config from the repo root, set `CODEX_SANDBOX_WORKING_DIR="$PWD/examples/openai-codex-sdk/sandbox/sample-workspace"`.
+
+### Run on Amazon Bedrock
+
+This example runs Codex against OpenAI frontier models hosted on Amazon Bedrock by setting `model_provider: amazon-bedrock` with a Bedrock model id (`openai.gpt-5.5`). It requires AWS credentials and Bedrock model access in a supported Region (`us-east-2` for GPT-5.5).
+
+**Location**: `./bedrock/`
+
+**Usage**:
+
+```bash
+(cd bedrock && promptfoo eval)
+```
+
+Export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` first; they are forwarded to the Codex CLI via `config.cli_env`.
 
 ## Key Features
 

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
-import { isJavascriptFile } from '../../src/util/fileExtensions';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -19,16 +18,9 @@ vi.mock('../../src/esm', async (importOriginal) => {
 vi.mock('../../src/logger', () => ({
   default: { debug: vi.fn() },
 }));
-vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    isJavascriptFile: vi.fn().mockReturnValue(true),
-  };
-});
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
-vi.mocked(isJavascriptFile);
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
@@ -305,6 +297,82 @@ describe('FunctionCallbackHandler', () => {
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
+    it('should load specific function from Windows-style external file paths', async () => {
+      const mockSpecificFunction = vi.fn().mockResolvedValue('windows result');
+      const mockModule = {
+        default: vi.fn(),
+        windowsHandler: mockSpecificFunction,
+      };
+      mockImportModule.mockResolvedValue(mockModule);
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://C:/path/to/functions.js:windowsHandler',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'windows result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'C:/path/to/functions.js'),
+      );
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+    });
+
+    it('should load default function from standard Windows file URLs on Windows', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('windows default result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+      try {
+        const callbacks: FunctionCallbackConfig = {
+          testFunction: 'file:///C:/path/to/functions.js',
+        };
+        const result = await handler.processCall(
+          { name: 'testFunction', arguments: '{}' },
+          callbacks,
+        );
+
+        expect(result).toEqual({
+          output: 'windows default result',
+          isError: false,
+        });
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/basePath', 'C:/path/to/functions.js'),
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
+      }
+    });
+
+    it('should preserve colons in default-export external file paths', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('colon path result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://path/to/functions:default.js',
+      };
+      const result = await handler.processCall(
+        { name: 'testFunction', arguments: '{}' },
+        callbacks,
+      );
+
+      expect(result).toEqual({
+        output: 'colon path result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'path/to/functions:default.js'),
+      );
+    });
+
     it('should handle inline function strings', async () => {
       const callbacks: FunctionCallbackConfig = {
         testFunction: '() => "inline result"',
@@ -468,8 +536,8 @@ describe('FunctionCallbackHandler', () => {
         { name: 'failing_tool', description: 'A tool that fails' },
       ]);
       mockMCPClient.callTool.mockResolvedValue({
-        content: '',
-        error: 'Tool execution failed: Invalid arguments',
+        content: 'Tool execution failed: Invalid arguments',
+        isError: true,
       });
 
       const call = { name: 'failing_tool', arguments: '{"invalid": true}' };
@@ -477,6 +545,42 @@ describe('FunctionCallbackHandler', () => {
 
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool execution failed: Invalid arguments',
+        isError: true,
+      });
+    });
+
+    it('should surface MCP results that resolve with an error field', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'failing_tool', description: 'A tool that fails' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: '',
+        error: 'Connection refused',
+      });
+
+      const call = { name: 'failing_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (failing_tool): Connection refused',
+        isError: true,
+      });
+    });
+
+    it('should fall back to a generic message when an error result has no content', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'failing_tool', description: 'A tool that fails' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: '',
+        isError: true,
+      });
+
+      const call = { name: 'failing_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (failing_tool): Tool returned an error result',
         isError: true,
       });
     });

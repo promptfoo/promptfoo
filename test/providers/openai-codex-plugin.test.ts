@@ -186,19 +186,15 @@ describe('OpenAICodexPluginProvider', () => {
     expect(cancellationResult.metadata?.codexPlugin.status).toBe('cancelled');
   });
 
-  it('cleans auth and runtime when shutdown fails without losing primary errors', async () => {
-    const codexHome = path.join(root, 'codex-home');
-    fs.mkdirSync(codexHome);
-    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"token":"secret"}');
+  it('cleans runtime when shutdown fails without losing primary errors', async () => {
     mocks.shutdown.mockRejectedValueOnce(new Error('shutdown failed'));
     const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, codex_home: codexHome },
+      config: { plugin: { path: pluginRoot }, workspace },
     });
     const shutdownResult = await provider.callApi('Return JSON', context());
     expect(shutdownResult.error).toBe('Codex plugin SDK shutdown failed: shutdown failed');
     expect(shutdownResult.metadata?.codexPlugin.status).toBe('failed');
     const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-    expect(fs.existsSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'auth.json'))).toBe(false);
     expect(fs.existsSync(path.dirname(sdkConfig.cli_env.HOME))).toBe(false);
 
     mocks.callApi.mockRejectedValueOnce(new Error('primary failed'));
@@ -343,42 +339,18 @@ while :; do sleep 1; done
     const originalCopyFileSync = fs.copyFileSync.bind(fs);
     vi.spyOn(fs, 'copyFileSync').mockImplementation((...args: any[]) => {
       if (String(args[1]).includes(exportedArtifacts)) {
-        throw new Error('secret-token=do-not-leak');
+        throw new Error('sensitive-value=do-not-leak');
       }
       return originalCopyFileSync(...(args as Parameters<typeof fs.copyFileSync>));
     });
     const result = await provider.callApi('Return JSON', context());
     expect(result.error).toBe('Codex plugin artifact export failed');
-    expect(result.error).not.toContain('secret-token');
+    expect(result.error).not.toContain('sensitive-value');
     expect(result.metadata?.codexPlugin).toMatchObject({
       status: 'failed',
       artifactError: 'Codex plugin artifact export failed',
       artifacts: [],
     });
-  });
-
-  it('deletes copied auth within the cleanup deadline even when runtime deletion hangs', async () => {
-    const codexHome = path.join(root, 'codex-home');
-    fs.mkdirSync(codexHome);
-    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"token":"secret"}');
-    const originalRm = fs.promises.rm.bind(fs.promises);
-    vi.spyOn(fs.promises, 'rm').mockImplementation(async (...args: any[]) => {
-      if (String(args[0]).includes('promptfoo-codex-plugin-')) {
-        return new Promise(() => {});
-      }
-      return originalRm(...(args as Parameters<typeof fs.promises.rm>));
-    });
-    const provider = new OpenAICodexPluginProvider({
-      config: { plugin: { path: pluginRoot }, workspace, codex_home: codexHome, timeout_ms: 100 },
-    });
-    const startedAt = Date.now();
-    const result = await provider.callApi('Return JSON', context());
-    const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
-    expect(Date.now() - startedAt).toBeLessThan(500);
-    expect(fs.existsSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'auth.json'))).toBe(false);
-    expect(result.metadata?.codexPlugin.cleanup.runtimeRemoved).toBe(false);
-    vi.restoreAllMocks();
-    fs.rmSync(path.dirname(sdkConfig.cli_env.HOME), { recursive: true, force: true });
   });
 
   it('excludes .git internals while hashing path plugin content', async () => {
@@ -442,7 +414,7 @@ while :; do sleep 1; done
     expect(
       () =>
         new OpenAICodexPluginProvider({
-          config: { plugin: { package: '@openai/demo-plugin', version: '1.2.3' }, workspace },
+          config: { plugin: { package: '@scope/demo-plugin', version: '1.2.3' }, workspace },
         }),
     ).not.toThrow();
     expect(

@@ -49,4 +49,5 @@ Use promptfoo with popular frameworks and services.
 - [Evaluating OpenAI Assistants](/docs/guides/evaluate-openai-assistants) — Evaluate OpenAI's Assistants API
 - [Evaluating CrewAI Agents](/docs/guides/evaluate-crewai) — Red team and evaluate CrewAI multi-agent workflows
 - [Evaluating LangGraph](/docs/guides/evaluate-langgraph) — Test LangGraph agent applications
+- [Evaluating Google ADK Agents](/docs/guides/evaluate-google-adk) — Trace sessions, tools, callbacks, plugins, and workflow agents
 - [Evaluating ElevenLabs Voice AI](/docs/guides/evaluate-elevenlabs) — Test text-to-speech and voice AI outputs

@@ -12,7 +12,8 @@ const execFileAsync = promisify(execFile);
 
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
-const existingClaudePluginRoot = path.join(repoRoot, 'plugins', 'promptfoo-evals');
+const repoClaudeSkillsRoot = path.join(repoRoot, '.claude', 'skills');
+const repoCodexSkillsRoot = path.join(repoRoot, '.agents', 'skills');
 const evalsSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-evals');
 const providerSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-provider-setup');
 const redteamSetupSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-redteam-setup');
@@ -24,6 +25,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
+const expectedPluginVersion = '0.1.1';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1711,7 +1713,7 @@ function openApiUnsafeResponseFieldSpec() {
   };
 }
 
-describe('promptfoo Codex plugin package', () => {
+describe('promptfoo plugin package (Codex + Claude Code)', () => {
   it('declares a Codex plugin manifest with a skills directory', () => {
     const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json');
     const manifest = JSON.parse(readText(manifestPath));
@@ -1730,11 +1732,16 @@ describe('promptfoo Codex plugin package', () => {
         expect.stringContaining('red teaming'),
       ]),
     );
+    expect(manifest.interface.composerIcon).toBe('./assets/promptfoo-panda.svg');
+    expect(manifest.interface.logo).toBe('./assets/promptfoo-panda.svg');
+    expect(manifest.interface.screenshots).toEqual([]);
     expect(fs.existsSync(path.join(pluginRoot, 'skills'))).toBe(true);
     expect(fs.existsSync(evalsSkillRoot)).toBe(true);
     expect(fs.existsSync(providerSkillRoot)).toBe(true);
     expect(fs.existsSync(redteamSetupSkillRoot)).toBe(true);
     expect(fs.existsSync(redteamRunSkillRoot)).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, manifest.interface.composerIcon))).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, manifest.interface.logo))).toBe(true);
   });
 
   it('keeps the Codex plugin manifest within documented packaging constraints', () => {
@@ -1760,11 +1767,14 @@ describe('promptfoo Codex plugin package', () => {
         'brandColor',
         'capabilities',
         'category',
+        'composerIcon',
         'defaultPrompt',
         'developerName',
         'displayName',
+        'logo',
         'longDescription',
         'privacyPolicyURL',
+        'screenshots',
         'shortDescription',
         'termsOfServiceURL',
         'websiteURL',
@@ -1797,6 +1807,9 @@ describe('promptfoo Codex plugin package', () => {
     expect(manifest.interface.longDescription.length).toBeLessThanOrEqual(160);
     expect(manifest.interface.capabilities).toEqual(expect.arrayContaining(['Read', 'Write']));
     expect(manifest.interface.brandColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(manifest.interface.composerIcon).toMatch(/^\.\//);
+    expect(manifest.interface.logo).toMatch(/^\.\//);
+    expect(manifest.interface.screenshots).toEqual([]);
     expect(new Set(manifest.interface.defaultPrompt).size).toBe(
       manifest.interface.defaultPrompt.length,
     );
@@ -1833,7 +1846,6 @@ describe('promptfoo Codex plugin package', () => {
     expect(
       fs.existsSync(path.join(repoRoot, entry.source.path, '.codex-plugin', 'plugin.json')),
     ).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, entry.source.path, '.claude-plugin'))).toBe(false);
   });
 
   it('keeps the published surface to four focused skills without a meta selector', () => {
@@ -1848,13 +1860,15 @@ describe('promptfoo Codex plugin package', () => {
     expect(skillDirs).not.toContain('promptfoo-meta');
   });
 
-  it('keeps the Codex plugin bundle file inventory intentionally small', () => {
+  it('keeps the shared plugin bundle file inventory intentionally small', () => {
     const packagedFiles = listFiles(pluginRoot, () => true)
       .map((filePath) => toPosixPath(path.relative(pluginRoot, filePath)))
       .sort();
 
     expect(packagedFiles).toEqual([
+      '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
+      'assets/promptfoo-panda.svg',
       'skills/promptfoo-evals/SKILL.md',
       'skills/promptfoo-evals/agents/openai.yaml',
       'skills/promptfoo-evals/references/eval-patterns.md',
@@ -1911,8 +1925,13 @@ describe('promptfoo Codex plugin package', () => {
       }
     > = {
       'promptfoo-evals': {
-        positives: ['eval configs', 'test cases', 'assertions', 'non-redteam'],
-        negatives: ['Do not use', 'provider connection', 'redteam plugin/strategy setup'],
+        positives: ['non-redteam promptfoo eval suites', 'test cases', 'assertions'],
+        negatives: [
+          'Do not use',
+          'connecting a new target/provider',
+          'smoke-testing an endpoint',
+          'redteam plugin/strategy setup',
+        ],
       },
       'promptfoo-provider-setup': {
         positives: ['providers or redteam targets', 'live HTTP', 'static-code-derived'],
@@ -1973,12 +1992,12 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
-  it('documents the Codex plugin bundle beside the published single eval skill', () => {
+  it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
-    expect(docs).toContain('repo-local Codex usage');
+    expect(docs).toContain('/plugin install promptfoo@promptfoo');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -1986,43 +2005,72 @@ describe('promptfoo Codex plugin package', () => {
     expect(docs).toContain('local graders');
     expect(docs).toContain('PROMPTFOO_PYTHON');
     expect(docs).toContain('copy `plugins/promptfoo`');
-    expect(docs).toContain('portable single');
     expect(docs).toContain('plugins/promptfoo');
     expect(docs).toContain('.agents/plugins/marketplace.json');
+    expect(docs).toContain('.claude-plugin/marketplace.json');
     for (const skillDir of expectedSkillDirs) {
       expect(docs).toContain(skillDir);
     }
   });
 
-  it('keeps the existing Claude eval plugin separate from the Codex bundle', () => {
+  it('serves one bundle to both the Codex and Claude marketplaces', () => {
     const codexManifest = JSON.parse(
       readText(path.join(pluginRoot, '.codex-plugin', 'plugin.json')),
     );
     const claudeManifest = JSON.parse(
-      readText(path.join(existingClaudePluginRoot, '.claude-plugin', 'plugin.json')),
+      readText(path.join(pluginRoot, '.claude-plugin', 'plugin.json')),
     );
 
+    // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
-    expect(claudeManifest.name).toBe('promptfoo-evals');
-    expect(fs.existsSync(path.join(pluginRoot, '.claude-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, '.codex-plugin'))).toBe(false);
-    expect(fs.existsSync(path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals'))).toBe(
-      true,
+    expect(claudeManifest.name).toBe('promptfoo');
+    expect(codexManifest.version).toBe(expectedPluginVersion);
+    expect(claudeManifest.version).toBe(expectedPluginVersion);
+    expect(claudeManifest.author.name).toBe('Promptfoo');
+    expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
+
+    // The standalone single-skill Claude bundle has been retired in favor of this shared bundle.
+    expect(fs.existsSync(path.join(repoRoot, 'plugins', 'promptfoo-evals'))).toBe(false);
+
+    // Claude marketplace entry — asserted with the same rigor as the Codex marketplace above.
+    const claudeMarketplace = JSON.parse(
+      readText(path.join(repoRoot, '.claude-plugin', 'marketplace.json')),
     );
+    expect(claudeMarketplace.name).toBe('promptfoo');
+    expect(claudeMarketplace.owner.name).toBe('promptfoo');
+    expect(typeof claudeMarketplace.metadata.description).toBe('string');
+    expect(claudeMarketplace.plugins).toHaveLength(1);
+    expect(JSON.stringify(claudeMarketplace)).not.toContain('[TODO:');
+    const claudeEntry = claudeMarketplace.plugins[0];
+    expect(claudeEntry.name).toBe('promptfoo');
+    expect(claudeEntry.license).toBe('MIT');
+
+    // Parity guarantee: both marketplaces must resolve to the SAME on-disk bundle.
+    const codexMarketplace = JSON.parse(
+      readText(path.join(repoRoot, '.agents', 'plugins', 'marketplace.json')),
+    );
+    const codexEntry = (codexMarketplace.plugins as MarketplacePlugin[]).find(
+      (plugin) => plugin.name === 'promptfoo',
+    );
+    if (!codexEntry) {
+      throw new Error('Missing promptfoo Codex marketplace entry');
+    }
+    const claudeBundle = path.resolve(repoRoot, claudeEntry.source);
+    expect(claudeBundle).toBe(pluginRoot);
+    expect(path.resolve(repoRoot, codexEntry.source.path)).toBe(pluginRoot);
+
+    // Claude Code auto-discovers the same four skills as Codex from the shared bundle's skills/.
+    const claudeSkillDirs = fs
+      .readdirSync(path.join(claudeBundle, 'skills'), { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name)
+      .sort();
+    expect(claudeSkillDirs).toEqual(expectedSkillDirs);
   });
 
-  it('keeps Codex eval guidance compatible with the published Claude eval skill', () => {
-    const claudeSkill = readText(
-      path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', 'SKILL.md'),
-    );
-    const codexSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-    const codexReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    expect(claudeSkill).toContain('deterministic');
-    expect(claudeSkill).toContain('model-graded');
-    expect(claudeSkill).toContain('tests: file://tests/*.yaml');
-    expect(claudeSkill).toContain("apiKey: '{{env.OPENAI_API_KEY}}'");
-    expect(claudeSkill).toContain('options.transform');
+  it('keeps the eval skill guidance complete and provider-aware', () => {
+    const evalsSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
+    const evalsReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
 
     for (const phrase of [
       'deterministic',
@@ -2034,10 +2082,54 @@ describe('promptfoo Codex plugin package', () => {
       'anthropic:messages:claude-sonnet-4-6',
       'echo',
     ]) {
-      expect(`${codexSkill}\n${codexReference}`).toContain(phrase);
+      expect(`${evalsSkill}\n${evalsReference}`).toContain(phrase);
     }
-    expect(codexSkill).toContain('If the provider does not work yet, switch to');
-    expect(codexReference).toContain('promptfoo-provider-setup');
+    expect(evalsSkill).toContain('If the provider does not work yet, switch to');
+    expect(evalsReference).toContain('promptfoo-provider-setup');
+  });
+
+  it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
+    const repoLocalSkillDirs = fs
+      .readdirSync(repoClaudeSkillsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(repoLocalSkillDirs).toEqual(
+      expect.arrayContaining(['promptfoo-evals', 'redteam-plugin-development', 'search-params']),
+    );
+
+    for (const skillDir of repoLocalSkillDirs) {
+      const skillRoot = path.join(repoClaudeSkillsRoot, skillDir);
+      const entries = fs.readdirSync(skillRoot);
+      expect(entries).toContain('SKILL.md');
+      expect(entries).not.toContain('skill.md');
+    }
+  });
+
+  it('keeps the promptfoo-evals contributor copy self-contained', () => {
+    // The repo-local copy is standalone: the sibling skills it could route to
+    // (promptfoo-provider-setup, the redteam skills) are not present under
+    // .claude/skills/, so it must not hand off to them and dangle.
+    const contributorEvals = readText(
+      path.join(repoClaudeSkillsRoot, 'promptfoo-evals', 'SKILL.md'),
+    );
+    for (const sibling of [
+      'promptfoo-provider-setup',
+      'promptfoo-redteam-setup',
+      'promptfoo-redteam-run',
+    ]) {
+      expect(contributorEvals).not.toContain(sibling);
+    }
+  });
+
+  it('keeps shared repo-local contributor skills aligned between Claude and Codex', () => {
+    for (const skillDir of ['redteam-plugin-development', 'search-params']) {
+      const claudeSkill = readText(path.join(repoClaudeSkillsRoot, skillDir, 'SKILL.md'));
+      const codexSkill = readText(path.join(repoCodexSkillsRoot, skillDir, 'SKILL.md'));
+
+      expect(codexSkill).toBe(claudeSkill);
+    }
   });
 
   it('keeps every agents/openai.yaml aligned with UI metadata constraints', () => {
@@ -2557,11 +2649,13 @@ describe('promptfoo-evals skill', () => {
     const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
 
     expect(skill).toMatch(/^---\nname: promptfoo-evals\n/);
-    expect(skill).toContain('prompts, providers, vars, test cases, assertions');
+    expect(skill).toContain('after the target');
+    expect(skill).toContain('or provider already works');
+    expect(skill).toContain('prompts, vars, test cases, assertions');
     expect(skill).toContain('model-graded rubrics');
-    expect(skill).toContain('non-redteam evaluation suites');
-    expect(skill).toContain('Do not use for initial');
-    expect(skill).toContain('provider connection work');
+    expect(skill).toContain('non-redteam promptfoo eval suites');
+    expect(skill).toContain('connecting a new target/provider');
+    expect(skill).toContain('smoke-testing');
     expect(skill).toContain('redteam plugin/strategy setup');
   });
 
@@ -4832,6 +4926,8 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(skill).toContain('Write the target and purpose');
     expect(skill).toContain('Choose a small plugin set');
     expect(skill).toContain('Choose strategies conservatively');
+    expect(skill).toContain('Use `jailbreak:meta` for the default first setup/generation pass.');
+    expect(skill).toContain('Use `jailbreak:hydra` instead when the target is stateful');
     expect(skill).toContain('search route handlers, API clients, tests');
     expect(skill).toContain('object IDs imply `bola`');
     expect(skill).toContain("Promptfoo's default redteam generation");
@@ -4887,6 +4983,9 @@ describe('promptfoo-redteam-setup skill', () => {
 
     expect(reference).toContain('Single-input HTTP policy scan');
     expect(reference).toContain('Multi-input authorization scan');
+    expect(reference).toContain('Multi-input is not the same as multi-turn.');
+    expect(reference).toContain('jailbreak:meta');
+    expect(reference).toContain('jailbreak:hydra');
     expect(reference).toContain('provider: file://./redteam-generator.mjs');
     expect(reference).toContain('file://./redteam-generator.py');
     expect(reference).toContain('call_api(prompt, options, context)');
@@ -4952,6 +5051,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'id: policy',
         'frameworks:',
         'strategies:',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4963,6 +5063,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'trip_id:',
         'redteam-generator.mjs',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4976,6 +5077,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4988,6 +5090,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -5002,6 +5105,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.py',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
   ])('ships a validatable $dir redteam setup fixture', ({ dir, snippets }) => {
@@ -5225,6 +5329,7 @@ describe('promptfoo-redteam-setup skill', () => {
       { id: 'rbac', numTests: 1 },
       { id: 'bola', numTests: 1 },
     ]);
+    expect(generated.redteam.strategies).toEqual(['jailbreak:meta']);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
     expectRecord(policyPlugin.config, 'Generated OpenAPI redteam policy config');

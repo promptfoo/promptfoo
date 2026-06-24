@@ -3,7 +3,7 @@ import { HelpCircle, Info, Lightbulb } from 'lucide-react';
 
 interface InfoBoxProps {
   children: React.ReactNode;
-  variant?: 'info' | 'tip' | 'help';
+  variant?: 'info' | 'tip' | 'help' | 'subtle';
   className?: string;
 }
 
@@ -26,6 +26,12 @@ export function InfoBox({ children, variant = 'info', className }: InfoBoxProps)
       border: 'border-purple-200 dark:border-purple-800',
       text: 'text-purple-700 dark:text-purple-300',
       icon: HelpCircle,
+    },
+    subtle: {
+      bg: 'bg-muted/30 dark:bg-muted/20',
+      border: 'border-border',
+      text: 'text-muted-foreground',
+      icon: Lightbulb,
     },
   }[variant];
 

@@ -45,7 +45,7 @@ When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbrea
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-4o-audio-preview
+  - id: openai:chat:gpt-audio-1.5
     config:
       modalities: ['text', 'audio']
       audio:
@@ -366,7 +366,7 @@ class AudioProvider {
       }
     }
 
-    // Call your audio-capable API (e.g., OpenAI gpt-4o-audio-preview)
+    // Call your audio-capable API (e.g., OpenAI gpt-audio-1.5)
     const response = await yourApiCall(messages);
 
     return {

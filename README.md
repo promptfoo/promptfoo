@@ -24,7 +24,7 @@
 
 ## Quick Start
 
-Requires [Node.js](https://nodejs.org/en/download) 20.20+ or 22.22+ for npm and npx usage.
+Requires [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0` for npm and npx usage.
 
 ```sh
 npm install -g promptfoo

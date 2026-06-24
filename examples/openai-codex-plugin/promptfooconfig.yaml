@@ -1,26 +1,26 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Compare Codex Security plugin versions
+description: Compare Codex plugin versions
 
 prompts:
-  - Run a minimal Codex Security scan and return only JSON.
+  - Run a minimal Codex plugin task and return only JSON.
 
 providers:
   - id: openai:codex-plugin
-    label: codex-security-current
+    label: codex-plugin-current
     config:
       plugin:
-        path: '{{env.CODEX_SECURITY_PLUGIN_CURRENT}}'
-      skill: security-scan
+        path: '{{env.CODEX_PLUGIN_CURRENT}}'
+      skill: demo-skill
       workspace: '{{env.CODEX_PLUGIN_WORKSPACE}}'
       skip_git_repo_check: true
       sandbox_mode: read-only
       approval_policy: never
   - id: openai:codex-plugin
-    label: codex-security-baseline
+    label: codex-plugin-baseline
     config:
       plugin:
-        path: '{{env.CODEX_SECURITY_PLUGIN_BASELINE}}'
-      skill: security-scan
+        path: '{{env.CODEX_PLUGIN_BASELINE}}'
+      skill: demo-skill
       workspace: '{{env.CODEX_PLUGIN_WORKSPACE}}'
       skip_git_repo_check: true
       sandbox_mode: read-only
@@ -33,9 +33,9 @@ tests:
         value: |
           const plugin = context.providerResponse?.metadata?.codexPlugin;
           const skillCalls = context.providerResponse?.metadata?.skillCalls ?? [];
-          return plugin?.invocation === 'skill:security-scan' &&
+          return plugin?.invocation === 'skill:demo-skill' &&
             plugin?.plugin?.sourceIdentity &&
             plugin?.plugin?.sourceDigest &&
             plugin?.plugin?.gitCommit &&
-            skillCalls.some((skillCall) => skillCall?.name === 'security-scan') &&
+            skillCalls.some((skillCall) => skillCall?.name === 'demo-skill') &&
             Boolean(plugin?.executionIdentity?.sessionId || plugin?.executionIdentity?.turnId);

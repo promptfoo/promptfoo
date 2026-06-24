@@ -53,17 +53,22 @@ const PromptDialog = ({
 
   return (
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
+          <DialogTitle className="flex min-w-0 flex-col items-start gap-2 text-left sm:flex-row sm:items-center">
+            <span className="min-w-0 break-words">
+              {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
+            </span>
             <Badge variant="outline" className="font-mono text-xs">
               {selectedPrompt.id.slice(0, 6)}
             </Badge>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div
+          data-testid="prompt-dialog-scroll-body"
+          className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           {/* Prompt content section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -88,7 +93,7 @@ const PromptDialog = ({
               </div>
 
               <div className="rounded-lg border border-border overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="min-w-[720px] w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr className="border-b border-border">
                       <th className="px-3 py-2 text-left font-semibold">Eval ID</th>
@@ -103,9 +108,9 @@ const PromptDialog = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedEvals.map((evalData) => (
+                    {sortedEvals.map((evalData, index) => (
                       <tr
-                        key={`eval-${evalData.id}`}
+                        key={`eval-${evalData.id}-${index}`}
                         className="border-b border-border hover:bg-muted/30"
                       >
                         <td className="px-3 py-2">
@@ -160,7 +165,7 @@ const PromptDialog = ({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter data-testid="prompt-dialog-footer" className="shrink-0">
           <Button variant="outline" onClick={handleClose}>
             Close
           </Button>

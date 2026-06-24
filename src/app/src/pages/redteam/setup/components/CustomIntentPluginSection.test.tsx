@@ -62,6 +62,7 @@ describe('CustomIntentPluginSection', () => {
 
       // Check for at least one text field (the empty intent)
       expect(screen.getByRole('textbox')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove intent 1' })).toBeDisabled();
     });
 
     it('renders with existing intents', () => {
@@ -139,6 +140,7 @@ describe('CustomIntentPluginSection', () => {
       const deleteIcons = document.querySelectorAll('svg.lucide-trash-2');
       const deleteButtons = Array.from(deleteIcons).map((icon) => icon.closest('button')!);
       expect(deleteButtons).toHaveLength(3);
+      expect(screen.getByRole('button', { name: 'Remove intent 1' })).toBeInTheDocument();
 
       await user.click(deleteButtons[0]);
 

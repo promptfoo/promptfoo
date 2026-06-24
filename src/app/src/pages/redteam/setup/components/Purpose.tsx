@@ -454,9 +454,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Core Application Details')}
                   className="rounded-t-lg border border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 hover:bg-muted/50">
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
+                      <h3 className="text-left text-base font-semibold tracking-tight">
                         Core Application Details
                       </h3>
                       <span className="text-xs font-medium text-muted-foreground">
@@ -468,7 +468,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     </div>
                     <ChevronDown
                       className={cn(
-                        'size-5 transition-transform',
+                        'size-5 shrink-0 transition-transform',
                         expandedSections.has('Core Application Details') && 'rotate-180',
                       )}
                     />
@@ -552,9 +552,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Access & Permissions')}
                   className="border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 hover:bg-muted/50">
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
+                      <h3 className="text-left text-base font-semibold tracking-tight">
                         Access & Permissions
                       </h3>
                       <span className="text-xs font-medium text-muted-foreground">
@@ -566,7 +566,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     </div>
                     <ChevronDown
                       className={cn(
-                        'size-5 transition-transform',
+                        'size-5 shrink-0 transition-transform',
                         expandedSections.has('Access & Permissions') && 'rotate-180',
                       )}
                     />
@@ -669,9 +669,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Data & Content')}
                   className="border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Data & Content</h3>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 hover:bg-muted/50">
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
+                      <h3 className="text-left text-base font-semibold tracking-tight">
+                        Data & Content
+                      </h3>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Data & Content')}
                       </span>
@@ -681,7 +683,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     </div>
                     <ChevronDown
                       className={cn(
-                        'size-5 transition-transform',
+                        'size-5 shrink-0 transition-transform',
                         expandedSections.has('Data & Content') && 'rotate-180',
                       )}
                     />
@@ -783,9 +785,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Business Context')}
                   className="rounded-b-lg border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Business Context</h3>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 p-4 hover:bg-muted/50">
+                    <div className="flex min-w-0 flex-1 flex-col items-start gap-1 pr-3 text-left sm:flex-row sm:items-center sm:gap-3">
+                      <h3 className="text-left text-base font-semibold tracking-tight">
+                        Business Context
+                      </h3>
                       <span className="text-xs font-medium text-muted-foreground">
                         {getCompletionPercentage('Business Context')}
                       </span>
@@ -795,7 +799,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     </div>
                     <ChevronDown
                       className={cn(
-                        'size-5 transition-transform',
+                        'size-5 shrink-0 transition-transform',
                         expandedSections.has('Business Context') && 'rotate-180',
                       )}
                     />
