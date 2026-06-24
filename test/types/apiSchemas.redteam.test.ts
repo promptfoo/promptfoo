@@ -157,6 +157,24 @@ describe('API schema red-team coverage', () => {
           apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
+
+      expect(
+        MediaSchemas.Info.Response.parse({
+          success: true,
+          data: {
+            key: 'audio/abcdef123456.mp3',
+            exists: true,
+            url: null,
+          },
+        }),
+      ).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: null,
+        },
+      });
     });
   });
 

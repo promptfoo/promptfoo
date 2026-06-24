@@ -32,8 +32,13 @@ export const MediaInfoResponseSchema = z.object({
     url: z
       .string()
       .nullable()
-      .describe('Storage provider URL; local providers may return a file:// URL'),
-    apiUrl: z.string().describe('Root-relative API URL for fetching the media bytes'),
+      .describe('Provider URL; local file URLs are replaced with the media API URL'),
+    apiUrl: z
+      .string()
+      .optional()
+      .describe(
+        'Server-relative API path for fetching the media bytes; prepend any configured deployment base path',
+      ),
   }),
 });
 

@@ -13,6 +13,15 @@ import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
+function getMediaApiUrl(req: Request, key: string): string {
+  const baseUrl = req.baseUrl || '/api/media';
+  return `${baseUrl.replace(/\/$/, '')}/${key}`;
+}
+
+function getBrowserSafeMediaUrl(storageUrl: string | null, apiUrl: string): string | null {
+  return storageUrl && /^file:/i.test(storageUrl.trimStart()) ? apiUrl : storageUrl;
+}
+
 /**
  * Get storage stats
  * Must be defined BEFORE wildcard routes
@@ -61,16 +70,27 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     }
 
     const storage = getMediaStorage();
-    const url = await storage.getUrl(key);
+    const apiUrl = getMediaApiUrl(req, key);
+    let storageUrl: string | null = null;
+    try {
+      storageUrl = await storage.getUrl(key);
+    } catch (error) {
+      logger.warn('[Media API] Failed to generate provider URL; using API access only', {
+        error,
+        key,
+        providerId: storage.providerId,
+      });
+    }
 
+    res.setHeader('Cache-Control', 'private, no-store');
     res.json(
       MediaSchemas.Info.Response.parse({
         success: true,
         data: {
           key,
           exists: true,
-          url,
-          apiUrl: `/api/media/${key}`,
+          url: getBrowserSafeMediaUrl(storageUrl, apiUrl),
+          apiUrl,
         },
       }),
     );
@@ -128,7 +148,8 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1 year cache (content-addressed)
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);
   } catch (error) {
     logger.error('[Media API] Error serving media', { error });
