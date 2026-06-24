@@ -188,7 +188,7 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
-`file://` references also work inside nested objects and arrays, and nested strings can reference other variables with `{{ }}` (quote them so YAML treats them as strings):
+`file://` references also work inside nested objects and arrays. A nested string can also map directly to a top-level file-backed variable with `{{ variable }}` (quote it so YAML treats it as a string):
 
 ```yaml
 tests:
@@ -203,7 +203,9 @@ tests:
           report: '{{ file_content }}'
 ```
 
-Text files are loaded as trimmed strings and YAML files as JSON strings. JavaScript, Python, PDF, and media files are only executed or loaded when referenced by a top-level variable.
+Relative nested references in an external YAML or JSON test/vars file are resolved from the directory containing that file. Inline references are resolved from the configuration base directory.
+
+Nested text files are loaded as trimmed strings and YAML files as JSON strings. Binary files and JavaScript, Python, PDF, or media references remain literal when nested; use a top-level variable for the existing executable, PDF, and media behavior.
 
 Javascript and Python variable files are supported. For example:
 

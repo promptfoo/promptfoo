@@ -313,6 +313,8 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal Base directory used to resolve persisted relative config references. */
+  configBasePath?: string;
 };
 
 const PromptMetricsSchema = z.object({

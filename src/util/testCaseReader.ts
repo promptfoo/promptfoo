@@ -19,7 +19,8 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
-import { isJavascriptFile } from './fileExtensions';
+import { isJavascriptFile, isSupportedNestedTextFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 import { parseXlsxFile } from './xlsx';
 
 import type {
@@ -42,6 +43,66 @@ type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
+function resolveVarFileReferences(
+  value: unknown,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  resolveDirectReferences = false,
+  visited = new WeakSet<object>(),
+): void {
+  if (typeof value !== 'object' || value === null || visited.has(value)) {
+    return;
+  }
+  visited.add(value);
+
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !('value' in descriptor) || descriptor.writable !== true) {
+      continue;
+    }
+
+    const nestedValue = descriptor.value;
+    if (
+      resolveDirectReferences &&
+      typeof nestedValue === 'string' &&
+      nestedValue.startsWith('file://')
+    ) {
+      const { filePath, functionName } = parseFileUrl(nestedValue);
+      if (!path.isAbsolute(filePath) && isSupportedNestedTextFile(filePath)) {
+        const rebasedPath = path.relative(
+          path.resolve(resolutionBasePath),
+          path.resolve(declaringBasePath, filePath),
+        );
+        const rebasedRef = `file://${rebasedPath}`;
+        Object.defineProperty(value, key, {
+          ...descriptor,
+          value: functionName ? `${rebasedRef}:${functionName}` : rebasedRef,
+        });
+      }
+    } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
+      resolveVarFileReferences(nestedValue, declaringBasePath, resolutionBasePath, true, visited);
+    }
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+export function rebaseTestCaseVarFileReferences(
+  testCase: TestCase,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+  visited = new WeakSet<object>(),
+): TestCase {
+  resolveVarFileReferences(testCase.vars, declaringBasePath, resolutionBasePath, false, visited);
+  return testCase;
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -60,7 +121,8 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
+      const yamlData = maybeLoadConfigFromExternalFile(rawData, 'vars');
+      resolveVarFileReferences(yamlData, path.dirname(p), basePath || process.cwd());
       Object.assign(ret, yamlData);
     }
   }
@@ -118,7 +180,23 @@ export async function readStandaloneTestsFile(
     });
     rows = await fetchCsvFromSharepoint(varsPath);
   } else {
-    return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+    const testCases = await readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+    const { fileExtension, pathWithoutFunction } = getStandaloneTestsFileMetadata(
+      varsPath,
+      basePath,
+    );
+    if (fileExtension === 'json' || fileExtension === 'yaml' || fileExtension === 'yml') {
+      const visited = new WeakSet<object>();
+      return testCases.map((testCase) =>
+        rebaseTestCaseVarFileReferences(
+          testCase,
+          path.dirname(pathWithoutFunction),
+          basePath || process.cwd(),
+          visited,
+        ),
+      );
+    }
+    return testCases;
   }
 
   return csvRowsToTestCases(rows);
@@ -407,6 +485,7 @@ export async function readTest(
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
+    rebaseTestCaseVarFileReferences(testCase, effectiveBasePath, basePath || process.cwd());
   } else {
     testCase = await loadTestWithVars(test, basePath);
   }
@@ -501,6 +580,7 @@ export async function loadTestsFromGlob(
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
+    let testCasesDeclareNestedVarPaths = false;
     // Extract path without function name (Windows-aware)
     const lastColonIndex = testFile.lastIndexOf(':');
     const pathWithoutFunction: string =
@@ -521,6 +601,7 @@ export async function loadTestsFromGlob(
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = fileContent
@@ -529,10 +610,12 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
+      testCasesDeclareNestedVarPaths = true;
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
     }
@@ -541,7 +624,16 @@ export async function loadTestsFromGlob(
       if (!Array.isArray(testCases) && typeof testCases === 'object') {
         testCases = [testCases];
       }
+      const visited = new WeakSet<object>();
       for (const testCase of testCases) {
+        if (testCasesDeclareNestedVarPaths) {
+          rebaseTestCaseVarFileReferences(
+            testCase,
+            path.dirname(testFile),
+            basePath || process.cwd(),
+            visited,
+          );
+        }
         ret.push(await readTest(testCase, path.dirname(testFile)));
       }
     }

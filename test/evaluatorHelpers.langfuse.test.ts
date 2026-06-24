@@ -5,6 +5,11 @@ import * as langfuseIntegration from '../src/integrations/langfuse';
 import type { Prompt } from '../src/types/index';
 
 vi.mock('../src/integrations/langfuse');
+const mockReadFile = vi.hoisted(() => vi.fn());
+vi.mock('fs/promises', () => ({
+  default: { readFile: mockReadFile },
+  readFile: mockReadFile,
+}));
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -19,6 +24,25 @@ describe('renderPrompt - Langfuse integration', () => {
   });
 
   describe('version-based prompts', () => {
+    it('should resolve nested file templates before passing vars to Langfuse', async () => {
+      mockGetPrompt.mockResolvedValue('Langfuse prompt');
+      mockReadFile.mockResolvedValueOnce('Hello {{ name | upper }}');
+      const vars = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+
+      await renderPrompt(toPrompt('langfuse://test-prompt:3:text'), vars, {});
+
+      expect(mockGetPrompt).toHaveBeenCalledWith(
+        'test-prompt',
+        { name: 'Alice', context: { message: 'Hello ALICE' } },
+        'text',
+        3,
+        undefined,
+      );
+    });
+
     it('should handle langfuse:// prompt with version only', async () => {
       mockGetPrompt.mockResolvedValue('Hello from Langfuse v3');
 

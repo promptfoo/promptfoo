@@ -288,6 +288,48 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should resolve nested JSON var file references relative to the declaring file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify([
+        {
+          vars: {
+            context: {
+              report: 'file://data/report.txt',
+              document: 'file://private/document.pdf',
+            },
+            items: ['plain', 'file://data/item.txt'],
+          },
+        },
+      ]),
+    );
+
+    const [result] = await readStandaloneTestsFile('fixtures/tests.json', path.resolve('/suite'));
+
+    expect(result.vars).toEqual({
+      context: {
+        report: 'file://fixtures/data/report.txt',
+        document: 'file://private/document.pdf',
+      },
+      items: ['plain', 'file://fixtures/data/item.txt'],
+    });
+  });
+
+  it('should rebase a nested YAML anchor shared across test cases only once', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      - context: &shared
+          report: file://data/report.txt
+      - context: *shared
+    `);
+
+    const result = await readStandaloneTestsFile('fixtures/tests.yaml', path.resolve('/suite'));
+
+    expect(result[0].vars?.context).toBe(result[1].vars?.context);
+    expect(result.map((test) => test.vars)).toEqual([
+      { context: { report: 'file://fixtures/data/report.txt' } },
+      { context: { report: 'file://fixtures/data/report.txt' } },
+    ]);
+  });
+
   it('should read JSONL file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}
@@ -808,6 +850,17 @@ describe('readTest', () => {
     const result = await readTest(input);
 
     expect(result).toEqual(input);
+  });
+
+  it('does not rewrite nested file references in inline TestCase input', async () => {
+    const input: TestCase = {
+      vars: { context: { report: 'file://data/report.txt' } },
+    };
+
+    const result = await readTest(input, path.resolve('/suite'));
+
+    expect(result.vars).toEqual({ context: { report: 'file://data/report.txt' } });
+    expect(input.vars).toEqual({ context: { report: 'file://data/report.txt' } });
   });
 
   it('readTest with invalid input', async () => {
@@ -1704,6 +1757,25 @@ describe('readVarsFiles', () => {
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
+
+  it('should resolve nested YAML var file references relative to the vars file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      context:
+        report: file://data/report.txt
+      items:
+        - plain
+        - file://data/item.txt
+    `);
+    vi.mocked(globSync).mockReturnValue(['/suite/fixtures/vars.yaml']);
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.anything(), 'vars');
+    expect(result).toEqual({
+      context: { report: 'file://fixtures/data/report.txt' },
+      items: ['plain', 'file://fixtures/data/item.txt'],
+    });
+  });
 });
 
 describe('loadTestsFromGlob', () => {
@@ -1798,6 +1870,17 @@ describe('loadTestsFromGlob', () => {
     // The mock should be called with the array from YAML
     expect(mockMaybeLoadConfig).toHaveBeenCalled();
     expect(result).toEqual(resolvedContent);
+  });
+
+  it('rebases nested refs in external YAML tests to the config base', async () => {
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/tests.yaml')]);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      yaml.dump([{ vars: { context: { report: 'file://data/report.txt' } } }]),
+    );
+
+    const [result] = await loadTestsFromGlob('fixtures/tests.yaml', path.resolve('/suite'));
+
+    expect(result.vars).toEqual({ context: { report: 'file://fixtures/data/report.txt' } });
   });
 
   it('should handle nested file:// references in complex test structures', async () => {

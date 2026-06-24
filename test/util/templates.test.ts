@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   analyzeTemplateReference,
+  analyzeTemplateReferences,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -300,6 +301,44 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+});
+
+describe('analyzeTemplateReferences', () => {
+  it.each([
+    '{{ user.name }} {{ question | default(fallback) }}',
+    '{% for context in items %}{{ context.message }}{% endfor %}',
+    '{% raw %}{{ context.message }}{% endraw %}',
+    '{% set local = source %}{{ local }} {{ after }}',
+    '{% macro greet(name, suffix=defaultSuffix) %}{{ name }}{{ suffix }}{{ outer }}{% endmacro %}',
+    '{% from templateName import foo as helper %}{{ helper() }} {{ outside }}',
+    '{{ broken',
+  ])('matches the established scope-aware single-variable analysis for %s', (template) => {
+    const candidates = [
+      'user',
+      'question',
+      'fallback',
+      'context',
+      'items',
+      'source',
+      'local',
+      'after',
+      'name',
+      'suffix',
+      'defaultSuffix',
+      'outer',
+      'templateName',
+      'foo',
+      'helper',
+      'outside',
+      'broken',
+    ];
+
+    const expected = new Set(
+      candidates.filter((candidate) => templateReferencesVariable(template, candidate)),
+    );
+
+    expect(analyzeTemplateReferences(template, candidates).referenced).toEqual(expected);
   });
 });
 

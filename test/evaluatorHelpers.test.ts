@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +10,6 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
-  sanitizeFileReferences,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { transform } from '../src/util/transform';
@@ -32,6 +30,7 @@ const { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockP
       dynamicModuleMocks.set(resolvedPath, moduleExport);
     };
     const fsMocks = {
+      readFile: vi.fn(),
       readFileSync: vi.fn(),
       writeFileSync: vi.fn(),
       statSync: vi.fn(),
@@ -70,15 +69,15 @@ vi.mock('node:module', () => {
 vi.mock('fs', () => ({
   ...fsMocks,
   promises: {
-    readFile: fsMocks.readFileSync,
+    readFile: fsMocks.readFile,
   },
 }));
 
 vi.mock('fs/promises', () => ({
   default: {
-    readFile: fsMocks.readFileSync,
+    readFile: fsMocks.readFile,
   },
-  readFile: fsMocks.readFileSync,
+  readFile: fsMocks.readFile,
 }));
 
 const mockGetText = vi.fn().mockResolvedValue({ text: 'Extracted PDF text' });
@@ -136,10 +135,12 @@ describe('evaluatorHelpers', () => {
    *   module mocks from leaking between tests (e.g., renderPrompt external JS tests)
    * - mockPathResolve: Resets to default implementation since some tests override it
    *   with custom behavior (e.g., collectFileMetadata returns only the last path segment)
-   * - vi.clearAllMocks(): Clears call history for all mocks to ensure clean assertions
+   * - fsMocks.readFile: Resets persistent async read implementations between tests
+   * - vi.clearAllMocks(): Clears call history for all other mocks
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    fsMocks.readFile.mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -148,14 +149,14 @@ describe('evaluatorHelpers', () => {
   describe('extractTextFromPDF', () => {
     it('should extract text from PDF successfully', async () => {
       const mockPDFText = 'Extracted PDF text';
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(Buffer.from('mock pdf content'));
 
       const result = await extractTextFromPDF('test.pdf');
       expect(result).toBe(mockPDFText);
     });
 
     it('should throw error when pdf-parse is not installed', async () => {
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(Buffer.from('mock pdf content'));
       const pdfParse = await import('pdf-parse');
       vi.mocked(pdfParse.PDFParse).mockImplementationOnce(() => {
         throw new Error("Cannot find module 'pdf-parse'");
@@ -167,7 +168,7 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should handle PDF extraction errors', async () => {
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(Buffer.from('mock pdf content'));
       mockGetText.mockRejectedValueOnce(new Error('PDF parsing failed'));
 
       await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
@@ -287,11 +288,11 @@ describe('evaluatorHelpers', () => {
       const vars = { var1: 'file://test.txt' };
       const evaluateOptions = {};
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('loaded from file');
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+      expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
@@ -360,11 +361,13 @@ describe('evaluatorHelpers', () => {
       const vars = { var1: 'file:///path/to/testData.json' };
       const evaluateOptions = {};
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(
+        JSON.stringify({ key: 'valueFromJson' }),
+      );
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.readFile).toHaveBeenCalledWith(
         expect.stringContaining('testData.json'),
         'utf8',
       );
@@ -376,11 +379,11 @@ describe('evaluatorHelpers', () => {
       const vars = { var1: 'file:///path/to/testData.yaml' };
       const evaluateOptions = {};
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('key: valueFromYaml');
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
-      expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.readFile).toHaveBeenCalledWith(
         expect.stringContaining('testData.yaml'),
         'utf8',
       );
@@ -404,10 +407,7 @@ describe('evaluatorHelpers', () => {
 
       // The nested file:// reference should have been resolved
       expect((vars.reporting_period as any).previous.report).toBe('file content here');
-      expect(fsPromises.readFile).toHaveBeenCalledWith(
-        expect.stringContaining('report.txt'),
-        'utf8',
-      );
+      expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('report.txt'));
     });
 
     it('should resolve file:// references nested inside an array var (issue #1613)', async () => {
@@ -420,7 +420,7 @@ describe('evaluatorHelpers', () => {
       await renderPrompt(toPrompt('{{ items }}'), vars, {});
 
       expect(vars.items[1]).toBe('item file content');
-      expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
+      expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('item.txt'));
     });
 
     it('should parse YAML file references nested inside an object var (issue #1613)', async () => {
@@ -466,6 +466,19 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Hello ALICE');
     });
 
+    it('should settle referenced top-level template vars before nested file templates', async () => {
+      const vars: Record<string, any> = {
+        person: 'Alice',
+        name: '{{ person | upper }}',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
     it('should render simple templates loaded from nested files in JSON prompts (issue #1613)', async () => {
       const vars: Record<string, any> = {
         name: 'Alice',
@@ -500,6 +513,34 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ message: 'Hello ALICE' }, null, 2));
     });
 
+    it('should render nested file templates reached through bracket notation', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context["message"] }}'), vars, {});
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
+    it('should render nested file templates referenced from Nunjucks set expressions', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{% set msg = context.message %}{{ msg }}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
     it('should not evaluate filtered skipped payloads loaded through nested files (issue #1613)', async () => {
       mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: 'must-not-render' });
       const vars: Record<string, any> = {
@@ -507,7 +548,9 @@ describe('evaluatorHelpers', () => {
         context: { message: 'file:///path/to/message.txt' },
       };
 
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Payload: {{ payload | safe }}');
+      const readFile = vi
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('Payload: {{ payload | safe }}');
 
       const renderedPrompt = await renderPrompt(
         toPrompt('{{ context.message }}'),
@@ -517,11 +560,12 @@ describe('evaluatorHelpers', () => {
         ['payload'],
       );
 
-      // A template referencing a skipped var via a filter must be left entirely raw,
-      // not rendered (the skipped value must never be inlined, at any nesting depth).
-      expect(vars.context.message).toBe('Payload: {{ payload | safe }}');
-      expect(renderedPrompt).toBe('Payload: {{ payload | safe }}');
+      // With a red-team payload present, nested preprocessing is disabled as a whole
+      // so aliases through arbitrary object graphs cannot bypass the skip boundary.
+      expect(vars.context.message).toBe('file:///path/to/message.txt');
+      expect(renderedPrompt).toBe('file:///path/to/message.txt');
       expect(renderedPrompt).not.toContain('must-not-render');
+      expect(readFile).not.toHaveBeenCalled();
       mockProcessEnv({ PROMPTFOO_SKIP_SENTINEL: undefined });
     });
 
@@ -542,7 +586,7 @@ describe('evaluatorHelpers', () => {
           payload,
           context: { message: 'file:///path/to/message.txt' },
         };
-        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
+        const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
 
         const renderedPrompt = await renderPrompt(
           toPrompt('{{ context.message }}'),
@@ -552,9 +596,10 @@ describe('evaluatorHelpers', () => {
           ['payload'],
         );
 
-        expect(vars.context.message).toBe(template);
-        expect(renderedPrompt).toBe(template);
+        expect(vars.context.message).toBe('file:///path/to/message.txt');
+        expect(renderedPrompt).toBe('file:///path/to/message.txt');
         expect(renderedPrompt).not.toContain(needle);
+        expect(readFile).not.toHaveBeenCalled();
         vi.restoreAllMocks();
       }
     });
@@ -564,7 +609,9 @@ describe('evaluatorHelpers', () => {
         payload: { evil: 'INJECTED-OBJECT-PAYLOAD' },
         context: { message: 'file:///path/to/message.txt' },
       };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Payload: {{ payload.evil }}');
+      const readFile = vi
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('Payload: {{ payload.evil }}');
 
       const renderedPrompt = await renderPrompt(
         toPrompt('{{ context.message }}'),
@@ -574,8 +621,9 @@ describe('evaluatorHelpers', () => {
         ['payload'],
       );
 
-      expect(vars.context.message).toBe('Payload: {{ payload.evil }}');
+      expect(vars.context.message).toBe('file:///path/to/message.txt');
       expect(renderedPrompt).not.toContain('INJECTED-OBJECT-PAYLOAD');
+      expect(readFile).not.toHaveBeenCalled();
     });
 
     it('should not evaluate skipped-var control tags loaded through nested files (issue #1613)', async () => {
@@ -585,9 +633,9 @@ describe('evaluatorHelpers', () => {
         attack: ['SECRET-A', 'SECRET-B'],
         context: { message: 'file:///path/to/message.txt' },
       };
-      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(
-        '{% for item in attack %}{{ item }}{% endfor %}',
-      );
+      const readFile = vi
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('{% for item in attack %}{{ item }}{% endfor %}');
 
       const renderedPrompt = await renderPrompt(
         toPrompt('{{ context.message }}'),
@@ -599,6 +647,7 @@ describe('evaluatorHelpers', () => {
 
       expect(renderedPrompt).not.toContain('SECRET-A');
       expect(renderedPrompt).not.toContain('SECRET-B');
+      expect(readFile).not.toHaveBeenCalled();
     });
 
     it('should not leak skipped payloads referenced by exotic Nunjucks syntax (issue #1613)', async () => {
@@ -625,7 +674,7 @@ describe('evaluatorHelpers', () => {
           items: { [SECRET]: 'hit' },
           context: { message: 'file:///path/to/message.txt' },
         };
-        vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
+        const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(template);
         const fileRendered = await renderPrompt(
           toPrompt('{{ context.message }}'),
           fileVars,
@@ -634,7 +683,8 @@ describe('evaluatorHelpers', () => {
           ['payload'],
         );
         expect(fileRendered, `file path leaked for: ${template}`).not.toContain(SECRET);
-        expect(fileVars.context.message).toBe(template);
+        expect(fileVars.context.message).toBe('file:///path/to/message.txt');
+        expect(readFile).not.toHaveBeenCalled();
         vi.restoreAllMocks();
 
         // form-2 path: the exotic template is a plain nested string.
@@ -692,7 +742,89 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Hello ALICE');
     });
 
-    it('should preserve raw nested template output across stabilization passes (issue #1613)', async () => {
+    it('should render tag-free nested dependencies in dependency order', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: {
+          summary: 'file:///path/to/summary.txt',
+          greeting: 'file:///path/to/greeting.txt',
+        },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('summary.txt') ? '{{ context.greeting | length }}' : '{{ name }}',
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.summary }}'), vars, {});
+
+      expect(renderedPrompt).toBe('5');
+    });
+
+    it('should settle nested dependencies reached through a top-level string alias', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        alias: '{{ context.greeting }}',
+        context: {
+          summary: 'file:///path/to/summary.txt',
+          greeting: 'file:///path/to/greeting.txt',
+        },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('summary.txt') ? '{{ alias | length }}' : 'Hello {{ name }}',
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.summary }}'), vars, {});
+
+      expect(vars.context.greeting).toBe('Hello Alice');
+      expect(vars.context.summary).toBe('11');
+      expect(renderedPrompt).toBe('11');
+    });
+
+    it.each([
+      ['loop-local', '{% for context in items %}{{ context.message }}{% endfor %}', 'hi'],
+      ['raw', '{% raw %}{{ context.message }}{% endraw %}', '{{ context.message }}'],
+    ])('should not render a nested target referenced only in %s syntax', async (_kind, promptText, expected) => {
+      const vars: Record<string, any> = {
+        context: { message: 'file:///path/to/malformed.txt' },
+        items: [{ message: 'hi' }],
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+
+      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+
+      expect(renderedPrompt).toBe(expected);
+      expect(vars.context.message).toBe('{% if %}broken{% endif %}');
+    });
+
+    it('should discover nested targets after JSON escape decoding', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"message":"\\u007b\\u007b context.message \\u007d\\u007d"}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ message: 'Hello ALICE' }, null, 2));
+    });
+
+    it('should not JSON-decode reachability when JSON autoescape is disabled', async () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+      const vars: Record<string, any> = {
+        context: { message: 'file:///path/to/malformed.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+
+      const prompt = '{"message":"\\u007b\\u007b context.message \\u007d\\u007d"}';
+      const renderedPrompt = await renderPrompt(toPrompt(prompt), vars, {});
+
+      expect(renderedPrompt).toBe(prompt);
+    });
+
+    it('should render only nested file templates reachable from the prompt (issue #1613)', async () => {
       const vars: Record<string, any> = {
         name: 'Alice',
         context: {
@@ -709,7 +841,7 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(toPrompt('{{ context.literal }}'), vars, {});
 
-      expect(vars.context.rendered).toBe('Hello ALICE');
+      expect(vars.context.rendered).toBe('Hello {{ name | upper }}');
       expect(vars.context.literal).toBe('{{ name }}');
       expect(renderedPrompt).toBe('{{ name }}');
     });
@@ -728,9 +860,7 @@ describe('evaluatorHelpers', () => {
       expect(vars.context.role).toBe('admin');
     });
 
-    it('should render templates in ordinary nested strings (issue #1613 form 2)', async () => {
-      // Nested strings that reference other (defined, non-skipped) vars render just like
-      // top-level string vars do.
+    it('should preserve ordinary nested template strings as literal data', async () => {
       const vars: Record<string, any> = {
         name: 'Alice',
         context: { message: 'Hello {{ name | upper }}' },
@@ -738,8 +868,8 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
 
-      expect(vars.context.message).toBe('Hello ALICE');
-      expect(renderedPrompt).toBe('Hello ALICE');
+      expect(vars.context.message).toBe('Hello {{ name | upper }}');
+      expect(renderedPrompt).toBe('Hello {{ name | upper }}');
     });
 
     it('should resolve a nested {{ var }} mapping to a top-level file-backed var (issue #1613 form 2)', async () => {
@@ -763,6 +893,313 @@ describe('evaluatorHelpers', () => {
 
       expect(vars.reporting_period.previous.report).toBe('<h1>Sample Report</h1>');
       expect(renderedPrompt).toBe('Analyze this report: <h1>Sample Report</h1>');
+    });
+
+    it.each([
+      ['plain', '{{ context.report }}', 'Hello ALICE'],
+      [
+        'JSON',
+        '{"report":"{{ context.report }}"}',
+        JSON.stringify({ report: 'Hello ALICE' }, null, 2),
+      ],
+    ])('should settle filtered top-level file content before a nested mapping in %s prompts', async (_kind, promptText, expected) => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        file_content: 'file:///path/to/report.txt',
+        context: { report: '{{ file_content }}' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+
+      expect(vars.context.report).toBe('Hello ALICE');
+      expect(renderedPrompt).toBe(expected);
+    });
+
+    it.each([
+      ['plain', '{{ context.report }}', ''],
+      ['JSON', '{"report":"{{ context.report }}"}', JSON.stringify({ report: '' }, null, 2)],
+    ])('should preserve empty YAML parity through a nested mapping in %s prompts', async (_kind, promptText, expected) => {
+      const vars: Record<string, any> = {
+        file_content: 'file:///path/to/empty.yaml',
+        context: { report: '{{ file_content }}' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('');
+
+      const renderedPrompt = await renderPrompt(toPrompt(promptText), vars, {});
+
+      expect(vars.context.report).toBeUndefined();
+      expect(renderedPrompt).toBe(expected);
+    });
+
+    it('should preserve malformed top-level file template errors through a nested mapping', async () => {
+      const vars: Record<string, any> = {
+        file_content: 'file:///path/to/malformed.txt',
+        context: { report: '{{ file_content }}' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+
+      await expect(renderPrompt(toPrompt('{{ context.report }}'), vars, {})).rejects.toThrow();
+    });
+
+    it.each([
+      ['empty YAML', 'source.yaml', '', ''],
+      ['malformed template', 'source.txt', '{% if %}broken{% endif %}', undefined],
+    ])('should preserve top-level %s parity when the mapping is loaded from a nested file', async (_kind, sourceFile, fileContent, expected) => {
+      const vars: Record<string, any> = {
+        file_content: `file:///path/to/${sourceFile}`,
+        context: { report: 'file:///path/to/mapping.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).endsWith(sourceFile) ? fileContent : '{{ file_content }}',
+      );
+
+      const rendered = renderPrompt(toPrompt('{{ context.report }}'), vars, {});
+      if (expected === undefined) {
+        await expect(rendered).rejects.toThrow();
+      } else {
+        await expect(rendered).resolves.toBe(expected);
+        expect(vars.context.report).toBeUndefined();
+      }
+    });
+
+    it('should preserve a prompt-function override of a collected nested target', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name }}');
+
+      const renderedPrompt = await renderPrompt(
+        {
+          function: async ({ vars }) => {
+            (vars.context as { message: string }).message = 'OVERRIDE';
+            return '{{ context.message }}';
+          },
+          label: 'function prompt',
+          raw: 'unused',
+        },
+        vars,
+        {},
+      );
+
+      expect(vars.context.message).toBe('OVERRIDE');
+      expect(renderedPrompt).toBe('OVERRIDE');
+    });
+
+    it('should not render filters in ordinary nested template strings', async () => {
+      const vars: Record<string, any> = {
+        context: { message: '{{ missing | default("fallback") }}' },
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(vars.context.message).toBe('{{ missing | default("fallback") }}');
+      expect(renderedPrompt).toBe('{{ missing | default("fallback") }}');
+    });
+
+    it('should report malformed templates loaded from nested files with source context', async () => {
+      const vars: Record<string, any> = {
+        context: { message: 'file:///path/to/malformed.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+
+      await expect(renderPrompt(toPrompt('{{ context.message }}'), vars, {})).rejects.toThrow(
+        /Failed to render nested file reference for var "context".*malformed\.txt/,
+      );
+    });
+
+    it('should not render nested targets mentioned only in an auto-wrapped partial tag', async () => {
+      const vars: Record<string, any> = {
+        context: { message: 'file:///path/to/malformed.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{% if %}broken{% endif %}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('literal {{ context.message'), vars, {});
+
+      expect(renderedPrompt).toBe('literal {{ context.message');
+      expect(vars.context.message).toBe('{% if %}broken{% endif %}');
+    });
+
+    it('should resolve static dependencies referenced from set tags without scanning the whole root', async () => {
+      const vars: Record<string, any> = {
+        context: {
+          label: 'file:///path/to/label.txt',
+          first: 'file:///path/to/first.txt',
+          second: 'file:///path/to/second.txt',
+        },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).endsWith('label.txt')
+          ? 'ready'
+          : '{% set value = context.label %}{{ value }}',
+      );
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.first }} {{ context.second }}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe('ready ready');
+    });
+
+    it('should evaluate settled nested filters only once', async () => {
+      const tick = vi.fn((value: string) => `${value}-${tick.mock.calls.length}`);
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ name | tick }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, { tick });
+
+      expect(renderedPrompt).toBe('Alice-1');
+      expect(tick).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reuse rendered top-level dependencies without re-running filters', async () => {
+      const tick = vi.fn((value: string) => `${value}-${tick.mock.calls.length}`);
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        generated: '{{ name | tick }}',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ generated }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, { tick });
+
+      expect(renderedPrompt).toBe('Alice-1');
+      expect(tick).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not retry a filter that intentionally returns template syntax', async () => {
+      const tick = vi.fn((value: string) => `{{ ${value} }}-${tick.mock.calls.length}`);
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('{{ name | tick }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, { tick });
+
+      expect(renderedPrompt).toBe('{{ Alice }}-1');
+      expect(tick).toHaveBeenCalledTimes(1);
+    });
+
+    it('should leave unrecognized binary nested files as literal references', async () => {
+      const vars: Record<string, any> = {
+        context: { payload: 'file:///path/to/payload.dat' },
+      };
+      const readFile = vi
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce(Buffer.from([0, 1, 2, 3, 255, 0, 128]));
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.payload }}'), vars, {});
+
+      expect(renderedPrompt).toBe('file:///path/to/payload.dat');
+      expect(vars.context.payload).toBe('file:///path/to/payload.dat');
+      expect(readFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should leave binary content with a text-looking filename literal', async () => {
+      const vars: Record<string, any> = {
+        context: { payload: 'file:///path/to/payload.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce(
+        Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 1, 2, 3, 255, 0, 128]),
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.payload }}'), vars, {});
+
+      expect(renderedPrompt).toBe('file:///path/to/payload.txt');
+      expect(vars.context.payload).toBe('file:///path/to/payload.txt');
+    });
+
+    it('should keep runtime register templates opaque during preprocessing', async () => {
+      mockProcessEnv({ PROMPTFOO_REGISTER_SENTINEL: 'must-not-render' });
+      const vars: Record<string, any> = {
+        stored: '{{ env.PROMPTFOO_REGISTER_SENTINEL }}',
+      };
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ stored }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['stored'],
+      );
+
+      expect(renderedPrompt).toBe('{{ env.PROMPTFOO_REGISTER_SENTINEL }}');
+      expect(renderedPrompt).not.toContain('must-not-render');
+      mockProcessEnv({ PROMPTFOO_REGISTER_SENTINEL: undefined });
+    });
+
+    it('should keep aliases of runtime register and conversation objects opaque', async () => {
+      const runtimeValue = { ref: 'file:///path/to/runtime.txt' };
+      const conversationValue = [{ output: 'file:///path/to/conversation.txt' }];
+      const vars: Record<string, any> = {
+        saved: runtimeValue,
+        runtimeAlias: runtimeValue,
+        _conversation: conversationValue,
+        conversationAlias: conversationValue,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ runtimeAlias.ref }}|{{ conversationAlias[0].output }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['saved'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/runtime.txt|file:///path/to/conversation.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not preprocess top-level aliases when a skipped payload is present', async () => {
+      const vars: Record<string, any> = {
+        payload: 'must-not-transform',
+        alias: '{{ payload | upper }}',
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ alias }}'), vars, {}, undefined, [
+        'payload',
+      ]);
+
+      expect(renderedPrompt).toBe('{{ payload | upper }}');
+    });
+
+    it('should preserve unresolved templates loaded from nested files', async () => {
+      const vars: Record<string, any> = {
+        context: { message: 'file:///path/to/message.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ missing }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(vars.context.message).toBe('Hello {{ missing }}');
+      expect(renderedPrompt).toBe('Hello {{ missing }}');
+    });
+
+    it('should not render unused nested or top-level file templates in JSON prompts', async () => {
+      const tick = vi.fn((value: string) => value);
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        topLevel: 'file:///path/to/top.txt',
+        context: { unused: 'file:///path/to/nested.txt' },
+      };
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('top.txt') ? '{{ name | tick }}' : '{{ missing | tick }}',
+      );
+
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"hello"}'), vars, { tick });
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'hello' }, null, 2));
+      expect(tick).not.toHaveBeenCalled();
     });
 
     it('should leave nested templates that reference undefined vars untouched (issue #1613 form 2)', async () => {
@@ -819,7 +1256,7 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(toPrompt('{{ history.report }}'), vars, {});
 
-      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('report:2026.txt'), 'utf8');
+      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('report:2026.txt'));
       expect(renderedPrompt).toBe('report body');
     });
 
@@ -904,6 +1341,28 @@ describe('evaluatorHelpers', () => {
       expect(readFile).toHaveBeenCalledTimes(1);
     });
 
+    it('should render nested file templates through deep shared and cyclic aliases', async () => {
+      const inner: Record<string, any> = { report: 'file:///path/to/shared.txt' };
+      const shared = { nested: inner };
+      inner.self = inner;
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        root: { first: shared, second: shared },
+      };
+      const readFile = vi
+        .spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ root.first.nested.self.report }}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe('Hello ALICE');
+      expect(readFile).toHaveBeenCalledTimes(1);
+    });
+
     it('should not dereference file refs through aliases of skipped vars (issue #1613)', async () => {
       const shared = { report: 'file:///path/to/skipped.txt' };
       const vars: Record<string, any> = {
@@ -960,6 +1419,130 @@ describe('evaluatorHelpers', () => {
       await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
 
       expect(vars.context.report).toBe('file:///path/to/skipped.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should keep aliases opaque when a runtime register proxy hides Map entries', async () => {
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const vars: Record<string, any> = {
+        saved: new Proxy(new Map([['child', shared]]), {}),
+        context: shared,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['saved'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
+      expect(vars.context.report).toBe('file:///path/to/skipped.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not fail when an opaque runtime register rejects reflection', async () => {
+      const saved = new Proxy(
+        { report: 'file:///path/to/skipped.txt' },
+        {
+          ownKeys() {
+            throw new Error('PROXY-OWNKEYS');
+          },
+        },
+      );
+
+      await expect(
+        renderPrompt(toPrompt('constant'), { saved }, {}, undefined, undefined, ['saved']),
+      ).resolves.toBe('constant');
+    });
+
+    it('should not trust successful Proxy reflection for opaque runtime registers', async () => {
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const ownKeys = vi.fn(() => []);
+      const vars: Record<string, any> = {
+        saved: new Proxy({ shared }, { ownKeys }),
+        context: shared,
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        ['saved'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
+      expect(ownKeys).not.toHaveBeenCalled();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should keep aliases hidden behind accessors opaque without invoking getters', async () => {
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const getter = vi.fn(() => shared);
+      const saved = {};
+      Object.defineProperty(saved, 'shared', { configurable: true, get: getter });
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        { saved, context: shared },
+        {},
+        undefined,
+        undefined,
+        ['saved'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
+      expect(getter).not.toHaveBeenCalled();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should conservatively protect aliases hidden in internal-slot containers', async () => {
+      const shared = { report: 'file:///path/to/skipped.txt' };
+      const saved = new WeakMap<object, object>([[shared, { value: true }]]);
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        { saved, context: shared },
+        {},
+        undefined,
+        undefined,
+        ['saved'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should not invoke overridden iterators while enforcing skipped-var boundaries', async () => {
+      const entries = vi.fn(() => {
+        throw new Error('entries should not run');
+      });
+      const payload = new Map();
+      Object.defineProperty(payload, 'entries', { value: entries });
+      const vars: Record<string, any> = {
+        payload,
+        context: { report: 'file:///path/to/skipped.txt' },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ context.report }}'),
+        vars,
+        {},
+        undefined,
+        ['payload'],
+      );
+
+      expect(renderedPrompt).toBe('file:///path/to/skipped.txt');
+      expect(entries).not.toHaveBeenCalled();
       expect(readFile).not.toHaveBeenCalled();
     });
 
@@ -2426,8 +3009,8 @@ describe('evaluatorHelpers', () => {
         return paths[paths.length - 1];
       });
 
-      // Mock fs.readFileSync to return predictable base64 data for different image types
-      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+      // Mock async file reads to return predictable base64 data for different image types
+      vi.mocked(fsPromises.readFile).mockImplementation(async (filePath) => {
         const pathStr = filePath.toString();
         if (pathStr.includes('.jpg') || pathStr.includes('.jpeg')) {
           // JPEG magic number: /9j/
@@ -2527,9 +3110,9 @@ describe('evaluatorHelpers', () => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
 
       // Mock a file with .jpg extension but PNG magic number
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('iVBORw0KGgoAAAANSUhEUgAA', 'base64'); // PNG magic
-      });
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValue(
+        Buffer.from('iVBORw0KGgoAAAANSUhEUgAA', 'base64'), // PNG magic
+      );
 
       const renderedPrompt = await renderPrompt(prompt, {
         image: 'file://wrong-extension.jpg', // .jpg extension
@@ -2540,9 +3123,7 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should maintain existing behavior for video files (raw base64)', async () => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-video-content');
-      });
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-video-content'));
 
       const prompt = toPrompt('Test prompt with video: {{video}}');
       const renderedPrompt = await renderPrompt(prompt, {
@@ -2555,9 +3136,7 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should maintain existing behavior for audio files (raw base64)', async () => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-audio-content');
-      });
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.from('test-audio-content'));
 
       const prompt = toPrompt('Test prompt with audio: {{audio}}');
       const renderedPrompt = await renderPrompt(prompt, {
@@ -2609,7 +3188,7 @@ describe('evaluatorHelpers', () => {
       });
 
       expect(renderedPrompt).toContain(existingDataUrl);
-      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
     });
 
     it('should work with HTTP URLs (no processing)', async () => {
@@ -2621,55 +3200,7 @@ describe('evaluatorHelpers', () => {
       });
 
       expect(renderedPrompt).toContain(httpUrl);
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('sanitizeFileReferences', () => {
-    const SENTINEL = '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]';
-
-    it('neutralizes top-level file:// and package: register values', () => {
-      const result = sanitizeFileReferences({
-        a: 'file:///etc/passwd',
-        b: 'package:evil:fn',
-        c: 'plain text',
-        d: 42,
-      });
-      expect(result).toEqual({ a: SENTINEL, b: SENTINEL, c: 'plain text', d: 42 });
-    });
-
-    it('neutralizes file:// nested inside objects and arrays at any depth', () => {
-      const result = sanitizeFileReferences({
-        stored: {
-          report: 'file:///secret.txt',
-          items: ['ok', 'file:///also-secret.txt', { deep: 'package:x:y' }],
-        },
-      }) as any;
-      expect(result.stored.report).toBe(SENTINEL);
-      expect(result.stored.items[0]).toBe('ok');
-      expect(result.stored.items[1]).toBe(SENTINEL);
-      expect(result.stored.items[2].deep).toBe(SENTINEL);
-    });
-
-    it('returns a deep copy without mutating the input', () => {
-      const input = { stored: { report: 'file:///secret.txt' } };
-      const result = sanitizeFileReferences(input) as any;
-      expect(input.stored.report).toBe('file:///secret.txt');
-      expect(result.stored).not.toBe(input.stored);
-    });
-
-    it('is cycle-safe', () => {
-      const cyclic: any = { report: 'file:///secret.txt' };
-      cyclic.self = cyclic;
-      const result = sanitizeFileReferences({ stored: cyclic }) as any;
-      expect(result.stored.report).toBe(SENTINEL);
-      expect(result.stored.self).toBe(result.stored);
-    });
-
-    it('leaves non-plain objects (Date) untouched', () => {
-      const date = new Date(0);
-      const result = sanitizeFileReferences({ when: date }) as any;
-      expect(result.when).toBe(date);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
     });
   });
 });

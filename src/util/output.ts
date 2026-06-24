@@ -29,7 +29,7 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
+import { sanitizeObject, sanitizeRuntimeOptionsForOutput } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -473,7 +473,7 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && {
-      runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptionsForOutput(evalRecord.runtimeOptions),
     }),
     ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };

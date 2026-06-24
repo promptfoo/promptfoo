@@ -334,7 +334,7 @@ This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers
 
 :::note
 
-Provider output is untrusted, so any `file://` or `package:` reference inside a stored value is neutralized rather than loaded when the variable is reused. This prevents a model from being steered into emitting a path like `file:///etc/passwd` that a later test would read. Stored text that is not a file/package reference is preserved unchanged.
+Provider output is untrusted, so stored values are treated as literal data when reused. A `file://` or `package:` reference is not loaded, and Nunjucks syntax in stored text is not evaluated before interpolation.
 
 :::
 

@@ -564,7 +564,7 @@ describe('runEval', () => {
     expect(registers).toHaveProperty('myOutput', 'Test output');
   });
 
-  it('should not dereference file:// or package: references from registers populated at runtime', async () => {
+  it('should keep file:// and package: references from runtime registers literal', async () => {
     // A model output captured via storeOutputAs is untrusted; when reused as a var
     // it must never be loaded as a file/package, at the top level or nested.
     const registers = {
@@ -591,11 +591,42 @@ describe('runEval', () => {
     });
 
     expect(results[0].success).toBe(true);
-    expect(captured[0]).toBe(
-      'A:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED] B:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED] C:[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
-    );
-    // The original registers object is not mutated.
+    expect(captured[0]).toBe('A:file:///etc/passwd B:file:///etc/hostname C:package:evil:fn');
+    // Register values remain literal and are not mutated.
     expect(registers.saved.nested).toBe('file:///etc/passwd');
+  });
+
+  it('should not evaluate Nunjucks syntax captured in runtime registers', async () => {
+    vi.stubEnv('PROMPTFOO_REGISTER_SECRET', 'must-not-render');
+    const registers = {
+      stored: '{{ env.PROMPTFOO_REGISTER_SECRET }}',
+      include: '{% include ".nvmrc" %}',
+    };
+    const callApi = vi.fn(async () => ({ output: 'ok' }));
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('capturing-provider'),
+      callApi,
+    };
+
+    try {
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'A:{{ stored }} B:{{ include }}', label: 'reg-template' },
+        test: {},
+        conversations: {},
+        registers,
+      });
+
+      expect(results[0].success).toBe(true);
+      expect(callApi).toHaveBeenCalledWith(
+        'A:{{ env.PROMPTFOO_REGISTER_SECRET }} B:{% include ".nvmrc" %}',
+        expect.anything(),
+        undefined,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('should handle provider errors', async () => {

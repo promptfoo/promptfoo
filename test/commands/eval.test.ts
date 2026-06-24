@@ -1283,13 +1283,30 @@ describe('evalCommand', () => {
     const config = {
       prompts: ['file://prompts/main.txt', { id: 'file://prompts/object.txt' }],
       providers: ['file://providers/provider.yaml'],
-      tests: ['file://vars/scenario.yaml', { vars: { body: 'file://vars/body.txt', inline: 'x' } }],
+      tests: [
+        'file://vars/scenario.yaml',
+        {
+          vars: {
+            body: 'file://vars/body.txt',
+            inline: 'x',
+            nested: { report: 'file://vars/nested/report.txt' },
+            items: ['plain', 'file://vars/nested/item.txt'],
+          },
+        },
+      ],
     } as UnifiedConfig;
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
       config,
       testSuite: {
         prompts: [],
         providers: [],
+        tests: [
+          {
+            vars: {
+              external: { report: `file://${path.resolve('/suite/fixtures/external.txt')}` },
+            },
+          },
+        ],
       },
       basePath: path.resolve('/suite'),
     });
@@ -1312,6 +1329,9 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'providers/provider.yaml'),
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
+        path.resolve('/suite', 'vars/nested/report.txt'),
+        path.resolve('/suite', 'vars/nested/item.txt'),
+        path.resolve('/suite/fixtures/external.txt'),
       ]),
       { ignored: /^\./, persistent: true },
     );
@@ -1341,6 +1361,7 @@ describe('evalCommand', () => {
       maxConcurrency: 2,
       delay: 0,
       providerFilter: 'selected-target',
+      configBasePath: '/suite/config',
     };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1378,6 +1399,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        '/suite/config',
       );
     } finally {
       findByIdSpy.mockRestore();
@@ -1387,7 +1410,10 @@ describe('evalCommand', () => {
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
     latestEval.prompts = [{ raw: 'retry prompt', label: 'Retry', config: {} }] as any;
-    latestEval.runtimeOptions = { providerFilter: 'selected-target' };
+    latestEval.runtimeOptions = {
+      providerFilter: 'selected-target',
+      configBasePath: '/suite/config',
+    };
     const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
     vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1', 'result-2']);
     vi.mocked(resolveConfigs).mockResolvedValueOnce({
@@ -1417,6 +1443,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         latestEval.config,
+        undefined,
+        '/suite/config',
       );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);

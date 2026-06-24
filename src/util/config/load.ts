@@ -44,12 +44,18 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
-import { readTest, readTests } from '../testCaseReader';
+import { readTest, readTests, rebaseTestCaseVarFileReferences } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
+
+const configDependencyPaths = new WeakMap<object, string[]>();
+
+export function getConfigDependencyPaths(config: object | undefined): string[] {
+  return config ? [...(configDependencyPaths.get(config) ?? [])] : [];
+}
 
 interface ConfigResolutionErrorOptions {
   cliMessage?: string;
@@ -493,6 +499,7 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
+  const configSourcePaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -508,8 +515,41 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
+      configSourcePaths.push(globPath);
     }
   }
+
+  const combinedBasePath = path.dirname(
+    configSourcePaths[0] ?? path.resolve(process.cwd(), configPaths[0]),
+  );
+  const rebaseConfigFileReference = (reference: string, sourceBasePath: string): string => {
+    const isFileUrl = reference.startsWith('file://');
+    if (!isFileUrl && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(reference)) {
+      return reference;
+    }
+    const referencedPath = isFileUrl ? reference.slice('file://'.length) : reference;
+    if (path.isAbsolute(referencedPath)) {
+      return reference;
+    }
+    const rebasedPath = path.relative(
+      combinedBasePath,
+      path.resolve(sourceBasePath, referencedPath),
+    );
+    return isFileUrl ? `file://${rebasedPath}` : rebasedPath;
+  };
+  const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
+  const addConfigDependency = (reference: string): void => {
+    const rawPath = reference.startsWith('file://') ? reference.slice('file://'.length) : reference;
+    if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
+      const resolvedPath = path.resolve(combinedBasePath, rawPath);
+      const matches = /[*?\[\]{}]/.test(rawPath)
+        ? globSync(resolvedPath, { windowsPathsNoEscape: true })
+        : [];
+      for (const dependencyPath of matches.length > 0 ? matches : [resolvedPath]) {
+        dependencyPaths.add(dependencyPath);
+      }
+    }
+  };
 
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -538,16 +578,91 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
-    const configPath = configPaths[i];
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
-    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
-      // Handle TestGeneratorConfig object
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
+    const sourceBasePath = path.dirname(configSourcePaths[i]);
+    const visitedConfigVars = new WeakSet<object>();
+    if (config.tests) {
+      for (const test of Array.isArray(config.tests) ? config.tests : [config.tests]) {
+        if (typeof test === 'string') {
+          const rebasedTest = rebaseConfigFileReference(test, sourceBasePath);
+          addConfigDependency(rebasedTest);
+          tests.push(rebasedTest);
+        } else if ('path' in test && typeof test.path === 'string') {
+          const rebasedPath = rebaseConfigFileReference(test.path, sourceBasePath);
+          addConfigDependency(rebasedPath);
+          tests.push({ ...test, path: rebasedPath });
+        } else {
+          const rawTest = test as TestCase & { vars?: TestCase['vars'] | string | string[] };
+          let rebasedTest: TestCase = rawTest;
+          if (typeof rawTest.vars === 'string' || Array.isArray(rawTest.vars)) {
+            const vars = [rawTest.vars].flat().map((varsPath) => {
+              const rebasedPath = rebaseConfigFileReference(varsPath, sourceBasePath);
+              addConfigDependency(rebasedPath);
+              return rebasedPath;
+            });
+            rebasedTest = {
+              ...rawTest,
+              vars: (typeof rawTest.vars === 'string'
+                ? vars[0]
+                : vars) as unknown as TestCase['vars'],
+            };
+          } else {
+            rebaseTestCaseVarFileReferences(
+              rawTest,
+              sourceBasePath,
+              combinedBasePath,
+              visitedConfigVars,
+            );
+          }
+          tests.push(rebasedTest);
+        }
+      }
+    }
+
+    if (typeof config.defaultTest === 'string' && config.defaultTest.startsWith('file://')) {
+      config.defaultTest = rebaseConfigFileReference(config.defaultTest, sourceBasePath);
+    } else if (config.defaultTest && typeof config.defaultTest === 'object') {
+      rebaseTestCaseVarFileReferences(
+        config.defaultTest as TestCase,
+        sourceBasePath,
+        combinedBasePath,
+        visitedConfigVars,
+      );
+    }
+
+    if (Array.isArray(config.scenarios)) {
+      for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
+        if (typeof scenario === 'string') {
+          config.scenarios[scenarioIndex] = rebaseConfigFileReference(scenario, sourceBasePath);
+          continue;
+        }
+        for (const test of scenario.config ?? []) {
+          rebaseTestCaseVarFileReferences(
+            test as TestCase,
+            sourceBasePath,
+            combinedBasePath,
+            visitedConfigVars,
+          );
+        }
+        const scenarioTests = (scenario as { tests?: string | TestCase[] }).tests;
+        if (!scenarioTests) {
+          continue;
+        }
+        if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
+          (scenario as { tests: string | TestCase[] }).tests = rebaseConfigFileReference(
+            scenarioTests,
+            sourceBasePath,
+          );
+        } else if (Array.isArray(scenarioTests)) {
+          for (const test of scenarioTests) {
+            rebaseTestCaseVarFileReferences(
+              test,
+              sourceBasePath,
+              combinedBasePath,
+              visitedConfigVars,
+            );
+          }
+        }
+      }
     }
   }
 
@@ -633,7 +748,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(configSourcePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -644,7 +759,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configSourcePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -725,6 +840,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
+  if (typeof combinedConfig.defaultTest === 'string') {
+    addConfigDependency(combinedConfig.defaultTest);
+  }
+  for (const scenario of combinedConfig.scenarios ?? []) {
+    if (typeof scenario === 'string') {
+      addConfigDependency(scenario);
+    } else if (typeof scenario.tests === 'string') {
+      addConfigDependency(scenario.tests);
+    }
+  }
+  configDependencyPaths.set(combinedConfig, [...dependencyPaths]);
+
   return combinedConfig;
 }
 
@@ -736,6 +863,7 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  defaultConfigBasePath: string = '',
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -785,7 +913,7 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+  const basePath = configPaths ? path.dirname(configPaths[0]) : defaultConfigBasePath;
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
@@ -799,14 +927,9 @@ export async function resolveConfigs(
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    // Set basePath in cliState temporarily for file resolution
-    const originalBasePath = cliState.basePath;
-    cliState.basePath = basePath;
-    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
-    cliState.basePath = originalBasePath;
-    processedDefaultTest = loaded as Partial<TestCase>;
+    processedDefaultTest = await readTest(defaultTestRaw.slice('file://'.length), basePath, true);
   } else if (defaultTestRaw) {
-    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+    processedDefaultTest = await readTest(defaultTestRaw as Partial<TestCase>, basePath, true);
   }
 
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
@@ -820,9 +943,7 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
-    defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
-      : undefined,
+    defaultTest: processedDefaultTest,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
@@ -833,6 +954,21 @@ export async function resolveConfigs(
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
+  };
+  configDependencyPaths.set(config, getConfigDependencyPaths(fileConfig));
+  const resolvedConfigDependencies = new Set(getConfigDependencyPaths(config));
+  const addResolvedConfigDependency = (reference: string): void => {
+    const rawPath = reference.startsWith('file://') ? reference.slice('file://'.length) : reference;
+    if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
+      return;
+    }
+    const resolvedPath = path.resolve(basePath || process.cwd(), rawPath);
+    const matches = /[*?\[\]{}]/.test(rawPath)
+      ? globSync(resolvedPath, { windowsPathsNoEscape: true })
+      : [];
+    for (const dependencyPath of matches.length > 0 ? matches : [resolvedPath]) {
+      resolvedConfigDependencies.add(dependencyPath);
+    }
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -930,30 +1066,72 @@ export async function resolveConfigs(
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
-    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
-    // Flatten the scenarios array in case glob patterns were used
-    config.scenarios = config.scenarios.flat().map((scenario) =>
-      typeof scenario === 'object'
-        ? {
-            ...scenario,
-            tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+    const loadedScenarios: Scenario[] = [];
+    for (const scenario of config.scenarios) {
+      if (typeof scenario !== 'string') {
+        loadedScenarios.push(scenario);
+        continue;
+      }
+
+      const scenarioPath = scenario.startsWith('file://')
+        ? scenario.slice('file://'.length)
+        : scenario;
+      const scenarioSources = /[*?\[\]{}]/.test(path.dirname(scenarioPath))
+        ? globSync(path.resolve(basePath, scenarioPath), { windowsPathsNoEscape: true }).map(
+            (matchedPath) => `file://${matchedPath}`,
+          )
+        : [scenario];
+      for (const scenarioSource of scenarioSources.length > 0 ? scenarioSources : [scenario]) {
+        const loaded = await maybeLoadFromExternalFile([scenarioSource]);
+        const sourcePath = scenarioSource.startsWith('file://')
+          ? scenarioSource.slice('file://'.length)
+          : scenarioSource;
+        const declaringBasePath = path.dirname(path.resolve(basePath, sourcePath));
+        const visitedScenarioVars = new WeakSet<object>();
+        for (const loadedScenario of [loaded].flat(Number.POSITIVE_INFINITY) as Scenario[]) {
+          const scenarioTests = (loadedScenario as { tests?: string | TestCase[] }).tests;
+          if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
+            const referencedPath = scenarioTests.slice('file://'.length);
+            if (!path.isAbsolute(referencedPath)) {
+              (loadedScenario as { tests: string | TestCase[] }).tests = `file://${path.relative(
+                path.resolve(basePath || process.cwd()),
+                path.resolve(declaringBasePath, referencedPath),
+              )}`;
+            }
+            addResolvedConfigDependency(
+              (loadedScenario as { tests: string | TestCase[] }).tests as string,
+            );
           }
-        : scenario,
-    );
+          for (const test of [
+            ...(loadedScenario.config ?? []),
+            ...(Array.isArray(loadedScenario.tests) ? loadedScenario.tests : []),
+          ]) {
+            rebaseTestCaseVarFileReferences(
+              test,
+              declaringBasePath,
+              basePath || process.cwd(),
+              visitedScenarioVars,
+            );
+          }
+          loadedScenarios.push(loadedScenario);
+        }
+      }
+    }
+    config.scenarios = loadedScenarios.map((scenario) => ({
+      ...scenario,
+      tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
+    }));
+    configDependencyPaths.set(config, [...resolvedConfigDependencies]);
   }
   if (Array.isArray(config.scenarios)) {
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
-      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
+      if (typeof scenario === 'object' && scenario.tests) {
+        scenario.tests = await readTests(
+          scenario.tests as TestSuiteConfig['tests'],
           cmdObj.tests ? undefined : basePath,
         );
-        scenario.tests = parsedScenarioTests;
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(

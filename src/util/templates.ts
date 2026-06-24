@@ -139,83 +139,36 @@ function collectFromImportBindingNames(namesNode: unknown): string[] {
   return names;
 }
 
-function astNodeListReferencesVariable(
-  nodes: readonly unknown[],
-  variableName: string,
-  parent: NunjucksParentContext,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  let scope = new Set(boundSymbols);
-  for (const item of nodes) {
-    if (!isNunjucksAstNode(item)) {
-      continue;
-    }
-    if (astReferencesVariable(item, variableName, parent, scope)) {
-      return true;
-    }
-    if (item.typename === 'Set') {
-      scope = addBindingNames(scope, item.targets);
-    } else if (item.typename === 'Macro') {
-      scope = addBindingNames(scope, item.name);
-    } else if (item.typename === 'Import') {
-      scope = addBindingNames(scope, item.target);
-    } else if (item.typename === 'FromImport') {
-      scope = addNamesToScope(scope, collectFromImportBindingNames(item.names));
-    }
-  }
-  return false;
-}
-
-function astChildReferencesVariable(
-  node: NunjucksAstNode,
-  field: string,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  const child = node[field];
-  if (Array.isArray(child)) {
-    return child.some(
-      (item) =>
-        isNunjucksAstNode(item) &&
-        astReferencesVariable(item, variableName, { field, node }, boundSymbols),
-    );
-  }
-  return (
-    isNunjucksAstNode(child) &&
-    astReferencesVariable(child, variableName, { field, node }, boundSymbols)
-  );
-}
-
 function isForLikeNode(node: NunjucksAstNode): boolean {
   return node.typename === 'For' || node.typename === 'AsyncEach' || node.typename === 'AsyncAll';
 }
 
-function forLikeNodeReferencesVariable(
+function collectAstChildReferences(
   node: NunjucksAstNode,
-  variableName: string,
+  field: string,
   boundSymbols: ReadonlySet<string>,
-): boolean {
-  const loopScope = addBindingNames(boundSymbols, node.name);
-  return (
-    astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
-    astChildReferencesVariable(node, 'body', variableName, loopScope) ||
-    astChildReferencesVariable(node, 'else_', variableName, boundSymbols)
-  );
+  references: Set<string>,
+): void {
+  const child = node[field];
+  if (Array.isArray(child)) {
+    for (const item of child) {
+      if (isNunjucksAstNode(item)) {
+        collectAstReferences(item, { field, node }, boundSymbols, references);
+      }
+    }
+  } else if (isNunjucksAstNode(child)) {
+    collectAstReferences(child, { field, node }, boundSymbols, references);
+  }
 }
 
-/**
- * Walk a Nunjucks macro/caller signature left-to-right. Positional args and
- * earlier keyword defaults are visible to later defaults, but the current
- * keyword is not bound until its own default value has been evaluated.
- */
-function analyzeSignatureArgs(
+function collectSignatureReferences(
   argsNode: unknown,
-  variableName: string,
   boundSymbols: ReadonlySet<string>,
-): { paramNames: string[]; referencesVariable: boolean } {
+  references: Set<string>,
+): string[] {
   const paramNames: string[] = [];
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
-    return { paramNames, referencesVariable: false };
+    return paramNames;
   }
 
   const defaultScope = new Set(boundSymbols);
@@ -231,15 +184,11 @@ function analyzeSignatureArgs(
     }
     if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
       for (const pair of child.children) {
-        const keywordParamName =
-          isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
-        if (
-          isNunjucksAstNode(pair) &&
-          pair.typename === 'Pair' &&
-          astChildReferencesVariable(pair, 'value', variableName, defaultScope)
-        ) {
-          return { paramNames, referencesVariable: true };
+        if (!isNunjucksAstNode(pair) || pair.typename !== 'Pair') {
+          continue;
         }
+        collectAstChildReferences(pair, 'value', defaultScope, references);
+        const keywordParamName = getSymbolName(pair.key);
         if (keywordParamName) {
           paramNames.push(keywordParamName);
           defaultScope.add(keywordParamName);
@@ -247,126 +196,117 @@ function analyzeSignatureArgs(
       }
       continue;
     }
-    if (
-      astReferencesVariable(
-        child,
-        variableName,
-        { field: 'children', node: argsNode },
-        defaultScope,
-      )
-    ) {
-      return { paramNames, referencesVariable: true };
+    collectAstReferences(child, { field: 'children', node: argsNode }, defaultScope, references);
+  }
+  return paramNames;
+}
+
+function collectAstNodeListReferences(
+  nodes: readonly unknown[],
+  parent: NunjucksParentContext,
+  boundSymbols: ReadonlySet<string>,
+  references: Set<string>,
+): void {
+  let scope = new Set(boundSymbols);
+  for (const item of nodes) {
+    if (!isNunjucksAstNode(item)) {
+      continue;
+    }
+    collectAstReferences(item, parent, scope, references);
+    if (item.typename === 'Set') {
+      scope = addBindingNames(scope, item.targets);
+    } else if (item.typename === 'Macro') {
+      scope = addBindingNames(scope, item.name);
+    } else if (item.typename === 'Import') {
+      scope = addBindingNames(scope, item.target);
+    } else if (item.typename === 'FromImport') {
+      scope = addNamesToScope(scope, collectFromImportBindingNames(item.names));
     }
   }
-
-  return { paramNames, referencesVariable: false };
 }
 
-function macroNodeReferencesVariable(
+function collectAstReferences(
   node: NunjucksAstNode,
-  variableName: string,
+  parent: NunjucksParentContext | undefined,
   boundSymbols: ReadonlySet<string>,
-): boolean {
-  const { paramNames, referencesVariable } = analyzeSignatureArgs(
-    node.args,
-    variableName,
-    boundSymbols,
-  );
-  if (referencesVariable) {
-    return true;
+  references: Set<string>,
+): void {
+  if (node.typename === 'Symbol') {
+    if (
+      typeof node.value === 'string' &&
+      !boundSymbols.has(node.value) &&
+      !isNonReferenceSymbol(parent)
+    ) {
+      references.add(node.value);
+    }
+    return;
   }
 
-  // Walk the body with the full macro scope (outer + param names + macro name).
-  const macroScope = addNamesToScope(boundSymbols, paramNames);
-  const macroName = getSymbolName(node.name);
-  if (macroName) {
-    macroScope.add(macroName);
-  }
-  return astChildReferencesVariable(node, 'body', variableName, macroScope);
-}
-
-function isNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
-    return true;
+  if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
+    collectAstNodeListReferences(
+      node.children,
+      { field: 'children', node },
+      boundSymbols,
+      references,
+    );
+    return;
   }
 
-  const right = node.right;
-  if (!isNunjucksAstNode(right)) {
-    return false;
+  if (isForLikeNode(node)) {
+    collectAstChildReferences(node, 'arr', boundSymbols, references);
+    collectAstChildReferences(node, 'body', addBindingNames(boundSymbols, node.name), references);
+    collectAstChildReferences(node, 'else_', boundSymbols, references);
+    return;
   }
 
-  if (right.typename === 'FunCall') {
-    return astChildReferencesVariable(right, 'args', variableName, boundSymbols);
+  if (node.typename === 'Macro') {
+    const paramNames = collectSignatureReferences(node.args, boundSymbols, references);
+    const macroScope = addNamesToScope(boundSymbols, paramNames);
+    const macroName = getSymbolName(node.name);
+    if (macroName) {
+      macroScope.add(macroName);
+    }
+    collectAstChildReferences(node, 'body', macroScope, references);
+    return;
   }
 
-  return (
-    right.typename !== 'Symbol' &&
-    astReferencesVariable(right, variableName, { field: 'right', node }, boundSymbols)
-  );
-}
-
-function setNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  return (
-    astChildReferencesVariable(node, 'value', variableName, boundSymbols) ||
-    astChildReferencesVariable(node, 'body', variableName, boundSymbols)
-  );
-}
-
-function fromImportNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  // `{% from template import a, b as c %}` — the template expression may
-  // reference variables, but the `names` list introduces local bindings
-  // (both plain and aliased) and must never be walked as references.
-  return astChildReferencesVariable(node, 'template', variableName, boundSymbols);
-}
-
-function blockNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
-  // label, not a variable reference. Only the body can reference variables.
-  return astChildReferencesVariable(node, 'body', variableName, boundSymbols);
-}
-
-function callerNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  const { paramNames, referencesVariable } = analyzeSignatureArgs(
-    node.args,
-    variableName,
-    boundSymbols,
-  );
-  if (referencesVariable) {
-    return true;
+  if (node.typename === 'Is') {
+    collectAstChildReferences(node, 'left', boundSymbols, references);
+    if (isNunjucksAstNode(node.right)) {
+      if (node.right.typename === 'FunCall') {
+        collectAstChildReferences(node.right, 'args', boundSymbols, references);
+      } else if (node.right.typename !== 'Symbol') {
+        collectAstReferences(node.right, { field: 'right', node }, boundSymbols, references);
+      }
+    }
+    return;
   }
 
-  const callerScope = addNamesToScope(boundSymbols, paramNames);
-  return astChildReferencesVariable(node, 'body', variableName, callerScope);
-}
+  if (node.typename === 'Set') {
+    collectAstChildReferences(node, 'value', boundSymbols, references);
+    collectAstChildReferences(node, 'body', boundSymbols, references);
+    return;
+  }
 
-function astFieldsReferenceVariable(
-  node: NunjucksAstNode,
-  variableName: string,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  return (node.fields ?? []).some((field) =>
-    astChildReferencesVariable(node, field, variableName, boundSymbols),
-  );
+  if (node.typename === 'FromImport') {
+    collectAstChildReferences(node, 'template', boundSymbols, references);
+    return;
+  }
+
+  if (node.typename === 'Block') {
+    collectAstChildReferences(node, 'body', boundSymbols, references);
+    return;
+  }
+
+  if (node.typename === 'Caller') {
+    const paramNames = collectSignatureReferences(node.args, boundSymbols, references);
+    collectAstChildReferences(node, 'body', addNamesToScope(boundSymbols, paramNames), references);
+    return;
+  }
+
+  for (const field of node.fields ?? []) {
+    collectAstChildReferences(node, field, boundSymbols, references);
+  }
 }
 
 function astReferencesVariable(
@@ -375,48 +315,9 @@ function astReferencesVariable(
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (node.typename === 'Symbol' && node.value === variableName) {
-    return !boundSymbols.has(variableName) && !isNonReferenceSymbol(parent);
-  }
-
-  if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
-    return astNodeListReferencesVariable(
-      node.children,
-      variableName,
-      { field: 'children', node },
-      boundSymbols,
-    );
-  }
-
-  if (isForLikeNode(node)) {
-    return forLikeNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'Macro') {
-    return macroNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'Is') {
-    return isNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'Set') {
-    return setNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'FromImport') {
-    return fromImportNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'Block') {
-    return blockNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  if (node.typename === 'Caller') {
-    return callerNodeReferencesVariable(node, variableName, boundSymbols);
-  }
-
-  return astFieldsReferenceVariable(node, variableName, boundSymbols);
+  const references = new Set<string>();
+  collectAstReferences(node, parent, boundSymbols, references);
+  return references.has(variableName);
 }
 
 /**
@@ -551,6 +452,29 @@ export function analyzeTemplateReference(
   return {
     referenced: astReferencesVariable(parseResult.ast, variableName),
     parsed: true,
+  };
+}
+
+/** Analyze several candidate roots with a single Nunjucks parse. */
+export function analyzeTemplateReferences(
+  template: string,
+  variableNames: Iterable<string>,
+): { parsed: boolean; referenced: Set<string> } {
+  const candidates = Array.from(new Set(variableNames)).filter(Boolean);
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return {
+      parsed: false,
+      referenced: new Set(candidates.filter((variableName) => template.includes(variableName))),
+    };
+  }
+
+  const allReferences = new Set<string>();
+  collectAstReferences(parseResult.ast, undefined, new Set(), allReferences);
+
+  return {
+    parsed: true,
+    referenced: new Set(candidates.filter((variableName) => allReferences.has(variableName))),
   };
 }
 

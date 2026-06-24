@@ -18,12 +18,7 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import {
-  collectFileMetadata,
-  renderPrompt,
-  runExtensionHook,
-  sanitizeFileReferences,
-} from './evaluatorHelpers';
+import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
@@ -798,6 +793,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  runtimeRegisterNames,
   test,
   testSuite,
   vars,
@@ -806,6 +802,7 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  runtimeRegisterNames?: string[];
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
@@ -819,6 +816,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    runtimeRegisterNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1447,11 +1445,12 @@ async function runEvalInternal({
     test,
     vars: state.vars,
   });
-  // Registers hold provider output captured via storeOutputAs. That output is
-  // untrusted, so neutralize any file://-or-package: references (at any depth)
-  // before it can be dereferenced as a var in this test.
+  const runtimeRegisterNames = registers ? Object.keys(registers) : undefined;
+  // Registers hold untrusted provider output captured via storeOutputAs. Keep
+  // each root opaque during preprocessing; the final prompt can still interpolate
+  // the stored value as literal data without loading files or evaluating templates.
   if (registers) {
-    Object.assign(state.vars, sanitizeFileReferences(registers));
+    Object.assign(state.vars, registers);
   }
   Object.assign(
     state.vars,
@@ -1473,6 +1472,7 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      runtimeRegisterNames,
       test,
       testSuite,
       vars: state.vars,

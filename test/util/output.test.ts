@@ -529,6 +529,7 @@ describe('writeOutput', () => {
       {
         runtimeOptions: {
           cache: false,
+          configBasePath: '/home/alice/acme/private-evals',
           abortSignal: new AbortController().signal,
           progressCallback: vi.fn(),
         },
