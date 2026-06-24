@@ -207,6 +207,476 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('does not move a stored SAS credential to a different semantic field', () => {
+      const redactedUri = 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [{ vars: { leak: redactedUri } }] },
+          {
+            tests: [
+              {
+                vars: {
+                  file: 'az://account/container/a.yaml?sp=r&sig=source-secret',
+                },
+              },
+            ],
+          },
+        ),
+      ).toEqual({ tests: [{ vars: { leak: redactedUri } }] });
+    });
+
+    it('should leave ambiguous reordered Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [redactedUri] },
+          {
+            tests: [
+              'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            ],
+          },
+        ),
+      ).toEqual({ tests: [redactedUri] });
+    });
+
+    it('restores unchanged duplicate Azure Blob SAS URIs by position', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [redactedUri, redactedUri] },
+          {
+            tests: [
+              'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              'az://account/container/tests.yaml?sp=r&sig=second-secret',
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          'az://account/container/tests.yaml?sp=r&sig=first-secret',
+          'az://account/container/tests.yaml?sp=r&sig=second-secret',
+        ],
+      });
+    });
+
+    it('leaves reordered duplicate Azure Blob SAS URIs redacted without immutable identity', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            file: redactedUri,
+          },
+          {
+            suite: 'a',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('does not treat mutable labels as duplicate credential identity', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [{ suite: 'b', file: redactedUri }] },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({ tests: [{ suite: 'b', file: redactedUri }] });
+    });
+
+    it('leaves edited duplicate Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'a', description: 'edited', file: redactedUri },
+              { suite: 'b', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'a',
+            description: 'edited',
+            file: redactedUri,
+          },
+          {
+            suite: 'b',
+            file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+          },
+        ],
+      });
+    });
+
+    it('leaves edited duplicates redacted when other array items move', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+              { suite: 'c', description: 'edited', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+              {
+                suite: 'c',
+                file: 'az://account/container/tests.yaml?sp=r&sig=third-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            file: redactedUri,
+          },
+          {
+            suite: 'a',
+            file: redactedUri,
+          },
+          {
+            suite: 'c',
+            description: 'edited',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('leaves edited duplicates redacted when a later array item is deleted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ suite: 'a', description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                description: 'original',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'a',
+            description: 'edited',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('leaves shifted edited duplicates redacted after an earlier deletion', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ suite: 'b', description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            description: 'edited',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('leaves ambiguous moved and edited duplicate Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'edited-b', file: redactedUri },
+              { suite: 'a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          { suite: 'edited-b', file: redactedUri },
+          {
+            suite: 'a',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('does not use mutable fields as array item identity when restoring duplicate SAS URIs', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ enabled: false, description: 'edited', file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                enabled: true,
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                enabled: false,
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [{ enabled: false, description: 'edited', file: redactedUri }],
+      });
+    });
+
+    it('does not use nested test vars as array item identity when restoring duplicate SAS URIs', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [{ description: 'edited', vars: { id: 'b' }, file: redactedUri }],
+          },
+          {
+            tests: [
+              {
+                vars: { id: 'a' },
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                vars: { id: 'b' },
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [{ description: 'edited', vars: { id: 'b' }, file: redactedUri }],
+      });
+    });
+
+    it('leaves moved and edited duplicate Azure Blob SAS URIs redacted', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'b', description: 'edited b', file: redactedUri },
+              { suite: 'a', description: 'edited a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                description: 'original a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                description: 'original b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          {
+            suite: 'b',
+            description: 'edited b',
+            file: redactedUri,
+          },
+          {
+            suite: 'a',
+            description: 'edited a',
+            file: redactedUri,
+          },
+        ],
+      });
+    });
+
+    it('leaves same-length reordered and edited duplicates redacted without stable identity', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { suite: 'edited b', file: redactedUri },
+              { suite: 'edited a', file: redactedUri },
+            ],
+          },
+          {
+            tests: [
+              {
+                suite: 'a',
+                file: 'az://account/container/tests.yaml?sp=r&sig=first-secret',
+              },
+              {
+                suite: 'b',
+                file: 'az://account/container/tests.yaml?sp=r&sig=second-secret',
+              },
+            ],
+          },
+        ),
+      ).toEqual({
+        tests: [
+          { suite: 'edited b', file: redactedUri },
+          { suite: 'edited a', file: redactedUri },
+        ],
+      });
+    });
+
+    it('does not move a reordered credential between fields within an array item', () => {
+      const stored = {
+        tests: [
+          {
+            primary: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            secondary: 'az://account/container/b.yaml?sp=r&sig=secret-b',
+          },
+          {
+            primary: 'az://account/container/c.yaml?sp=r&sig=secret-c',
+          },
+        ],
+      };
+
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              {
+                primary: 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D',
+                secondary: 'az://account/container/c.yaml?sp=r&sig=%5BREDACTED%5D',
+              },
+              {
+                primary: 'inline suite',
+              },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          {
+            primary: 'az://account/container/a.yaml?sp=r&sig=secret-a',
+            secondary: 'az://account/container/c.yaml?sp=r&sig=%5BREDACTED%5D',
+          },
+          {
+            primary: 'inline suite',
+          },
+        ],
+      });
+    });
+
     it('restores nested array SAS tokens when unrelated object fields are edited', () => {
       const stored = {
         tests: [

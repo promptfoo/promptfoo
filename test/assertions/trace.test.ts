@@ -140,6 +140,21 @@ describe('trace assertions', () => {
       ).toBe(true);
     });
 
+    it('should not treat response-only tokens-used assertions as trace-aware', () => {
+      expect(
+        assertionUsesTrace({
+          type: 'tokens-used',
+          value: { max: 100, source: 'response' },
+        }),
+      ).toBe(false);
+      expect(
+        assertionUsesTrace({
+          type: 'tokens-used',
+          value: { max: 100, source: 'auto' },
+        }),
+      ).toBe(true);
+    });
+
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
@@ -291,6 +306,28 @@ describe('trace assertions', () => {
 
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip trace loading for response-only tokens-used assertions', async () => {
+      const result = await runAssertions({
+        test: {
+          ...mockTest,
+          assert: [
+            {
+              type: 'tokens-used',
+              value: { max: 100, source: 'response' },
+            },
+          ],
+        },
+        providerResponse: {
+          ...mockProviderResponse,
+          tokenUsage: { total: 42 },
+        },
+        traceId: 'unused-trace',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
     });
 
     it('should pass trace data to file:// scripts for non-trace assertion types', async () => {

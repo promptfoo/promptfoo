@@ -86,6 +86,7 @@ import { handleSimilar } from './similar';
 import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTokensUsed } from './tokensUsed';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
@@ -95,6 +96,7 @@ import {
   handleTrajectoryStepCount,
   handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
+  handleTrajectoryToolSet,
   handleTrajectoryToolUsed,
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
@@ -137,6 +139,7 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'javascript',
   'python',
   'ruby',
+  'tokens-used',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
@@ -144,6 +147,7 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:step-count',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:tool-used',
 ]);
 
@@ -152,7 +156,23 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionUsesTrace);
   }
 
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  const baseType = getAssertionBaseType(assertion);
+  if (baseType === 'tokens-used' && tokensUsedReadsOnlyResponse(assertion)) {
+    return false;
+  }
+
+  return TRACE_AWARE_ASSERTION_TYPES.has(baseType);
+}
+
+function tokensUsedReadsOnlyResponse(assertion: Assertion): boolean {
+  const value = assertion.value;
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'source' in value &&
+    value.source === 'response'
+  );
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
@@ -302,11 +322,13 @@ const ASSERTION_HANDLERS: Record<
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
+  'tokens-used': handleTokensUsed,
   'tool-call-f1': handleToolCallF1,
   'trajectory:goal-success': handleTrajectoryGoalSuccess,
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
   'trajectory:step-count': handleTrajectoryStepCount,
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-set': handleTrajectoryToolSet,
   'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,

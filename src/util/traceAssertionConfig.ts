@@ -32,6 +32,24 @@ function finiteNonNegativeIntegerError(value: unknown, label: string): string | 
     : `${label} must be a finite non-negative integer`;
 }
 
+/**
+ * Returns true only when the entire authored value is one Nunjucks output expression.
+ * Partial strings must stay strings so runtime validation can reject them.
+ */
+export function isNunjucksOutputExpression(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{{') || !trimmed.endsWith('}}')) {
+    return false;
+  }
+
+  const expression = trimmed.slice(2, -2);
+  return Boolean(expression.trim()) && !expression.includes('{{') && !expression.includes('}}');
+}
+
 function validRangeError(
   min: number | undefined,
   max: number | undefined,
@@ -152,6 +170,46 @@ export function traceErrorSpansConfigError(value: unknown): string | undefined {
 }
 
 /**
+ * tokens-used: requires at least one bound; `min`/`max` must be finite non-negative
+ * numbers with `max >= min`; `source` and `pattern` must use supported values.
+ */
+export function tokensUsedConfigError(value: {
+  min?: unknown;
+  max?: unknown;
+  pattern?: unknown;
+  source?: unknown;
+}): string | undefined {
+  const { min, max, pattern, source } = value;
+  if (min === undefined && max === undefined) {
+    return 'tokens-used assertion must include min or max';
+  }
+  if (source !== undefined && source !== 'trace' && source !== 'response' && source !== 'auto') {
+    return 'tokens-used source must be "trace", "response", or "auto"';
+  }
+  if (pattern !== undefined && (typeof pattern !== 'string' || !pattern.trim())) {
+    return 'tokens-used pattern must be a non-empty string';
+  }
+  if (min !== undefined) {
+    const error = finiteNonNegativeNumberError(min, 'tokens-used min');
+    if (error) {
+      return error;
+    }
+  }
+  if (max !== undefined) {
+    const error = finiteNonNegativeNumberError(max, 'tokens-used max');
+    if (error) {
+      return error;
+    }
+  }
+  if ((min as number | undefined) !== undefined && (max as number | undefined) !== undefined) {
+    return (min as number) > (max as number)
+      ? 'tokens-used min must be less than or equal to max'
+      : undefined;
+  }
+  return undefined;
+}
+
+/**
  * trajectory:step-count / trajectory:tool-used count bounds: `min`/`max` must be finite
  * non-negative integers with `max >= min`. `assertionType` is interpolated into the
  * message so each assertion reports its own name.
@@ -218,6 +276,55 @@ export function trajectoryToolSequenceModeError(value: { mode?: unknown }): stri
   const { mode } = value;
   if (mode !== undefined && mode !== 'in_order' && mode !== 'exact') {
     return 'trajectory:tool-sequence assertion mode must be "in_order" or "exact"';
+  }
+  return undefined;
+}
+
+/**
+ * trajectory:tool-set: requires an array value or object with a non-empty `tools` array,
+ * and only supports `subset` or `exact` mode.
+ */
+export function trajectoryToolSetConfigError(value: unknown): string | undefined {
+  const tools = Array.isArray(value)
+    ? value
+    : isPlainObject(value) && Array.isArray(value.tools)
+      ? value.tools
+      : undefined;
+  if (!tools) {
+    return 'trajectory:tool-set assertion must have an array value or an object with a tools array';
+  }
+  if (
+    isPlainObject(value) &&
+    value.mode !== undefined &&
+    value.mode !== 'subset' &&
+    value.mode !== 'exact'
+  ) {
+    return 'trajectory:tool-set assertion mode must be "subset" or "exact"';
+  }
+  if (tools.length === 0) {
+    return 'trajectory:tool-set assertion requires at least one expected tool';
+  }
+  const hasValidToolMatcher = (tool: unknown): boolean => {
+    if (typeof tool === 'string') {
+      return tool.trim().length > 0;
+    }
+    if (!isPlainObject(tool)) {
+      return false;
+    }
+    const hasName = Object.prototype.hasOwnProperty.call(tool, 'name');
+    const hasPattern = Object.prototype.hasOwnProperty.call(tool, 'pattern');
+    const validName = !hasName || (typeof tool.name === 'string' && tool.name.trim().length > 0);
+    const validPattern =
+      !hasPattern || (typeof tool.pattern === 'string' && tool.pattern.trim().length > 0);
+    const rawType = tool.type;
+    const validType =
+      rawType === undefined ||
+      rawType === 'tool' ||
+      (Array.isArray(rawType) && rawType.length > 0 && rawType.every((type) => type === 'tool'));
+    return validName && validPattern && validType && (hasName || hasPattern);
+  };
+  if (!tools.every(hasValidToolMatcher)) {
+    return 'Each trajectory tool set entry needs a name or pattern.';
   }
   return undefined;
 }

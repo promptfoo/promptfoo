@@ -145,6 +145,34 @@ describe('runAssertions', () => {
     });
   });
 
+  it('should render object-form tokens-used budget templates', async () => {
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {
+        vars: { tokenBudget: 400 },
+        assert: [
+          {
+            type: 'tokens-used',
+            value: {
+              max: '{{ tokenBudget }}',
+              source: 'response',
+            } as unknown as { max: number; source: 'response' },
+          },
+        ],
+      },
+      providerResponse: {
+        output: 'ok',
+        tokenUsage: { total: 350, prompt: 300, completion: 50 },
+      },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults![0].reason).toContain('Tokens used: 350');
+    expect(result.componentResults![0].reason).toContain('expected at most 400');
+  });
+
   it('should handle output as an object', async () => {
     const output = { key: 'value' };
 

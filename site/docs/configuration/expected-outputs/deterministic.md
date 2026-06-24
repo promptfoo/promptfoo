@@ -56,6 +56,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-set](#trajectorytool-set)                      | Ensure traced tool usage contains a required set of tools          |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
@@ -75,6 +76,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [tokens-used](#tokens-used)                                     | Check traced or response token usage against min/max budgets       |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
@@ -729,6 +731,29 @@ tests:
 
 For `not-trajectory:tool-used`, object values are forbidden-use checks. Omit count bounds or set `max: 0`; other count ranges are rejected to avoid ambiguous double-negative semantics.
 
+### trajectory:tool-set {#trajectorytool-set}
+
+The `trajectory:tool-set` assertion checks that traced tool usage contains a required set of tools, regardless of order.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-set
+        value:
+          - search_corpus
+          - fetch_document
+          - rerank
+
+      - type: trajectory:tool-set
+        value:
+          tools:
+            - search_corpus
+            - fetch_document
+          mode: exact
+```
+
+Use an array value for the default `subset` mode, where extra tools are allowed. Use object form with `mode: exact` when the observed tool set must contain only the expected tools.
+
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
 The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
@@ -762,7 +787,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
-- optional `redactArgsInFailures` (boolean), which replaces the **observed** (traced) argument payloads in this assertion's reasons with `[redacted]` (both passing and failing) so traced args don't leak into reports or logs. The `expected` args you configure still appear in the result's assertion config, as they do for any assertion
+- optional `redactArgsInFailures` (boolean), which defaults to `true` and hides expected and observed argument payloads from passing and failing assertion reasons; set it to `false` only when the arguments are known to be non-sensitive and reason-level diagnostics are required. The expected args still appear in the assertion config, as they do for any assertion
 - optional `defaults`, a map of argument names to their default values
 - optional `ignore`, an argument name or list of names to drop before matching, regardless of value
 
@@ -1080,6 +1105,49 @@ Common patterns:
 - `*.error` - Matches spans ending with ".error"
 
 Provide at least one of `min` or `max`. Count bounds must be finite non-negative integers, and `max` must be greater than or equal to `min`.
+
+### Tokens-Used {#tokens-used}
+
+The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, an unfiltered assertion uses the larger available total from traced token attributes and provider response usage. If only one source reports usage, it uses that source. Use `source: trace` when a trace without token attributes should intentionally count as zero.
+
+```yaml
+assert:
+  - type: tokens-used
+    value:
+      max: 1200
+
+  - type: tokens-used
+    value:
+      pattern: 'llm.*'
+      max: 800
+      source: trace
+```
+
+Configuration options:
+
+- `min`: Minimum required token count (finite, non-negative number)
+- `max`: Maximum allowed token count (finite, non-negative number)
+- `pattern`: Non-empty span-name filter when reading from traces. Defaults to `*`
+- `source`: `auto` (default), `trace`, or `response`
+
+An explicit `pattern` with `source: auto` is trace-scoped because provider response usage cannot
+honor a span-name filter. It throws when no matching span reports recognized token usage instead of
+silently passing a budget at zero. Set `source: trace` when a missing match should intentionally count
+as zero.
+
+Row variables render inside the structured value. Numeric `min` and `max` template results
+are coerced after rendering, so a budget such as `max: '{{ token_budget }}'` can vary by test.
+The resolved value must still be a finite non-negative number. Quoted literal numbers such as
+`max: '1200'` are invalid; use a YAML number or a full `{{ ... }}` output expression.
+
+If `tokens-used` needs provider response usage and the provider does not return token
+usage metadata, the assertion throws instead of assuming zero tokens.
+
+For traced usage, Promptfoo sums every matching token-bearing operation span. Span parentage does
+not establish that one operation aggregates another, so nested operations are counted separately.
+Use `pattern` to select the instrumentation spans that belong in a budget. Within each span,
+Promptfoo uses the largest available aggregate or component total so incomplete or inconsistent
+token attributes do not undercount the budget.
 
 ### Trace-Span-Duration
 

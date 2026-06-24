@@ -1,12 +1,14 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { renderVarsInObject } from '../util/render';
 import {
   notTrajectoryToolUsedBoundsError,
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
+  trajectoryToolSetConfigError,
 } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 import {
@@ -74,6 +76,23 @@ function applyInverse(pass: boolean, inverse: boolean) {
 
 function formatStepList(stepLabels: string[]): string {
   return stepLabels.length > 0 ? stepLabels.join(', ') : '(none)';
+}
+
+function getRenderedTrajectoryValue(params: AssertionParams): unknown {
+  const value = params.renderedValue ?? params.assertion.value;
+  if (params.valueFromScript !== undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? renderVarsInObject(item, params.assertionValueContext.vars)
+        : item,
+    );
+  }
+  return value && typeof value === 'object'
+    ? renderVarsInObject(value, params.assertionValueContext.vars)
+    : value;
 }
 
 function requireNamedTrajectoryMatcher(
@@ -254,7 +273,7 @@ function handleCountedToolUsed(
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const steps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const expected = resolveToolMatchers(params.renderedValue ?? params.assertion.value);
+  const expected = resolveToolMatchers(getRenderedTrajectoryValue(params));
 
   if (expected.kind === 'list') {
     if (expected.matchers.length === 0) {
@@ -298,6 +317,78 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   return handleCountedToolUsed(params, steps, expected.matcher);
+};
+
+interface TrajectoryToolSetValue {
+  tools: Array<string | TrajectoryStepMatcher>;
+  mode?: 'subset' | 'exact';
+}
+
+function resolveToolSetValue(value: unknown): TrajectoryToolSetValue {
+  const configError = trajectoryToolSetConfigError(value);
+  if (configError) {
+    throw new Error(configError);
+  }
+  if (Array.isArray(value)) {
+    return { tools: value as Array<string | TrajectoryStepMatcher>, mode: 'subset' };
+  }
+  const objValue = value as TrajectoryToolSetValue;
+  return { tools: objValue.tools, mode: objValue.mode ?? 'subset' };
+}
+
+export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
+  const trace = getTraceOrThrow(params);
+  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const value = resolveToolSetValue(getRenderedTrajectoryValue(params));
+
+  const expectedMatchers = value.tools.map((tool, index) => {
+    const matcher = normalizeTrajectoryMatcher(tool, 'tool');
+    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-set', index);
+    return matcher;
+  });
+
+  const missingExpected = expectedMatchers.filter(
+    (matcher) => !toolSteps.some((step) => matchesTrajectoryStep(step, matcher)),
+  );
+  const expectedSatisfied = missingExpected.length === 0;
+
+  const extraSteps = toolSteps.filter(
+    (step) => !expectedMatchers.some((matcher) => matchesTrajectoryStep(step, matcher)),
+  );
+  const extraNames = [...new Set(extraSteps.map((step) => step.name))];
+
+  const basePass =
+    value.mode === 'exact' ? expectedSatisfied && extraSteps.length === 0 : expectedSatisfied;
+  const pass = applyInverse(basePass, params.inverse);
+
+  const expectedLabels = expectedMatchers.map((m) => m.pattern || m.name || '*');
+  const actualTools = toolSteps.map(formatTrajectoryStep);
+
+  let reason: string;
+  if (params.inverse) {
+    reason = basePass
+      ? `Forbidden tool set was satisfied: ${expectedLabels.join(', ')}. Actual tools: ${formatStepList(actualTools)}`
+      : `Forbidden tool set was not satisfied. Missing: ${
+          missingExpected.map((m) => m.pattern || m.name || '*').join(', ') || '(none)'
+        }. Actual tools: ${formatStepList(actualTools)}`;
+  } else if (!expectedSatisfied) {
+    reason = `Missing expected tools: ${missingExpected
+      .map((m) => m.pattern || m.name || '*')
+      .join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
+  } else if (value.mode === 'exact' && extraSteps.length > 0) {
+    reason = `Unexpected tools observed under mode=exact: ${extraNames.join(', ')}. Expected exactly: ${expectedLabels.join(', ')}`;
+  } else {
+    reason = `Observed expected tool set (mode=${value.mode ?? 'subset'}): ${expectedLabels.join(
+      ', ',
+    )}. Actual tools: ${formatStepList(actualTools)}`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -517,7 +608,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
-    redactArgsInFailures: redactArgsInFailures === true,
+    redactArgsInFailures: redactArgsInFailures !== false,
     defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
     ignore: resolveToolArgsMatchIgnore((value as TrajectoryToolArgsMatchValue).ignore),
   } as const;
@@ -526,7 +617,7 @@ function resolveToolArgsMatchValue(value: unknown) {
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
+  const value = resolveSequenceValue(getRenderedTrajectoryValue(params));
   const expectedMatchers = value.steps.map((step, index) => {
     const matcher = normalizeTrajectoryMatcher(step, 'tool');
     requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-sequence', index);
@@ -598,7 +689,7 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
   const { matcher, expectedArgs, mode, redactArgsInFailures, defaults, ignore } =
-    resolveToolArgsMatchValue(params.renderedValue ?? params.assertion.value);
+    resolveToolArgsMatchValue(getRenderedTrajectoryValue(params));
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
@@ -678,7 +769,7 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
 export const handleTrajectoryStepCount = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const steps = extractTrajectorySteps(trace);
-  const matcher = resolveStepCountValue(params.renderedValue ?? params.assertion.value);
+  const matcher = resolveStepCountValue(getRenderedTrajectoryValue(params));
 
   const { min, max } = matcher;
   if (min === undefined && max === undefined) {
@@ -762,18 +853,12 @@ export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
-  // Imported lazily so the trajectory assertion module doesn't pull the scheduler/render
-  // (and transitively the DB) into its import graph for the non-goal-success handlers.
-  const { renderVarsInObject } = await import('../util/render');
+  // Imported lazily so non-model-graded trajectory assertions don't pull the scheduler
+  // (and transitively the DB) into their import graph.
   const { getProviderCallExecutionContext, withProviderCallExecutionContext } = await import(
     '../scheduler/providerCallExecutionContext'
   );
-  const assertionValue = params.renderedValue ?? params.assertion.value;
-  const { goal, timeoutMs } = resolveGoalSuccessValue(
-    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
-      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
-      : assertionValue,
-  );
+  const { goal, timeoutMs } = resolveGoalSuccessValue(getRenderedTrajectoryValue(params));
   const trajectory = summarizeTrajectoryForJudge(trace);
   const runJudge = () =>
     matchesTrajectoryGoalSuccess(

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isNunjucksOutputExpression,
   notTrajectoryToolUsedBoundsError,
+  tokensUsedConfigError,
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
   traceSpanDurationConfigError,
@@ -8,6 +10,7 @@ import {
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
   trajectoryToolSequenceModeError,
+  trajectoryToolSetConfigError,
 } from '../../src/util/traceAssertionConfig';
 
 describe('traceAssertionConfig shared validators', () => {
@@ -96,6 +99,47 @@ describe('traceAssertionConfig shared validators', () => {
     });
   });
 
+  describe('tokensUsedConfigError', () => {
+    it('requires valid bounds', () => {
+      expect(tokensUsedConfigError({})).toBe('tokens-used assertion must include min or max');
+      expect(tokensUsedConfigError({ min: -1 })).toBe(
+        'tokens-used min must be a finite non-negative number',
+      );
+      expect(tokensUsedConfigError({ max: '100' })).toBe(
+        'tokens-used max must be a finite non-negative number',
+      );
+      expect(tokensUsedConfigError({ max: '{{ token_budget }}' })).toBe(
+        'tokens-used max must be a finite non-negative number',
+      );
+      expect(tokensUsedConfigError({ min: 5, max: 2 })).toBe(
+        'tokens-used min must be less than or equal to max',
+      );
+      expect(tokensUsedConfigError({ min: 1, max: 2 })).toBeUndefined();
+    });
+
+    it('validates source and pattern', () => {
+      expect(tokensUsedConfigError({ max: 10, source: 'cache' })).toBe(
+        'tokens-used source must be "trace", "response", or "auto"',
+      );
+      expect(tokensUsedConfigError({ max: 10, pattern: '  ' })).toBe(
+        'tokens-used pattern must be a non-empty string',
+      );
+      expect(tokensUsedConfigError({ max: 10, source: 'trace', pattern: 'llm.*' })).toBeUndefined();
+    });
+  });
+
+  describe('isNunjucksOutputExpression', () => {
+    it('accepts one full output expression and rejects partial or block templates', () => {
+      expect(isNunjucksOutputExpression('{{ token_budget }}')).toBe(true);
+      expect(isNunjucksOutputExpression('  {{ token_budget | int }}  ')).toBe(true);
+      expect(isNunjucksOutputExpression('100')).toBe(false);
+      expect(isNunjucksOutputExpression('100{{ "" }}')).toBe(false);
+      expect(isNunjucksOutputExpression('{{ token_budget }} tokens')).toBe(false);
+      expect(isNunjucksOutputExpression('{{ a }}{{ b }}')).toBe(false);
+      expect(isNunjucksOutputExpression('{% set budget = 100 %}{{ budget }}')).toBe(false);
+    });
+  });
+
   describe('trajectoryCountBoundsError', () => {
     it('interpolates the assertion type into the message', () => {
       expect(trajectoryCountBoundsError({ min: -1 }, 'trajectory:tool-used')).toBe(
@@ -157,6 +201,39 @@ describe('traceAssertionConfig shared validators', () => {
       expect(trajectoryToolSequenceModeError({ mode: 'adjacent' })).toBe(
         'trajectory:tool-sequence assertion mode must be "in_order" or "exact"',
       );
+    });
+  });
+
+  describe('trajectoryToolSetConfigError', () => {
+    it('requires a non-empty tools array', () => {
+      expect(trajectoryToolSetConfigError('search')).toBe(
+        'trajectory:tool-set assertion must have an array value or an object with a tools array',
+      );
+      expect(trajectoryToolSetConfigError([])).toBe(
+        'trajectory:tool-set assertion requires at least one expected tool',
+      );
+      expect(trajectoryToolSetConfigError({ tools: ['search'] })).toBeUndefined();
+    });
+
+    it('only allows subset or exact mode', () => {
+      expect(trajectoryToolSetConfigError({ tools: ['search'], mode: 'ordered' })).toBe(
+        'trajectory:tool-set assertion mode must be "subset" or "exact"',
+      );
+      expect(trajectoryToolSetConfigError({ tools: ['search'], mode: 'exact' })).toBeUndefined();
+    });
+
+    it('requires every tool matcher to have a non-blank string name or pattern', () => {
+      const error = 'Each trajectory tool set entry needs a name or pattern.';
+      expect(trajectoryToolSetConfigError(['   '])).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 123 }] })).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ pattern: '' }] })).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 'search', pattern: '   ' }] })).toBe(
+        error,
+      );
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 'search', type: 'bogus' }] })).toBe(
+        error,
+      );
+      expect(trajectoryToolSetConfigError({ tools: [{ pattern: 'search_*' }] })).toBeUndefined();
     });
   });
 });
