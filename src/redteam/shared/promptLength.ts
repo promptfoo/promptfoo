@@ -172,7 +172,7 @@ function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar:
   if (injectVar !== MULTI_INPUT_VAR) {
     const prompt = vars?.[injectVar];
     if (Array.isArray(prompt) && prompt.every((value) => typeof value === 'string')) {
-      return prompt;
+      return prompt as string[];
     }
     return [
       typeof prompt === 'object' && prompt !== null ? JSON.stringify(prompt) : String(prompt ?? ''),
