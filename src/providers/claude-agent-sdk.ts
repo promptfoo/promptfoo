@@ -1087,7 +1087,7 @@ function extraArgsContainSensitiveData(
   extraArgs: Record<string, string | null> | undefined,
 ): boolean {
   return Object.keys(extraArgs ?? {}).some((key) =>
-    isSensitiveEnvironmentKey(key.replaceAll('-', '_')),
+    isSensitiveEnvironmentKey(key.replace(/-/g, '_')),
   );
 }
 

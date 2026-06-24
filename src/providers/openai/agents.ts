@@ -342,7 +342,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         );
       }
 
-      const hasMockValue = Object.hasOwn(toolMocks, tool.name);
+      const hasMockValue = Object.prototype.hasOwnProperty.call(toolMocks, tool.name);
       return {
         ...tool,
         isEnabled: async () => true,
@@ -655,22 +655,22 @@ function assertNoMockToolOverrides(modelSettings: unknown, source: string): void
   const providerDataRecord = providerData as Record<string, unknown>;
   const extraBodies = [providerDataRecord.extraBody, providerDataRecord.extra_body];
   const overridesPrompt =
-    Object.hasOwn(providerDataRecord, 'prompt') ||
+    Object.prototype.hasOwnProperty.call(providerDataRecord, 'prompt') ||
     extraBodies.some(
       (extraBody) =>
         !!extraBody &&
         typeof extraBody === 'object' &&
         !Array.isArray(extraBody) &&
-        Object.hasOwn(extraBody, 'prompt'),
+        Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
     );
   const overridesTools =
-    Object.hasOwn(providerDataRecord, 'tools') ||
+    Object.prototype.hasOwnProperty.call(providerDataRecord, 'tools') ||
     extraBodies.some(
       (extraBody) =>
         !!extraBody &&
         typeof extraBody === 'object' &&
         !Array.isArray(extraBody) &&
-        Object.hasOwn(extraBody, 'tools'),
+        Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
     );
 
   if (overridesPrompt || overridesTools) {
