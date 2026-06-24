@@ -1533,7 +1533,7 @@ tests:
 
 An intervention can block, replace, or mask content. If hard blocking is the policy, also assert on the returned content or native assessment. Clean built-in Bedrock responses may omit `guardrails`, so a benign `guardrails` assertion can pass through the default-unflagged fallback without proving the configured guardrail ran.
 
-Guardrail metadata is not identical across InvokeModel, Converse streaming, cached responses, and Bedrock Agents. Export a known intervention with `--no-cache -o output.json` and verify `providerResponse.guardrails` before relying on the assertion in CI. See [Testing AWS Bedrock Guardrails](/docs/guides/testing-guardrails#testing-aws-bedrock-guardrails) for direct ApplyGuardrail testing and response semantics.
+Guardrail metadata is not identical across InvokeModel, Converse streaming, cached responses, and Bedrock Agents. Export a known intervention with `--no-cache -o output.json` and verify `response.guardrails` in the exported result before relying on the assertion in CI. See [Testing AWS Bedrock Guardrails](/docs/guides/testing-guardrails#testing-aws-bedrock-guardrails) for direct ApplyGuardrail testing and response semantics.
 
 ## Environment Variables
 

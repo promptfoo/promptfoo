@@ -226,7 +226,7 @@ Verify the normalized data with a fresh exported eval:
 
 ```bash
 promptfoo eval --no-cache -o output.json
-jq '.results.results[] | {test: .testCase.description, guardrails: .providerResponse.guardrails}' output.json
+jq '.results.results[] | {test: .testCase.description, guardrails: .response.guardrails}' output.json
 ```
 
 If a dangerous test unexpectedly passes, check these conditions first:

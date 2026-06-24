@@ -67,10 +67,16 @@ export default function transformModelArmorResponse(json, _text, context) {
     throw new Error(`Model Armor invocation was ${result.invocationResult ?? 'unknown'}`);
   }
 
-  const executionStates = collectExecutionStates(result.filterResults);
-  const incompleteState = executionStates.find((state) => state !== 'EXECUTION_SUCCESS');
-  if (incompleteState) {
-    throw new Error(`Model Armor filter execution was ${incompleteState}`);
+  const filterResults = result.filterResults || {};
+  for (const [filterName, filterResult] of Object.entries(filterResults)) {
+    const executionStates = collectExecutionStates(filterResult);
+    if (executionStates.length === 0) {
+      throw new Error(`Model Armor filter ${filterName} did not include an execution state`);
+    }
+    const incompleteState = executionStates.find((state) => state !== 'EXECUTION_SUCCESS');
+    if (incompleteState) {
+      throw new Error(`Model Armor filter ${filterName} execution was ${incompleteState}`);
+    }
   }
 
   const matchState = result.filterMatchState;
@@ -79,7 +85,7 @@ export default function transformModelArmorResponse(json, _text, context) {
   }
 
   const flagged = matchState === 'MATCH_FOUND';
-  const filters = result.filterResults || {};
+  const filters = filterResults;
   const reasons = collectMatchReasons(filters);
   const reason = reasons.join('; ') || (flagged ? 'Content flagged by Model Armor' : undefined);
   return {

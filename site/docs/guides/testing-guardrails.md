@@ -134,7 +134,7 @@ Run without cache and inspect the exported provider response:
 
 ```bash
 promptfoo eval --no-cache -o output.json
-jq '.results.results[] | {test: .testCase.description, guardrails: .providerResponse.guardrails}' output.json
+jq '.results.results[] | {test: .testCase.description, guardrails: .response.guardrails}' output.json
 ```
 
 Check more than the final pass count:
