@@ -325,19 +325,20 @@ function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | numb
 
 function validateScopedCharsPerMessageLimits(
   scopes: ScopedPromptLimit[],
-  scopeName: 'plugins' | 'strategies',
+  pathPrefix: ['plugins' | 'strategies', ...Array<string | number>],
   ctx: z.RefinementCtx,
 ): void {
   for (const [index, scope] of scopes.entries()) {
     if (typeof scope === 'string' || !scope.config) {
       continue;
     }
+    const configPath = [...pathPrefix, index, 'config'];
     for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
       if (!hasValidCharsPerMessageLimit(scope.config[key])) {
         ctx.addIssue({
           code: 'custom',
           message: `${key} must be a positive integer`,
-          path: [scopeName, index, 'config', key],
+          path: [...configPath, key],
         });
       }
     }
@@ -347,7 +348,10 @@ function validateScopedCharsPerMessageLimits(
         minCharsPerMessage: getCharsPerMessageLimit(scope.config.minCharsPerMessage),
       })
     ) {
-      addCharsPerMessageRangeIssue(ctx, [scopeName, index, 'config', 'minCharsPerMessage']);
+      addCharsPerMessageRangeIssue(ctx, [...configPath, 'minCharsPerMessage']);
+    }
+    if (Array.isArray(scope.config.steps)) {
+      validateScopedCharsPerMessageLimits(scope.config.steps, [...configPath, 'steps'], ctx);
     }
   }
 }
@@ -586,8 +590,8 @@ export const RedteamConfigSchema = z
     if (!hasValidCharsPerMessageRange(data)) {
       addCharsPerMessageRangeIssue(ctx, ['minCharsPerMessage']);
     }
-    validateScopedCharsPerMessageLimits(data.plugins ?? [], 'plugins', ctx);
-    validateScopedCharsPerMessageLimits(data.strategies ?? [], 'strategies', ctx);
+    validateScopedCharsPerMessageLimits(data.plugins ?? [], ['plugins'], ctx);
+    validateScopedCharsPerMessageLimits(data.strategies ?? [], ['strategies'], ctx);
     validateEffectiveCharsPerMessageRanges(data, ctx);
   })
   .transform((data): RedteamFileConfig => {

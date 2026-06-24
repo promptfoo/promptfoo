@@ -355,6 +355,16 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject invalid layered strategy step message limits', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [
+          { id: 'layer', config: { steps: [{ id: 'goat', config: { minCharsPerMessage: 1.5 } }] } },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should reject layered strategy step ranges combined with plugin ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({
