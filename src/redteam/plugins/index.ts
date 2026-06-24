@@ -292,6 +292,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
       }
 
       let retryInstructions: string | undefined;
+      let lastGenerationReturnedTestCases = true;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
         const generatedTestCases = await pluginFactory.action({
@@ -299,6 +300,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           n: Math.max(params.n - currentTestCases.length, 0),
           config: retryConfig,
         });
+        lastGenerationReturnedTestCases = generatedTestCases.length > 0;
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -331,6 +333,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         params.n,
         2,
         dedupeTestCases,
+        () => lastGenerationReturnedTestCases,
       );
 
       return testCases.map(stripRetryModifier);
@@ -347,6 +350,7 @@ async function fetchRemoteTestCases(
   redteamGenerationContext?: RedteamGenerationContext | string,
   abortSignal?: AbortSignal,
 ): Promise<TestCase[]> {
+  let deleteFromCache: (() => Promise<void>) | undefined;
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
@@ -395,12 +399,7 @@ async function fetchRemoteTestCases(
   }
 
   try {
-    const {
-      data: responseText,
-      deleteFromCache,
-      status,
-      statusText,
-    } = await fetchWithCache<string>(
+    const response = await fetchWithCache<string>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -413,6 +412,8 @@ async function fetchRemoteTestCases(
       getRequestTimeoutMs(),
       'text',
     );
+    deleteFromCache = response.deleteFromCache;
+    const { data: responseText, status, statusText } = response;
     abortSignal?.throwIfAborted();
     if (status !== 200) {
       await deleteFromCache?.();
@@ -458,6 +459,7 @@ async function fetchRemoteTestCases(
     return ret;
   } catch (err) {
     if (abortSignal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+      await deleteFromCache?.();
       throw err;
     }
     logger.error(`Error generating test cases for ${key}`, { error: err });

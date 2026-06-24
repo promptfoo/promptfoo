@@ -56,6 +56,23 @@ describe('retryWithDeduplication', () => {
     expect(operation).toHaveBeenCalledTimes(3);
   });
 
+  it('should stop after an empty result when the caller declines another retry', async () => {
+    const operation = vi.fn().mockResolvedValue([]);
+    const shouldRetryAfterNoNewItems = vi.fn().mockReturnValue(false);
+
+    const result = await retryWithDeduplication(
+      operation,
+      3,
+      2,
+      undefined,
+      shouldRetryAfterNoNewItems,
+    );
+
+    expect(result).toEqual([]);
+    expect(operation).toHaveBeenCalledOnce();
+    expect(shouldRetryAfterNoNewItems).toHaveBeenCalledOnce();
+  });
+
   it('should return all unique items even if target count is not reached', async () => {
     const operation = vi
       .fn()

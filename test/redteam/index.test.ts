@@ -246,26 +246,35 @@ describe('synthesize', () => {
       });
       const retryAction = vi.fn().mockReturnValue([]);
 
-      vi.spyOn(Plugins, 'find').mockReturnValue({ action: pluginAction, key: 'test-plugin' });
-      vi.spyOn(Strategies, 'find').mockReturnValue({ action: retryAction, id: 'retry' });
+      const pluginFindSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'test-plugin' });
+      const strategyFindSpy = vi
+        .spyOn(Strategies, 'find')
+        .mockReturnValue({ action: retryAction, id: 'retry' });
 
-      await expect(
-        synthesize({
-          abortSignal: controller.signal,
-          entities: [],
-          language: 'en',
-          numTests: 1,
-          plugins: [{ id: 'test-plugin', numTests: 1 }],
-          prompts: ['Test prompt'],
-          provider: mockProvider,
-          purpose: 'Test purpose',
-          strategies: [{ id: 'retry' }],
-          targetIds: ['test-provider'],
-        }),
-      ).rejects.toThrow('Operation cancelled');
+      try {
+        await expect(
+          synthesize({
+            abortSignal: controller.signal,
+            entities: [],
+            language: 'en',
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            provider: mockProvider,
+            purpose: 'Test purpose',
+            strategies: [{ id: 'retry' }],
+            targetIds: ['test-provider'],
+          }),
+        ).rejects.toThrow('Operation cancelled');
 
-      expect(pluginAction).toHaveBeenCalledTimes(1);
-      expect(retryAction).not.toHaveBeenCalled();
+        expect(pluginAction).toHaveBeenCalledTimes(1);
+        expect(retryAction).not.toHaveBeenCalled();
+      } finally {
+        pluginFindSpy.mockRestore();
+        strategyFindSpy.mockRestore();
+      }
     });
 
     it('should generate test cases for each plugin', async () => {

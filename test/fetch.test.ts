@@ -1416,6 +1416,36 @@ describe('fetchWithRetries', () => {
     );
   });
 
+  it('should not block retries while a response body cancellation is pending', async () => {
+    let resolveCancellation: (() => void) | undefined;
+    const cancel = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCancellation = resolve;
+        }),
+    );
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    Object.assign(transientResponse, { body: { cancel } });
+    const successResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+
+    const resultPromise = fetchWithRetries('https://example.com', {}, 1000, 1);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      resolveCancellation?.();
+    }
+
+    await expect(resultPromise).resolves.toBe(successResponse);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('should return the final recognized transient response after retries are exhausted', async () => {
     const transientResponse = createMockResponse({
       status: 503,

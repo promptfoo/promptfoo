@@ -499,13 +499,15 @@ function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown
 
     if (key === 'retryOnStatusCodes') {
       if (value == null) {
-        identity.retryOnStatusCodes = value;
         continue;
       }
       if (!Array.isArray(value) || !value.every((status) => Number.isInteger(status))) {
         return { cacheable: false, identity: undefined };
       }
-      identity.retryOnStatusCodes = [...new Set(value)].sort((a, b) => a - b);
+      const retryOnStatusCodes = [...new Set(value)].sort((a, b) => a - b);
+      if (retryOnStatusCodes.length > 0) {
+        identity.retryOnStatusCodes = retryOnStatusCodes;
+      }
       continue;
     }
 

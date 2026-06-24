@@ -74,6 +74,12 @@ describe('Plugins', () => {
     // Reset all mocks
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(neverGenerateRemote).mockReset().mockReturnValue(false);
+    vi.mocked(shouldGenerateRemote).mockReset().mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('plugin registration', () => {
@@ -265,6 +271,33 @@ describe('Plugins', () => {
           },
         },
       ]);
+    });
+
+    it('should not retry max-chars generation after an empty remote failure', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: 'server error',
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(fetchWithCache).toHaveBeenCalledOnce();
     });
   });
 
@@ -664,11 +697,13 @@ describe('Plugins', () => {
     it('should propagate cancellation after a cached remote generation response', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       const abortController = new AbortController();
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
         abortController.abort();
         return {
           ...mockFetchResponse([{ vars: { testVar: 'cached test' } }]),
           cached: true,
+          deleteFromCache,
         };
       });
 
@@ -685,6 +720,7 @@ describe('Plugins', () => {
         }),
       ).rejects.toMatchObject({ name: 'AbortError' });
       expect(abortController.signal.aborted).toBe(true);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('should log invalid remote responses without including their body', async () => {

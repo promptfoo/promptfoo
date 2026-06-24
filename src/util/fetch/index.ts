@@ -78,9 +78,12 @@ function getBoundedRetryAfterDelayMs(value: string): number | undefined {
   return delayWithJitter <= MAX_RETRY_DELAY_MS ? delayWithJitter : MAX_RETRY_DELAY_MS - jitter;
 }
 
-async function discardResponseBody(response: Response): Promise<void> {
+function discardResponseBody(response: Response): void {
   try {
-    await response.body?.cancel();
+    const cancellation = response.body?.cancel();
+    void cancellation?.catch((error) => {
+      logger.debug('[fetch] Failed to discard retryable response body', { error });
+    });
   } catch (error) {
     logger.debug('[fetch] Failed to discard retryable response body', { error });
   }
@@ -144,7 +147,7 @@ async function waitForTransientResponseRetry({
   signal?: AbortSignal | null;
   url: RequestInfo;
 }): Promise<void> {
-  await discardResponseBody(response);
+  discardResponseBody(response);
   const retryAfter = response.headers.get('Retry-After');
   const retryAfterDelayMs = retryAfter ? getBoundedRetryAfterDelayMs(retryAfter) : undefined;
   if (retryAfterDelayMs !== undefined) {

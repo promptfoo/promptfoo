@@ -1236,6 +1236,21 @@ describe('fetchWithCache', () => {
       });
     });
 
+    it('should treat empty and omitted retry status policies as equivalent', async () => {
+      mockFetchWithRetries.mockResolvedValue(
+        mockFetchWithRetriesResponse(true, { data: 'default retry policy' }),
+      );
+
+      const omitted = await fetchWithCache(url, {}, 1000);
+      const empty = await fetchWithCache(url, { retryOnStatusCodes: [] }, 1000);
+      const explicitUndefined = await fetchWithCache(url, { retryOnStatusCodes: undefined }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(omitted.cached).toBe(false);
+      expect(empty.cached).toBe(true);
+      expect(explicitUndefined.cached).toBe(true);
+    });
+
     it('should isolate cached responses by retry status policy', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: '500 policy' }))
