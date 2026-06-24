@@ -38,35 +38,131 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export interface OutputStripFlags {
+  shouldStripPromptText: boolean;
+  shouldStripResponseOutput: boolean;
+  shouldStripTestVars: boolean;
+  shouldStripGradingResult: boolean;
+  shouldStripMetadata: boolean;
+}
+
+function hasAnyStripFlag(flags: OutputStripFlags): boolean {
+  return Object.values(flags).some(Boolean);
+}
+
+export function projectErrorForOutput(
+  error: EvaluateResult['error'],
+  stripFlags: OutputStripFlags,
+): EvaluateResult['error'] {
+  return error && hasAnyStripFlag(stripFlags) ? '[error details stripped]' : error;
+}
+
+function projectRedteamHistoryForOutput(history: unknown, stripFlags: OutputStripFlags): unknown {
+  const shouldProjectHistory =
+    stripFlags.shouldStripPromptText ||
+    stripFlags.shouldStripResponseOutput ||
+    stripFlags.shouldStripTestVars;
+  if (!shouldProjectHistory) {
+    return history;
+  }
+  if (!Array.isArray(history)) {
+    return undefined;
+  }
+
+  return history.filter(isRecord).map((entry) => {
+    const {
+      promptAudio: _promptAudio,
+      promptImage: _promptImage,
+      outputAudio: _outputAudio,
+      outputImage: _outputImage,
+      inputVars: _inputVars,
+      ...projectedEntry
+    } = entry;
+
+    return {
+      ...projectedEntry,
+      ...(stripFlags.shouldStripPromptText
+        ? { prompt: '[prompt stripped]' }
+        : {
+            ...(entry.promptAudio !== undefined && { promptAudio: entry.promptAudio }),
+            ...(entry.promptImage !== undefined && { promptImage: entry.promptImage }),
+          }),
+      ...(stripFlags.shouldStripResponseOutput
+        ? { output: '[output stripped]' }
+        : {
+            ...(entry.outputAudio !== undefined && { outputAudio: entry.outputAudio }),
+            ...(entry.outputImage !== undefined && { outputImage: entry.outputImage }),
+          }),
+      ...(!stripFlags.shouldStripTestVars &&
+        entry.inputVars !== undefined && { inputVars: entry.inputVars }),
+    };
+  });
+}
+
+export function projectMetadataForOutput(
+  metadata: Record<string, unknown> | undefined,
+  stripFlags: OutputStripFlags,
+): Record<string, unknown> | undefined {
+  if (stripFlags.shouldStripMetadata) {
+    return undefined;
+  }
+  if (!metadata) {
+    return metadata;
+  }
+
+  const projectedMetadata = { ...metadata };
+  if (stripFlags.shouldStripPromptText) {
+    delete projectedMetadata.redteamFinalPrompt;
+  }
+  for (const historyKey of ['redteamHistory', 'redteamTreeHistory'] as const) {
+    if (historyKey in projectedMetadata) {
+      const projectedHistory = projectRedteamHistoryForOutput(
+        projectedMetadata[historyKey],
+        stripFlags,
+      );
+      if (projectedHistory === undefined) {
+        delete projectedMetadata[historyKey];
+      } else {
+        projectedMetadata[historyKey] = projectedHistory;
+      }
+    }
+  }
+
+  return Object.keys(projectedMetadata).length > 0 ? projectedMetadata : undefined;
+}
+
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean; stripPrompt: boolean },
+  stripFlags: OutputStripFlags,
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput && !options.stripPrompt) {
+  if (!hasAnyStripFlag(stripFlags)) {
     return response;
   }
 
-  const projectedResponse: ProviderResponse = options.stripMetadata
-    ? (({ metadata: _metadata, ...rest }) => rest)(response)
-    : { ...response };
-
-  if (options.stripPrompt) {
-    delete projectedResponse.prompt;
-    if (projectedResponse.metadata?.redteamFinalPrompt !== undefined) {
-      const { redteamFinalPrompt: _redteamFinalPrompt, ...metadata } = projectedResponse.metadata;
-      if (Object.keys(metadata).length > 0) {
-        projectedResponse.metadata = metadata;
-      } else {
-        delete projectedResponse.metadata;
-      }
-    }
+  const projectedResponse: ProviderResponse = { ...response };
+  const metadata = projectMetadataForOutput(
+    response.metadata as Record<string, unknown> | undefined,
+    stripFlags,
+  );
+  if (metadata) {
+    projectedResponse.metadata = metadata;
+  } else {
+    delete projectedResponse.metadata;
   }
 
-  if (options.stripOutput) {
+  if (stripFlags.shouldStripPromptText) {
+    delete projectedResponse.prompt;
+  }
+
+  if (stripFlags.shouldStripResponseOutput) {
     projectedResponse.output = '[output stripped]';
   }
 
@@ -87,27 +183,23 @@ function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
   };
 }
 
-function projectTestCase(
-  testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripPrompt: boolean; stripVars: boolean },
-): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripPrompt && !options.stripVars) {
+function projectTestCase(testCase: AtomicTestCase, stripFlags: OutputStripFlags): AtomicTestCase {
+  if (!hasAnyStripFlag(stripFlags)) {
     return testCase;
   }
 
-  const projectedTestCase = options.stripMetadata
-    ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
-    : { ...testCase };
-
-  if (options.stripPrompt && 'metadata' in projectedTestCase) {
-    const testCaseMetadata = projectedTestCase.metadata as Record<string, unknown> | undefined;
-    if (testCaseMetadata?.redteamFinalPrompt !== undefined) {
-      const { redteamFinalPrompt: _redteamFinalPrompt, ...metadata } = testCaseMetadata;
-      projectedTestCase.metadata = Object.keys(metadata).length > 0 ? metadata : undefined;
-    }
+  const projectedTestCase = { ...testCase };
+  const metadata = projectMetadataForOutput(
+    testCase.metadata as Record<string, unknown> | undefined,
+    stripFlags,
+  );
+  if (metadata) {
+    projectedTestCase.metadata = metadata;
+  } else {
+    delete projectedTestCase.metadata;
   }
 
-  if (options.stripVars) {
+  if (stripFlags.shouldStripTestVars) {
     projectedTestCase.vars = undefined;
   }
 
@@ -116,18 +208,12 @@ function projectTestCase(
 
 function projectResultMetadata(
   metadata: EvaluateResult['metadata'],
-  options: { stripMetadata: boolean; stripPrompt: boolean },
+  stripFlags: OutputStripFlags,
 ): EvaluateResult['metadata'] {
-  if (options.stripMetadata) {
+  if (stripFlags.shouldStripMetadata) {
     return {};
   }
-
-  if (!options.stripPrompt || metadata?.redteamFinalPrompt === undefined) {
-    return metadata;
-  }
-
-  const { redteamFinalPrompt: _redteamFinalPrompt, ...projectedMetadata } = metadata;
-  return projectedMetadata;
+  return projectMetadataForOutput(metadata, stripFlags);
 }
 
 export function projectEvaluateResultForOutput(result: EvaluateResult): EvaluateResult {
@@ -137,7 +223,14 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
     shouldStripTestVars,
     shouldStripGradingResult,
     shouldStripMetadata,
-  } = getStripFlags();
+  } = getOutputStripFlags();
+  const stripFlags = {
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  };
 
   if (
     !shouldStripPromptText &&
@@ -153,22 +246,12 @@ export function projectEvaluateResultForOutput(result: EvaluateResult): Evaluate
     ...result,
     prompt: projectPrompt(result.prompt, shouldStripPromptText),
     promptId: shouldStripPromptText ? hashPrompt(result.prompt) : result.promptId,
-    response: projectProviderResponse(result.response, {
-      stripMetadata: shouldStripMetadata,
-      stripOutput: shouldStripResponseOutput,
-      stripPrompt: shouldStripPromptText,
-    }),
-    testCase: projectTestCase(result.testCase, {
-      stripMetadata: shouldStripMetadata,
-      stripPrompt: shouldStripPromptText,
-      stripVars: shouldStripTestVars,
-    }),
+    response: projectProviderResponse(result.response, stripFlags),
+    testCase: projectTestCase(result.testCase, stripFlags),
     gradingResult: shouldStripGradingResult ? null : result.gradingResult,
     vars: shouldStripTestVars ? {} : result.vars,
-    metadata: projectResultMetadata(result.metadata, {
-      stripMetadata: shouldStripMetadata,
-      stripPrompt: shouldStripPromptText,
-    }),
+    metadata: projectResultMetadata(result.metadata, stripFlags),
+    error: projectErrorForOutput(result.error, stripFlags),
   };
 }
 
@@ -614,7 +697,7 @@ function redactSensitiveResultFieldsForDb<
 
 // Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
-function getStripFlags() {
+export function getOutputStripFlags(): OutputStripFlags {
   return {
     shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
     shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
@@ -639,7 +722,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     shouldStripTestVars,
     shouldStripGradingResult,
     shouldStripMetadata,
-  } = getStripFlags();
+  } = getOutputStripFlags();
+  const stripFlags = {
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  };
 
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
@@ -647,15 +737,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     gradingResult: sanitizeForDb(artifactResult.gradingResult),
     metadata: sanitizeForDb(artifactResult.metadata),
   });
-  const response = projectProviderResponse(redacted.response ?? undefined, {
-    stripMetadata: shouldStripMetadata,
-    stripOutput: shouldStripResponseOutput,
-    stripPrompt: shouldStripPromptText,
-  });
-  const metadata = projectResultMetadata(redacted.metadata as EvaluateResult['metadata'], {
-    stripMetadata: shouldStripMetadata,
-    stripPrompt: shouldStripPromptText,
-  });
+  const response = projectProviderResponse(redacted.response ?? undefined, stripFlags);
+  const metadata = projectResultMetadata(
+    redacted.metadata as EvaluateResult['metadata'],
+    stripFlags,
+  );
 
   return {
     ...result,
@@ -663,11 +749,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
       ? {
           testCase: projectTestCase(
             sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
-            {
-              stripMetadata: shouldStripMetadata,
-              stripPrompt: shouldStripPromptText,
-              stripVars: shouldStripTestVars,
-            },
+            stripFlags,
           ),
         }
       : {}),
@@ -695,6 +777,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata,
+    error: projectErrorForOutput(artifactResult.error as EvaluateResult['error'], stripFlags),
   } as T;
 }
 
@@ -862,6 +945,29 @@ export default class EvalResult {
       .where(
         and(
           eq(evalResultsTable.evalId, evalId),
+          eq(evalResultsTable.testIdx, testIdx),
+          eq(evalResultsTable.promptIdx, promptIdx),
+        ),
+      )
+      .limit(1)
+      .get();
+    return result ? new EvalResult({ ...result, persisted: true }) : null;
+  }
+
+  static async findByEvalIdAndResultId(
+    evalId: string,
+    resultId: string,
+    testIdx: number,
+    promptIdx: number,
+  ) {
+    const db = await getDb();
+    const result = await db
+      .select()
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, evalId),
+          eq(evalResultsTable.id, resultId),
           eq(evalResultsTable.testIdx, testIdx),
           eq(evalResultsTable.promptIdx, promptIdx),
         ),

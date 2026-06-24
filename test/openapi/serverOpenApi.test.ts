@@ -107,6 +107,9 @@ describe('server OpenAPI generation', () => {
     const resultRowPromptIdxParam = resultRowOperation?.parameters?.find(
       (param: any) => param.name === 'promptIdx',
     ) as any;
+    const resultRowIdParam = resultRowOperation?.parameters?.find(
+      (param: any) => param.name === 'resultId',
+    ) as any;
     const evalTableResponseContent = evalTableOperation?.responses['200']?.content;
     const evalTableJsonSchema = evalTableResponseContent?.['application/json']?.schema as
       | { anyOf?: unknown[]; oneOf?: unknown[] }
@@ -165,6 +168,13 @@ describe('server OpenAPI generation', () => {
         schema: expect.objectContaining({ minimum: 0, type: 'integer' }),
       }),
     );
+    expect(resultRowIdParam).toEqual(
+      expect.objectContaining({
+        in: 'query',
+        required: false,
+        schema: expect.objectContaining({ minLength: 1, type: 'string' }),
+      }),
+    );
     expect(
       getMediaInfoOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.url,
@@ -214,6 +224,8 @@ describe('server OpenAPI generation', () => {
     const explicitServerErrorOperations = [
       paths['/api/eval/{id}/table']?.get,
       paths['/api/eval/{evalId}/results/{id}/rating']?.post,
+      paths['/api/results/{id}']?.get,
+      paths['/api/results/{id}/rows/{testIdx}/{promptIdx}']?.get,
       paths['/api/model-audit/scanners']?.get,
       paths['/api/model-audit/check-path']?.post,
       paths['/api/model-audit/scans']?.get,

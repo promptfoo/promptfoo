@@ -170,17 +170,15 @@ export async function readResult(
   id: string,
   options: ResultsFileOptions = {},
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
-  try {
-    const eval_ = await Eval.findById(id);
-    invariant(eval_, `Eval with ID ${id} not found.`);
-    return {
-      id,
-      result: await eval_.toResultsFile(options),
-      createdAt: new Date(eval_.createdAt),
-    };
-  } catch (err) {
-    logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    return undefined;
   }
+  return {
+    id,
+    result: await eval_.toResultsFile(options),
+    createdAt: new Date(eval_.createdAt),
+  };
 }
 
 export async function updateResult(

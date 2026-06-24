@@ -1262,6 +1262,87 @@ describe('evaluator', () => {
         restoreEnv();
       }
     });
+
+    it('selects duplicate persisted rows by immutable result ID', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          success: false,
+          response: { output: 'stale retry output' },
+        }),
+      );
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          success: true,
+          response: { output: 'final retry output' },
+        }),
+      );
+      const db = await getDb();
+      const rows = await db
+        .select({ id: evalResultsTable.id, response: evalResultsTable.response })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, eval1.id))
+        .all();
+      const finalRow = rows.find((row) => row.response?.output === 'final retry output');
+
+      expect(finalRow).toBeDefined();
+      await expect(
+        Eval.getResultByIdAndIndices(eval1.id, 0, 0, finalRow!.id),
+      ).resolves.toMatchObject({
+        id: finalRow!.id,
+        success: true,
+        response: { output: 'final retry output' },
+      });
+      await expect(
+        Eval.getResultByIdAndIndices(eval1.id, 0, 1, finalRow!.id),
+      ).resolves.toBeUndefined();
+
+      const compact = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      expect(compact.results.results.map((result) => result.id)).toEqual(
+        expect.arrayContaining(rows.map((row) => row.id)),
+      );
+    });
+
+    it('loads and sanitizes one legacy result without hydrating the evaluation', async () => {
+      const legacyResult = createEvaluateResult({
+        id: 'legacy-row-id',
+        testIdx: 4,
+        promptIdx: 2,
+        provider: {
+          id: 'legacy-provider',
+          label: 'Legacy provider',
+          config: { apiKey: 'legacy-provider-secret' },
+        } as EvaluateResult['provider'],
+        response: {
+          output: 'legacy output',
+          metadata: { headers: { authorization: 'Bearer legacy-secret' } },
+        },
+      });
+      const evalId = await writeResultsToDatabase(
+        createEvaluateSummaryV2({ results: [legacyResult] }),
+        {},
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById');
+
+      const result = await Eval.getResultByIdAndIndices(evalId, 4, 2, 'legacy-row-id');
+
+      expect(findByIdSpy).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        id: 'legacy-row-id',
+        provider: { id: 'legacy-provider', label: 'Legacy provider' },
+        response: { output: 'legacy output' },
+      });
+      expect(result?.provider).not.toHaveProperty('config');
+      expect(JSON.stringify(result)).not.toContain('legacy-provider-secret');
+      expect(JSON.stringify(result)).not.toContain('Bearer legacy-secret');
+      await expect(
+        Eval.getResultByIdAndIndices(evalId, 4, 2, 'other-row-id'),
+      ).resolves.toBeUndefined();
+    });
   });
 
   describe('toResultsFile', () => {
@@ -1337,7 +1418,27 @@ describe('evaluator', () => {
             id: 'test-provider',
             label: 'Test provider',
             config: {
-              tools: [{ type: 'function', function: { name: 'search' } }],
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'search',
+                    description: 'Search safely',
+                    parameters: {
+                      type: 'object',
+                      properties: { api_key: { type: 'string' }, password: { type: 'string' } },
+                    },
+                  },
+                },
+                {
+                  type: 'mcp',
+                  server_label: 'private-server',
+                  server_url: 'https://user:password@example.com?token=tool-secret',
+                  headers: { authorization: 'Bearer tool-secret' },
+                  allowed_tools: ['read'],
+                },
+                { type: 'custom', nested: { apiKey: 'unknown-tool-secret' } },
+              ],
               apiKey: 'should not be projected',
             },
           },
@@ -1346,7 +1447,25 @@ describe('evaluator', () => {
         redteam: {
           injectVar: 'attackInput',
           frameworks: ['owasp:llm'],
-          plugins: [{ id: 'coding-agent:network-egress-bypass' }],
+          plugins: [
+            {
+              id: 'coding-agent:network-egress-bypass',
+              severity: 'high',
+              config: { apiKey: 'plugin-secret', prompt: oversizedText },
+            },
+            { id: 'policy', config: { policy: 'Inline policy text', apiKey: 'policy-secret' } },
+            {
+              id: 'policy',
+              config: {
+                policy: {
+                  id: 'policy-id',
+                  name: 'Named policy',
+                  text: 'Named policy text',
+                  apiKey: 'policy-object-secret',
+                },
+              },
+            },
+          ] as any,
           purpose: 'should not be projected',
           strategies: ['jailbreak:meta'],
         },
@@ -1460,15 +1579,45 @@ describe('evaluator', () => {
           {
             id: 'test-provider',
             label: 'Test provider',
-            config: { tools: [{ type: 'function', function: { name: 'search' } }] },
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'search',
+                    description: 'Search safely',
+                    parameters: {
+                      type: 'object',
+                      properties: { api_key: { type: 'string' }, password: { type: 'string' } },
+                    },
+                  },
+                },
+                { type: 'mcp', server_label: 'private-server', allowed_tools: ['read'] },
+                { type: 'custom' },
+              ],
+            },
           },
         ],
         redteam: {
           injectVar: 'attackInput',
           frameworks: ['owasp:llm'],
-          plugins: [{ id: 'coding-agent:network-egress-bypass' }],
+          plugins: [
+            { id: 'coding-agent:network-egress-bypass', severity: 'high' },
+            { id: 'policy', config: { policy: 'Inline policy text' } },
+            {
+              id: 'policy',
+              config: {
+                policy: { id: 'policy-id', name: 'Named policy', text: 'Named policy text' },
+              },
+            },
+          ],
         },
       });
+      expect(JSON.stringify(projected.config)).not.toContain('tool-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('unknown-tool-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('plugin-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('policy-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('policy-object-secret');
     });
 
     it('should omit legacy table bodies from redteam report result projections', async () => {
@@ -1508,6 +1657,63 @@ describe('evaluator', () => {
       const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
 
       expect(projected.results.results[0].vars).toEqual({});
+    });
+
+    it('filters malformed legacy grading components recursively', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'top level',
+              componentResults: [
+                null,
+                'malformed',
+                {
+                  pass: false,
+                  score: 0,
+                  reason: 'valid child',
+                  componentResults: { invalid: true },
+                },
+              ],
+            },
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult?.componentResults).toEqual([
+        { pass: false, score: 0, reason: 'valid child' },
+      ]);
+    });
+
+    it.each([null, 'malformed'])('ignores legacy componentResults shaped as %j', async (value) => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'top level',
+              componentResults: value,
+            },
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'top level',
+      });
     });
 
     it('removes provider config from legacy compact result projections', async () => {
@@ -1830,6 +2036,73 @@ describe('evaluator', () => {
       }
     });
 
+    it('projects sensitive attack histories when metadata remains enabled', async () => {
+      const createHistoryResult = () =>
+        createEvaluateResult({
+          error: 'sensitive error prompt and output',
+          metadata: {
+            pluginId: 'harmful',
+            redteamHistory: [
+              {
+                prompt: 'sensitive history prompt',
+                promptAudio: { data: 'sensitive prompt audio', format: 'wav' },
+                promptImage: { data: 'sensitive prompt image', format: 'png' },
+                output: 'sensitive history output',
+                outputAudio: { data: 'sensitive output audio', format: 'wav' },
+                outputImage: { data: 'sensitive output image', format: 'png' },
+                inputVars: { attackInput: 'sensitive input var' },
+                score: 1,
+              },
+              null,
+            ],
+            redteamTreeHistory: [
+              {
+                id: 'node-1',
+                prompt: 'sensitive tree prompt',
+                output: 'sensitive tree output',
+                score: 1,
+              },
+            ],
+          },
+        });
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createHistoryResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [createHistoryResult()] });
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        for (const eval_ of [persistedEval, legacyEval]) {
+          const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+          const result = projected.results.results[0];
+
+          expect(result.error).toBe('[error details stripped]');
+          expect(result.metadata?.redteamHistory).toEqual([
+            {
+              prompt: '[prompt stripped]',
+              output: '[output stripped]',
+              score: 1,
+            },
+          ]);
+          expect(result.metadata?.redteamTreeHistory).toEqual([
+            {
+              id: 'node-1',
+              prompt: '[prompt stripped]',
+              output: '[output stripped]',
+              score: 1,
+            },
+          ]);
+          expect(JSON.stringify(result)).not.toContain('sensitive');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('defaults missing persisted test-case vars before compact projection', async () => {
       const eval1 = await EvalFactory.create({ numResults: 1 });
       const db = await getDb();
@@ -1960,6 +2233,75 @@ describe('evaluator', () => {
 
         expect(result.response).toEqual({ output: 'visible response' });
         expect(JSON.stringify(result.response)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves safe prompt identity across persisted, legacy, and in-memory projections', async () => {
+      const prompt: Prompt = {
+        id: 'public-prompt-id',
+        raw: 'sensitive distinct prompt',
+        label: 'Sensitive distinct prompt',
+      };
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createEvaluateResult({ prompt }));
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: [createEvaluateResult({ prompt })],
+      });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createEvaluateResult({ prompt }));
+      await inMemoryEval.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          prompt: { id: 'other-prompt-id', raw: 'other prompt', label: 'Other prompt' },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projectedResults = await Promise.all(
+          [persistedEval, legacyEval, inMemoryEval].map(
+            async (eval_) =>
+              (await eval_.toResultsFile({ resultProjection: 'redteamReport' })).results.results,
+          ),
+        );
+        const promptIds = projectedResults.map((results) => results[0].promptId);
+
+        expect(new Set(promptIds).size).toBe(1);
+        for (const results of projectedResults) {
+          expect(results[0].prompt).toMatchObject({
+            id: 'public-prompt-id',
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+          });
+        }
+        expect(projectedResults[2][1].promptId).not.toBe(projectedResults[2][0].promptId);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('degrades non-text persisted prompt fields before hashing', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET prompt = ${JSON.stringify({ id: 'safe-id', raw: 7, label: true, display: [] })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.results.results[0].prompt).toEqual({
+          id: 'safe-id',
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        });
+        expect(projected.results.results[0].promptId).toEqual(expect.any(String));
       } finally {
         restoreEnv();
       }

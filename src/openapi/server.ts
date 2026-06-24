@@ -255,11 +255,13 @@ export function createServerOpenApiRegistry() {
     summary: 'Get one evaluation result row',
     request: {
       params: params('ResultRowParams', OpenApiResultRowParamsSchema),
+      query: query('ResultRowQuery', ServerSchemas.ResultRow.Query),
     },
     responses: {
       200: jsonResponse('ResultRowResponse', ServerSchemas.ResultRow.Response),
       400: validationError(),
       404: notFound('Result row not found'),
+      500: serverError(),
     },
   });
 
@@ -277,6 +279,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('ResultResponse', ServerSchemas.Result.Response),
       400: validationError(),
       404: notFound('Result not found'),
+      500: serverError(),
     },
   });
 

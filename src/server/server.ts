@@ -185,15 +185,20 @@ export function createApp() {
       replyValidationError(res, paramsResult.error);
       return;
     }
+    const queryResult = ServerSchemas.ResultRow.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      replyValidationError(res, queryResult.error);
+      return;
+    }
     const { id, testIdx, promptIdx } = paramsResult.data;
+    const { resultId } = queryResult.data;
 
     try {
-      const eval_ = await Eval.findById(id);
-      if (!eval_) {
+      if (!(await Eval.exists(id))) {
         res.status(404).json({ error: 'Result not found' });
         return;
       }
-      const result = await eval_.getResult(testIdx, promptIdx);
+      const result = await Eval.getResultByIdAndIndices(id, testIdx, promptIdx, resultId);
       if (!result) {
         res.status(404).json({ error: 'Result row not found' });
         return;
@@ -217,19 +222,23 @@ export function createApp() {
     }
     const { id } = paramsResult.data;
     const { includeTraces, resultProjection } = queryResult.data;
-    const file = await readResult(id, { includeTraces, resultProjection });
-    if (!file) {
-      res.status(404).json({ error: 'Result not found' });
-      return;
+    try {
+      const file = await readResult(id, { includeTraces, resultProjection });
+      if (!file) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+      res.json(
+        ServerSchemas.Result.Response.parse({
+          data: {
+            ...file.result,
+            config: redactAzureBlobSasTokens(file.result.config),
+          },
+        }),
+      );
+    } catch (error) {
+      sendError(res, 500, 'Failed to load result', error);
     }
-    res.json(
-      ServerSchemas.Result.Response.parse({
-        data: {
-          ...file.result,
-          config: redactAzureBlobSasTokens(file.result.config),
-        },
-      }),
-    );
   });
 
   app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {

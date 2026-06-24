@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
   type ApiProvider,
@@ -1256,6 +1259,13 @@ describe('EvalResult', () => {
             prompt: 'sensitive provider prompt',
             metadata: {
               redteamFinalPrompt: 'sensitive final prompt',
+              redteamHistory: [
+                {
+                  prompt: 'sensitive response history prompt',
+                  promptAudio: { data: 'sensitive response audio', format: 'wav' },
+                  output: 'visible response history output',
+                },
+              ],
               keep: 'visible metadata',
             },
           },
@@ -1263,8 +1273,16 @@ describe('EvalResult', () => {
           provider: mockProvider,
           metadata: {
             redteamFinalPrompt: 'sensitive top-level final prompt',
+            redteamTreeHistory: [
+              {
+                prompt: 'sensitive result history prompt',
+                promptImage: { data: 'sensitive result image', format: 'png' },
+                output: 'visible result history output',
+              },
+            ],
             keep: 'visible result metadata',
           },
+          error: 'sensitive error prompt',
           failureReason: ResultFailureReason.NONE,
           namedScores: {},
         });
@@ -1278,9 +1296,26 @@ describe('EvalResult', () => {
         });
         expect(evaluateResult.response).toEqual({
           output: 'visible output',
-          metadata: { keep: 'visible metadata' },
+          metadata: {
+            keep: 'visible metadata',
+            redteamHistory: [
+              {
+                prompt: '[prompt stripped]',
+                output: 'visible response history output',
+              },
+            ],
+          },
         });
-        expect(evaluateResult.metadata).toEqual({ keep: 'visible result metadata' });
+        expect(evaluateResult.metadata).toEqual({
+          keep: 'visible result metadata',
+          redteamTreeHistory: [
+            {
+              prompt: '[prompt stripped]',
+              output: 'visible result history output',
+            },
+          ],
+        });
+        expect(evaluateResult.error).toBe('[error details stripped]');
         expect(JSON.stringify(evaluateResult)).not.toContain('sensitive');
       } finally {
         restoreEnv();
@@ -1427,6 +1462,42 @@ describe('EvalResult', () => {
         expect(evaluateResult.testCase).not.toHaveProperty('metadata');
         expect(evaluateResult.testCase.vars).toBeUndefined();
         expect(JSON.stringify(evaluateResult)).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
+  describe('sanitizeResultForJsonlArtifact', () => {
+    it('projects histories and errors under granular strip flags', () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        const artifact = sanitizeResultForJsonlArtifact({
+          ...createEvaluateResult(),
+          error: 'sensitive artifact error',
+          metadata: {
+            redteamHistory: [
+              {
+                prompt: 'sensitive artifact prompt',
+                promptAudio: { data: 'sensitive prompt audio', format: 'wav' },
+                output: 'sensitive artifact output',
+                outputImage: { data: 'sensitive output image', format: 'png' },
+                inputVars: { attackInput: 'sensitive artifact var' },
+              },
+            ],
+          },
+        });
+
+        expect(artifact.error).toBe('[error details stripped]');
+        expect(artifact.metadata?.redteamHistory).toEqual([
+          { prompt: '[prompt stripped]', output: '[output stripped]' },
+        ]);
+        expect(JSON.stringify(artifact)).not.toContain('sensitive');
       } finally {
         restoreEnv();
       }

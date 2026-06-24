@@ -48,6 +48,10 @@ const ResultRowParamsSchema = ResultParamsSchema.extend({
   promptIdx: z.coerce.number().int().nonnegative(),
 });
 
+const ResultRowQuerySchema = z.object({
+  resultId: z.string().min(1).optional(),
+});
+
 const ResultQuerySchema = z.object({
   includeTraces: z
     .union([z.boolean(), z.enum(['true', 'false'])])
@@ -137,6 +141,7 @@ export const ServerSchemas = {
   },
   ResultRow: {
     Params: ResultRowParamsSchema,
+    Query: ResultRowQuerySchema,
     Response: DataResponseSchema,
   },
   Prompts: {
