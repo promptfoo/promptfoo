@@ -29,6 +29,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getChangedVarNames, propagateRemoteGeneratedVarProvenance } from '../remoteTestProvenance';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -522,6 +523,7 @@ export async function createIterationContext({
   iterationNumber: number;
   loggerTag?: string;
 }): Promise<CallApiContextParams | undefined> {
+  const varsBeforeTransform = { ...originalVars };
   let iterationVars = { ...originalVars };
 
   if (transformVarsConfig) {
@@ -561,10 +563,22 @@ export async function createIterationContext({
   }
 
   // Create iteration-specific context with updated vars
+  const changedVarNames = getChangedVarNames(varsBeforeTransform, iterationVars);
   const iterationContext = context
     ? {
         ...context,
         vars: iterationVars,
+        ...(context.test
+          ? {
+              test: {
+                ...context.test,
+                metadata: propagateRemoteGeneratedVarProvenance(
+                  context.test.metadata ?? {},
+                  changedVarNames,
+                ),
+              },
+            }
+          : {}),
       }
     : undefined;
 

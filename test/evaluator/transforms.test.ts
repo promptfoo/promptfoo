@@ -198,7 +198,11 @@ describeEvaluator('evaluator transforms', () => {
     };
     const testSuite: TestSuite = {
       providers: [provider],
-      prompts: [toPrompt('COPIED={{copiedAttack}} PRIMARY={{prompt}}')],
+      prompts: [toPrompt('COPIED={{copiedAttack}} PRIMARY={{prompt}} TRUSTED={{trusted}}')],
+      defaultTest: {
+        vars: { trusted: '{{ 6 * 7 }}' },
+      },
+      redteam: { injectVar: 'prompt' },
       tests: [
         {
           metadata: {
@@ -222,12 +226,12 @@ describeEvaluator('evaluator transforms', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(testSuite.tests?.[0].vars).toEqual(
-      expect.objectContaining({ copiedAttack: attack, prompt: attack }),
+      expect.objectContaining({ copiedAttack: attack, prompt: attack, trusted: '{{ 6 * 7 }}' }),
     );
     expect(callApi.mock.calls[0][1].vars).toEqual(
-      expect.objectContaining({ copiedAttack: attack, prompt: attack }),
+      expect.objectContaining({ copiedAttack: attack, prompt: attack, trusted: '{{ 6 * 7 }}' }),
     );
-    expect(callApi.mock.calls[0][0]).toBe(`COPIED=${attack} PRIMARY=${attack}`);
+    expect(callApi.mock.calls[0][0]).toBe(`COPIED=${attack} PRIMARY=${attack} TRUSTED=42`);
     expect(callApi.mock.calls[0][1].test.metadata.__promptfooRemoteGenerated).toEqual({
       metadata: [],
       unsafeRenderVars: ['prompt', 'copiedAttack'],

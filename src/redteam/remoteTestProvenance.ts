@@ -1,3 +1,4 @@
+import deepEqual from 'fast-deep-equal';
 import { safeJsonStringify } from '../util/json';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
@@ -12,6 +13,16 @@ export type RemoteGeneratedTestProvenance = {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+export function getChangedVarNames(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): string[] {
+  return Object.keys(after).filter(
+    (name) =>
+      !Object.prototype.hasOwnProperty.call(before, name) || !deepEqual(before[name], after[name]),
+  );
 }
 
 export function getRemoteGeneratedTestProvenance(
@@ -57,6 +68,25 @@ export function setRemoteGeneratedTestProvenance<T extends Record<string, unknow
       ...(unsafeRenderVars.length > 0 ? { unsafeRenderVars } : {}),
     },
   } as T;
+}
+
+export function propagateRemoteGeneratedVarProvenance<T extends Record<string, unknown>>(
+  metadata: T,
+  varNames: string[],
+): T {
+  const provenance = getRemoteGeneratedTestProvenance(metadata);
+  if (!provenance || varNames.length === 0) {
+    return metadata;
+  }
+
+  return setRemoteGeneratedTestProvenance(metadata, {
+    ...provenance,
+    vars: provenance.vars.length > 0 ? [...provenance.vars, ...varNames] : [],
+    unsafeRenderVars:
+      provenance.unsafeRenderVars && provenance.unsafeRenderVars.length > 0
+        ? [...provenance.unsafeRenderVars, ...varNames]
+        : undefined,
+  });
 }
 
 export function trustRemoteGeneratedTestVars<T extends Record<string, unknown>>(

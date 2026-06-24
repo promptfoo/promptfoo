@@ -2743,6 +2743,9 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       document: docxDataUri,
       question: 'What changed?',
     });
+    expect(vi.mocked(evaluatorHelpers.renderPrompt).mock.calls[0][4]).toEqual(
+      expect.arrayContaining(['objective', 'document', 'question']),
+    );
   });
 
   it('should preserve the existing DOCX var when remote materialization omits it', async () => {

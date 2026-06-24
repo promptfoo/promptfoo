@@ -493,7 +493,10 @@ export class HydraProvider implements ApiProvider {
           updatedVars,
           filters,
           targetProvider,
-          getRemoteGeneratedRenderSkipVars(test?.metadata, [this.injectVar]),
+          getRemoteGeneratedRenderSkipVars(test?.metadata, [
+            this.injectVar,
+            ...Object.keys(currentRenderInputVars ?? {}),
+          ]),
         );
       } else {
         // Stateless: send full conversation history as JSON

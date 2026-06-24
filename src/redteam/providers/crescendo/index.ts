@@ -1025,7 +1025,10 @@ export class CrescendoProvider implements ApiProvider {
       updatedVars,
       filters,
       provider,
-      getRemoteGeneratedRenderSkipVars(context?.test?.metadata, [this.config.injectVar]),
+      getRemoteGeneratedRenderSkipVars(context?.test?.metadata, [
+        this.config.injectVar,
+        ...Object.keys(currentRenderInputVars ?? {}),
+      ]),
     );
 
     try {

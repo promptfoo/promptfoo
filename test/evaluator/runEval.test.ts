@@ -716,10 +716,23 @@ describe('runEval', () => {
   });
 
   it.each([
-    ['image', 'image_text'],
-    ['video', 'video_text'],
-    ['indirect-web-pwn', 'embeddedInjection'],
-  ])('should skip rendering %s strategy display variable %s', async (strategyId, displayVar) => {
+    { displayVar: 'image_text', strategyId: 'image' },
+    { displayVar: 'video_text', strategyId: 'video' },
+    { displayVar: 'embeddedInjection', strategyId: 'indirect-web-pwn' },
+    {
+      displayVar: 'embeddedInjection',
+      strategyId: 'jailbreak:hydra/indirect-web-pwn',
+    },
+    {
+      displayVar: 'video_text',
+      strategyConfig: { steps: ['hydra', { id: 'video' }] },
+      strategyId: 'layer/custom',
+    },
+  ])('should skip rendering $strategyId legacy display variable $displayVar', async ({
+    displayVar,
+    strategyConfig,
+    strategyId,
+  }) => {
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
@@ -732,6 +745,7 @@ describe('runEval', () => {
         metadata: {
           pluginConfig: {},
           pluginId: 'ssrf',
+          ...(strategyConfig ? { strategyConfig } : {}),
           strategyId,
         },
       },

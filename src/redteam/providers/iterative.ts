@@ -423,7 +423,10 @@ export async function runRedteamConversation({
       updatedVars,
       filters,
       targetProvider,
-      getRemoteGeneratedRenderSkipVars(test?.metadata, [injectVar]),
+      getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
+        injectVar,
+        ...Object.keys(currentRenderInputVars ?? {}),
+      ]),
     );
 
     const iterationStart = Date.now();

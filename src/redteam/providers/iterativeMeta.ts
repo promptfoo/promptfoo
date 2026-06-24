@@ -413,7 +413,10 @@ export async function runMetaAgentRedteam({
       updatedVars,
       filters,
       targetProvider,
-      getRemoteGeneratedRenderSkipVars(test?.metadata, [injectVar]),
+      getRemoteGeneratedRenderSkipVars(iterationContext?.test?.metadata ?? test?.metadata, [
+        injectVar,
+        ...Object.keys(currentRenderInputVars ?? {}),
+      ]),
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {

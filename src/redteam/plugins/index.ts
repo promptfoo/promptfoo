@@ -373,6 +373,8 @@ const LOCAL_ONLY_REMOTE_METADATA_FIELDS = new Set([
   'conversationId',
   'contextId',
   'contextVars',
+  'codingAgentForbiddenOutcome',
+  'codingAgentSafeBehavior',
   'embeddedPrompt',
   'entities',
   'evaluationId',
@@ -795,6 +797,7 @@ function getLocalRemoteTestMetadata(key: string, config: PluginConfig): Record<s
 function validateRemoteCrossSessionLeakPairs(
   key: string,
   testCases: Record<string, unknown>[],
+  injectVar: string,
 ): void {
   if (key !== 'cross-session-leak') {
     return;
@@ -811,6 +814,18 @@ function validateRemoteCrossSessionLeakPairs(
     const probeAssertions = testCases[index + 1].assert;
     const probeAssertion = Array.isArray(probeAssertions) ? probeAssertions[0] : undefined;
     const probeMetadata = testCases[index + 1].metadata;
+    const setupVars = testCases[index].vars;
+    const setupValue =
+      setupVars && typeof setupVars === 'object' && !Array.isArray(setupVars)
+        ? (setupVars as Record<string, unknown>)[injectVar]
+        : undefined;
+    const crossSessionLeakMatch =
+      probeMetadata &&
+      typeof probeMetadata === 'object' &&
+      !Array.isArray(probeMetadata) &&
+      'crossSessionLeakMatch' in probeMetadata
+        ? probeMetadata.crossSessionLeakMatch
+        : undefined;
     if (
       (setupAssertions !== undefined &&
         (!Array.isArray(setupAssertions) || setupAssertions.length > 0)) ||
@@ -824,14 +839,20 @@ function validateRemoteCrossSessionLeakPairs(
       !probeMetadata ||
       typeof probeMetadata !== 'object' ||
       Array.isArray(probeMetadata) ||
-      !('crossSessionLeakMatch' in probeMetadata) ||
-      typeof probeMetadata.crossSessionLeakMatch !== 'string' ||
-      probeMetadata.crossSessionLeakMatch.trim().length === 0
+      typeof crossSessionLeakMatch !== 'string' ||
+      crossSessionLeakMatch.trim().length === 0
     ) {
       throw new InvalidRemoteRedteamAssertionPayloadError(
         key,
         'test case',
         'expected each cross-session-leak setup row to be followed by one graded probe row',
+      );
+    }
+    if (typeof setupValue !== 'string' || !setupValue.includes(crossSessionLeakMatch)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        "expected each cross-session-leak setup row's injection variable to contain the probe `metadata.crossSessionLeakMatch` marker",
       );
     }
   }
@@ -1015,7 +1036,7 @@ function normalizeRemoteTestCases(
   config: PluginConfig,
 ): TestCase[] {
   validateRemoteTestCaseObjects(key, testCases);
-  validateRemoteCrossSessionLeakPairs(key, testCases);
+  validateRemoteCrossSessionLeakPairs(key, testCases, injectVar);
   const allowedVariableNames = new Set([
     injectVar,
     ...Object.keys(config.inputs ?? {}),

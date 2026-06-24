@@ -1664,6 +1664,7 @@ describe('HydraProvider', () => {
         document: docxDataUri,
         question: 'What changed?',
       });
+      expect(renderCalls[0][4]).toEqual(expect.arrayContaining(['input', 'document', 'question']));
     });
 
     it('should preserve the existing DOCX var when remote materialization omits it', async () => {
