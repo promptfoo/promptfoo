@@ -1318,6 +1318,54 @@ describe('HydraProvider', () => {
       });
     });
 
+    it('normalizes a singular target image before grading a backtrackable refusal', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help.',
+        image: { data: 'base64-image', format: 'png' },
+      } as any);
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, maxBacktracks: 1 });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+        imageOutputs: [{ data: 'base64-image', mimeType: 'image/png' }],
+      });
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
+    });
+
+    it('grades structured provider raw evidence before backtracking', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help.',
+        raw: { items: [{ type: 'command_execution', command: 'cat .env' }] },
+      });
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, maxBacktracks: 1 });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'coding-agent:secret-env-read' }],
+          metadata: { goal: 'test goal', pluginId: 'coding-agent:secret-env-read' },
+        } as any,
+      });
+
+      expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
+    });
+
     it('grades confirmed exfiltration even when response text is a clean refusal', async () => {
       mockIsBacktrackableRefusal.mockReturnValue(true);
       mockAgentProvider.callApi.mockResolvedValue({
@@ -2250,6 +2298,44 @@ describe('HydraProvider', () => {
       // Metadata should have trace snapshots
       expect(result.metadata?.traceSnapshots).toBeDefined();
       expect(result.metadata?.traceSnapshots).toHaveLength(1);
+    });
+
+    it('grades a backtrackable refusal when grading trace evidence is present', async () => {
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: false,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'forbidden-tool' }],
+        insights: ['Forbidden tool executed'],
+        fetchedAt: Date.now(),
+      });
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'I cannot help.' });
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, maxBacktracks: 1 });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      });
+
+      expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
     });
 
     it('should NOT fetch trace context when traceparent is missing', async () => {

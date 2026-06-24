@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isCleanRefusal } from '../../../../src/redteam/util';
+import {
+  hasProviderResponseGradingEvidence,
+  isBacktrackableRefusal,
+} from '../../../../src/redteam/util';
 import { sleep } from '../../../../src/util/time';
 import {
   createMockProvider,
@@ -40,8 +43,10 @@ vi.mock('../../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../../src/redteam/util', () => ({
-  isCleanRefusal: vi.fn().mockReturnValue(false),
+vi.mock('../../../../src/redteam/util', async (importOriginal) => ({
+  ...(await importOriginal()),
+  hasProviderResponseGradingEvidence: vi.fn().mockReturnValue(false),
+  isBacktrackableRefusal: vi.fn().mockReturnValue(false),
 }));
 
 describe('VoiceCrescendoProvider', () => {
@@ -50,14 +55,16 @@ describe('VoiceCrescendoProvider', () => {
   let mockTargetProvider: MockApiProvider;
   let getTargetResponse: typeof import('../../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../../src/redteam/providers/shared').redteamProviderManager;
-  const mockedIsCleanRefusal = vi.mocked(isCleanRefusal);
+  const mockedHasProviderResponseGradingEvidence = vi.mocked(hasProviderResponseGradingEvidence);
+  const mockedIsBacktrackableRefusal = vi.mocked(isBacktrackableRefusal);
   const mockedSleep = vi.mocked(sleep);
 
   beforeEach(async () => {
     vi.clearAllMocks();
     mockedSleep.mockReset();
     mockedSleep.mockResolvedValue(undefined);
-    mockedIsCleanRefusal.mockReturnValue(false);
+    mockedHasProviderResponseGradingEvidence.mockReturnValue(false);
+    mockedIsBacktrackableRefusal.mockReturnValue(false);
 
     // Import mocked modules
     const sharedModule = await import('../../../../src/redteam/providers/shared');
@@ -321,10 +328,69 @@ describe('VoiceCrescendoProvider', () => {
 
     const result = await provider.callApi('Test objective', context);
 
-    expect(mockedIsCleanRefusal).toHaveBeenCalledWith(mixedResponse);
+    expect(mockedIsBacktrackableRefusal).toHaveBeenCalledWith(mixedResponse);
     expect(scoringProvider.callApi).toHaveBeenCalledOnce();
     expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
     expect(result.metadata?.stopReason).toBe('Objective achieved');
+  });
+
+  it('should backtrack on an explicitly safe refusal continuation', async () => {
+    mockedIsBacktrackableRefusal.mockReturnValue(true);
+    vi.mocked(getTargetResponse).mockResolvedValue({
+      output: 'I cannot help with that request because it is unsafe.',
+      tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+    });
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test objective', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(1);
+    expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(2);
+  });
+
+  it('should preserve provider evidence instead of backtracking', async () => {
+    mockedIsBacktrackableRefusal.mockReturnValue(true);
+    mockedHasProviderResponseGradingEvidence.mockReturnValue(true);
+    vi.mocked(getTargetResponse).mockResolvedValue({
+      output: 'I cannot help.',
+      images: [{ data: 'image-data' }],
+    });
+    const scoringProvider = createMockProvider({
+      id: 'mock-scoring-provider',
+      response: createProviderResponse({
+        output: JSON.stringify({
+          objectiveAchieved: false,
+          confidence: 0.1,
+          reason: 'Evidence evaluated',
+          partialSuccess: false,
+        }),
+      }),
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(scoringProvider);
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test objective', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
+    expect(scoringProvider.callApi).toHaveBeenCalledOnce();
   });
 
   it('should stop when target ends conversation', async () => {

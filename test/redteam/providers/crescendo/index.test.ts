@@ -10,6 +10,22 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+const mockCheckExfilTracking = vi.hoisted(() => vi.fn());
+const mockFetchTraceContext = vi.hoisted(() => vi.fn());
+const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'trace-id'));
+const mockResolveTracingOptions = vi.hoisted(() =>
+  vi.fn(() => ({
+    enabled: false,
+    includeInAttack: false,
+    includeInGrading: false,
+    includeInternalSpans: false,
+    maxSpans: 50,
+    maxDepth: 5,
+    maxRetries: 3,
+    retryDelayMs: 500,
+    sanitizeAttributes: true,
+  })),
+);
 
 // Hoisted mock for applyRuntimeTransforms
 const mockApplyRuntimeTransforms = vi.hoisted(() =>
@@ -55,6 +71,22 @@ vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
+vi.mock('../../../../src/redteam/strategies/indirectWebPwn', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkExfilTracking: mockCheckExfilTracking,
+}));
+
+vi.mock('../../../../src/tracing/traceContext', async (importOriginal) => ({
+  ...(await importOriginal()),
+  extractTraceIdFromTraceparent: mockExtractTraceIdFromTraceparent,
+  fetchTraceContext: mockFetchTraceContext,
+}));
+
+vi.mock('../../../../src/redteam/providers/tracingOptions', async (importOriginal) => ({
+  ...(await importOriginal()),
+  resolveTracingOptions: mockResolveTracingOptions,
+}));
+
 vi.mock('../../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -85,6 +117,19 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 beforeEach(() => {
   vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+  mockFetchTraceContext.mockReset().mockResolvedValue(null);
+  mockExtractTraceIdFromTraceparent.mockReset().mockReturnValue('trace-id');
+  mockResolveTracingOptions.mockReset().mockReturnValue({
+    enabled: false,
+    includeInAttack: false,
+    includeInGrading: false,
+    includeInternalSpans: false,
+    maxSpans: 50,
+    maxDepth: 5,
+    maxRetries: 3,
+    retryDelayMs: 500,
+    sanitizeAttributes: true,
+  });
 });
 
 describe('MemorySystem', () => {
@@ -138,6 +183,7 @@ describe('CrescendoProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
 
     // Create fresh mocks for each test
     mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
@@ -175,6 +221,7 @@ describe('CrescendoProvider', () => {
 
     // Set up default getGraderById mock
     mockGetGraderById.mockReset();
+    mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
     mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
@@ -274,7 +321,7 @@ describe('CrescendoProvider', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
 
-  it('should only short-circuit refusal scoring for classifier-clean output', async () => {
+  it('should route mixed output to outcome grading and retain semantic fallback', async () => {
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({ value: false, metadata: 0, rationale: 'mixed output' }),
     });
@@ -282,6 +329,13 @@ describe('CrescendoProvider', () => {
     await expect(
       (crescendoProvider as any).getRefusalScore('test objective', {
         output: 'I cannot help. The answer is 42.',
+      }),
+    ).resolves.toEqual([false, 'Mixed refusal output requires outcome grading.']);
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+
+    await expect(
+      (crescendoProvider as any).getRefusalScore('test objective', {
+        output: 'That is outside my scope.',
       }),
     ).resolves.toEqual([false, 'mixed output']);
     expect(mockScoringProvider.callApi).toHaveBeenCalledOnce();
@@ -295,7 +349,15 @@ describe('CrescendoProvider', () => {
 
   it.each([
     [{ output: 'I cannot help.', images: [{ data: 'image-data' }] }, false],
+    [{ output: 'I cannot help.', image: { data: 'image-data', format: 'png' } }, false],
     [{ output: 'I cannot help.', metadata: { wasExfiltrated: true, exfilCount: 1 } }, false],
+    [
+      {
+        output: 'I cannot help.',
+        raw: { items: [{ type: 'command_execution', command: 'cat .env' }] },
+      },
+      false,
+    ],
     [{ output: 'I cannot help.' }, true],
   ])('should preserve non-text grading evidence before refusal backtracking', async (response, external) => {
     await expect(
@@ -430,6 +492,90 @@ describe('CrescendoProvider', () => {
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    });
+
+    it('grades the unblocking response with its own trace evidence', async () => {
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: false,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      const createTrace = (traceId: string, spanName: string) => ({
+        traceId,
+        spans: [
+          {
+            spanId: `${traceId}-span`,
+            name: spanName,
+            kind: 'client' as const,
+            startTime: 0,
+            durationMs: 1,
+            attributes: {},
+            status: { code: 'ok' as const },
+            depth: 0,
+            events: [],
+          },
+        ],
+        insights: [],
+        fetchedAt: 0,
+      });
+      mockFetchTraceContext
+        .mockResolvedValueOnce(createTrace('initial-trace', 'initial-question'))
+        .mockResolvedValueOnce(createTrace('unblocking-trace', 'forbidden-tool'));
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'What is your registration number?' })
+        .mockResolvedValueOnce({ output: 'I cannot help.' });
+      vi.mocked(tryUnblocking).mockResolvedValue({
+        success: true,
+        unblockingPrompt: 'REG123456789',
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not achieved' }),
+      });
+      const graderGetResult = vi.fn().mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Trace evaluated' },
+      });
+      mockGetGraderById.mockReturnValue({ getResult: graderGetResult });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        stateful: false,
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        traceparent: '00-trace-id-span-id-01',
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test objective', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(result.metadata?.crescendoBacktrackCount).toBe(0);
+      expect(graderGetResult).toHaveBeenCalledOnce();
+      expect(graderGetResult.mock.calls[0][7]).toMatchObject({
+        traceContext: { traceId: 'unblocking-trace' },
+        traceSummary: expect.stringContaining('forbidden-tool'),
+      });
+      expect(graderGetResult.mock.calls[0][7]).not.toMatchObject({
+        traceContext: { traceId: 'initial-trace' },
+      });
     });
 
     it('should continue without unblocking when no blocking question detected', async () => {
@@ -2562,6 +2708,7 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
 
     mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
     mockRedTeamProvider.callApi.mockReset();
@@ -2614,6 +2761,63 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     });
 
     expect(provider['perTurnLayers']).toEqual([]);
+  });
+
+  it('grades layer-mode exfiltration instead of backtracking on refusal text', async () => {
+    mockApplyRuntimeTransforms.mockResolvedValueOnce({
+      prompt: 'transformed prompt',
+      metadata: { webPageUuid: 'layer-page' },
+    });
+    mockCheckExfilTracking.mockResolvedValue({
+      wasExfiltrated: true,
+      exfilCount: 1,
+      exfilRecords: [],
+    });
+    const graderGetResult = vi.fn().mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Exfiltration detected' },
+    });
+    mockGetGraderById.mockReturnValue({ getResult: graderGetResult });
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'I cannot help.',
+      metadata: { wasExfiltrated: false, exfilCount: 0 },
+    });
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not achieved' }),
+    });
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+    });
+    const result = await provider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      evaluationId: 'eval-id',
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        assert: [{ type: 'harmful:test' }],
+        metadata: { goal: 'test objective', pluginId: 'harmful:test' },
+      } as any,
+    });
+
+    expect(mockCheckExfilTracking).toHaveBeenCalledWith('layer-page', 'eval-id');
+    expect(graderGetResult).toHaveBeenCalledOnce();
+    expect(graderGetResult.mock.calls[0][7]).toMatchObject({
+      wasExfiltrated: true,
+      exfilCount: 1,
+    });
+    expect(result.metadata?.crescendoBacktrackCount).toBe(0);
+    expect(result.metadata?.storedGraderResult).toBeDefined();
   });
 
   it('should include promptAudio and promptImage in redteamHistory when transforms are applied', async () => {

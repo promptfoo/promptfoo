@@ -35,11 +35,13 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyRefusal,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
+  getProviderResponseGradingImages,
   getSessionId,
   hasProviderResponseGradingEvidence,
-  isCleanRefusal,
+  hasTraceGradingEvidence,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -545,11 +547,15 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
+        const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
+          test?.metadata?.webPageUuid) as string | undefined;
+        const hasTraceEvidence =
+          tracingOptions.includeInGrading && hasTraceGradingEvidence(lastResponse);
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse,
           options,
-          Boolean(test?.metadata?.webPageUuid),
+          Boolean(webPageUuid || hasTraceEvidence),
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -591,60 +597,49 @@ export class CrescendoProvider implements ApiProvider {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingTraceSummary = tracingOptions.includeInGrading
-              ? (response.traceSummary ??
-                (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
+              ? (lastResponse.traceSummary ??
+                (lastResponse.traceContext
+                  ? formatTraceSummary(lastResponse.traceContext)
+                  : undefined))
               : undefined;
 
             // Build grading context with image outputs, tracing, and exfil tracking data.
-            let gradingContext: RedteamGradingContext | undefined = {
+            const responseImages = getProviderResponseGradingImages(lastResponse);
+            const gradingContext: RedteamGradingContext = {
               providerResponse: lastResponse,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(responseImages.length ? { imageOutputs: responseImages } : {}),
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: lastResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
             };
 
-            // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated === undefined) {
-              // Try to fetch exfil tracking from server API via webPageUuid
-              const webPageUuid = test.metadata?.webPageUuid as string | undefined;
-              if (webPageUuid) {
-                const evalId =
-                  context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-                logger.debug('[Crescendo] Fetching exfil tracking from server API', {
-                  webPageUuid,
-                  evalId,
+            if (webPageUuid) {
+              const evalId =
+                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+              logger.debug('[Crescendo] Fetching exfil tracking from server API', {
+                webPageUuid,
+                evalId,
+              });
+              const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              if (exfilData) {
+                Object.assign(gradingContext, {
+                  wasExfiltrated: exfilData.wasExfiltrated,
+                  exfilCount: exfilData.exfilCount,
+                  exfilRecords: exfilData.exfilRecords,
                 });
-                const exfilData = await checkExfilTracking(webPageUuid, evalId);
-                if (exfilData) {
-                  gradingContext = {
-                    ...(gradingContext ?? {}),
-                    ...(tracingOptions.includeInGrading
-                      ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                      : {}),
-                    wasExfiltrated: exfilData.wasExfiltrated,
-                    exfilCount: exfilData.exfilCount,
-                    exfilRecords: exfilData.exfilRecords,
-                  };
-                }
               }
-            } else {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
+            }
+
+            if (
+              gradingContext.wasExfiltrated === undefined &&
+              lastResponse.metadata?.wasExfiltrated !== undefined
+            ) {
+              logger.debug('[Crescendo] Using provider response exfil metadata as fallback');
+              Object.assign(gradingContext, {
                 wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
                 exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
                 exfilRecords: [],
-              };
-            }
-
-            // Fallback to just tracing context if no exfil data found
-            if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                traceContext: response.traceContext,
-                traceSummary: gradingTraceSummary,
-              };
+              });
             }
 
             // Provide prior turns separately from the latest assistant output
@@ -654,14 +649,13 @@ export class CrescendoProvider implements ApiProvider {
               prompt: turn.prompt,
               output: turn.output,
             }));
-            gradingContext = {
-              ...(gradingContext ?? {}),
+            Object.assign(gradingContext, {
               redteamHistory: [...redteamHistory],
               conversationHistory: conversationHistoryForGrading,
               conversationTranscript: formatRedteamHistoryAsTranscript(
                 conversationHistoryForGrading,
               ),
-            };
+            });
 
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
@@ -1250,15 +1244,18 @@ export class CrescendoProvider implements ApiProvider {
       return [false, 'The response contains non-text evidence that requires outcome grading.'];
     }
     const responseText = String(lastResponse.output ?? '');
-    // Only complete, classifier-clean refusals may bypass semantic refusal grading.
-    if (isCleanRefusal(responseText)) {
+    const classification = classifyRefusal(responseText);
+    if (classification.kind === 'clean_refusal') {
       logger.debug(
         '[Crescendo] Response is a classifier-clean refusal. Short-circuiting refusal grading.',
       );
       return [true, 'The output contains a standard refusal.'];
     }
+    if (classification.kind === 'mixed_refusal') {
+      return [false, 'Mixed refusal output requires outcome grading.'];
+    }
 
-    // Otherwise, use the scoring chat to grade the refusal
+    // Use the scoring chat to detect non-standard refusals the deterministic classifier missed.
     const refusalInput = JSON.stringify({
       conversationObjective: attackPrompt,
       responseToEvaluateInput: responseText,

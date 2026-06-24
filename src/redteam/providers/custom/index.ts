@@ -18,7 +18,13 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, hasProviderResponseGradingEvidence, isCleanRefusal } from '../../util';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
+import {
+  classifyRefusal,
+  getProviderResponseGradingImages,
+  getSessionId,
+  hasProviderResponseGradingEvidence,
+} from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
@@ -506,10 +512,13 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
+        const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
+          test?.metadata?.webPageUuid) as string | undefined;
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse,
           options,
+          Boolean(webPageUuid),
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -548,10 +557,33 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const gradingContext: RedteamGradingContext | undefined = {
+            const responseImages = getProviderResponseGradingImages(lastResponse);
+            const gradingContext: RedteamGradingContext = {
               providerResponse: lastResponse,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(responseImages.length ? { imageOutputs: responseImages } : {}),
             };
+            if (webPageUuid) {
+              const evalId =
+                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+              const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              if (exfilData) {
+                Object.assign(gradingContext, {
+                  wasExfiltrated: exfilData.wasExfiltrated,
+                  exfilCount: exfilData.exfilCount,
+                  exfilRecords: exfilData.exfilRecords,
+                });
+              }
+            }
+            if (
+              gradingContext.wasExfiltrated === undefined &&
+              lastResponse.metadata?.wasExfiltrated !== undefined
+            ) {
+              Object.assign(gradingContext, {
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              });
+            }
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -855,7 +887,13 @@ export class CustomProvider implements ApiProvider {
         this.config.injectVar,
         this.perTurnLayers,
         Strategies,
-        { targetId: this.config.targetId },
+        {
+          targetId: this.config.targetId,
+          evaluationId: context?.evaluationId,
+          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          purpose: context?.test?.metadata?.purpose as string | undefined,
+          goal: context?.test?.metadata?.goal as string | undefined,
+        },
       );
 
       if (lastTransformResult.error) {
@@ -941,21 +979,25 @@ export class CustomProvider implements ApiProvider {
     attackPrompt: string,
     lastResponse: ProviderResponse,
     options?: CallApiOptionsParams,
+    hasExternalGradingEvidence = false,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
-    if (hasProviderResponseGradingEvidence(lastResponse)) {
+    if (hasExternalGradingEvidence || hasProviderResponseGradingEvidence(lastResponse)) {
       return [false, 'The response contains non-text evidence that requires outcome grading.'];
     }
     const responseText = String(lastResponse.output ?? '');
-    // Only complete, classifier-clean refusals may bypass semantic refusal grading.
-    if (isCleanRefusal(responseText)) {
+    const classification = classifyRefusal(responseText);
+    if (classification.kind === 'clean_refusal') {
       logger.debug(
         '[Custom] Response is a classifier-clean refusal. Short-circuiting refusal grading.',
       );
       return [true, 'The output contains a standard refusal.'];
     }
+    if (classification.kind === 'mixed_refusal') {
+      return [false, 'Mixed refusal output requires outcome grading.'];
+    }
 
-    // Otherwise, use the scoring chat to grade the refusal
+    // Use the scoring chat to detect non-standard refusals the deterministic classifier missed.
     const refusalInput = JSON.stringify({
       conversationObjective: attackPrompt,
       responseToEvaluateInput: responseText,

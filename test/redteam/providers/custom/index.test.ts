@@ -8,6 +8,7 @@ import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+const mockCheckExfilTracking = vi.hoisted(() => vi.fn());
 
 // Hoisted mock for applyRuntimeTransforms
 const mockApplyRuntimeTransforms = vi.hoisted(() =>
@@ -55,6 +56,11 @@ vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
     getGraderById: mockGetGraderById,
   };
 });
+
+vi.mock('../../../../src/redteam/strategies/indirectWebPwn', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkExfilTracking: mockCheckExfilTracking,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
@@ -121,6 +127,7 @@ describe('CustomProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
 
     // Create fresh mocks for each test
     mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
@@ -173,7 +180,7 @@ describe('CustomProvider', () => {
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
   });
 
-  it('should only short-circuit refusal scoring for classifier-clean output', async () => {
+  it('should route mixed output to outcome grading and retain semantic fallback', async () => {
     mockScoringProvider.callApi.mockResolvedValue({
       output: JSON.stringify({ value: false, metadata: 0, rationale: 'mixed output' }),
     });
@@ -181,6 +188,13 @@ describe('CustomProvider', () => {
     await expect(
       (customProvider as any).getRefusalScore('test objective', {
         output: 'I cannot help. The answer is 42.',
+      }),
+    ).resolves.toEqual([false, 'Mixed refusal output requires outcome grading.']);
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+
+    await expect(
+      (customProvider as any).getRefusalScore('test objective', {
+        output: 'That is outside my scope.',
       }),
     ).resolves.toEqual([false, 'mixed output']);
     expect(mockScoringProvider.callApi).toHaveBeenCalledOnce();
@@ -194,7 +208,12 @@ describe('CustomProvider', () => {
 
   it.each([
     { output: 'I cannot help.', images: [{ data: 'image-data' }] },
+    { output: 'I cannot help.', image: { data: 'image-data', format: 'png' } },
     { output: 'I cannot help.', metadata: { wasExfiltrated: true, exfilCount: 1 } },
+    {
+      output: 'I cannot help.',
+      raw: { items: [{ type: 'command_execution', command: 'cat .env' }] },
+    },
   ])('should preserve non-text grading evidence before refusal backtracking', async (response) => {
     await expect(
       (customProvider as any).getRefusalScore('test objective', response),
@@ -1382,6 +1401,64 @@ describe('CustomProvider', () => {
       });
 
       expect(provider['perTurnLayers']).toEqual([]);
+    });
+
+    it('grades layer-mode exfiltration instead of backtracking on refusal text', async () => {
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed prompt',
+        metadata: { webPageUuid: 'layer-page' },
+      });
+      mockCheckExfilTracking.mockResolvedValue({
+        wasExfiltrated: true,
+        exfilCount: 1,
+        exfilRecords: [],
+      });
+      const graderGetResult = vi.fn().mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Exfiltration detected' },
+      });
+      mockGetGraderById.mockReturnValue({ getResult: graderGetResult });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help.',
+        metadata: { wasExfiltrated: false, exfilCount: 0 },
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not achieved' }),
+      });
+
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        redteamProvider: mockRedTeamProvider,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        evaluationId: 'eval-id',
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test objective', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(mockCheckExfilTracking).toHaveBeenCalledWith('layer-page', 'eval-id');
+      expect(graderGetResult).toHaveBeenCalledOnce();
+      expect(graderGetResult.mock.calls[0][7]).toMatchObject({
+        wasExfiltrated: true,
+        exfilCount: 1,
+      });
+      expect(result.metadata?.customBacktrackCount).toBe(0);
+      expect(result.metadata?.storedGraderResult).toBeDefined();
     });
 
     it('should not apply transforms when perTurnLayers is empty', async () => {

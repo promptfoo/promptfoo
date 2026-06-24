@@ -36,8 +36,10 @@ import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
+  getProviderResponseGradingImages,
   getSessionId,
   hasProviderResponseGradingEvidence,
+  hasTraceGradingEvidence,
   isBacktrackableRefusal,
 } from '../../util';
 import {
@@ -766,7 +768,11 @@ export class HydraProvider implements ApiProvider {
       });
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const hasExternalGradingEvidence = Boolean(lastTransformResult?.metadata?.webPageUuid);
+      const hasExternalGradingEvidence = Boolean(
+        lastTransformResult?.metadata?.webPageUuid ||
+          (tracingOptions.includeInGrading &&
+            hasTraceGradingEvidence({ traceContext, traceSummary: computedTraceSummary })),
+      );
       const isRefusal =
         !hasExternalGradingEvidence &&
         !hasProviderResponseGradingEvidence(targetResponse) &&
@@ -825,9 +831,10 @@ export class HydraProvider implements ApiProvider {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
+          const responseImages = getProviderResponseGradingImages(targetResponse);
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
-            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+            ...(responseImages.length ? { imageOutputs: responseImages } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
               : {}),

@@ -24,7 +24,7 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../ut
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
-import { isCleanRefusal } from '../../util';
+import { hasProviderResponseGradingEvidence, isBacktrackableRefusal } from '../../util';
 import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
@@ -582,8 +582,11 @@ export class VoiceCrescendoProvider implements ApiProvider {
           responseTranscript: responseText,
         });
 
-        // Backtrack only for complete refusals; mixed output must reach objective evaluation.
-        if (isCleanRefusal(responseText)) {
+        // Preserve response evidence and unknown/risky mixed output for objective evaluation.
+        if (
+          !hasProviderResponseGradingEvidence(targetResponse) &&
+          isBacktrackableRefusal(responseText)
+        ) {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
             backtrackCount++;
