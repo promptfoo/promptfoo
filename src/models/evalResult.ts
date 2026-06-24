@@ -892,10 +892,27 @@ function buildServerOwnedClearGradingResult(
   current: GradingResult,
   normalized: GradingResult,
 ): GradingResult {
+  const automatedComponents = Array.isArray(normalized.componentResults)
+    ? normalized.componentResults.filter(
+        (componentResult) => !isHumanGradingResult(componentResult),
+      )
+    : [];
+  const componentScores = automatedComponents
+    .map((componentResult) => componentResult.score)
+    .filter((score): score is number => typeof score === 'number');
   const cleared = {
     ...current,
-    pass: normalized.pass,
-    score: normalized.score,
+    // A legacy clear submits the whole grading result. Recompute its aggregate outcome from
+    // the server-owned automated components instead of trusting caller-supplied pass/score.
+    pass:
+      automatedComponents.length > 0
+        ? automatedComponents.every((componentResult) => componentResult.pass)
+        : normalized.pass,
+    score:
+      componentScores.length > 0
+        ? componentScores.reduce((sum, componentScore) => sum + componentScore, 0) /
+          componentScores.length
+        : normalized.score,
   } as GradingResult;
   cleared.reason = current.reason;
   if (hasOwn(normalized, 'componentResults')) {

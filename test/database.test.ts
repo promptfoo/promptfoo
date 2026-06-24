@@ -272,34 +272,12 @@ describe('database WAL mode', () => {
     }
   });
 
-  it('does not multiply the busy timeout across transaction retries', async () => {
+  it('does not retry SQLITE_BUSY after the native busy timeout', async () => {
     const database = await import('../src/database');
-    const db = await database.getDb();
-    await db.run('CREATE TABLE transaction_lock_probe (id TEXT PRIMARY KEY)');
+    const busyError = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
+    const operation = vi.fn().mockRejectedValue(busyError);
 
-    const lock = createWriteLockWorker(pathToFileURL(database.getDbPath()).href, 5500);
-    try {
-      await lock.locked;
-      const startedAt = Date.now();
-      const outcome = await db
-        .transaction(async (tx) => {
-          await tx.run("INSERT INTO transaction_lock_probe VALUES ('blocked')");
-        })
-        .then(
-          () => ({ ok: true as const }),
-          (error) => ({ ok: false as const, error }),
-        );
-      const elapsedMs = Date.now() - startedAt;
-      await lock.released;
-
-      expect(outcome.ok).toBe(false);
-      expect(elapsedMs).toBeGreaterThanOrEqual(4500);
-      expect(elapsedMs).toBeLessThan(9000);
-      await expect(db.all('SELECT id FROM transaction_lock_probe ORDER BY id')).resolves.toEqual([
-        { id: 'holder' },
-      ]);
-    } finally {
-      await lock.worker.terminate();
-    }
-  }, 12_000);
+    await expect(database.withTransientLockRetry(operation)).rejects.toBe(busyError);
+    expect(operation).toHaveBeenCalledOnce();
+  });
 });

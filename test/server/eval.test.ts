@@ -1201,6 +1201,7 @@ describe('eval routes', () => {
       invariant(result instanceof EvalResult, 'EvalResult is required');
       invariant(result.id, 'Result ID is required');
       await markResultAsError(eval_, result);
+      const errorMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
 
       result.gradingResult = {
         ...createManualRatingPayload(result, true),
@@ -1223,13 +1224,15 @@ describe('eval routes', () => {
       const legacyRating = await EvalResult.findById(result.id);
       invariant(legacyRating, 'Legacy rating is required');
       const clearPayload = createClearManualRatingPayload(legacyRating);
+      const expectedClearScore = clearPayload.score;
       clearPayload.comment = 'Stale client comment';
       clearPayload.metadata = { source: 'stale client' };
       clearPayload.reason = 'Stale client reason';
       clearPayload.tokensUsed = { total: 999 };
+      const poisonedOutcomeClearPayload = { ...clearPayload, pass: true, score: 999 };
       const response = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(clearPayload);
+        .send(poisonedOutcomeClearPayload);
 
       expect(response.status).toBe(200);
       expect(response.body.gradingResult).toMatchObject({
@@ -1243,8 +1246,12 @@ describe('eval routes', () => {
       );
       expect(response.body).toMatchObject({
         success: false,
+        score: expectedClearScore,
         failureReason: ResultFailureReason.ERROR,
       });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        errorMetrics,
+      );
       const db = await getDb();
       const firstClearState = await db
         .select({
@@ -1265,7 +1272,7 @@ describe('eval routes', () => {
 
       const retryResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(clearPayload);
+        .send(poisonedOutcomeClearPayload);
 
       expect(retryResponse.status).toBe(200);
       expect(retryResponse.body.gradingResult).toMatchObject({
@@ -1305,7 +1312,7 @@ describe('eval routes', () => {
       vi.mocked(updateSignalFile).mockClear();
       const delayedClearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(clearPayload);
+        .send(poisonedOutcomeClearPayload);
       expect(delayedClearResponse.status).toBe(200);
       expect(delayedClearResponse.body.gradingResult?.comment).toBe('Updated by a legacy client');
       expect(updateSignalFile).not.toHaveBeenCalled();

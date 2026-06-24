@@ -141,7 +141,8 @@ function isRetryableDatabaseLockError(error: unknown): boolean {
   return hasDatabaseLockError(error, false);
 }
 
-async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
+/** @internal Exported only for deterministic lock-retry regression tests. */
+export async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await operation();
