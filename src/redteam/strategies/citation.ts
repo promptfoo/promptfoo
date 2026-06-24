@@ -18,6 +18,16 @@ import { mergeProviderTokenUsage } from './util';
 import type { TestCase } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 
+class CitationGenerationError extends Error {
+  constructor(
+    message: string,
+    readonly tokenUsage: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'CitationGenerationError';
+  }
+}
+
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
@@ -168,7 +178,10 @@ async function generateCitations(
         error: deferredFailureMessage ?? 'Citation generation failed',
         tokenUsage: deferredFailureTokenUsage,
       });
-      return [];
+      throw new CitationGenerationError(
+        deferredFailureMessage ?? 'Citation generation failed',
+        deferredFailureTokenUsage,
+      );
     }
 
     if (deferredFailureTokenUsage && allResults.length > 0) {
@@ -198,6 +211,9 @@ async function generateCitations(
       progressBar.stop();
     }
     logger.error(`Error in remote citation generation: ${error}`);
+    if (error instanceof CitationGenerationError) {
+      throw error;
+    }
     return [];
   }
 }

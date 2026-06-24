@@ -195,6 +195,27 @@ async function rematerializeStrategyInputVars(
   }
 }
 
+function detachProviderTokenUsage(testCases: TestCase[]): {
+  testCases: TestCase[];
+  tokenUsage: TokenUsage | undefined;
+} {
+  let tokenUsage: TokenUsage | undefined;
+
+  return {
+    testCases: testCases.map((testCase) => {
+      const providerTokenUsage = testCase.metadata?.providerTokenUsage as TokenUsage | undefined;
+      if (!providerTokenUsage) {
+        return testCase;
+      }
+
+      tokenUsage = mergeProviderTokenUsage(tokenUsage, providerTokenUsage);
+      const { providerTokenUsage: _providerTokenUsage, ...metadata } = testCase.metadata!;
+      return { ...testCase, metadata };
+    }),
+    tokenUsage,
+  };
+}
+
 export const MAX_MAX_CONCURRENCY = 20;
 
 /**
@@ -1682,8 +1703,10 @@ export async function synthesize({
     }
   });
 
-  // After generating plugin test cases but before applying strategies:
-  const pluginTestCases = testCases;
+  // Generation usage is shared request-level accounting. Remove it before strategy fan-out and
+  // attach it once after the final basic/strategy rows are combined.
+  const { testCases: pluginTestCases, tokenUsage: pluginGenerationTokenUsage } =
+    detachProviderTokenUsage(testCases);
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -1744,11 +1767,11 @@ export async function synthesize({
   // Combine test cases based on basic strategy setting
   const combinedTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
-  const extractionTokenUsage = mergeProviderTokenUsage(
-    purposeExtraction.tokenUsage,
-    entityExtraction.tokenUsage,
+  const sharedGenerationTokenUsage = mergeProviderTokenUsage(
+    pluginGenerationTokenUsage,
+    mergeProviderTokenUsage(purposeExtraction.tokenUsage, entityExtraction.tokenUsage),
   );
-  const finalTestCases = attachProviderTokenUsage(combinedTestCases, extractionTokenUsage);
+  const finalTestCases = attachProviderTokenUsage(combinedTestCases, sharedGenerationTokenUsage);
 
   // Check for abort signal
   checkAbort();

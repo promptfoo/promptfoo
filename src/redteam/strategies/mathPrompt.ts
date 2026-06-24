@@ -110,6 +110,11 @@ export async function generateMathPrompt(
         }
 
         const batchResults = data.result as TestCase[];
+        if (batch.length > 0 && batchResults.length === 0) {
+          remoteFailureMessage ??=
+            data.error || 'MathPrompt generation returned no results for a non-empty batch';
+          return;
+        }
         if (data.tokenUsage && batchResults.length > 0) {
           const [firstResult, ...remainingResults] = batchResults;
           allResults = allResults.concat([
@@ -280,9 +285,15 @@ export async function addMathPrompt(
 
   for (const testCase of fallbackTestCases) {
     const originalText = String(testCase.vars![injectVar]);
+    const { providerTokenUsage: inheritedProviderTokenUsage, ...baseMetadata } =
+      testCase.metadata ?? {};
 
-    for (const concept of mathConcepts) {
+    for (const [conceptIndex, concept] of mathConcepts.entries()) {
       const { encodedPrompt, tokenUsage } = await encodeMathPrompt(originalText, concept);
+      const providerTokenUsage = mergeProviderTokenUsage(
+        conceptIndex === 0 ? inheritedProviderTokenUsage : undefined,
+        tokenUsage,
+      );
 
       encodedTestCases.push({
         ...testCase,
@@ -295,17 +306,10 @@ export async function addMathPrompt(
           [injectVar]: encodedPrompt,
         },
         metadata: {
-          ...testCase.metadata,
+          ...baseMetadata,
           strategyId: 'math-prompt',
           originalText,
-          ...(tokenUsage
-            ? {
-                providerTokenUsage: mergeProviderTokenUsage(
-                  testCase.metadata?.providerTokenUsage,
-                  tokenUsage,
-                ),
-              }
-            : {}),
+          ...(providerTokenUsage ? { providerTokenUsage } : {}),
         },
       });
 

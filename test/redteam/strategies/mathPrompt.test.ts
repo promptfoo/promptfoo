@@ -188,7 +188,7 @@ describe('mathPrompt', () => {
       });
     });
 
-    it('should preserve prior generation usage when layered after another strategy', async () => {
+    it('should preserve prior generation usage exactly once across concept fan-out', async () => {
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
 
       const mockProvider = createMockProvider({
@@ -218,8 +218,53 @@ describe('mathPrompt', () => {
           },
         ] as any,
         'prompt',
-        { mathConcepts: ['topology'] },
+        { mathConcepts: ['topology', 'calculus'] },
       );
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve empty remote batch usage before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [],
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+      });
 
       expect(result[0]?.metadata?.providerTokenUsage).toEqual({
         total: 17,

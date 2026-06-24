@@ -362,11 +362,21 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
-    vi.spyOn(target, 'callApi').mockRejectedValueOnce(new Error('Target provider failed'));
+    vi.spyOn(target, 'callApi').mockRejectedValueOnce(
+      Object.assign(new Error('Target provider failed'), {
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      }),
+    );
     const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toMatchObject({
       error: expect.stringContaining('Target provider failed'),
+      tokenUsage: {
+        total: 9,
+        prompt: 6,
+        completion: 3,
+        numRequests: 1,
+      },
     });
   });
 

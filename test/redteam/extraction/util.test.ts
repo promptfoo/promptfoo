@@ -334,6 +334,37 @@ describe('Extraction Utils', () => {
         tokenUsage: { total: 12, prompt: 7, completion: 5, numRequests: 1 },
       });
     });
+
+    it('should preserve token usage when the provider throws', async () => {
+      vi.mocked(provider.callApi).mockRejectedValue(
+        Object.assign(new Error('Provider threw'), {
+          tokenUsage: { total: 9, prompt: 6, completion: 3 },
+        }),
+      );
+
+      await expect(
+        callExtractionWithMetadata(provider, 'test prompt', vi.fn()),
+      ).rejects.toMatchObject({
+        message: 'Provider threw',
+        tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+      });
+    });
+
+    it('should preserve response usage when output processing throws', async () => {
+      vi.mocked(provider.callApi).mockResolvedValue({
+        output: 'malformed output',
+        tokenUsage: { total: 8, prompt: 5, completion: 3 },
+      });
+
+      await expect(
+        callExtractionWithMetadata(provider, 'test prompt', () => {
+          throw new Error('Parser failed');
+        }),
+      ).rejects.toMatchObject({
+        message: 'Parser failed',
+        tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+      });
+    });
   });
 
   describe('formatPrompts', () => {

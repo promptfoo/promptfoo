@@ -465,7 +465,6 @@ describe('doTargetPurposeDiscovery', () => {
       id: 'test',
       response: {
         output: 'I am a test assistant',
-        tokenUsage: { total: 11, prompt: 6, completion: 5 },
       },
     });
 
@@ -476,9 +475,9 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: 'Test limitations',
       user: 'Test user',
       tokenUsage: {
-        total: 23,
-        prompt: 13,
-        completion: 10,
+        total: 12,
+        prompt: 7,
+        completion: 5,
         numRequests: 3,
       },
     });

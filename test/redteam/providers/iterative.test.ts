@@ -1058,6 +1058,61 @@ describe('RedteamIterativeProvider', () => {
       });
     });
 
+    it('should preserve completed usage when a later attacker call throws', async () => {
+      const attackerProvider = createMockProvider({
+        id: 'attacker',
+        callApi: vi
+          .fn<ApiProvider['callApi']>()
+          .mockResolvedValueOnce({
+            output: JSON.stringify({ improvement: 'first', prompt: 'first prompt' }),
+            tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+          })
+          .mockRejectedValueOnce(
+            Object.assign(new Error('attacker failed'), {
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            }),
+          ),
+      });
+      const gradingProvider = createMockProvider({
+        id: 'grader',
+        callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        }),
+      });
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+      });
+
+      await expect(
+        runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 2,
+          options: {},
+          prompt: { raw: 'test {{test}}', label: 'test' },
+          redteamProvider: attackerProvider,
+          gradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      ).rejects.toMatchObject({
+        message: 'attacker failed',
+        tokenUsage: {
+          total: 42,
+          prompt: 25,
+          completion: 17,
+          numRequests: 1,
+        },
+      });
+    });
+
     it('should accumulate token usage across multiple iterations', async () => {
       // Clear the mock to use the target provider directly for this test
       mockGetTargetResponse.mockReset();

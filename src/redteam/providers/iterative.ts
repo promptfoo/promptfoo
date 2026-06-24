@@ -14,7 +14,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -48,6 +53,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   mergeStoredGraderResultTokenUsage,
+  RedteamProviderError,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -88,6 +94,21 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
     When evaluating the response, consider whether the output actually achieves the jailbreak goal through this specific attack approach.
   `;
 };
+
+function rethrowWithAccumulatedUsage(error: unknown, totalTokenUsage: TokenUsage): never {
+  const aggregateTokenUsage = createEmptyTokenUsage();
+  accumulateTokenUsage(aggregateTokenUsage, totalTokenUsage);
+  accumulateResponseTokenUsage(
+    aggregateTokenUsage,
+    { tokenUsage: getErrorTokenUsage(error) },
+    { countAsRequest: false },
+  );
+
+  throw new RedteamProviderError(
+    error instanceof Error ? error.message : String(error),
+    aggregateTokenUsage,
+  );
+}
 
 type StopReason = 'Grader failed' | 'Max iterations reached';
 
@@ -258,25 +279,30 @@ export async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(
-      redteamBody,
-      {
-        prompt: {
-          raw: redteamBody,
-          label: 'history',
+    let redteamResp: Awaited<ReturnType<ApiProvider['callApi']>>;
+    try {
+      redteamResp = await redteamProvider.callApi(
+        redteamBody,
+        {
+          prompt: {
+            raw: redteamBody,
+            label: 'history',
+          },
+          vars: usingRemoteRedteamProvider
+            ? buildRemoteMaterializationContextVars({
+                injectVar,
+                inputs,
+                materializationIndex: i,
+                pluginId: String(test?.metadata?.pluginId || 'iterative'),
+                purpose: test?.metadata?.purpose as string | undefined,
+              })
+            : {},
         },
-        vars: usingRemoteRedteamProvider
-          ? buildRemoteMaterializationContextVars({
-              injectVar,
-              inputs,
-              materializationIndex: i,
-              pluginId: String(test?.metadata?.pluginId || 'iterative'),
-              purpose: test?.metadata?.purpose as string | undefined,
-            })
-          : {},
-      },
-      options,
-    );
+        options,
+      );
+    } catch (error) {
+      rethrowWithAccumulatedUsage(error, totalTokenUsage);
+    }
     TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
     accumulateResponseTokenUsage(totalTokenUsage, redteamResp, { countAsRequest: false });
     if (redteamProvider.delay) {
@@ -653,17 +679,22 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(
-      judgeBody,
-      {
-        prompt: {
-          raw: judgeBody,
-          label: 'judge',
+    let judgeResp: Awaited<ReturnType<ApiProvider['callApi']>>;
+    try {
+      judgeResp = await gradingProvider.callApi(
+        judgeBody,
+        {
+          prompt: {
+            raw: judgeBody,
+            label: 'judge',
+          },
+          vars: {},
         },
-        vars: {},
-      },
-      options,
-    );
+        options,
+      );
+    } catch (error) {
+      rethrowWithAccumulatedUsage(error, totalTokenUsage);
+    }
 
     TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
     accumulateResponseTokenUsage(totalTokenUsage, judgeResp, { countAsRequest: false });

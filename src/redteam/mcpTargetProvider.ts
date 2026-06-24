@@ -1,6 +1,10 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../util/tokenUsageUtils';
 import { McpMaterializationError, materializeTrackedMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
 
@@ -67,6 +71,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
 
     const totalTokenUsage = createEmptyTokenUsage();
     let hasAuxiliaryTokenUsage = false;
+    let targetCallAttempted = false;
 
     try {
       const intentValue =
@@ -113,6 +118,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }
         : undefined;
 
+      targetCallAttempted = true;
       const targetResponse = await this.target.callApi(
         materializedPrompt,
         materializedContext,
@@ -128,13 +134,19 @@ class RedteamMcpTargetProvider implements ApiProvider {
       if (error instanceof McpMaterializationError) {
         accumulateResponseTokenUsage(totalTokenUsage, error, { countAsRequest: false });
         hasAuxiliaryTokenUsage = Boolean(error.tokenUsage);
+      } else if (targetCallAttempted) {
+        const targetErrorTokenUsage = getErrorTokenUsage(error);
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          targetErrorTokenUsage ? { tokenUsage: targetErrorTokenUsage } : {},
+        );
       }
 
       return {
         error: `Failed to materialize MCP target prompt: ${
           error instanceof Error ? error.message : String(error)
         }`,
-        ...(hasAuxiliaryTokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+        ...(hasAuxiliaryTokenUsage || targetCallAttempted ? { tokenUsage: totalTokenUsage } : {}),
       };
     }
   }

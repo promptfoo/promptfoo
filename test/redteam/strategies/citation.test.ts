@@ -189,7 +189,7 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
-  it('should report one-row API error usage without making generation fatal', async () => {
+  it('should propagate one-row API error usage when no citation can be generated', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
@@ -200,9 +200,10 @@ describe('citation strategy', () => {
       statusText: 'Error',
     });
 
-    const result = await addCitationTestCases(testCases, 'prompt', {});
-
-    expect(result).toEqual([]);
+    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
+      message: 'Validation error: Required at "result.topic"; Required at "result.citation"',
+      tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+    });
     expect(logger.error).toHaveBeenCalledWith(
       '[Citation] Token usage from failed citation generation',
       {
@@ -276,7 +277,7 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
-  it('should report one-row invalid response usage without making generation fatal', async () => {
+  it('should propagate invalid response usage when no citation can be generated', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
         result: {
@@ -289,9 +290,10 @@ describe('citation strategy', () => {
       statusText: 'OK',
     });
 
-    const result = await addCitationTestCases(testCases, 'prompt', {});
-
-    expect(result).toEqual([]);
+    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
+      message: 'Citation generation returned invalid response structure',
+      tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+    });
     expect(logger.error).toHaveBeenCalledWith(
       '[Citation] Token usage from failed citation generation',
       {

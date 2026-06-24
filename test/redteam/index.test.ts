@@ -312,6 +312,51 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should attach shared plugin generation usage once after strategy fan-out', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'generated prompt' },
+            metadata: {
+              providerTokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+            },
+          },
+        ]),
+      } as any);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'goat',
+        action: vi.fn().mockImplementation((testCases) =>
+          testCases.map((testCase: any) => ({
+            ...testCase,
+            metadata: { ...testCase.metadata, strategyId: 'goat' },
+          })),
+        ),
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(2);
+      expect(result.testCases.filter((testCase) => testCase.metadata?.providerTokenUsage)).toEqual([
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            providerTokenUsage: {
+              total: 11,
+              prompt: 7,
+              completion: 4,
+              numRequests: 1,
+            },
+          }),
+        }),
+      ]);
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

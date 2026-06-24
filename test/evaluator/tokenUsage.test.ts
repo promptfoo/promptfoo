@@ -204,4 +204,31 @@ describeEvaluator('evaluator token usage', () => {
     expect(summary.stats.tokenUsage.numRequests).toBe(1);
     expect(summary.results[0].response?.tokenUsage).not.toHaveProperty('numRequests');
   });
+
+  it('should count a successful provider response that omits token usage', async () => {
+    const providerWithoutUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-usage'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test response' }),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: providerWithoutUsage,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 1,
+    });
+  });
 });

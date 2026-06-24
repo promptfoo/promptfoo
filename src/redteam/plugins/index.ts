@@ -255,10 +255,12 @@ function stripRetryModifier(testCase: TestCase): TestCase {
 
 function dedupeTestCases(testCases: TestCase[]): TestCase[] {
   const deduped: TestCase[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, TestCase>();
 
   for (const testCase of testCases) {
     const normalizedTestCase = stripRetryModifier(testCase);
+    const { providerTokenUsage, ...metadataWithoutProviderTokenUsage } =
+      normalizedTestCase.metadata ?? {};
     const provider =
       typeof normalizedTestCase.provider === 'string'
         ? normalizedTestCase.provider
@@ -269,15 +271,26 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
       vars: normalizedTestCase.vars,
       assert: normalizedTestCase.assert,
       options: normalizedTestCase.options,
-      metadata: normalizedTestCase.metadata,
+      metadata: normalizedTestCase.metadata ? metadataWithoutProviderTokenUsage : undefined,
       provider,
     });
 
-    if (seen.has(dedupKey)) {
+    const existingTestCase = seen.get(dedupKey);
+    if (existingTestCase) {
+      const mergedTokenUsage = mergeProviderTokenUsage(
+        existingTestCase.metadata?.providerTokenUsage,
+        providerTokenUsage,
+      );
+      if (mergedTokenUsage) {
+        existingTestCase.metadata = {
+          ...existingTestCase.metadata,
+          providerTokenUsage: mergedTokenUsage,
+        };
+      }
       continue;
     }
 
-    seen.add(dedupKey);
+    seen.set(dedupKey, normalizedTestCase);
     deduped.push(normalizedTestCase);
   }
 
@@ -448,7 +461,7 @@ async function fetchRemoteTestCases(
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
-    if (n === 1 && ret.length === 0 && data.tokenUsage) {
+    if (ret.length === 0 && data.tokenUsage) {
       throw new RemotePluginGenerationError(
         `Remote generation returned no test cases for ${key}`,
         data.tokenUsage,

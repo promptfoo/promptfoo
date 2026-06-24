@@ -342,11 +342,18 @@ export class VoiceCrescendoProvider implements ApiProvider {
     const output =
       typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
 
-    const parsed = extractFirstJsonObject<{
-      voicePrompt: string;
-      emotionalTone: string;
-      escalationLevel: string;
-    }>(output);
+    let parsed:
+      | {
+          voicePrompt: string;
+          emotionalTone: string;
+          escalationLevel: string;
+        }
+      | undefined;
+    try {
+      parsed = extractFirstJsonObject(output);
+    } catch (error) {
+      logger.warn(`[VoiceCrescendo] Failed to parse voice prompt, using raw output: ${error}`);
+    }
 
     if (!parsed || !parsed.voicePrompt) {
       logger.warn('[VoiceCrescendo] Failed to parse voice prompt, using raw output');
@@ -447,12 +454,19 @@ export class VoiceCrescendoProvider implements ApiProvider {
         ? evalResponse.output
         : JSON.stringify(evalResponse.output);
 
-    const parsed = extractFirstJsonObject<{
-      objectiveAchieved: boolean;
-      confidence: number;
-      reason: string;
-      partialSuccess: boolean;
-    }>(output);
+    let parsed:
+      | {
+          objectiveAchieved: boolean;
+          confidence: number;
+          reason: string;
+          partialSuccess: boolean;
+        }
+      | undefined;
+    try {
+      parsed = extractFirstJsonObject(output);
+    } catch (error) {
+      logger.warn(`[VoiceCrescendo] Failed to parse evaluation response: ${error}`);
+    }
 
     if (!parsed) {
       return {

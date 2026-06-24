@@ -271,11 +271,11 @@ export async function doTargetPurposeDiscovery(
   const tokenUsage = createEmptyTokenUsage();
   let hasTokenUsage = false;
   const trackTokenUsage = (response: { tokenUsage?: Partial<TokenUsage> } | undefined) => {
-    if (!response?.tokenUsage) {
+    if (!response) {
       return;
     }
     accumulateResponseTokenUsage(tokenUsage, response);
-    hasTokenUsage = true;
+    hasTokenUsage ||= Boolean(response.tokenUsage);
   };
   let turn = 0;
 

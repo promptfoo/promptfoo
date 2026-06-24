@@ -480,15 +480,14 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     });
 
     if (!response.ok) {
-      const errorBody = (await response.json().catch(() => undefined)) as
-        | { tokenUsage?: TokenUsage }
-        | undefined;
+      const errorBody: unknown = await response.json().catch(() => undefined);
+      const tokenUsage = getErrorTokenUsage(errorBody);
       sendError(
         res,
         500,
         `Failed to process ${taskId} task`,
         new Error(`Cloud function responded with status ${response.status}`),
-        errorBody?.tokenUsage ? { tokenUsage: errorBody.tokenUsage } : {},
+        tokenUsage ? { tokenUsage } : {},
       );
       return;
     }

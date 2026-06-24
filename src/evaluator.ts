@@ -1561,9 +1561,7 @@ async function runEvalInternal({
     });
 
     // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
+    accumulateResponseTokenUsage(ret.tokenUsage, response);
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
       // Save the output in a register for later use

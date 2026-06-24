@@ -131,9 +131,23 @@ export async function callExtractionWithMetadata<T>(
   prompt: string,
   processOutput: (output: string) => T,
 ): Promise<ExtractionResult<T>> {
-  const { output, error, tokenUsage } = await provider.callApi(
-    JSON.stringify([{ role: 'user', content: prompt }]),
-  );
+  let response: Awaited<ReturnType<ApiProvider['callApi']>>;
+  try {
+    response = await provider.callApi(JSON.stringify([{ role: 'user', content: prompt }]));
+  } catch (error) {
+    const errorTokenUsage = getErrorTokenUsage(error);
+    throw new ExtractionError(
+      error instanceof Error ? error.message : String(error),
+      errorTokenUsage
+        ? {
+            ...errorTokenUsage,
+            ...(errorTokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+          }
+        : { numRequests: 1 },
+    );
+  }
+
+  const { output, error, tokenUsage } = response;
   const normalizedTokenUsage = tokenUsage
     ? {
         ...tokenUsage,
@@ -154,10 +168,17 @@ export async function callExtractionWithMetadata<T>(
     );
   }
 
-  return {
-    result: processOutput(output),
-    tokenUsage: normalizedTokenUsage,
-  };
+  try {
+    return {
+      result: processOutput(output),
+      tokenUsage: normalizedTokenUsage,
+    };
+  } catch (error) {
+    throw new ExtractionError(
+      error instanceof Error ? error.message : String(error),
+      normalizedTokenUsage,
+    );
+  }
 }
 
 export function formatPrompts(prompts: string[]): string {

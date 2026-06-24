@@ -260,6 +260,82 @@ describe('VoiceCrescendoProvider', () => {
     expect(getTargetResponse).not.toHaveBeenCalled();
   });
 
+  it('should preserve attacker usage when voice prompt JSON is malformed', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(
+      createMockProvider({
+        id: 'mock-attacker',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'raw voice prompt',
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        }),
+      }),
+    );
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
+      createMockProvider({
+        id: 'mock-grader',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({
+            objectiveAchieved: false,
+            confidence: 0,
+            reason: 'not achieved',
+            partialSuccess: false,
+          }),
+          tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
+        }),
+      }),
+    );
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.prompt).toBe('raw voice prompt');
+    expect(result.tokenUsage).toMatchObject({
+      total: 57,
+      prompt: 38,
+      completion: 19,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve scorer usage when evaluation JSON is malformed', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(
+      createMockProvider({
+        id: 'mock-grader',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'malformed evaluation',
+          tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
+        }),
+      }),
+    );
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 57,
+      prompt: 38,
+      completion: 19,
+      numRequests: 1,
+    });
+  });
+
   it('should include metadata with conversation history', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
 

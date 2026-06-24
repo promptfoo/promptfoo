@@ -1257,7 +1257,13 @@ describe('Redteam Routes', () => {
           Promise.resolve({
             error: 'Warning',
             message: 'Skipping generation',
-            tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+            tokenUsage: {
+              total: 9,
+              prompt: 5,
+              completion: 4,
+              numRequests: 1,
+              secret: 'must-not-leak',
+            },
           }),
       } as any);
 
@@ -1268,6 +1274,23 @@ describe('Redteam Routes', () => {
         error: 'Failed to process my-task task',
         tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
       });
+    });
+
+    it('should omit malformed helper usage from proxied cloud task errors', async () => {
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () =>
+          Promise.resolve({
+            error: 'Warning',
+            tokenUsage: { total: 'not-a-number', secret: 'must-not-leak' },
+          }),
+      } as any);
+
+      const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to process my-task task' });
     });
 
     it('should return 400 when taskId exceeds max length', async () => {
