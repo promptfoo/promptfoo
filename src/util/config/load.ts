@@ -736,7 +736,11 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
-  options: { loadEnvFiles?: boolean } = {},
+  options: {
+    allowConfigFilterSample?: boolean;
+    configBasePath?: string;
+    loadEnvFiles?: boolean;
+  } = {},
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -786,7 +790,7 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+  const basePath = configPaths ? path.dirname(configPaths[0]) : (options.configBasePath ?? '');
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
@@ -959,8 +963,12 @@ export async function resolveConfigs(
     );
   }
   if (Array.isArray(config.scenarios)) {
-    const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    const configuredFilterSample =
+      options.allowConfigFilterSample === false ? undefined : commandLineOptions?.filterSample;
+    const configuredFilterSampleSeed =
+      options.allowConfigFilterSample === false ? undefined : commandLineOptions?.filterSampleSeed;
+    const filterSample = cmdObj.filterSample ?? configuredFilterSample;
+    const filterSampleSeed = cmdObj.filterSampleSeed ?? configuredFilterSampleSeed;
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);

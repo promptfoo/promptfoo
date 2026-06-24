@@ -5,13 +5,22 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableCache, isCacheEnabled } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
+import { createProviderSelection } from '../../../src/util/eval/providerSelection';
+import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
+import type {
+  CommandLineOptions,
+  EvalProviderSelection,
+  EvaluateOptions,
+  TestSuite,
+} from '../../../src/types/index';
+import type { InternalEvaluateOptions } from '../../../src/types/internal';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -358,6 +367,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should load config env before hydrating scenarios in reusable prefilter hooks', async () => {
+      const restoreEnv = mockProcessEnv({ PR9208_SCENARIOS_PATH: undefined });
       const scenariosPath = path.join(tmpDir, 'env-scenarios.yaml');
       fs.writeFileSync(
         scenariosPath,
@@ -371,33 +381,126 @@ describe('evaluateOptions behavior', () => {
       const envPath = path.join(tmpDir, 'scenario-path.env');
       fs.writeFileSync(envPath, `PR9208_SCENARIOS_PATH=${scenariosPath}\n`);
 
-      let observedScenarios: TestSuite['scenarios'];
-      await doEval(
-        {
-          table: false,
-          write: false,
-        },
-        {
-          commandLineOptions: { envPath },
-          providers: ['echo'],
-          prompts: ['Hello {{role}}'],
-          scenarios: ['file://{{env.PR9208_SCENARIOS_PATH}}'],
-        },
-        undefined,
-        { eventSource: 'mcp' },
-        {
-          beforeFilterTestSuite: (testSuite) => {
-            observedScenarios = testSuite.scenarios;
+      try {
+        let observedScenarios: TestSuite['scenarios'];
+        await doEval(
+          {
+            table: false,
+            write: false,
           },
-        },
-      );
+          {
+            commandLineOptions: { envPath },
+            providers: ['echo'],
+            prompts: ['Hello {{role}}'],
+            scenarios: ['file://{{env.PR9208_SCENARIOS_PATH}}'],
+          },
+          undefined,
+          { eventSource: 'mcp' },
+          {
+            beforeFilterTestSuite: (testSuite) => {
+              observedScenarios = testSuite.scenarios;
+            },
+          },
+        );
 
-      expect(observedScenarios).toEqual([
-        {
-          config: [{}],
-          tests: [{ vars: { role: 'auditor' } }],
-        },
-      ]);
+        expect(observedScenarios).toEqual([
+          {
+            config: [{}],
+            tests: [{ vars: { role: 'auditor' } }],
+          },
+        ]);
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(initialEval.runtimeOptions?.configEnvPaths).toBe(envPath);
+        expect(initialEval.runtimeOptions?.configEnvSource).toBe('config');
+
+        const restoreClearedEnv = mockProcessEnv({ PR9208_SCENARIOS_PATH: undefined });
+        const resumeEval = new Eval(initialEval.config, {
+          id: 'eval-resume-config-env',
+          persisted: true,
+          runtimeOptions: initialEval.runtimeOptions,
+        });
+        const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+        try {
+          await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
+            eventSource: 'mcp',
+          });
+          expect(process.env.PR9208_SCENARIOS_PATH).toBe(scenariosPath);
+        } finally {
+          findByIdSpy.mockRestore();
+          restoreClearedEnv();
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should persist absolute CLI env paths for resume and let a new CLI env override them', async () => {
+      const restoreEnv = mockProcessEnv({ PR9208_CLI_ENV: undefined });
+      const originalEnvPath = path.join(tmpDir, 'cli-original.env');
+      const overrideEnvPath = path.join(tmpDir, 'cli-override.env');
+      const configEnvPath = path.join(tmpDir, 'cli-config.env');
+      fs.writeFileSync(originalEnvPath, 'PR9208_CLI_ENV=original\n');
+      fs.writeFileSync(overrideEnvPath, 'PR9208_CLI_ENV=override\n');
+      fs.writeFileSync(configEnvPath, 'PR9208_CLI_ENV=config\n');
+      const relativeOriginalEnvPath = path.relative(process.cwd(), originalEnvPath);
+      const relativeOverrideEnvPath = path.relative(process.cwd(), overrideEnvPath);
+
+      try {
+        await doEval(
+          {
+            envPath: relativeOriginalEnvPath,
+            table: false,
+            write: false,
+          },
+          {
+            commandLineOptions: { envPath: configEnvPath },
+            providers: ['echo'],
+            prompts: ['Hello'],
+            tests: [{ vars: { input: 'cli env persistence' } }],
+          },
+          undefined,
+          { eventSource: 'mcp' },
+        );
+
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(initialEval.runtimeOptions?.configEnvPaths).toBe(originalEnvPath);
+        expect(initialEval.runtimeOptions?.configEnvSource).toBe('cli');
+        expect(process.env.PR9208_CLI_ENV).toBe('original');
+
+        const resumeEval = new Eval(initialEval.config, {
+          id: 'eval-resume-cli-env',
+          persisted: true,
+          runtimeOptions: initialEval.runtimeOptions,
+        });
+        const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+        try {
+          const restoreClearedEnv = mockProcessEnv({ PR9208_CLI_ENV: undefined });
+          try {
+            await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
+              eventSource: 'mcp',
+            });
+            expect(process.env.PR9208_CLI_ENV).toBe('original');
+          } finally {
+            restoreClearedEnv();
+          }
+
+          await doEval(
+            {
+              envPath: relativeOverrideEnvPath,
+              table: false,
+              resume: resumeEval.id,
+            } as any,
+            {},
+            undefined,
+            { eventSource: 'mcp' },
+          );
+          expect(process.env.PR9208_CLI_ENV).toBe('override');
+        } finally {
+          findByIdSpy.mockRestore();
+        }
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should scope reusable no-cache runs without disabling cache for later calls', async () => {
@@ -951,6 +1054,132 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it('should persist and restore exact MCP provider and flattened test selections', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-provider-selection-replay.yaml', {
+        providers: [
+          { id: 'echo', label: 'excluded-target' },
+          { id: 'echo', label: 'selected-target' },
+        ],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+      let providerSelection: EvalProviderSelection | undefined;
+      const evaluateOptionOverrides: Partial<InternalEvaluateOptions> = {
+        testCaseIndices: [2],
+      };
+
+      await doEval(
+        { table: false, write: false, config: [tempConfig] },
+        {},
+        undefined,
+        { eventSource: 'mcp' },
+        {
+          beforeFilterTestSuite: (testSuite, _config, context) => {
+            const allProviders = [...testSuite.providers];
+            testSuite.providers = testSuite.providers.filter(
+              (provider) => provider.label === 'selected-target',
+            );
+            providerSelection = createProviderSelection(
+              allProviders,
+              Array.isArray(context?.selectedProviderConfigs)
+                ? context.selectedProviderConfigs
+                : undefined,
+              testSuite.providers,
+            );
+            evaluateOptionOverrides.providerSelection = providerSelection;
+          },
+          evaluateOptionOverrides,
+        },
+      );
+
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialSuite.providers.map((provider) => provider.label)).toEqual(['selected-target']);
+      expect(cliState.selectedProviderConfigs).toEqual([{ id: 'echo', label: 'selected-target' }]);
+      expect(initialEval.runtimeOptions).toMatchObject({
+        configBasePath: tmpDir,
+        providerSelection,
+        testCaseIndices: [2],
+      });
+
+      const resumeEval = new Eval(initialEval.config, {
+        id: 'eval-resume-exact-selection',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
+          eventSource: 'mcp',
+        });
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions & {
+          testCaseIndices?: number[];
+        };
+        expect(resumedSuite.providers.map((provider) => provider.label)).toEqual([
+          'selected-target',
+        ]);
+        expect(resumedOptions.testCaseIndices).toEqual([2]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should persist and restore reordered and repeated prompt selections', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-prompt-selection-replay.yaml', {
+        providers: ['echo'],
+        prompts: [
+          { raw: 'first', label: 'First' },
+          { raw: 'second', label: 'Second' },
+          { raw: 'third', label: 'Third' },
+        ],
+        tests: [{ vars: {} }],
+      });
+
+      await doEval(
+        { table: false, write: false, config: [tempConfig] },
+        {},
+        undefined,
+        { eventSource: 'mcp' },
+        {
+          beforeFilterTestSuite: (testSuite) => {
+            testSuite.prompts = [testSuite.prompts[2], testSuite.prompts[0], testSuite.prompts[2]];
+          },
+        },
+      );
+
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialEval.runtimeOptions?.promptSelection?.prompts).toHaveLength(3);
+      const resumeEval = new Eval(initialEval.config, {
+        id: 'eval-resume-exact-prompts',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
+          eventSource: 'mcp',
+        });
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.prompts.map((prompt) => prompt.label)).toEqual([
+          'Third',
+          'First',
+          'Third',
+        ]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
     it('should not treat evaluateOptions.providerFilter as a provider selection', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-ignored-provider-filter.yaml', {
         evaluateOptions: {
@@ -994,6 +1223,7 @@ describe('evaluateOptions behavior', () => {
 
       await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
       const firstSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const firstEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
       const secondSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
 
@@ -1001,6 +1231,104 @@ describe('evaluateOptions behavior', () => {
       expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(
         secondSuite.tests?.map((test) => test.vars?.input),
       );
+      expect(firstEval.runtimeOptions?.testCaseSelection?.tests).toHaveLength(2);
+
+      const resumeEval = new Eval(firstEval.config, {
+        id: 'eval-resume-sampled-tests',
+        persisted: true,
+        runtimeOptions: firstEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions & {
+          testCaseSelection?: unknown;
+        };
+        expect(resumedSuite.tests?.map((test) => test.vars?.input)).toEqual([
+          'one',
+          'two',
+          'three',
+        ]);
+        expect(resumedOptions.testCaseSelection).toEqual(
+          firstEval.runtimeOptions?.testCaseSelection,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should suppress configured sampling when explicit test case indices are provided', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-index-overrides-sample.yaml', {
+        commandLineOptions: {
+          filterSample: 1,
+          filterSampleSeed: 42,
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval(
+        { table: false, write: false, config: [tempConfig] },
+        {},
+        undefined,
+        {},
+        {
+          allowConfigFilterSample: false,
+          evaluateOptionOverrides: { testCaseIndices: [2] },
+        },
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions & {
+        testCaseIndices?: number[];
+      };
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['one', 'two', 'three']);
+      expect(options.testCaseIndices).toEqual([2]);
+    });
+
+    it('should suppress configured scenario sampling before applying flattened indices', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-scenario-index-overrides-sample.yaml', {
+        commandLineOptions: {
+          filterSample: 1,
+          filterSampleSeed: 42,
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{region}} {{role}}'],
+        scenarios: [
+          {
+            config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+            tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+          },
+        ],
+      });
+
+      await doEval(
+        { table: false, write: false, config: [tempConfig] },
+        {},
+        undefined,
+        {},
+        {
+          allowConfigFilterSample: false,
+          evaluateOptionOverrides: { testCaseIndices: [3] },
+        },
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions & {
+        testCaseIndices?: number[];
+      };
+      expect(testSuite.scenarios?.[0].tests).toHaveLength(2);
+      expect(testSuite.scenarios?.[0].config).toHaveLength(2);
+      expect(options.testCaseIndices).toEqual([3]);
+      expect(options.filterRange).toBeUndefined();
     });
 
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {

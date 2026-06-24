@@ -32,6 +32,8 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
 function createMockEvalResult() {
   return {
     id: 'test-eval-123',
+    shared: false,
+    shareableUrl: undefined,
     toEvaluateSummary: vi.fn().mockResolvedValue({
       version: 3,
       stats: { successes: 1, failures: 0, errors: 0 },
@@ -72,7 +74,9 @@ async function defaultDoEvalImplementation(
 ) {
   const testSuite = createMockTestSuite();
   const config = { providers: testSuite.providers };
-  await customization?.beforeFilterTestSuite?.(testSuite, config);
+  await customization?.beforeFilterTestSuite?.(testSuite, config, {
+    selectedProviderConfigs: testSuite.providers,
+  });
   await customization?.afterFilterTestSuite?.(testSuite, config, {});
   return createMockEvalResult();
 }
@@ -143,11 +147,13 @@ describe('runEvaluation tool', () => {
         expect.objectContaining({
           beforeFilterTestSuite: expect.any(Function),
           afterFilterTestSuite: expect.any(Function),
-          evaluateOptionOverrides: {
+          evaluateOptionOverrides: expect.objectContaining({
             timeoutMs: 1234,
             testCaseIndices: [0],
-          },
+            testCaseSelection: expect.objectContaining({ tests: expect.any(Array) }),
+          }),
           allowConfigFilterRange: false,
+          allowConfigFilterSample: false,
           disablePromptSuggestions: true,
           skipRedteamEmailPreflight: true,
         }),
@@ -234,7 +240,7 @@ describe('runEvaluation tool', () => {
           timeoutMs: 30000,
         }),
         expect.objectContaining({
-          evaluateOptionOverrides: undefined,
+          evaluateOptionOverrides: {},
         }),
       );
       expect(payload.data.configuration.options.timeoutMs).toBe(9999);
@@ -281,11 +287,63 @@ describe('runEvaluation tool', () => {
       expect(payload.data.configuration.options.maxConcurrency).toBe(1);
     });
 
+    it('should report successful and unsuccessful sharing outcomes without hiding eval results', async () => {
+      const { doEval } = await import('../../../../src/node/doEval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      vi.mocked(doEval).mockImplementationOnce(async (...args: any[]) => {
+        const customization = args[4];
+        const testSuite = createMockTestSuite();
+        await customization.beforeFilterTestSuite(
+          testSuite,
+          { providers: [] },
+          {
+            selectedProviderConfigs: testSuite.providers,
+          },
+        );
+        await customization.afterFilterTestSuite(testSuite, { providers: [] }, {});
+        return {
+          ...createMockEvalResult(),
+          shared: true,
+          shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
+        } as any;
+      });
+
+      const sharedResult = await toolHandler({ configPath: 'test.yaml', share: true });
+      const sharedPayload = JSON.parse(sharedResult.content[0].text);
+      expect(sharedPayload.data.sharing).toEqual({
+        requested: true,
+        status: 'shared',
+        shared: true,
+        shareableUrl: 'https://app.promptfoo.dev/eval/shared-123',
+      });
+
+      vi.mocked(doEval).mockImplementationOnce(defaultDoEvalImplementation as any);
+      const notSharedResult = await toolHandler({ configPath: 'test.yaml', share: true });
+      const notSharedPayload = JSON.parse(notSharedResult.content[0].text);
+      expect(notSharedResult.isError).toBe(false);
+      expect(notSharedPayload.data.results.totalEvals).toBe(1);
+      expect(notSharedPayload.data.sharing).toEqual({
+        requested: true,
+        status: 'not_shared',
+        shared: false,
+        warning: 'The evaluation completed, but a shareable URL was not created.',
+      });
+    });
+
     it('should keep source config providers unchanged while filtering executable providers', async () => {
       const { doEval } = await import('../../../../src/node/doEval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
-      let observedPermissionProviders: unknown;
+      let observedProviderSelection: unknown;
 
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
@@ -297,12 +355,12 @@ describe('runEvaluation tool', () => {
             providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
           };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs: config.providers,
+          });
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
-          observedPermissionProviders = customization?.getCloudPermissionConfig?.(
-            config as any,
-          )?.providers;
+          observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -330,14 +388,22 @@ describe('runEvaluation tool', () => {
         { id: 'blocked-provider' },
       ]);
       expect(observedExecutableProviders).toEqual([{ id: 'allowed-provider' }]);
-      expect(observedPermissionProviders).toEqual([{ id: 'allowed-provider' }]);
+      expect(observedProviderSelection).toEqual({
+        providers: [
+          expect.objectContaining({
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+            id: 'allowed-provider',
+            index: 0,
+          }),
+        ],
+      });
     });
 
     it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
       const { doEval } = await import('../../../../src/node/doEval');
       let observedConfigProviders: unknown;
       let observedExecutableProviders: unknown;
-      let observedPermissionProviders: unknown;
+      let observedProviderSelection: unknown;
 
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
@@ -352,13 +418,21 @@ describe('runEvaluation tool', () => {
           const config = {
             providers: ['file://providers-with-secrets.yaml'],
           };
+          const selectedProviderConfigs = [
+            {
+              id: 'cloud:resolved-provider',
+              label: 'resolved-target',
+              config: { apiKey: 'sentinel-secret' },
+            },
+            { id: 'blocked-provider' },
+          ];
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any, {
+            selectedProviderConfigs,
+          });
           observedConfigProviders = config.providers;
           observedExecutableProviders = testSuite.providers;
-          observedPermissionProviders = customization?.getCloudPermissionConfig?.(
-            config as any,
-          )?.providers;
+          observedProviderSelection = customization?.evaluateOptionOverrides?.providerSelection;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any, {});
           return createMockEvalResult() as any;
         },
@@ -385,7 +459,17 @@ describe('runEvaluation tool', () => {
       expect(observedExecutableProviders).toEqual([
         expect.objectContaining({ label: 'resolved-target' }),
       ]);
-      expect(observedPermissionProviders).toEqual(['file://providers-with-secrets.yaml']);
+      expect(observedProviderSelection).toEqual({
+        providers: [
+          expect.objectContaining({
+            id: 'cloud:resolved-provider',
+            index: 0,
+            label: 'resolved-target',
+            fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
+        ],
+      });
+      expect(JSON.stringify(observedProviderSelection)).not.toContain('sentinel-secret');
     });
 
     it('should return the same suite metadata shape for unfiltered evals', async () => {
@@ -561,7 +645,10 @@ describe('runEvaluation tool', () => {
         expect.any(String),
         expect.any(Object),
         expect.objectContaining({
-          evaluateOptionOverrides: { testCaseIndices: [1, 3] },
+          evaluateOptionOverrides: expect.objectContaining({
+            testCaseIndices: [1, 3],
+            testCaseSelection: expect.objectContaining({ tests: expect.any(Array) }),
+          }),
         }),
       );
     });
@@ -1058,12 +1145,43 @@ describe('runEvaluation tool', () => {
       expect(result.content[0].text).toContain('No providers matched filter');
     });
 
-    it('should return an error when config resolution fails instead of terminating the host', async () => {
+    it('should redact unexpected default-config load errors', async () => {
+      const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+      vi.mocked(loadDefaultConfig).mockRejectedValueOnce(
+        new Error('Invalid YAML near apiKey: SENTINEL_DEFAULT_SECRET_9208'),
+      );
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({ configPath: 'test.yaml' });
+
+      expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toBe('Evaluation failed. Check the Promptfoo server logs for details.');
+      expect(result.content[0].text).not.toContain('SENTINEL_DEFAULT_SECRET_9208');
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to load default config for MCP evaluation',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('should redact unexpected config resolution errors instead of terminating the host', async () => {
       const { ConfigResolutionError } = await import('../../../../src/util/config/load');
       const { doEval } = await import('../../../../src/node/doEval');
 
       vi.mocked(doEval).mockRejectedValueOnce(
-        new ConfigResolutionError('You must provide at least 1 prompt'),
+        new ConfigResolutionError(
+          'Invalid YAML near apiKey: SENTINEL_SECRET_9208. You must provide at least 1 prompt',
+        ),
       );
 
       const { registerRunEvaluationTool } = await import(
@@ -1084,10 +1202,12 @@ describe('runEvaluation tool', () => {
 
       expect(result.isError).toBe(true);
       const payload = JSON.parse(result.content[0].text);
-      expect(payload.error).toBe('You must provide at least 1 prompt');
+      expect(payload.error).toBe('Evaluation failed. Check the Promptfoo server logs for details.');
+      expect(result.content[0].text).not.toContain('SENTINEL_SECRET_9208');
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
-        'Evaluation execution failed: You must provide at least 1 prompt',
+        'Evaluation execution failed',
+        expect.objectContaining({ error: expect.any(ConfigResolutionError) }),
       );
     });
   });

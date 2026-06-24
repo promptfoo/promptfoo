@@ -1,10 +1,11 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import { createTestCaseSelection, getTestCasesForSelection } from '../../../evaluator';
 import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
-import { getProviderIdAndLabel } from '../../../util/eval/filterProviders';
+import { createProviderSelection } from '../../../util/eval/providerSelection';
 import { parseFilterRange } from '../../../util/filterRange';
 import { escapeRegExp } from '../../../util/text';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
@@ -12,7 +13,7 @@ import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../../types/index';
+import type { CommandLineOptions, TestSuite } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
 interface EvaluationFilterSummary {
@@ -38,6 +39,9 @@ class McpEvaluationFilterError extends Error {
     this.name = 'McpEvaluationFilterError';
   }
 }
+
+const UNEXPECTED_EVALUATION_ERROR =
+  'Evaluation failed. Check the Promptfoo server logs for details.';
 
 function getProviderId(provider: TestSuite['providers'][number]): string {
   return typeof provider.id === 'function' ? provider.id() : provider.id;
@@ -74,26 +78,6 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   }
 
   testSuite.providers = filteredProviders;
-}
-
-function getProviderPermissionConfig(
-  config: Partial<UnifiedConfig>,
-  providerFilter?: string | string[],
-): Partial<UnifiedConfig> {
-  if (!hasStringFilters(providerFilter) || !Array.isArray(config.providers)) {
-    return config;
-  }
-
-  const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-  const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
-  const filteredProviders = config.providers.filter((provider, index) => {
-    const { id, label } = getProviderIdAndLabel(provider, index);
-    return filterPattern.test(label || '') || filterPattern.test(id);
-  });
-
-  // If a match exists only after resolving an external provider file, keep the
-  // original permission scope instead of expanding file content into the payload.
-  return filteredProviders.length > 0 ? { ...config, providers: filteredProviders } : config;
 }
 
 function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[]): void {
@@ -280,11 +264,16 @@ function applyMcpEvaluationFilters(
 }
 
 function setSelectedTestCaseIndices(
-  evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined,
+  evaluateOptionOverrides: Partial<InternalEvaluateOptions>,
+  testSuite: TestSuite,
   selectedTestCaseIndices: number[] | undefined,
 ): void {
-  if (evaluateOptionOverrides && selectedTestCaseIndices) {
+  if (selectedTestCaseIndices) {
     evaluateOptionOverrides.testCaseIndices = selectedTestCaseIndices;
+    evaluateOptionOverrides.testCaseSelection = createTestCaseSelection(
+      getTestCasesForSelection(testSuite),
+      selectedTestCaseIndices,
+    );
   }
 }
 
@@ -407,6 +396,9 @@ export function registerRunEvaluationTool(server: McpServer) {
             - Single zero-based index: 0
             - Multiple indices: [0, 2, 5]  
             - Range with inclusive start and exclusive end: {"start": 0, "end": 3}
+            Indices address logical tests after scenario expansion: explicit tests first; then,
+            for each scenario, config rows in declaration order with test templates iterated
+            within each row. Variable combinations, prompts, providers, and repeats do not add indices.
             If not specified, runs all test cases.
           `,
         ),
@@ -449,7 +441,11 @@ export function registerRunEvaluationTool(server: McpServer) {
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
       cache: z.boolean().optional().prefault(true).describe('Enable caching of results'),
       write: z.boolean().optional().prefault(false).describe('Write results to database'),
-      share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
+      share: z
+        .boolean()
+        .optional()
+        .prefault(false)
+        .describe('Attempt to create a shareable URL and report the sharing outcome'),
       resultLimit: z
         .number()
         .min(1)
@@ -488,11 +484,12 @@ export function registerRunEvaluationTool(server: McpServer) {
           defaultConfig = result.defaultConfig;
           defaultConfigPath = result.defaultConfigPath;
         } catch (error) {
+          logger.error('Failed to load default config for MCP evaluation', { error });
           return createToolResponse(
             'run_evaluation',
             false,
             undefined,
-            `Failed to load default config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            UNEXPECTED_EVALUATION_ERROR,
           );
         }
 
@@ -529,26 +526,39 @@ export function registerRunEvaluationTool(server: McpServer) {
           eventSource: 'mcp',
           showProgressBar: false,
         };
-        const evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined =
-          args.timeoutMs === undefined && testCaseIndices === undefined
-            ? undefined
-            : {
-                ...(args.timeoutMs === undefined ? {} : { timeoutMs }),
-              };
+        const evaluateOptionOverrides: Partial<InternalEvaluateOptions> = {
+          ...(args.timeoutMs === undefined ? {} : { timeoutMs }),
+        };
 
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
         const startTime = Date.now();
         const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
-          beforeFilterTestSuite: (testSuite) => {
+          beforeFilterTestSuite: (testSuite, _config, { selectedProviderConfigs } = {}) => {
+            const unfilteredProviders = [...testSuite.providers];
             const filteredSuite = applyMcpEvaluationFilters(testSuite, {
               testCaseIndices,
               promptFilter,
               providerFilter,
             });
+            if (hasStringFilters(providerFilter)) {
+              try {
+                evaluateOptionOverrides.providerSelection = createProviderSelection(
+                  unfilteredProviders,
+                  Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
+                  testSuite.providers,
+                );
+              } catch (error) {
+                throw new McpEvaluationFilterError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to preserve selected provider identities',
+                );
+              }
+            }
             suiteSummary = filteredSuite.suiteSummary;
             selectedTestCaseIndices = filteredSuite.selectedTestCaseIndices;
-            setSelectedTestCaseIndices(evaluateOptionOverrides, selectedTestCaseIndices);
+            setSelectedTestCaseIndices(evaluateOptionOverrides, testSuite, selectedTestCaseIndices);
             if (hasFilters) {
               logger.debug(
                 `Running filtered eval with ${suiteSummary.testCases.filtered} test cases, ${suiteSummary.prompts.filtered} prompts, ${suiteSummary.providers.filtered} providers`,
@@ -570,9 +580,9 @@ export function registerRunEvaluationTool(server: McpServer) {
               selectedTestCaseIndices?.length,
             );
           },
-          getCloudPermissionConfig: (config) => getProviderPermissionConfig(config, providerFilter),
           evaluateOptionOverrides,
           allowConfigFilterRange: testCaseIndices === undefined,
+          allowConfigFilterSample: testCaseIndices === undefined,
           disablePromptSuggestions: hasFilters,
           skipRedteamEmailPreflight: hasFilters,
         });
@@ -630,6 +640,15 @@ export function registerRunEvaluationTool(server: McpServer) {
             pagination,
             results: formattedResults,
           },
+          sharing: {
+            requested: share,
+            status: share ? (evalResult.shareableUrl ? 'shared' : 'not_shared') : 'not_requested',
+            shared: evalResult.shared,
+            ...(evalResult.shareableUrl ? { shareableUrl: evalResult.shareableUrl } : {}),
+            ...(share && !evalResult.shareableUrl
+              ? { warning: 'The evaluation completed, but a shareable URL was not created.' }
+              : {}),
+          },
           prompts: formatPromptsSummary(summary),
         };
 
@@ -640,41 +659,8 @@ export function registerRunEvaluationTool(server: McpServer) {
           return createToolResponse('run_evaluation', false, undefined, errorMessage);
         }
 
-        logger.error(`Evaluation execution failed: ${errorMessage}`);
-
-        const errorData = {
-          configuration: {
-            configPath: args.configPath || 'promptfooconfig.yaml',
-            testCaseIndices: args.testCaseIndices,
-            promptFilter: args.promptFilter,
-            providerFilter: args.providerFilter,
-          },
-          error: errorMessage,
-          troubleshooting: {
-            commonIssues: [
-              'Configuration file not found or invalid format',
-              'Test case indices out of range',
-              'Provider or prompt filters not matching any items',
-              'Provider authentication or configuration errors',
-              'Assertion configuration errors',
-              'Timeout issues with slow providers',
-            ],
-            configurationTips: [
-              'Ensure promptfooconfig.yaml exists and is valid',
-              'Check that provider credentials are properly configured',
-              'Verify test case indices are within bounds',
-              'Use exact provider IDs and prompt labels for filtering',
-            ],
-            exampleUsage: {
-              singleTestCase: '{"testCaseIndices": 0}',
-              multipleTestCases: '{"testCaseIndices": [0, 2, 5]}',
-              testCaseRange: '{"testCaseIndices": {"start": 0, "end": 3}}',
-              withFilters: '{"promptFilter": "my-prompt", "providerFilter": "openai:gpt-4"}',
-            },
-          },
-        };
-
-        return createToolResponse('run_evaluation', false, errorData, errorMessage);
+        logger.error('Evaluation execution failed', { error });
+        return createToolResponse('run_evaluation', false, undefined, UNEXPECTED_EVALUATION_ERROR);
       }
     },
   );
