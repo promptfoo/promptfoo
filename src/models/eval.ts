@@ -242,6 +242,11 @@ function jsonObjectOrEmpty(value: SQLWrapper): SQL {
   return sql`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN ${value} ELSE json('{}') END ELSE json('{}') END`;
 }
 
+function jsonObjectFieldOrEmpty(value: SQLWrapper, path: string): SQL {
+  const object = jsonObjectOrEmpty(value);
+  return sql`CASE WHEN json_type(${object}, ${path}) = 'object' THEN json_extract(${object}, ${path}) ELSE json('{}') END`;
+}
+
 function jsonIsObject(value: SQLWrapper): SQL<number> {
   return sql<number>`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN 1 ELSE 0 END ELSE 0 END`;
 }
@@ -940,12 +945,13 @@ export class EvalQueries {
     }
 
     const evalIds = evals.map((e) => e.id);
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key, eval_id
       FROM (
-        SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT eval_id, ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
       ) t, json_each(t.vars) j
@@ -967,12 +973,13 @@ export class EvalQueries {
 
   static async getVarsFromEval(evalId: string) {
     const db = await getDb();
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key
       FROM (
-        SELECT json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_results.eval_id = ${evalId}
       ) t, json_each(t.vars) j

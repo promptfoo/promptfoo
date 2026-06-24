@@ -22,7 +22,7 @@ import {
   ResultFailureReason,
   type TraceData,
 } from '../../src/types/index';
-import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { readResult, updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -3130,8 +3130,14 @@ describe('evaluator', () => {
         })}
         WHERE ${evalResultsTable.evalId} = ${eval1.id}
       `);
+      await db.update(evalsTable).set({ vars: [] }).where(eq(evalsTable.id, eval1.id)).run();
 
-      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const stored = await readResult(eval1.id, {
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+      expect(stored).toBeDefined();
+      const projected = stored!.result;
 
       expect(projected.results.results[0].vars).toEqual({});
       expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
@@ -3725,6 +3731,23 @@ describe('evaluator', () => {
 
       expect(vars[evalWithVars.id]).toEqual(['foo']);
       expect(vars).not.toHaveProperty(evalWithoutVars.id);
+    });
+
+    it('ignores non-object test-case vars without failing other evals', async () => {
+      const evalWithVars = await EvalFactory.create({ numResults: 1 });
+      const evalWithScalarVars = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
+      );
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":"malformed-vars-shape"}') WHERE eval_id = '${evalWithScalarVars.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([evalWithVars, evalWithScalarVars]);
+
+      expect(vars[evalWithVars.id]).toEqual(['foo']);
+      expect(vars).not.toHaveProperty(evalWithScalarVars.id);
     });
   });
 
