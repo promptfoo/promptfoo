@@ -627,6 +627,21 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+function ensureContainedDirectory(root: string, directory: string, label: string): string {
+  assertContainedPath(root, directory, label);
+  const relativeSegments = path.relative(root, directory).split(path.sep).filter(Boolean);
+  let current = root;
+  for (const segment of relativeSegments) {
+    current = path.join(current, segment);
+    if (!pathExists(current)) {
+      fs.mkdirSync(current);
+    }
+    current = fs.realpathSync(current);
+    assertContainedPath(root, current, label);
+  }
+  return current;
+}
+
 function resolveArtifactExportDir(
   config: OpenAICodexPluginConfig,
   namespace: string,
@@ -638,15 +653,11 @@ function resolveArtifactExportDir(
   fs.mkdirSync(configuredArtifactsDir, { recursive: true });
   const resolvedArtifactsDir = fs.realpathSync(configuredArtifactsDir);
   const artifactExportDir = path.join(resolvedArtifactsDir, namespace);
-  assertContainedPath(resolvedArtifactsDir, artifactExportDir, 'Codex plugin artifact export path');
-  fs.mkdirSync(artifactExportDir, { recursive: true });
-  const resolvedArtifactExportDir = fs.realpathSync(artifactExportDir);
-  assertContainedPath(
+  return ensureContainedDirectory(
     resolvedArtifactsDir,
-    resolvedArtifactExportDir,
+    artifactExportDir,
     'Codex plugin artifact export path',
   );
-  return resolvedArtifactExportDir;
 }
 
 async function makeRuntimeRemovable(root: string): Promise<void> {
@@ -746,8 +757,11 @@ function exportArtifacts(
       exportedPath,
       'Codex plugin artifact export path',
     );
-    fs.mkdirSync(path.dirname(exportedPath), { recursive: true });
-    const resolvedParent = fs.realpathSync(path.dirname(exportedPath));
+    const resolvedParent = ensureContainedDirectory(
+      runtime.exportedArtifactDir!,
+      path.dirname(exportedPath),
+      'Codex plugin artifact export path',
+    );
     assertContainedPath(
       runtime.exportedArtifactDir!,
       resolvedParent,
