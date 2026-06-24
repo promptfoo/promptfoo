@@ -7,7 +7,6 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
   type FrameworkComplianceId,
-  riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
@@ -15,7 +14,7 @@ import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
-  getFrameworkPluginId,
+  getPluginSeverity,
   type PluginCategories,
   type TestResultStats,
 } from './FrameworkComplianceUtils';
@@ -43,10 +42,7 @@ function getFrameworkSeverity(nonCompliantPlugins: string[]): Severity {
 
   let highestSeverity: Severity = Severity.Low;
   for (const plugin of nonCompliantPlugins) {
-    const pluginSeverity =
-      riskCategorySeverityMap[
-        getFrameworkPluginId(plugin) as keyof typeof riskCategorySeverityMap
-      ] || Severity.Low;
+    const pluginSeverity = getPluginSeverity(plugin);
 
     if (pluginSeverity === Severity.Critical) {
       return Severity.Critical;

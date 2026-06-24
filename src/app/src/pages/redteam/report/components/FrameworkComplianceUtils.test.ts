@@ -4,6 +4,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
+  getPluginSeverity,
 } from './FrameworkComplianceUtils';
 
 import type { CategoryStats } from './FrameworkComplianceUtils';
@@ -296,5 +297,12 @@ describe('getPluginDisplayName', () => {
     expect(result).toBe(pluginKey);
 
     delete displayNameOverrides[pluginKey as keyof typeof displayNameOverrides];
+  });
+});
+
+describe('getPluginSeverity', () => {
+  it('should normalize fully qualified plugin IDs before looking up severity', () => {
+    expect(getPluginSeverity('promptfoo:redteam:intent')).toBe('high');
+    expect(getPluginSeverity('promptfoo:redteam:harmful:hate')).toBe('critical');
   });
 });

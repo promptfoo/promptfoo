@@ -10,7 +10,6 @@ import {
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
-  riskCategorySeverityMap,
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -22,7 +21,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
-  getFrameworkPluginId,
+  getPluginSeverity,
   type PluginCategories,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
@@ -68,13 +67,6 @@ const categoryNamesByFramework: Partial<Record<string, string[]>> = {
   'owasp:llm': OWASP_LLM_TOP_10_NAMES,
   'owasp:api': OWASP_API_TOP_10_NAMES,
   'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
-};
-
-const getPluginSeverity = (plugin: string): Severity => {
-  return (
-    riskCategorySeverityMap[getFrameworkPluginId(plugin) as keyof typeof riskCategorySeverityMap] ||
-    Severity.Low
-  );
 };
 
 const sortPluginsBySeverity = (plugins: string[]): string[] => {

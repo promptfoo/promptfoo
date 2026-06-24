@@ -1,5 +1,4 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { Severity } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
@@ -280,7 +279,7 @@ describe('FrameworkCompliance', () => {
         framework: 'owasp:agentic',
         isTested: true,
         isCompliant: false,
-        frameworkSeverity: Severity.High,
+        frameworkSeverity: 'high',
         pluginCategories: expect.objectContaining({
           nonCompliant: ['promptfoo:redteam:intent'],
         }),

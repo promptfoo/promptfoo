@@ -1,4 +1,9 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  Severity,
+} from '@promptfoo/redteam/constants';
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -22,6 +27,10 @@ export type PluginCategories = {
 
 export const getFrameworkPluginId = (pluginId: string): string =>
   pluginId.replace(/^promptfoo:redteam:/, '');
+
+export const getPluginSeverity = (pluginId: string): Severity =>
+  riskCategorySeverityMap[getFrameworkPluginId(pluginId) as keyof typeof riskCategorySeverityMap] ||
+  Severity.Low;
 
 /**
  * Expands plugin collections like 'harmful' into their individual plugins
