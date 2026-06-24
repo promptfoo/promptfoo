@@ -15,6 +15,44 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+function logStderr(stderr: string): void {
+  for (const line of stderr.split(/\r?\n/)) {
+    const message = line.trim();
+    if (!message) {
+      continue;
+    }
+
+    const levelMatch = /^(DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\b[: ]?/i.exec(message);
+    if (levelMatch) {
+      switch (levelMatch[1].toUpperCase()) {
+        case 'DEBUG':
+          logger.debug(line);
+          continue;
+        case 'INFO':
+          logger.info(line);
+          continue;
+        case 'WARN':
+        case 'WARNING':
+          logger.warn(line);
+          continue;
+        default:
+          logger.error(line);
+          continue;
+      }
+    }
+
+    if (
+      /\b(error|exception|fatal|failed|failure)\b/i.test(message) ||
+      /(?:Error|Exception)\b/.test(message) ||
+      /^from\s.+:\d+/.test(message)
+    ) {
+      logger.error(line);
+    } else {
+      logger.warn(line);
+    }
+  }
+}
+
 /**
  * Global state for Ruby executable path caching.
  * Ensures consistent Ruby executable usage across multiple provider instances.
@@ -316,7 +354,7 @@ export async function runRuby<T = unknown>(
     }
 
     if (stderr) {
-      logger.error(stderr.trim());
+      logStderr(stderr);
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');

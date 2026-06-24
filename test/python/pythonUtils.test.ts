@@ -62,6 +62,7 @@ vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
   },
 }));
@@ -97,6 +98,9 @@ describe('Python Utils', () => {
     mockExecFileAsync.mockReset();
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
+    mockPythonShellInstance.stdout.on.mockReset();
+    mockPythonShellInstance.stderr.on.mockReset();
+    mockPythonShellInstance.end.mockReset();
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
@@ -609,6 +613,27 @@ describe('Python Utils', () => {
       const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
       expect(debugMessages).not.toContain('secret-input');
       expect(debugMessages).not.toContain('secret-result');
+    });
+
+    it('classifies routine stderr without reporting Python logging as errors', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.stderr.on.mockImplementation((event: string, callback: any) => {
+        if (event === 'data') {
+          callback(Buffer.from('INFO:root:loaded config\nWARNING:root:slow response\n'));
+        }
+      });
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython('/path/to/script.py', 'test_method', []);
+
+      expect(logger.info).toHaveBeenCalledWith('INFO:root:loaded config');
+      expect(logger.warn).toHaveBeenCalledWith('WARNING:root:slow response');
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('should throw an error if Python script does not return final_result', async () => {

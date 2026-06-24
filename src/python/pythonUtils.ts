@@ -13,6 +13,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../util/secureTempFiles';
+import { PythonStderrLogger } from './stderr';
 
 const execFileAsync = promisify(execFile);
 
@@ -334,16 +335,18 @@ export async function runPython<T = unknown>(
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
+        const stderrLogger = new PythonStderrLogger();
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
         });
 
         pyshell.stderr?.on('data', (chunk: Buffer) => {
-          logger.error(chunk.toString('utf-8').trim());
+          stderrLogger.handleData(chunk);
         });
 
         pyshell.end((err) => {
+          stderrLogger.flush();
           if (err) {
             reject(err);
           } else {
@@ -374,18 +377,12 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
-    logger.error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
-    throw new Error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
+    const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+      (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+      'No Python traceback available'
+    }`;
+    logger.error(message);
+    throw new Error(message);
   } finally {
     if (tempDirectory) {
       try {
