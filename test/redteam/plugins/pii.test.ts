@@ -198,6 +198,30 @@ describe('getPiiLeakTestsForCategory', () => {
     });
   });
 
+  it('should preserve shared multi-row generation usage exactly once', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: First prompt\nPrompt: Second prompt',
+      tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
+    });
+
+    const result = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        n: 2,
+      },
+      'pii:direct',
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 15,
+      prompt: 9,
+      completion: 6,
+      numRequests: 1,
+    });
+    expect(result[1]?.metadata?.providerTokenUsage).toBeUndefined();
+  });
+
   it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
     mockProvider.callApi.mockImplementation(async (prompt: string) => {
       if (prompt.includes('You are preparing a realistic DOCX document')) {

@@ -19,6 +19,8 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -42,6 +44,8 @@ describe('monkeyPatchFetch', () => {
   beforeEach(() => {
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(CLOUD_API_HOST);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -104,13 +108,15 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
-  it('should add Authorization header for configured on-prem cloud API requests', async () => {
+  it('should add authorization and current team for configured on-prem cloud task requests', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
     const apiKey = 'test-api-key-123';
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/api');
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
 
     const url = 'https://onprem.example.com/api/v1/task';
     await monkeyPatchFetch(url);
@@ -118,8 +124,39 @@ describe('monkeyPatchFetch', () => {
     expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
+        'x-promptfoo-team-id': 'team-current',
       },
     });
+  });
+
+  it.each([
+    '/api/v1/task',
+    '/api/v1/task/harmful',
+  ])('should add the current CLI team to Cloud task requests at %s', async (pathname) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
+
+    const url = CLOUD_API_HOST + pathname;
+    await monkeyPatchFetch(url);
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('x-promptfoo-team-id')).toBe('team-current');
+    expect(cloudConfig.getCurrentTeamId).toHaveBeenCalledWith('org-1');
+  });
+
+  it('should not add the current CLI team to non-task Cloud requests', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
+
+    const url = CLOUD_API_HOST + '/api/v1/users/me';
+    await monkeyPatchFetch(url);
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).has('x-promptfoo-team-id')).toBe(false);
   });
 
   it.each([
@@ -129,10 +166,27 @@ describe('monkeyPatchFetch', () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
 
     await monkeyPatchFetch(url);
 
     expect(mockOriginalFetch).toHaveBeenCalledWith(url, {});
+  });
+
+  it('should not override a caller-supplied team header', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-current');
+
+    const url = CLOUD_API_HOST + '/api/v1/task';
+    await monkeyPatchFetch(url, {
+      headers: { 'x-promptfoo-team-id': 'team-explicit' },
+    });
+
+    const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('x-promptfoo-team-id')).toBe('team-explicit');
   });
 
   it('should attach the token for a port-bearing on-prem cloud host', async () => {

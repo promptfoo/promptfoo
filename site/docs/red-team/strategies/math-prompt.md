@@ -28,6 +28,13 @@ The math prompt strategy works by:
 
 This approach exploits the gap between natural language safety filters and mathematical notation processing.
 
+### Token accounting and fallback
+
+Remote and local encoding calls are reported as non-grading token usage, separately from target
+probes and assertion grading. If remote batch generation fails and Promptfoo falls back to local
+encoding, usage reported by completed and failed remote batches is retained once alongside the
+local fallback usage.
+
 ## Example Scenarios
 
 Original:

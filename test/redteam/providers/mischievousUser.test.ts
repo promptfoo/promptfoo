@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamMischievousUserProvider from '../../../src/redteam/providers/mischievousUser';
 import { createMockProvider } from '../../factories/provider';
 
@@ -17,7 +17,7 @@ vi.mock('../../../src/providers/promptfoo', async (importOriginal) => {
 
 describe('RedteamMischievousUserProvider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockPromptfooSimulatedUserProvider.mockReset().mockImplementation(function () {
       return {
         callApi: mockUserProviderCallApi,
@@ -26,10 +26,14 @@ describe('RedteamMischievousUserProvider', () => {
       };
     });
     mockUserProviderId.mockReset().mockReturnValue('mock-user-provider');
-    mockUserProviderCallApi.mockResolvedValue({
+    mockUserProviderCallApi.mockReset().mockResolvedValue({
       output: 'user response',
       tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('preserves simulated-user spend while counting only target probes', async () => {

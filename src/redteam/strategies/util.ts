@@ -1,4 +1,4 @@
-import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
+import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../../types/index';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
@@ -57,60 +57,64 @@ export function pluginMatchesStrategyTargets(
 /**
  * Merge generation-time provider usage across layered strategies without mutating prior metadata.
  */
+function cloneTokenUsage(tokenUsage: TokenUsage): TokenUsage {
+  return {
+    ...tokenUsage,
+    ...(tokenUsage.completionDetails && {
+      completionDetails: { ...tokenUsage.completionDetails },
+    }),
+    ...(tokenUsage.assertions && {
+      assertions: {
+        ...tokenUsage.assertions,
+        ...(tokenUsage.assertions.completionDetails && {
+          completionDetails: { ...tokenUsage.assertions.completionDetails },
+        }),
+      },
+    }),
+  };
+}
+
 export function mergeProviderTokenUsage(
   existing: TokenUsage | undefined,
   update: TokenUsage | undefined,
 ): TokenUsage | undefined {
   if (!existing) {
-    return update
-      ? {
-          ...update,
-          ...(update.completionDetails && {
-            completionDetails: { ...update.completionDetails },
-          }),
-          ...(update.assertions && {
-            assertions: {
-              ...update.assertions,
-              ...(update.assertions.completionDetails && {
-                completionDetails: { ...update.assertions.completionDetails },
-              }),
-            },
-          }),
-        }
-      : undefined;
+    return update ? cloneTokenUsage(update) : undefined;
   }
   if (!update) {
-    return {
-      ...existing,
-      ...(existing.completionDetails && {
-        completionDetails: { ...existing.completionDetails },
-      }),
-      ...(existing.assertions && {
-        assertions: {
-          ...existing.assertions,
-          ...(existing.assertions.completionDetails && {
-            completionDetails: { ...existing.assertions.completionDetails },
-          }),
-        },
-      }),
-    };
+    return cloneTokenUsage(existing);
   }
 
-  const merged: TokenUsage = {
-    ...existing,
-    ...(existing.completionDetails && {
-      completionDetails: { ...existing.completionDetails },
-    }),
-    ...(existing.assertions && {
-      assertions: {
-        ...existing.assertions,
-        ...(existing.assertions.completionDetails && {
-          completionDetails: { ...existing.assertions.completionDetails },
-        }),
-      },
-    }),
-  };
+  const merged = cloneTokenUsage(existing);
 
   accumulateTokenUsage(merged, update);
   return merged;
+}
+
+/**
+ * Attach request-level generation usage to exactly one emitted row.
+ */
+export function attachProviderTokenUsage<T extends TestCase>(
+  testCases: T[],
+  tokenUsage: TokenUsage | undefined,
+  targetIndex = 0,
+): T[] {
+  if (!tokenUsage || testCases.length === 0) {
+    return testCases;
+  }
+
+  return testCases.map((testCase, index) =>
+    index === targetIndex
+      ? ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            providerTokenUsage: mergeProviderTokenUsage(
+              testCase.metadata?.providerTokenUsage,
+              tokenUsage,
+            ),
+          },
+        } as T)
+      : testCase,
+  );
 }

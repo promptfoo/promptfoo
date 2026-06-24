@@ -55,7 +55,9 @@ describe('mathPrompt', () => {
       };
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
-      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {});
+      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {
+        targetId: 'cloud-target-123',
+      });
 
       expect(result).toEqual([
         {
@@ -69,6 +71,11 @@ describe('mathPrompt', () => {
       expect(mockProgressBar.start).toHaveBeenCalledWith(1, 0);
       expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
       expect(mockProgressBar.stop).toHaveBeenCalledWith();
+      const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+      expect(requestBody).toBeTypeOf('string');
+      expect(JSON.parse(requestBody as string)).toMatchObject({
+        targetId: 'cloud-target-123',
+      });
     });
 
     it('should handle errors gracefully', async () => {
@@ -301,6 +308,61 @@ describe('mathPrompt', () => {
         numRequests: 2,
       });
       expect(result[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('should preserve completed batch usage when a later remote batch fails', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce({
+          data: {
+            result: [{ vars: { prompt: 'remote encoded' } }],
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+        } as any)
+        .mockResolvedValueOnce({
+          data: {
+            error: 'second batch failed',
+            tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
+          },
+        } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'local encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt(
+        Array.from({ length: 9 }, (_value, index) => ({
+          vars: { prompt: `test ${index}` },
+        })) as any,
+        'prompt',
+        { mathConcepts: ['topology'] },
+      );
+
+      expect(result).toHaveLength(9);
+      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 28,
+        prompt: 15,
+        completion: 13,
+        numRequests: 3,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toMatchObject({
         total: 10,
         prompt: 5,
         completion: 5,

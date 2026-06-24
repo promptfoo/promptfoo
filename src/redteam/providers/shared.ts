@@ -24,13 +24,17 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
-import { BaseTokenUsageSchema } from '../../types/shared';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -42,15 +46,6 @@ export class RedteamProviderError extends Error {
     super(message);
     this.name = 'RedteamProviderError';
   }
-}
-
-function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
-    return undefined;
-  }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -662,11 +657,13 @@ export async function tryUnblocking({
   lastResponse,
   goal,
   purpose,
+  targetId,
 }: {
   messages: Message[];
   lastResponse: string;
   goal: string | undefined;
   purpose?: string;
+  targetId?: string;
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
@@ -705,6 +702,7 @@ export async function tryUnblocking({
       task: 'blocking-question-analysis',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(targetId),
     });
 
     const unblockingRequest = {

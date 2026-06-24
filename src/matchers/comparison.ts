@@ -50,8 +50,9 @@ export async function matchesSelectBest(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp)),
+    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
+    return Array.from({ length: outputs.length }, (_, index) =>
+      fail(resp.error || 'No output', index === 0 ? tokensUsed : undefined),
     );
   }
 
@@ -61,8 +62,9 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(`Invalid select-best verdict: ${verdict}`, normalizeMatcherResponseTokenUsage(resp)),
+    const tokensUsed = normalizeMatcherResponseTokenUsage(resp);
+    return Array.from({ length: outputs.length }, (_, index) =>
+      fail(`Invalid select-best verdict: ${verdict}`, index === 0 ? tokensUsed : undefined),
     );
   }
 
@@ -73,14 +75,14 @@ export async function matchesSelectBest(
         pass: true,
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
-        tokensUsed,
+        ...(index === 0 ? { tokensUsed } : {}),
       };
     } else {
       return {
         pass: false,
         score: 0,
         reason: `Output not selected: ${criteria}`,
-        tokensUsed,
+        ...(index === 0 ? { tokensUsed } : {}),
       };
     }
   });

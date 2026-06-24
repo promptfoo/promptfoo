@@ -79,7 +79,10 @@ describe('Entities Extractor', () => {
       cached: false,
     });
 
-    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
+    const result = await extractEntities(provider, ['prompt1', 'prompt2'], {
+      providerTargetIds: ['file://local-provider.ts'],
+      cloudTargetId: 'cloud-target-123',
+    });
 
     expect(result).toEqual(['Apple', 'Google']);
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -91,6 +94,7 @@ describe('Entities Extractor', () => {
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
           email: null,
+          targetId: 'cloud-target-123',
         }),
       }),
       expect.any(Number),
@@ -194,19 +198,6 @@ describe('Entities Extractor', () => {
       result: [],
       tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
     });
-  });
-
-  it('should honor an explicit local-extraction override', async () => {
-    mockProcessEnv({
-      OPENAI_API_KEY: undefined,
-      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false',
-    });
-
-    const result = await extractEntities(provider, ['prompt'], { forceLocal: true });
-
-    expect(result).toEqual(['Apple', 'Google']);
-    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
-    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
   it('should log debug message when no entities are found', async () => {

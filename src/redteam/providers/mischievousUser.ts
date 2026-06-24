@@ -12,6 +12,7 @@ type Config = {
   injectVar: string;
   maxTurns?: number;
   stateful?: boolean;
+  targetId?: string;
 };
 
 export default class RedteamMischievousUserProvider extends SimulatedUser {
@@ -37,6 +38,7 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
         instructions: `{{${config.injectVar}}}`,
         maxTurns,
         stateful: config.stateful ?? false,
+        targetId: config.targetId,
       },
     });
   }

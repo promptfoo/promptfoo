@@ -20,6 +20,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -107,6 +108,7 @@ interface HydraResponse extends ProviderResponse {
 interface HydraConfig {
   injectVar: string;
   scanId?: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
@@ -188,6 +190,7 @@ export class HydraProvider implements ApiProvider {
       task: 'hydra-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(this.config.targetId),
       // Pass inputs schema for multi-input mode
       inputs: this.config.inputs,
     });
@@ -554,6 +557,7 @@ export class HydraProvider implements ApiProvider {
           this.perTurnLayers,
           Strategies,
           {
+            targetId: this.config.targetId,
             evaluationId: context?.evaluationId,
             testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
             originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,

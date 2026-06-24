@@ -1,6 +1,5 @@
 import logger from '../logger';
 import {
-  BaseTokenUsageSchema,
   buildInputPromptDescription,
   DocumentMediaInjectionPlacementSchema,
   type DocxInjectionPlacement,
@@ -16,6 +15,7 @@ import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
 } from '../util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../types/index';
@@ -50,15 +50,6 @@ export type MaterializedInputVariablesResult = {
   tokenUsage?: TokenUsage;
   vars: Record<string, string>;
 };
-
-function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
-    return undefined;
-  }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
-}
 
 type DocxRenderPlan = {
   bodyText: string;

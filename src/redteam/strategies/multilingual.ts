@@ -16,6 +16,7 @@ import {
   getRemoteGenerationUrl,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -165,6 +166,7 @@ async function processRemoteChunk(
     testCases,
     injectVar,
     config,
+    ...remoteGenerationContextPayload(config.targetId),
     email: getUserEmail(),
   };
 
@@ -404,7 +406,7 @@ async function generateMultilingual(
  *
  * @param {string} text - The text to be translated, written in English.
  * @param {string[]} languages - An array of language codes (e.g., 'bn', 'sw') specifying the target languages.
- * @returns {Promise<Record<string, string>>} A promise that resolves to an object where keys are language codes and values are the translated text.
+ * @returns A promise containing translations keyed by language code and optional provider usage.
  * The function attempts several parsing strategies to extract translations from model responses.
  */
 async function translateBatchCore(

@@ -5,7 +5,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
-import { mergeProviderTokenUsage } from '../strategies/util';
+import { attachProviderTokenUsage } from '../strategies/util';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -127,8 +127,6 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
 
     const prompts = extractJsonObjects(output);
     const tests: TestCase[] = [];
-    const onePairGenerationTokenUsage =
-      n === 1 && prompts.length === 1 ? generationTokenUsage : undefined;
 
     for (const prompt of prompts) {
       const { userA, userB, match } = prompt as { userA: string; userB: string; match: string };
@@ -154,16 +152,18 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
           crossSessionLeakMatch: match,
           pluginId: getShortPluginId(this.id),
           pluginConfig: this.config,
-          ...(onePairGenerationTokenUsage
-            ? {
-                providerTokenUsage: mergeProviderTokenUsage(undefined, onePairGenerationTokenUsage),
-              }
-            : {}),
         },
       });
     }
 
-    return tests;
+    const usageTargetIndex = tests.findIndex(
+      (testCase) => testCase.metadata?.crossSessionLeakMatch,
+    );
+    return attachProviderTokenUsage(
+      tests,
+      generationTokenUsage,
+      usageTargetIndex >= 0 ? usageTargetIndex : 0,
+    );
   }
 }
 

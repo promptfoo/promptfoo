@@ -6,15 +6,18 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import invariant from '../../util/invariant';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
-import type { ApiProvider, TokenUsage } from '../../types/index';
+import type { ApiProvider, RemoteGenerationContext, TokenUsage } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
   result: z.union([z.string(), z.array(z.string())]),
-  tokenUsage: z.custom<TokenUsage>().optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export type RedTeamTask = 'purpose' | 'entities';
@@ -37,19 +40,12 @@ export function getExtractionErrorTokenUsage(error: unknown): TokenUsage | undef
   return error instanceof ExtractionError ? error.tokenUsage : undefined;
 }
 
-function getResponseTokenUsage(data: unknown): TokenUsage | undefined {
-  if (!data || typeof data !== 'object' || !('tokenUsage' in data)) {
-    return undefined;
-  }
-
-  return (data as { tokenUsage?: TokenUsage }).tokenUsage;
-}
-
 /**
  * Fetches remote generation results for a given task and prompts.
  *
  * @param task - The type of task to perform ('purpose' or 'entities').
  * @param prompts - An array of prompts to process.
+ * @param generationContext - Resolved target context for routing the remote task.
  * @returns A Promise that resolves to either a string or an array of strings, depending on the task.
  * @throws Will throw an error if the remote generation fails.
  *
@@ -62,13 +58,15 @@ function getResponseTokenUsage(data: unknown): TokenUsage | undefined {
 export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
+  generationContext?: RemoteGenerationContext,
 ): Promise<string | string[]> {
-  return (await fetchRemoteGenerationWithMetadata(task, prompts)).result;
+  return (await fetchRemoteGenerationWithMetadata(task, prompts, generationContext)).result;
 }
 
 export async function fetchRemoteGenerationWithMetadata(
   task: RedTeamTask,
   prompts: string[],
+  generationContext?: RemoteGenerationContext,
 ): Promise<ExtractionResult<string | string[]>> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -80,6 +78,7 @@ export async function fetchRemoteGenerationWithMetadata(
       prompts,
       version: VERSION,
       email: getUserEmail(),
+      ...remoteGenerationContextPayload(generationContext),
     };
 
     const response = await fetchWithCache(
@@ -96,13 +95,13 @@ export async function fetchRemoteGenerationWithMetadata(
     if (response.status !== 200) {
       throw new ExtractionError(
         `Remote extraction failed for task '${task}' with status ${response.status}`,
-        getResponseTokenUsage(response.data),
+        getErrorTokenUsage(response.data),
       );
     }
 
     const parsedResponse = RedTeamGenerationResponse.safeParse(response.data);
     if (!parsedResponse.success) {
-      const tokenUsage = getResponseTokenUsage(response.data);
+      const tokenUsage = getErrorTokenUsage(response.data);
       if (tokenUsage) {
         throw new ExtractionError(parsedResponse.error.message, tokenUsage);
       }

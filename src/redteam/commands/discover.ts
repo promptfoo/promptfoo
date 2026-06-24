@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import path from 'path';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -10,19 +11,26 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
-import { loadApiProvider, loadApiProviders } from '../../providers/index';
+import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getCloudTargetIdFromProviders } from '../remoteGenerationContextFromProviders';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
@@ -39,6 +47,7 @@ const TargetPurposeDiscoveryStateSchema = z.object({
 export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
+  targetId: z.string().optional(),
   version: z.string(),
   email: z.string().optional().nullable(),
 });
@@ -62,7 +71,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
-  tokenUsage: z.custom<TokenUsage>().optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -71,7 +80,7 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
   error: z.string().optional(),
-  tokenUsage: z.custom<TokenUsage>().optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const ArgsSchema = z
@@ -93,6 +102,8 @@ export type TargetPurposeDiscoveryResult = z.infer<typeof TargetPurposeDiscovery
 
 type Args = z.infer<typeof ArgsSchema>;
 
+type DiscoveryProviderConfig = NonNullable<UnifiedConfig['providers']>;
+
 // ========================================================
 // Constants
 // ========================================================
@@ -105,6 +116,27 @@ const COMMAND = 'discover';
 // ========================================================
 // Utils
 // ========================================================
+
+/**
+ * Expands provider file references and derives context from the first provider that discovery uses.
+ */
+export function resolveDiscoveryProviderContext(
+  providers: DiscoveryProviderConfig,
+  basePath?: string,
+): {
+  providers: DiscoveryProviderConfig;
+  cloudTargetId?: string;
+} {
+  const resolvedProviders = resolveProviderConfigs(providers, { basePath });
+  const selectedProvider = Array.isArray(resolvedProviders)
+    ? resolvedProviders[0]
+    : resolvedProviders;
+
+  return {
+    providers: resolvedProviders,
+    cloudTargetId: getCloudTargetIdFromProviders(selectedProvider),
+  };
+}
 
 // Helper function to check if a string value should be considered null
 const isNullLike = (value: string | null | undefined): boolean => {
@@ -143,19 +175,29 @@ function extractStringField(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
-async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
+async function getRemoteResponseErrorDetail(
+  response: Response,
+): Promise<{ detail: string; tokenUsage?: TokenUsage }> {
   const rawText = (await response.text()).trim();
   const fallback = rawText || response.statusText || 'Unknown error';
   if (!rawText) {
-    return fallback;
+    return { detail: fallback };
   }
   try {
-    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
+    const parsed = JSON.parse(rawText) as {
+      message?: unknown;
+      error?: unknown;
+      tokenUsage?: unknown;
+    } | null;
     const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
-    return detail ?? fallback;
+    const tokenUsage = BaseTokenUsageSchema.safeParse(parsed?.tokenUsage);
+    return {
+      detail: detail ?? fallback,
+      ...(tokenUsage.success ? { tokenUsage: tokenUsage.data } : {}),
+    };
   } catch {
     // Not JSON — fall through to raw text.
-    return fallback;
+    return { detail: fallback };
   }
 }
 
@@ -178,10 +220,13 @@ function getRemoteErrorHint(status: number): string | undefined {
 }
 
 async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
-  const detail = await getRemoteResponseErrorDetail(response);
+  const { detail, tokenUsage } = await getRemoteResponseErrorDetail(response);
   const hint = getRemoteErrorHint(response.status);
   const base = `Remote server returned HTTP ${response.status}: ${detail}`;
-  return new Error(hint ? `${base}\n${hint}` : base);
+  return Object.assign(
+    new Error(hint ? `${base}\n${hint}` : base),
+    tokenUsage ? { tokenUsage } : {},
+  );
 }
 
 /**
@@ -191,12 +236,14 @@ async function buildRemoteErrorFromResponse(response: Response): Promise<Error> 
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
+ * @param targetId - Cloud target database ID used to resolve target-owned task context.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
   showProgress: boolean = true,
+  targetId?: string,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
@@ -252,6 +299,7 @@ export async function doTargetPurposeDiscovery(
                 answers: state.answers,
               },
               task: 'target-purpose-discovery',
+              ...remoteGenerationContextPayload(targetId),
               version: VERSION,
               email: getUserEmail(),
             }),
@@ -340,6 +388,18 @@ export async function doTargetPurposeDiscovery(
       ...normalizedResult,
       ...(hasTokenUsage ? { tokenUsage } : {}),
     };
+  } catch (error) {
+    const errorTokenUsage = getErrorTokenUsage(error);
+    if (errorTokenUsage) {
+      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: errorTokenUsage });
+      hasTokenUsage = true;
+    }
+    if (hasTokenUsage) {
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+        tokenUsage,
+      });
+    }
+    throw error;
   } finally {
     pbar?.stop();
   }
@@ -400,6 +460,7 @@ export function discoverCommand(
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
+      let cloudTargetId: string | undefined;
       // Fallback to the default config path:
 
       // If user provides a config, read the target from it:
@@ -426,15 +487,19 @@ export function discoverCommand(
           throw new Error('Config must contain a target');
         }
 
-        const providers = await loadApiProviders(config.providers);
+        const basePath = path.dirname(path.resolve(args.config));
+        const resolved = resolveDiscoveryProviderContext(config.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
 
         target = providers[0];
+        cloudTargetId = resolved.cloudTargetId;
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+        cloudTargetId = args.target;
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
@@ -442,8 +507,13 @@ export function discoverCommand(
           throw new Error('Config must contain a target or provider');
         }
 
-        const providers = await loadApiProviders(defaultConfig.providers);
+        const basePath = defaultConfigPath
+          ? path.dirname(path.resolve(defaultConfigPath))
+          : undefined;
+        const resolved = resolveDiscoveryProviderContext(defaultConfig.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
         target = providers[0];
+        cloudTargetId = resolved.cloudTargetId;
 
         // Alert the user that we're using a config from the current working directory:
         logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
@@ -456,7 +526,12 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(
+          target,
+          undefined,
+          true,
+          cloudTargetId,
+        );
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {

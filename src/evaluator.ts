@@ -68,8 +68,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { BaseTokenUsageSchema } from './types/shared';
-import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -87,6 +86,7 @@ import {
   isGoogleProvider,
   isOpenAiProvider,
   isProviderAllowed,
+  sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
@@ -98,6 +98,8 @@ import {
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
+  normalizeTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
@@ -432,6 +434,12 @@ function getRepeatCacheNamespace(
   return undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -587,16 +595,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function isAbortShapedError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
-}
-
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
 
   if (aborted) {
     // Skip stack serialization on the abort path — debug logs usually go
@@ -654,6 +658,17 @@ interface ProviderCallResult {
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
 
+function mergeProviderPromptConfig(
+  promptConfig: Prompt['config'],
+  testOptions: AtomicTestCase['options'],
+): Prompt['config'] {
+  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  return {
+    ...(promptConfig ?? {}),
+    ...providerOptions,
+  };
+}
+
 function createRunEvalState({
   provider,
   prompt,
@@ -666,10 +681,7 @@ function createRunEvalState({
   const setup = createRunEvalSetup({
     provider,
     prompt,
-    promptConfig: {
-      ...(prompt.config ?? {}),
-      ...(test.options ?? {}),
-    },
+    promptConfig: mergeProviderPromptConfig(prompt.config, test.options),
     vars,
   });
 
@@ -808,10 +820,7 @@ async function renderRunEvalPrompt({
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
-  const promptConfig = {
-    ...(promptForRender.config ?? {}),
-    ...(test.options ?? {}),
-  };
+  const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
   setup.prompt.raw = renderedPrompt;
   return {
@@ -915,7 +924,7 @@ async function callActiveProvider({
     isApiProvider(test.provider) ? test.provider : originalProvider,
     test,
   );
-  logger.debug(`Provider type: ${activeProvider.id()}`);
+  logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -1576,11 +1585,13 @@ async function runEvalInternal({
     if (!isAbortError) {
       logger.error('Provider call failed during eval', logContext);
     }
-    const parsedTokenUsage =
-      err && typeof err === 'object' && 'tokenUsage' in err
-        ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
-        : undefined;
-    const errorTokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
+    const responseTokenUsage = getErrorTokenUsage(err);
+    const errorTokenUsage = responseTokenUsage
+      ? normalizeTokenUsage({
+          ...responseTokenUsage,
+          numRequests: responseTokenUsage.numRequests ?? 1,
+        })
+      : undefined;
 
     return [
       {
@@ -1598,8 +1609,8 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
-        ...(errorTokenUsage
-          ? { response: { error: errorWithStack, tokenUsage: errorTokenUsage } }
+        ...(responseTokenUsage
+          ? { response: { error: errorWithStack, tokenUsage: responseTokenUsage } }
           : {}),
         ...(errorTokenUsage ? { tokenUsage: errorTokenUsage } : {}),
         ...getTraceLinkage(traceContext, evalId),
@@ -2183,6 +2194,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
+      ...data.options,
       ...test.options,
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
@@ -2399,13 +2411,19 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
-  for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
+  const globalRepeat = normalizeRepeatCount(options.repeat);
+  const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
+  const effectiveOptions = {
+    ...options,
+    repeat: testRepeat,
+  };
+  for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
     for (const vars of varCombinations) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
         evalId,
-        options,
+        options: effectiveOptions,
         promptIdCache,
         promptIndexMap,
         promptPrefix,
@@ -4809,7 +4827,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           const metrics = this.rateLimitRegistry.getMetrics();
           for (const [key, m] of Object.entries(metrics)) {
             if (m.totalRequests > 0) {
-              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
                 totalRequests: m.totalRequests,
                 completedRequests: m.completedRequests,
                 failedRequests: m.failedRequests,
@@ -4840,12 +4858,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // Only surface a writer-close failure when nothing else failed, so the original
           // evaluation/cleanup error is never masked by a secondary I/O error.
           if (evaluationError === undefined && cleanupError === undefined) {
-            throw writerCloseErrors.length === 1
-              ? writerCloseErrors[0]
-              : new AggregateError(
-                  writerCloseErrors,
-                  'Multiple JSONL output writers failed to close',
-                );
+            // When results persisted to the database, that copy is authoritative and the
+            // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
+            // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
+            // — log it rather than failing an otherwise-successful run. Only when persistence
+            // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
+            if (this.store.resultPersistenceFailed) {
+              throw writerCloseErrors.length === 1
+                ? writerCloseErrors[0]
+                : new AggregateError(
+                    writerCloseErrors,
+                    'Multiple JSONL output writers failed to close',
+                  );
+            }
+            logger.warn(
+              `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+            );
           }
         }
       }

@@ -82,18 +82,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -118,18 +118,18 @@ describe('RedteamPluginBase', () => {
         {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           assert: [{ type: 'contains', value: 'test prompt' }],
           vars: { testVar: 'test prompt' },
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -180,18 +180,18 @@ describe('RedteamPluginBase', () => {
         {
           vars: { testVar: 'duplicate' },
           assert: expect.any(Array),
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
         {
           vars: { testVar: 'unique' },
           assert: expect.any(Array),
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
-          },
+          }),
         },
       ]),
     );
@@ -587,6 +587,27 @@ describe('RedteamPluginBase', () => {
         completion: 4,
         numRequests: 1,
       });
+    });
+
+    it('should preserve shared multi-row generation usage exactly once', async () => {
+      const batchProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: first prompt\nPrompt: second prompt',
+          tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
+        }),
+      });
+      const batchPlugin = new TestPlugin(batchProvider, 'test purpose', 'testVar', {});
+
+      const tests = await batchPlugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 1,
+      });
+      expect(tests[1]?.metadata).not.toHaveProperty('providerTokenUsage');
     });
 
     it('should preserve generation usage when over-generation is sampled to one emitted row', async () => {

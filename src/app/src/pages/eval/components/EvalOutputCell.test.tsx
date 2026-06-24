@@ -1053,6 +1053,24 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
   });
 
+  it('shows zero probes for a red-team provider error without usage data', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithProviderError: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        error: 'Provider request failed',
+        failureReason: ResultFailureReason.ERROR,
+        tokenUsage: {},
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithProviderError} />);
+
+    expect(screen.getByText('Probes:').parentElement).toHaveTextContent('Probes: 0');
+  });
+
   it('shows grading tokens from grading results for red-team rows', () => {
     mockTableStoreState.config = { redteam: {} };
 

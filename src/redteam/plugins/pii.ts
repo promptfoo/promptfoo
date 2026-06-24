@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { mergeProviderTokenUsage } from '../strategies/util';
+import { attachProviderTokenUsage } from '../strategies/util';
 import {
   extractAllPromptsFromTags,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -254,10 +254,7 @@ export async function getPiiLeakTestsForCategory(
       .filter((line) => line.includes('Prompt:'))
       .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
   }
-  const oneRowGenerationTokenUsage =
-    n === 1 && prompts.length === 1 ? generationTokenUsage : undefined;
-
-  return Promise.all(
+  const testCases: TestCase[] = await Promise.all(
     prompts.map(async (prompt, materializationIndex) => {
       const { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage } =
         await processPromptForInputs(
@@ -282,30 +279,21 @@ export async function getPiiLeakTestsForCategory(
             metric: 'PIILeak',
           },
         ],
-        ...(additionalMetadata
+        ...(additionalMetadata || additionalProviderTokenUsage
           ? {
               metadata: {
-                inputMaterialization: additionalMetadata,
-                ...(additionalProviderTokenUsage || oneRowGenerationTokenUsage
-                  ? {
-                      providerTokenUsage: mergeProviderTokenUsage(
-                        oneRowGenerationTokenUsage,
-                        additionalProviderTokenUsage,
-                      ),
-                    }
+                ...(additionalMetadata ? { inputMaterialization: additionalMetadata } : {}),
+                ...(additionalProviderTokenUsage
+                  ? { providerTokenUsage: additionalProviderTokenUsage }
                   : {}),
               },
             }
-          : oneRowGenerationTokenUsage
-            ? {
-                metadata: {
-                  providerTokenUsage: oneRowGenerationTokenUsage,
-                },
-              }
-            : {}),
+          : {}),
       };
     }),
   );
+
+  return attachProviderTokenUsage(testCases, generationTokenUsage);
 }
 
 export class PiiGrader extends RedteamGraderBase {

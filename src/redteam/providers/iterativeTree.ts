@@ -23,8 +23,14 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+  getErrorTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -366,6 +372,21 @@ export async function getNewPrompt(
   };
 }
 
+function rethrowWithAccumulatedUsage(error: unknown, totalTokenUsage: TokenUsage): never {
+  const aggregateTokenUsage = createEmptyTokenUsage();
+  accumulateTokenUsage(aggregateTokenUsage, totalTokenUsage);
+  accumulateResponseTokenUsage(
+    aggregateTokenUsage,
+    { tokenUsage: getErrorTokenUsage(error) },
+    { countAsRequest: false },
+  );
+
+  throw new RedteamProviderError(
+    error instanceof Error ? error.message : String(error),
+    aggregateTokenUsage,
+  );
+}
+
 /**
  * Updates the red team's conversation history with the latest interaction results.
  * @param targetResponse - The response from the target provider.
@@ -535,6 +556,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
   treeParams,
 }: {
   context: CallApiContextParams;
@@ -550,6 +572,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
   treeParams?: {
     maxDepth?: number;
     maxAttempts?: number;
@@ -645,6 +668,24 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
+        let promptResult: Awaited<ReturnType<typeof getNewPrompt>>;
+        try {
+          promptResult = await getNewPrompt(
+            redteamProvider,
+            [...redteamHistory, { role: 'assistant', content: node.prompt }],
+            shouldGenerateRemote()
+              ? {
+                  inputs,
+                  materializationIndex: attempts,
+                  pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+                  purpose: test?.metadata?.purpose as string | undefined,
+                }
+              : undefined,
+          );
+        } catch (error) {
+          rethrowWithAccumulatedUsage(error, totalTokenUsage);
+        }
+
         let {
           improvement,
           inputMaterialization,
@@ -652,18 +693,7 @@ async function runRedteamConversation({
           materializedVars,
           prompt: newInjectVar,
           tokenUsage: redteamTokenUsage,
-        } = await getNewPrompt(
-          redteamProvider,
-          [...redteamHistory, { role: 'assistant', content: node.prompt }],
-          shouldGenerateRemote()
-            ? {
-                inputs,
-                materializationIndex: attempts,
-                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              }
-            : undefined,
-        );
+        } = promptResult;
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
@@ -708,6 +738,7 @@ async function runRedteamConversation({
             perTurnLayers,
             Strategies,
             {
+              targetId,
               evaluationId: context?.evaluationId,
               testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
               originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
@@ -851,17 +882,19 @@ async function runRedteamConversation({
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
-        const {
-          score,
-          explanation,
-          tokenUsage: judgeTokenUsage,
-        } = await evaluateResponse(
-          gradingProvider,
-          judgeSystemPrompt,
-          targetResponse.output,
-          bestResponse,
-          containsPenalizedPhrase,
-        );
+        let evaluationResult: Awaited<ReturnType<typeof evaluateResponse>>;
+        try {
+          evaluationResult = await evaluateResponse(
+            gradingProvider,
+            judgeSystemPrompt,
+            targetResponse.output,
+            bestResponse,
+            containsPenalizedPhrase,
+          );
+        } catch (error) {
+          rethrowWithAccumulatedUsage(error, totalTokenUsage);
+        }
+        const { score, explanation, tokenUsage: judgeTokenUsage } = evaluationResult;
         accumulateResponseTokenUsage(
           totalTokenUsage,
           { tokenUsage: judgeTokenUsage },
@@ -1370,11 +1403,13 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(this.config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -1410,6 +1445,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
     });
   }

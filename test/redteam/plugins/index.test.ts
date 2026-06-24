@@ -206,6 +206,39 @@ describe('Plugins', () => {
       expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
     });
 
+    it('should preserve usage from an oversized local generation when its retry succeeds', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long',
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: short',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result?.[0]?.vars?.testVar).toBe('short');
+      expect(result?.[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 24,
+        prompt: 15,
+        completion: 9,
+        numRequests: 2,
+      });
+    });
+
     it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
@@ -302,6 +335,7 @@ describe('Plugins', () => {
         n: 1,
         config: {},
         delayMs: 0,
+        targetId: 'cloud-target-123',
       });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -315,6 +349,7 @@ describe('Plugins', () => {
             n: 1,
             purpose: 'test',
             task: 'ssrf',
+            targetId: 'cloud-target-123',
             version: VERSION,
             email: null,
           }),

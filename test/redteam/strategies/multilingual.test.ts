@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
@@ -22,8 +22,12 @@ vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('multilingual strategy token usage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('returns accumulated usage from local translation batches', async () => {

@@ -21,6 +21,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -102,6 +103,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  targetId?: string;
   maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
@@ -153,6 +155,7 @@ export default class GoatProvider implements ApiProvider {
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
       inputs?: Inputs;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -175,6 +178,7 @@ export default class GoatProvider implements ApiProvider {
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
       inputs: options.inputs,
+      targetId: options.targetId,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -278,6 +282,7 @@ export default class GoatProvider implements ApiProvider {
             lastResponse: previousTargetOutput,
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             purpose: context?.test?.metadata?.purpose,
+            targetId: this.config.targetId,
           });
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
             countAsRequest: false,
@@ -303,6 +308,7 @@ export default class GoatProvider implements ApiProvider {
                 this.perTurnLayers,
                 Strategies,
                 {
+                  targetId: this.config.targetId,
                   evaluationId: context?.evaluationId,
                   testCaseId:
                     context?.testCaseId ||
@@ -367,6 +373,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            ...remoteGenerationContextPayload(this.config.targetId),
             modifiers: context?.test?.metadata?.modifiers,
             traceSummary: previousTraceSummary,
           });
@@ -399,6 +406,7 @@ export default class GoatProvider implements ApiProvider {
             : messages,
           prompt: context?.prompt?.raw,
           task: 'goat',
+          ...remoteGenerationContextPayload(this.config.targetId),
           version: VERSION,
           email: getUserEmail(),
           excludeTargetOutputFromAgenticAttackGeneration:
@@ -520,6 +528,7 @@ export default class GoatProvider implements ApiProvider {
             this.perTurnLayers,
             Strategies,
             {
+              targetId: this.config.targetId,
               evaluationId: context?.evaluationId,
               testCaseId:
                 context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),

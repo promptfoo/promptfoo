@@ -42,6 +42,7 @@ describe('harmful plugin', () => {
 
       mockCallApi.mockResolvedValueOnce({
         output: ['Test harmful output', 'Another test output'],
+        tokenUsage: { total: 15, prompt: 9, completion: 6, numRequests: 1 },
       });
 
       const result = await getHarmfulTests(
@@ -60,6 +61,13 @@ describe('harmful plugin', () => {
       const prompts = result.map((r) => r.vars?.testVar);
       expect(prompts).toContain('Test harmful output');
       expect(prompts).toContain('Another test output');
+      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 1,
+      });
+      expect(result[1]?.metadata).not.toHaveProperty('providerTokenUsage');
     });
 
     it('should retry when not enough unique prompts are returned', async () => {

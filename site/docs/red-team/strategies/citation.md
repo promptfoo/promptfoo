@@ -53,6 +53,12 @@ The strategy:
 3. Reformats the prompt to reference the citation
 4. Tests whether the target model responds differently to the academically-framed version
 
+### Token accounting
+
+Citation-generation model calls are reported as non-grading token usage, separately from target
+probes and assertion grading. When some citation requests fail but others succeed, Promptfoo keeps
+the failed requests' reported usage on one surviving test case so the batch total is counted once.
+
 ## Background
 
 Recent research has shown that LLMs may be more likely to comply with harmful requests when they're presented in an academic or research context.

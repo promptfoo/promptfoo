@@ -9,26 +9,29 @@ import {
   getExtractionErrorTokenUsage,
 } from './util';
 
-import type { ApiProvider } from '../../types/index';
-import type { ExtractionOptions } from './purpose';
+import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export async function extractEntities(
   provider: ApiProvider,
   prompts: string[],
-  options?: ExtractionOptions,
+  generationContext?: RemoteGenerationContext,
 ): Promise<string[]> {
-  return (await extractEntitiesWithMetadata(provider, prompts, options)).result;
+  return (await extractEntitiesWithMetadata(provider, prompts, generationContext)).result;
 }
 
 export async function extractEntitiesWithMetadata(
   provider: ApiProvider,
   prompts: string[],
-  options?: ExtractionOptions,
+  generationContext?: RemoteGenerationContext,
 ): Promise<ExtractionResult<string[]>> {
-  if (!options?.forceLocal && shouldGenerateRemote()) {
+  if (shouldGenerateRemote()) {
     try {
-      const response = await fetchRemoteGenerationWithMetadata('entities' as RedTeamTask, prompts);
+      const response = await fetchRemoteGenerationWithMetadata(
+        'entities' as RedTeamTask,
+        prompts,
+        generationContext,
+      );
       return {
         result: response.result as string[],
         ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),

@@ -1641,7 +1641,9 @@ function EvalOutputCell({
       {renderCellDetail({
         showStats,
         isRedteam,
-        probeCount: tokenUsage?.numRequests,
+        probeCount:
+          tokenUsage?.numRequests ??
+          (output.failureReason === ResultFailureReason.ERROR ? 0 : undefined),
         tokenUsageDisplay,
         gradingTokenUsageDisplay,
         latencyDisplay,

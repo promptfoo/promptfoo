@@ -10,6 +10,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -132,6 +133,7 @@ export interface CustomResponse extends ProviderResponse {
 interface CustomConfig {
   injectVar: string;
   strategyText: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   redteamProvider: RedteamFileConfig['provider'];
@@ -225,6 +227,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -244,6 +247,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
@@ -468,6 +472,7 @@ export class CustomProvider implements ApiProvider {
           lastResponse: lastResponse.output,
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
+          targetId: this.config.targetId,
         });
         accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
           countAsRequest: false,
@@ -898,6 +903,7 @@ export class CustomProvider implements ApiProvider {
         this.perTurnLayers,
         Strategies,
         {
+          ...remoteGenerationContextPayload(this.config.targetId),
           evaluationId: context?.evaluationId,
           testCaseId:
             context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),

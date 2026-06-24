@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { neverGenerateRemote } from '../remoteGeneration';
 import {
   callExtractionWithMetadata,
   type ExtractionResult,
@@ -9,27 +9,23 @@ import {
   getExtractionErrorTokenUsage,
 } from './util';
 
-import type { ApiProvider } from '../../types/index';
+import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export const DEFAULT_PURPOSE = 'An AI system';
 
-export interface ExtractionOptions {
-  forceLocal?: boolean;
-}
-
 export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
-  options?: ExtractionOptions,
+  generationContext?: RemoteGenerationContext,
 ): Promise<string> {
-  return (await extractSystemPurposeWithMetadata(provider, prompts, options)).result;
+  return (await extractSystemPurposeWithMetadata(provider, prompts, generationContext)).result;
 }
 
 export async function extractSystemPurposeWithMetadata(
   provider: ApiProvider,
   prompts: string[],
-  options?: ExtractionOptions,
+  generationContext?: RemoteGenerationContext,
 ): Promise<ExtractionResult<string>> {
   const onlyTemplatePrompt =
     prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
@@ -39,9 +35,13 @@ export async function extractSystemPurposeWithMetadata(
     return { result: DEFAULT_PURPOSE };
   }
 
-  if (!options?.forceLocal && shouldGenerateRemote()) {
+  if (!neverGenerateRemote()) {
     try {
-      const response = await fetchRemoteGenerationWithMetadata('purpose' as RedTeamTask, prompts);
+      const response = await fetchRemoteGenerationWithMetadata(
+        'purpose' as RedTeamTask,
+        prompts,
+        generationContext,
+      );
       return {
         result: response.result as string,
         ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),

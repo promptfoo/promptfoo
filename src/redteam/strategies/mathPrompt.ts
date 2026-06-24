@@ -7,12 +7,14 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -50,6 +52,8 @@ export async function generateMathPrompt(
     }
 
     let allResults: TestCase[] = [];
+    let remoteFailureMessage: string | undefined;
+    let remoteTokenUsage: TokenUsage | undefined;
     let processedBatches = 0;
 
     let progressBar: SingleBar | undefined;
@@ -72,6 +76,7 @@ export async function generateMathPrompt(
         testCases: batch,
         injectVar,
         config,
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 
@@ -81,57 +86,74 @@ export async function generateMathPrompt(
         tokenUsage?: TokenUsage;
       }
 
-      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
-
-      logger.debug(
-        `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,
-      );
-      if (!Array.isArray(data.result)) {
-        const errorMessage =
-          data.error || 'MathPrompt generation returned invalid response structure';
-        if (data.tokenUsage) {
-          throw new MathPromptGenerationError(errorMessage, data.tokenUsage);
-        }
-        throw new Error(errorMessage);
-      }
-      const batchResults = data.result as TestCase[];
-      if (data.tokenUsage && batchResults.length > 0) {
-        const [firstResult, ...remainingResults] = batchResults;
-        allResults = allResults.concat([
+      try {
+        const { data } = await fetchWithCache<MathPromptGenerationResponse>(
+          getRemoteGenerationUrl(),
           {
-            ...firstResult,
-            metadata: {
-              ...firstResult.metadata,
-              providerTokenUsage: mergeProviderTokenUsage(
-                firstResult.metadata?.providerTokenUsage,
-                data.tokenUsage,
-              ),
-            },
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(payload),
           },
-          ...remainingResults,
-        ]);
-      } else {
-        allResults = allResults.concat(batchResults);
-      }
+          getRequestTimeoutMs(),
+        );
 
-      processedBatches++;
-      if (progressBar) {
-        progressBar.increment(1);
-      } else {
-        logger.debug(`Processed batch ${processedBatches} of ${batches.length}`);
+        logger.debug(
+          `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,
+        );
+        if (data.tokenUsage) {
+          remoteTokenUsage = mergeProviderTokenUsage(remoteTokenUsage, data.tokenUsage);
+        }
+        if (!Array.isArray(data.result)) {
+          remoteFailureMessage ??=
+            data.error || 'MathPrompt generation returned invalid response structure';
+          return;
+        }
+
+        const batchResults = data.result as TestCase[];
+        if (data.tokenUsage && batchResults.length > 0) {
+          const [firstResult, ...remainingResults] = batchResults;
+          allResults = allResults.concat([
+            {
+              ...firstResult,
+              metadata: {
+                ...firstResult.metadata,
+                providerTokenUsage: mergeProviderTokenUsage(
+                  firstResult.metadata?.providerTokenUsage,
+                  data.tokenUsage,
+                ),
+              },
+            },
+            ...remainingResults,
+          ]);
+        } else {
+          allResults = allResults.concat(batchResults);
+        }
+      } catch (error) {
+        remoteFailureMessage ??= error instanceof Error ? error.message : String(error);
+        const errorTokenUsage = getErrorTokenUsage(error);
+        if (errorTokenUsage) {
+          remoteTokenUsage = mergeProviderTokenUsage(remoteTokenUsage, errorTokenUsage);
+        }
+      } finally {
+        processedBatches++;
+        if (progressBar) {
+          progressBar.increment(1);
+        } else {
+          logger.debug(`Processed batch ${processedBatches} of ${batches.length}`);
+        }
       }
     });
 
     if (progressBar) {
       progressBar.stop();
+    }
+
+    if (remoteFailureMessage) {
+      if (remoteTokenUsage) {
+        throw new MathPromptGenerationError(remoteFailureMessage, remoteTokenUsage);
+      }
+      logger.error(`Error in remote MathPrompt generation: ${remoteFailureMessage}`);
+      return [];
     }
 
     return allResults;

@@ -4,6 +4,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { RUNTIME_TRANSFORM_TOKEN_USAGE_KEY } from '../shared/runtimeTransform';
 import { createWebPageTaskError, WebPageTaskError } from '../shared/webPageTaskError';
 
@@ -221,6 +222,7 @@ async function createWebPage(
   purpose?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<CreateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
@@ -249,6 +251,7 @@ async function createWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000, // 60s timeout for LLM generation
@@ -275,6 +278,7 @@ async function updateWebPage(
   evalId?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<UpdateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
@@ -300,6 +304,7 @@ async function updateWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000,
@@ -430,8 +435,10 @@ async function updateExistingPageState(params: {
   evalId?: string;
   useLlmUpdate: boolean;
   preferSmallModel: boolean;
+  targetId?: string;
 }): Promise<CreateWebPageResponse['tokenUsage']> {
-  const { stateKey, pageState, attackPrompt, evalId, useLlmUpdate, preferSmallModel } = params;
+  const { stateKey, pageState, attackPrompt, evalId, useLlmUpdate, preferSmallModel, targetId } =
+    params;
 
   logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
     stateKey,
@@ -449,6 +456,7 @@ async function updateExistingPageState(params: {
       evalId,
       useLlmUpdate,
       preferSmallModel,
+      targetId,
     );
 
     const previousLocation = pageState.embeddingLocation;
@@ -487,6 +495,7 @@ async function createInitialPageState(params: {
   purpose?: string;
   useLlmCreate: boolean;
   preferSmallModel: boolean;
+  targetId?: string;
 }): Promise<
   | {
       pageState: PageState;
@@ -506,6 +515,7 @@ async function createInitialPageState(params: {
     purpose,
     useLlmCreate,
     preferSmallModel,
+    targetId,
   } = params;
 
   logger.debug('[IndirectWebPwn] First turn - creating new page', {
@@ -522,6 +532,7 @@ async function createInitialPageState(params: {
       purpose,
       useLlmCreate,
       preferSmallModel,
+      targetId,
     );
 
     cleanupExpiredPageState();
@@ -579,6 +590,7 @@ async function transformForPerTurnLayer(
   const useLlmCreate = (config.useLlm as boolean) ?? true;
   const useLlmUpdate = (config.useLlm as boolean) ?? true;
   const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
+  const targetId = typeof config.targetId === 'string' ? config.targetId : undefined;
 
   const results: TestCase[] = [];
 
@@ -625,6 +637,7 @@ async function transformForPerTurnLayer(
         evalId,
         useLlmUpdate,
         preferSmallModel,
+        targetId,
       });
       turnNumber = pageState.turnCount;
     } else {
@@ -637,6 +650,7 @@ async function transformForPerTurnLayer(
         purpose: testCase.metadata?.purpose as string | undefined,
         useLlmCreate,
         preferSmallModel,
+        targetId,
       });
 
       if ('error' in createdPage) {

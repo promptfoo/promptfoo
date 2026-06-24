@@ -21,13 +21,13 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCase, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
-import { BaseTokenUsageSchema } from '../../types/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { evalJobService } from '../services/evalJobService';
 import {
@@ -36,6 +36,7 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ApiProvider } from '../../types/providers';
@@ -62,15 +63,6 @@ function createUsageTrackingProvider(provider: ApiProvider): {
     provider: trackedProvider,
     getTokenUsage: () => (hasTokenUsage ? tokenUsage : undefined),
   };
-}
-
-function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
-    return undefined;
-  }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage | undefined {
@@ -169,21 +161,23 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       });
       testCases = generatedTestCases.map((testCase) => withPluginMetadata(testCase, plugin.id));
     } catch (error) {
-      const tokenUsage = trackedRedteamProvider.getTokenUsage() || getErrorTokenUsage(error);
-      logger.error('Error generating test case', { error });
-      res.status(500).json({
-        error: 'Failed to generate test case',
-        ...(tokenUsage ? { tokenUsage } : {}),
-      });
+      const tokenUsage = mergeTokenUsage(
+        trackedRedteamProvider.getTokenUsage(),
+        getErrorTokenUsage(error),
+      );
+      sendError(res, 500, 'Failed to generate test case', error, tokenUsage ? { tokenUsage } : {});
       return;
     }
 
     if (testCases.length === 0) {
       const tokenUsage = trackedRedteamProvider.getTokenUsage();
-      res.status(500).json({
-        error: 'Failed to generate test case',
-        ...(tokenUsage ? { tokenUsage } : {}),
-      });
+      sendError(
+        res,
+        500,
+        'Failed to generate test case',
+        undefined,
+        tokenUsage ? { tokenUsage } : {},
+      );
       return;
     }
 
@@ -224,15 +218,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           );
         }
       } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}`, { error });
         const tokenUsage = mergeTokenUsage(
           trackedRedteamProvider.getTokenUsage(),
           getErrorTokenUsage(error),
         );
-        res.status(500).json({
-          error: `Failed to apply strategy ${strategy.id}`,
-          ...(tokenUsage ? { tokenUsage } : {}),
-        });
+        sendError(
+          res,
+          500,
+          `Failed to apply strategy ${strategy.id}`,
+          error,
+          tokenUsage ? { tokenUsage } : {},
+        );
         return;
       }
     }
@@ -280,18 +276,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           return;
         }
 
-        logger.error('[Multi-turn] Error generating prompt', {
-          message: error instanceof Error ? error.message : String(error),
-          strategy: strategy.id,
-        });
         const tokenUsage = mergeTokenUsage(
           trackedRedteamProvider.getTokenUsage(),
           getErrorTokenUsage(error),
         );
-        res.status(500).json({
-          error: 'Failed to generate multi-turn prompt',
-          ...(tokenUsage ? { tokenUsage } : {}),
-        });
+        sendError(
+          res,
+          500,
+          'Failed to generate multi-turn prompt',
+          error,
+          tokenUsage ? { tokenUsage } : {},
+        );
         return;
       }
     }
@@ -330,10 +325,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
-    logger.error('Error generating test case', { error });
-    res.status(500).json({
-      error: 'Failed to generate test case',
-    });
+    sendError(res, 500, 'Failed to generate test case', error);
   }
 });
 
@@ -488,14 +480,16 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     });
 
     if (!response.ok) {
-      logger.error(`Cloud function responded with status ${response.status}`);
       const errorBody = (await response.json().catch(() => undefined)) as
         | { tokenUsage?: TokenUsage }
         | undefined;
-      res.status(500).json({
-        error: `Failed to process ${taskId} task`,
-        ...(errorBody?.tokenUsage ? { tokenUsage: errorBody.tokenUsage } : {}),
-      });
+      sendError(
+        res,
+        500,
+        `Failed to process ${taskId} task`,
+        new Error(`Cloud function responded with status ${response.status}`),
+        errorBody?.tokenUsage ? { tokenUsage: errorBody.tokenUsage } : {},
+      );
       return;
     }
 
@@ -503,8 +497,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(RedteamSchemas.Task.Response.parse(data));
   } catch (error) {
-    logger.error(`Error in ${taskId} task: ${error}`);
-    res.status(500).json({ error: `Failed to process ${taskId} task` });
+    sendError(res, 500, `Failed to process ${taskId} task`, error);
   }
 });
 

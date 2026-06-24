@@ -19,6 +19,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -225,6 +226,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
           // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
         });
@@ -246,6 +248,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
@@ -509,6 +512,7 @@ export class CrescendoProvider implements ApiProvider {
           lastResponse: lastResponse.output,
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
         accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
           countAsRequest: false,
@@ -1150,6 +1154,7 @@ export class CrescendoProvider implements ApiProvider {
         this.perTurnLayers,
         Strategies,
         {
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
           evaluationId: context?.evaluationId,
           testCaseId:
             context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),

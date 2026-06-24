@@ -2,8 +2,8 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import dedent from 'dedent';
 import logger from '../logger';
-import { BaseTokenUsageSchema } from '../types/shared';
 import { extractJsonObjects } from '../util/json';
+import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 
 import type { MCPTool } from '../providers/mcp/types';
 import type { ApiProvider, TokenUsage } from '../types/index';
@@ -31,15 +31,6 @@ export class McpMaterializationError extends Error {
     super(message);
     this.name = 'McpMaterializationError';
   }
-}
-
-function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
-    return undefined;
-  }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;

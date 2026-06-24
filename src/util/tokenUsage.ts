@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { sanitizeProviderIdForLog } from './provider';
 import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
@@ -49,7 +50,7 @@ export class TokenUsageTracker {
     accumulateTokenUsage(updated, usage);
     this.providersMap.set(providerId, updated);
     logger.debug(
-      `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+      `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );
   }
 
@@ -66,7 +67,7 @@ export class TokenUsageTracker {
     accumulateResponseTokenUsage(updated, response);
     this.providersMap.set(providerId, updated);
     logger.debug(
-      `Tracked response usage for ${providerId}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
+      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
     );
   }
 

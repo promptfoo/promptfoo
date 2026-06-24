@@ -3,10 +3,22 @@ import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
+import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
+
+export { remoteGenerationContextPayload } from './remoteGenerationContext';
+export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
+}
+
+// Provider implementations already depend on this module. Re-exporting the leaf helper here
+// avoids introducing a providers -> redteam context dependency solely for payload construction.
+export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {
+  targetId?: string;
+} {
+  return buildRemoteGenerationContextPayload(contextOrCloudTargetId);
 }
 
 /**
@@ -181,9 +193,9 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   if (envUrl) {
     return envUrl;
   }
-
-  return (
-    buildRemoteUrl('/api/v1/task/harmful', 'https://api.promptfoo.app/api/v1/task/harmful') ??
-    'https://api.promptfoo.app/api/v1/task/harmful'
-  );
+  const cloudConfig = new CloudConfig();
+  if (cloudConfig.isEnabled()) {
+    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
+  }
+  return 'https://api.promptfoo.app/api/v1/task/harmful';
 }

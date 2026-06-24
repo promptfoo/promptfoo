@@ -4,7 +4,7 @@ import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { mergeProviderTokenUsage } from '../../strategies/util';
+import { attachProviderTokenUsage } from '../../strategies/util';
 import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
@@ -79,7 +79,7 @@ async function processPromptForInputs(
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -88,6 +88,7 @@ export async function getHarmfulTests(
     n: Math.min(n, maxHarmfulTests),
     harmCategory: plugin,
     config,
+    targetId,
   });
   const generationTokenUsage = createEmptyTokenUsage();
   let hasGenerationTokenUsage = false;
@@ -107,10 +108,8 @@ export async function getHarmfulTests(
   const allPrompts = await retryWithDeduplication(generatePrompts, n);
   const inputs = config?.inputs as Inputs | undefined;
   const sampledPrompts = sampleArray(allPrompts, n);
-  const oneRowGenerationTokenUsage =
-    sampledPrompts.length === 1 && hasGenerationTokenUsage ? generationTokenUsage : undefined;
 
-  return Promise.all(
+  const testCases = await Promise.all(
     sampledPrompts.map(async (prompt, materializationIndex) => {
       const { processedPrompt, additionalVars, additionalMetadata, additionalProviderTokenUsage } =
         await processPromptForInputs(
@@ -140,19 +139,16 @@ export async function getHarmfulTests(
       if (additionalProviderTokenUsage) {
         testCase.metadata = {
           ...testCase.metadata,
-          providerTokenUsage: mergeProviderTokenUsage(
-            oneRowGenerationTokenUsage,
-            additionalProviderTokenUsage,
-          ),
-        };
-      } else if (oneRowGenerationTokenUsage) {
-        testCase.metadata = {
-          ...testCase.metadata,
-          providerTokenUsage: oneRowGenerationTokenUsage,
+          providerTokenUsage: additionalProviderTokenUsage,
         };
       }
 
       return testCase;
     }),
+  );
+
+  return attachProviderTokenUsage(
+    testCases,
+    hasGenerationTokenUsage ? generationTokenUsage : undefined,
   );
 }

@@ -12,6 +12,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -53,6 +54,7 @@ async function generateCitations(
         injectVar,
         topic: testCase.vars[injectVar],
         config,
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 

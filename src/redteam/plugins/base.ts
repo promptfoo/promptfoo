@@ -16,7 +16,7 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
-import { mergeProviderTokenUsage } from '../strategies/util';
+import { attachProviderTokenUsage, mergeProviderTokenUsage } from '../strategies/util';
 import {
   extractInputVarsFromPrompt,
   getShortPluginId,
@@ -244,8 +244,6 @@ export abstract class RedteamPluginBase {
       n,
     );
     const prompts = sampleArray(allPrompts, n);
-    const oneRowGenerationTokenUsage =
-      n === 1 && prompts.length === 1 && hasGenerationTokenUsage ? generationTokenUsage : undefined;
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {
@@ -253,20 +251,10 @@ export abstract class RedteamPluginBase {
     }
 
     const testCases = await this.promptsToTestCases(prompts as { __prompt: string }[]);
-    if (!oneRowGenerationTokenUsage || testCases.length !== 1) {
-      return testCases;
-    }
-
-    return testCases.map((testCase) => ({
-      ...testCase,
-      metadata: {
-        ...testCase.metadata,
-        providerTokenUsage: mergeProviderTokenUsage(
-          testCase.metadata?.providerTokenUsage,
-          oneRowGenerationTokenUsage,
-        ),
-      },
-    }));
+    return attachProviderTokenUsage(
+      testCases,
+      hasGenerationTokenUsage ? generationTokenUsage : undefined,
+    );
   }
 
   /**

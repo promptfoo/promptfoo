@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RUNTIME_TRANSFORM_TOKEN_USAGE_KEY } from '../../../src/redteam/shared/runtimeTransform';
 import {
   addIndirectWebPwnTestCases,
@@ -34,10 +34,15 @@ function mockJsonResponse(payload: unknown, ok = true) {
 
 describe('addIndirectWebPwnTestCases token usage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockGetUserEmail.mockReset().mockReturnValue('test@example.com');
     mockGetRemoteGenerationUrl.mockReset().mockReturnValue('https://mocked.task.api');
     clearPageState();
+  });
+
+  afterEach(() => {
+    clearPageState();
+    vi.resetAllMocks();
   });
 
   it('preserves failed create-page helper usage for runtime transforms', async () => {

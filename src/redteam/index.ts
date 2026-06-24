@@ -43,13 +43,21 @@ import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/ut
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
+  remoteGenerationContextPayload,
+  resolveRedteamGenerationContext,
+} from './remoteGenerationContext';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
-import { mergeProviderTokenUsage, pluginMatchesStrategyTargets } from './strategies/util';
+import {
+  attachProviderTokenUsage,
+  mergeProviderTokenUsage,
+  pluginMatchesStrategyTargets,
+} from './strategies/util';
 import {
   extractGoalFromPromptWithUsage,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -61,6 +69,7 @@ import type { Inputs, TokenUsage } from '../types/shared';
 import type {
   FailedPluginInfo,
   Policy,
+  RedteamGenerationContext,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -601,6 +610,7 @@ async function applyStrategies(
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
+  redteamGenerationContext?: RedteamGenerationContext,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -680,6 +690,7 @@ async function applyStrategies(
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
+        ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
     );
@@ -960,6 +971,7 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  */
 export async function synthesize({
   abortSignal,
+  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,
   entities: entitiesOverride,
   injectVar,
@@ -971,6 +983,7 @@ export async function synthesize({
   prompts,
   provider,
   purpose: purposeOverride,
+  redteamGenerationContext: inputRedteamGenerationContext,
   strategies,
   targetIds,
   showProgressBar: showProgressBarOverride,
@@ -1000,6 +1013,13 @@ export async function synthesize({
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
+
+  const redteamGenerationContext = resolveRedteamGenerationContext({
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    targetIds,
+  });
+  const cloudTargetId = redteamGenerationContext.cloudTargetId;
 
   if (maxConcurrency > MAX_MAX_CONCURRENCY) {
     maxConcurrency = MAX_MAX_CONCURRENCY;
@@ -1321,7 +1341,7 @@ export async function synthesize({
   }
   const purposeExtraction = purposeOverride
     ? { result: purposeOverride }
-    : await extractSystemPurposeWithMetadata(redteamProvider, prompts);
+    : await extractSystemPurposeWithMetadata(redteamProvider, prompts, redteamGenerationContext);
   const purpose = purposeExtraction.result;
 
   if (showProgressBar) {
@@ -1331,7 +1351,7 @@ export async function synthesize({
   }
   const entityExtraction = Array.isArray(entitiesOverride)
     ? { result: entitiesOverride }
-    : await extractEntitiesWithMetadata(redteamProvider, prompts);
+    : await extractEntitiesWithMetadata(redteamProvider, prompts, redteamGenerationContext);
   const entities = entityExtraction.result;
 
   logger.debug(`System purpose: ${purpose}`);
@@ -1375,6 +1395,8 @@ export async function synthesize({
           injectVar,
           n: plugin.numTests,
           delayMs: delay || 0,
+          targetId: cloudTargetId,
+          redteamGenerationContext,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1472,6 +1494,7 @@ export async function synthesize({
               purpose,
               plugin.id,
               policy,
+              cloudTargetId,
             );
             (testCase.metadata as any).goal = extractedGoal.goal;
             if (extractedGoal.tokenUsage) {
@@ -1614,6 +1637,7 @@ export async function synthesize({
               purpose,
               plugin.id,
               policy,
+              cloudTargetId,
             );
             (testCase.metadata as any).goal = extractedGoal.goal;
             if (extractedGoal.tokenUsage) {
@@ -1672,7 +1696,7 @@ export async function synthesize({
     }
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetIds,
+      targetIds: redteamGenerationContext.providerTargetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(
@@ -1683,6 +1707,7 @@ export async function synthesize({
       purpose,
       undefined,
       maxCharsPerMessage,
+      redteamGenerationContext,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1707,6 +1732,7 @@ export async function synthesize({
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
+      redteamGenerationContext,
     );
 
   Object.assign(strategyResults, otherStrategyResults);
@@ -1716,24 +1742,13 @@ export async function synthesize({
   }
 
   // Combine test cases based on basic strategy setting
-  let finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const combinedTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
 
   const extractionTokenUsage = mergeProviderTokenUsage(
     purposeExtraction.tokenUsage,
     entityExtraction.tokenUsage,
   );
-  if (finalTestCases.length === 1 && extractionTokenUsage) {
-    finalTestCases = finalTestCases.map((testCase) => ({
-      ...testCase,
-      metadata: {
-        ...testCase.metadata,
-        providerTokenUsage: mergeProviderTokenUsage(
-          testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
-          extractionTokenUsage,
-        ),
-      },
-    }));
-  }
+  const finalTestCases = attachProviderTokenUsage(combinedTestCases, extractionTokenUsage);
 
   // Check for abort signal
   checkAbort();

@@ -6,12 +6,37 @@ import {
   accumulateTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
   normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
+  describe('getErrorTokenUsage', () => {
+    it('returns validated usage carried by an error', () => {
+      const error = Object.assign(new Error('failed'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      });
+
+      expect(getErrorTokenUsage(error)).toEqual({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('rejects malformed usage carried by an error', () => {
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: 'invalid' })),
+      ).toBeUndefined();
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: null })),
+      ).toBeUndefined();
+    });
+  });
+
   describe('createEmptyTokenUsage', () => {
     it('should create an empty token usage object with all fields initialized to zero', () => {
       const result = createEmptyTokenUsage();

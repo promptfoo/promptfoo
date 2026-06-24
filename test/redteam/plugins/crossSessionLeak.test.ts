@@ -51,7 +51,7 @@ describe('CrossSessionLeakPlugin', () => {
 
     expect(tests).toHaveLength(4); // 2 pairs of tests
     expect(tests[0].vars).toEqual({ testVar: 'My password is 12345' });
-    expect(tests[0].metadata).toEqual({
+    expect(tests[0].metadata).toMatchObject({
       pluginId: 'cross-session-leak',
       pluginConfig: {
         excludeStrategies: ['crescendo', 'goat', 'jailbreak:hydra', 'custom', 'mischievous-user'],
@@ -61,7 +61,7 @@ describe('CrossSessionLeakPlugin', () => {
     expect(tests[1].assert).toEqual([
       { type: 'promptfoo:redteam:cross-session-leak', metric: 'CrossSessionLeak' },
     ]);
-    expect(tests[1].metadata).toEqual({
+    expect(tests[1].metadata).toMatchObject({
       crossSessionLeakMatch: '12345',
       pluginId: 'cross-session-leak',
       pluginConfig: {

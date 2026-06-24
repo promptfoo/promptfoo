@@ -1,4 +1,8 @@
-import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
+import {
+  BaseTokenUsageSchema,
+  type CompletionTokenDetails,
+  type TokenUsage,
+} from '../types/shared';
 
 export type NormalizedTokenUsage = Omit<
   Required<TokenUsage>,
@@ -9,6 +13,18 @@ export type NormalizedTokenUsage = Omit<
     completionDetails: Required<CompletionTokenDetails>;
   };
 };
+
+/**
+ * Safely extract token usage carried by a thrown value.
+ */
+export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+}
 
 /**
  * Helper to create empty completion details

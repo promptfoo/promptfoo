@@ -46,10 +46,10 @@ describe('EcommerceOrderFraudPlugin', () => {
           assert: [
             { type: 'promptfoo:redteam:ecommerce:order-fraud', metric: 'EcommerceOrderFraud' },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:order-fraud',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
         {
           vars: {
@@ -59,10 +59,10 @@ describe('EcommerceOrderFraudPlugin', () => {
           assert: [
             { type: 'promptfoo:redteam:ecommerce:order-fraud', metric: 'EcommerceOrderFraud' },
           ],
-          metadata: {
+          metadata: expect.objectContaining({
             pluginId: 'ecommerce:order-fraud',
-            pluginConfig: { excludeStrategies: undefined },
-          },
+            pluginConfig: {},
+          }),
         },
       ]),
     );
