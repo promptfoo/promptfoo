@@ -9,7 +9,7 @@ npx promptfoo@latest init --example provider-model-armor
 cd provider-model-armor
 ```
 
-Model Armor is a managed service that screens LLM prompts and responses for:
+Model Armor is a managed service that can screen LLM prompts and responses for:
 
 - **Responsible AI (RAI)**: Hate speech, harassment, sexually explicit, dangerous content
 - **CSAM**: Child safety content detection (always enabled)
@@ -78,7 +78,8 @@ This example:
 
 - Calls the `sanitizeUserPrompt` API directly
 - Maps filter results to Promptfoo's guardrails format
-- Tests both benign and adversarial prompts
+- Tests both benign and adversarial input prompts
+- Fails closed when Model Armor reports a partial, failed, skipped, or unknown filter result
 
 ### 2. Vertex AI with Model Armor Integration
 
@@ -92,7 +93,7 @@ This example:
 
 - Uses Vertex AI's native Model Armor integration
 - Compares models with and without Model Armor enabled
-- Uses the `guardrails` and `not-guardrails` assertion types
+- Uses `not-guardrails` against the protected provider for known attacks
 
 ## Configuration Files
 
@@ -103,7 +104,7 @@ This example:
 
 ### Using the Dataset
 
-The included CSV dataset contains test prompts for each Model Armor filter type. Load it in your config:
+The included CSV dataset contains test prompts for each Model Armor filter type. Its `__expected` column applies `guardrails` to benign rows and `not-guardrails` to expected findings. Load it in your config:
 
 ```yaml
 tests: file://datasets/model-armor-test.csv
@@ -113,16 +114,17 @@ Each row includes a prompt and expected behavior (benign vs. adversarial).
 
 ## Understanding Results
 
-When Model Armor blocks content, you'll see:
+When Model Armor reports a policy match, you'll see:
 
 - `guardrails.flagged: true` - Content was flagged
-- `guardrails.flaggedInput: true` - The input prompt was blocked
-- `guardrails.flaggedOutput: true` - The generated response was blocked
+- `guardrails.flaggedInput: true` - The finding came from the input prompt
 - `guardrails.reason` - Detailed explanation of which filters matched
+
+The included configurations test prompt-side protection. Promptfoo currently handles Vertex `finishReason: MODEL_ARMOR` as a provider error, so regular `guardrails` assertions do not grade response-template blocks. Use the direct `sanitizeModelResponse` API with a normalized transform when you need response-side regression tests.
 
 For debugging, inspect the raw Model Armor response in `metadata.modelArmor`, which contains the full `sanitizationResult` including individual filter states and confidence levels.
 
-Use `not-guardrails` to verify dangerous prompts get caught - the test passes when content is blocked, fails when it slips through.
+Use `not-guardrails` to verify dangerous prompts produce a policy match. A match does not by itself prove that the deployment blocked the request; check the configured enforcement mode when hard blocking is required.
 
 ## Cleanup
 

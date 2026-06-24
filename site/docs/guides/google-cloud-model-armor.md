@@ -23,11 +23,11 @@ keywords:
 
 ## Quick Start
 
-The simplest way to test Model Armor is using the Vertex AI provider with the `modelArmor` configuration:
+The simplest input-side test uses the Vertex AI provider with a Model Armor prompt template:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     config:
       projectId: my-project-id
       region: us-central1
@@ -63,7 +63,7 @@ The `guardrails` assertion passes when content is **not** blocked. The `not-guar
 
 ## How It Works
 
-Model Armor screens prompts (input) and responses (output) against your configured policies:
+Model Armor can screen prompts (input) and responses (output) against your configured policies:
 
 ```text
 ┌─────────────┐     ┌─────────────┐     ┌─────────┐     ┌─────────────┐     ┌────────┐
@@ -88,12 +88,7 @@ Filters support confidence levels (`LOW_AND_ABOVE`, `MEDIUM_AND_ABOVE`, `HIGH`) 
 
 ### Supported Regions
 
-Model Armor Vertex AI integration is available in:
-
-- `us-central1`
-- `us-east4`
-- `us-west1`
-- `europe-west4`
+Model Armor templates, Vertex AI integration, and floor settings do not all have the same location coverage. Check the current [Model Armor locations documentation](https://docs.cloud.google.com/model-armor/locations) before choosing a template region.
 
 ## Prerequisites
 
@@ -142,9 +137,9 @@ gcloud auth application-default login
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     config:
       projectId: my-project-id
       region: us-central1
@@ -157,19 +152,24 @@ The `promptTemplate` screens user prompts before they reach the model. The `resp
 
 ### Understanding Guardrails Signals
 
-When Model Armor blocks a prompt, Promptfoo returns:
+Google uses different native signals for the two directions:
 
-- `flaggedInput: true` - The input prompt was blocked (`blockReason: MODEL_ARMOR`)
-- `flaggedOutput: true` - The model response was blocked (`finishReason: SAFETY`)
-- `reason` - Explanation of which filters triggered
+- An input block returns `promptFeedback.blockReason: MODEL_ARMOR` with no candidates. Promptfoo normalizes this as `flagged: true` and `flaggedInput: true`.
+- A response block returns a candidate with `finishReason: MODEL_ARMOR` and no content. This is distinct from the generic Gemini `SAFETY` finish reason.
 
-This distinction helps you identify whether the issue was with the input or the output.
+Prompt-side blocks can include an optional `blockReasonMessage`; response-side blocks contain no candidate content. Inline Vertex responses do not include detailed per-filter results. Use Cloud Logging or the direct sanitization API when you need the matching filter, confidence, or finding details.
+
+:::warning Response-side assertion limitation
+
+Promptfoo currently normalizes the Model Armor prompt-side signal. A response-side `finishReason: MODEL_ARMOR` follows the generic provider-error path and does not reach a regular `guardrails` assertion. Model Armor's Vertex integration is non-streaming. To grade response-template blocks today, call the sanitization API through a custom target and normalize its result.
+
+:::
 
 ### Red Team Testing
 
 Use `not-guardrails` to verify dangerous prompts get caught - the test passes when content is blocked, fails when it slips through:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   # Prompt injection
   - description: Classic prompt injection
@@ -197,7 +197,7 @@ tests:
 
 Test benign prompts to catch over-blocking. The `guardrails` assertion passes when content is **not** flagged:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - description: Security research question (should NOT be blocked)
     vars:
@@ -216,9 +216,9 @@ tests:
 
 Compare strict vs. moderate configurations side-by-side:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     label: strict
     config:
       projectId: my-project-id
@@ -226,7 +226,7 @@ providers:
       modelArmor:
         promptTemplate: projects/my-project-id/locations/us-central1/templates/strict
 
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     label: moderate
     config:
       projectId: my-project-id
@@ -252,7 +252,7 @@ Model Armor policies can be applied at two levels:
 
 For floor settings to actually block content (not just log violations), set enforcement type to "Inspect and block" in [GCP Console → Security → Model Armor → Floor Settings](https://console.cloud.google.com/security/model-armor/floor-settings).
 
-Floor settings apply project-wide to all Vertex AI calls, regardless of whether `modelArmor` templates are configured.
+Floor settings apply to supported calls only after Vertex AI is added as an integrated service and enforcement is configured. They are separate from the explicit `modelArmor` template paths in a provider request.
 
 For more details, see the [Model Armor floor settings documentation](https://cloud.google.com/security-command-center/docs/set-up-model-armor-floor-settings).
 
@@ -294,12 +294,13 @@ The response transformer maps Model Armor's filter results to Promptfoo's guardr
 
 ### Response Format
 
-The sanitization API returns detailed filter results:
+The sanitization API returns detailed filter results and a separate execution status:
 
 ```json
 {
   "sanitizationResult": {
     "filterMatchState": "MATCH_FOUND",
+    "invocationResult": "SUCCESS",
     "filterResults": {
       "pi_and_jailbreak": {
         "piAndJailbreakFilterResult": {
@@ -311,6 +312,8 @@ The sanitization API returns detailed filter results:
   }
 }
 ```
+
+Treat `filterMatchState: MATCH_FOUND` as the policy signal only when the relevant filters ran successfully. `invocationResult: PARTIAL` or `FAILURE`, and per-filter skipped/error states, are indeterminate rather than clean. Despite the API name, most filters report findings without rewriting content; sensitive-data de-identification is the main transformation case.
 
 </details>
 

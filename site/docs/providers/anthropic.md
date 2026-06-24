@@ -190,6 +190,24 @@ providers:
         - 'STOP'
 ```
 
+### Classifier Refusals
+
+Anthropic can return a safety-classifier refusal as a successful Messages response with `stop_reason: refusal`. When the response also includes `stop_details`, Promptfoo returns the provider content as `output` (often empty for a classifier refusal) and normalizes:
+
+```json
+{
+  "finishReason": "content_filter",
+  "guardrails": {
+    "flagged": true,
+    "reason": "Content refused by Anthropic safety filters — category: ..."
+  }
+}
+```
+
+`stop_details.category` and `stop_details.explanation` are optional and should be treated as informational. Promptfoo currently requires `stop_details` to create the top-level `guardrails` signal, so a plain model-written refusal or a `stop_reason: refusal` without details is not equivalent to this assertion result. API validation errors are provider errors and skip assertions.
+
+For streaming responses, the terminal refusal reason can arrive after partial text in the final message delta. Promptfoo merges the final structured details before returning the provider response, and cached structured refusals preserve the normalized signal. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) to require this structured safety signal; use [`is-refusal`](/docs/configuration/expected-outputs/deterministic#is-refusal) for model-written refusal text.
+
 ### Metadata
 
 Pass request metadata to the API for tracking or auditing purposes:

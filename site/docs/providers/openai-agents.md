@@ -175,7 +175,7 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails:
+Validate the initial agent input and final agent output with guardrails:
 
 ```yaml
 providers:
@@ -186,7 +186,9 @@ providers:
       outputGuardrails: file://./guardrails/output-guardrails.ts
 ```
 
-Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+These are OpenAI Agents SDK input and output guardrails. Tool guardrails are a separate SDK feature. A tripped guardrail currently surfaces from the Promptfoo provider as an error, and successful runs do not populate the top-level response used by Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Use the SDK guardrail for runtime enforcement, then test the resulting application behavior with ordinary assertions or a wrapper that normalizes tripwires.
+
+See OpenAI's [guardrails and human review guide](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals) for the SDK execution model.
 
 ## Sessions
 

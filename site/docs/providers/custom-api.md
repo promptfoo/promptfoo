@@ -91,10 +91,21 @@ module.exports = class OpenAIProvider {
   cached: false,
   conversationEnded: false, // Optional: set true to stop multi-turn redteam gracefully
   conversationEndReason: 'thread_closed', // Optional reason when conversationEnded=true
+  guardrails: { // Optional: normalized target guardrail decision
+    flagged: false,
+    flaggedInput: false,
+    flaggedOutput: false,
+  },
   metadata: {}, // Additional data
   ...
 }
 ```
+
+### Guardrail Responses
+
+To use [`guardrails` or `not-guardrails`](/docs/configuration/expected-outputs/guardrails), return `guardrails` beside `output`, not inside `output` or `metadata`. Set `flagged` explicitly; the directional fields only identify the stage that fired. Keep vendor-specific assessments and scores under `metadata`.
+
+Expected policy blocks should still return a scorable `output`. Return `error` when the guardrail itself failed to execute so the failure is not mistaken for a clean decision. See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for the full response mapping pattern.
 
 ### Context Parameter
 

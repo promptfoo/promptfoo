@@ -591,7 +591,7 @@ This will import the function `parseResponse` from the file `path/to/parser.js`.
 
 ### Guardrails Support
 
-If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
+If your HTTP target has guardrails set up, return a non-empty `output` and a top-level `guardrails` object from the transform. The object must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. `flagged` controls the assertion verdict; `flaggedInput` and `flaggedOutput` only describe which side triggered.
 
 ```yaml
 providers:
@@ -599,11 +599,35 @@ providers:
     config:
       url: 'https://example.com/api'
       transformResponse: |
-        {
-          output: json.choices[0].message.content,
-          guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
+        (json, text, context) => {
+          const status = context?.response?.status;
+          if (json.error) {
+            throw new Error(
+              json.error?.message || `Guardrail request failed with HTTP ${status ?? 'unknown'}`,
+            );
+          }
+          if (typeof json.blocked !== 'boolean') {
+            throw new Error('Guardrail response did not include a boolean blocked decision');
+          }
+          if (!json.blocked && status && (status < 200 || status >= 300)) {
+            throw new Error(`Guardrail returned an allow decision with HTTP ${status}`);
+          }
+          return {
+            output: json.output || json.blockReason || text || 'Guardrail returned an empty response',
+            guardrails: {
+              flagged: json.blocked,
+              flaggedInput: json.blocked && json.stage === 'input',
+              flaggedOutput: json.blocked && json.stage === 'output',
+              reason: json.blockReason
+            },
+            metadata: { guardrail: json.guardrailDetails }
+          };
         }
 ```
+
+Return an expected safety block as `output` plus `guardrails`, even when the upstream API uses a structured 4xx response. Throw from `transformResponse` for a guardrail timeout, partial execution, filter error, or unknown schema so it cannot become `flagged: false`. A provider error skips assertions.
+
+See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for response patterns and [the assertion reference](/docs/configuration/expected-outputs/guardrails) for exact pass/fail behavior.
 
 ### Ending Multi-turn Conversations
 

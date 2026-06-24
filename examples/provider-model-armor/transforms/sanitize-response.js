@@ -1,60 +1,95 @@
 /**
- * Transform Model Armor sanitization API response to Promptfoo guardrails format.
- *
- * This function maps the Model Armor filter results to Promptfoo's standardized
- * guardrails response structure, enabling the `guardrails` assertion type.
+ * Transform a Model Armor sanitization response into Promptfoo guardrail metadata.
  *
  * @see https://cloud.google.com/security-command-center/docs/sanitize-prompts-responses
  */
-(function () {
-  const result = json.sanitizationResult || {};
-  const flagged = result.filterMatchState === 'MATCH_FOUND';
-  const filters = result.filterResults || {};
+
+function collectExecutionStates(value, states = []) {
+  if (!value || typeof value !== 'object') {
+    return states;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'executionState' && typeof child === 'string') {
+      states.push(child);
+    } else {
+      collectExecutionStates(child, states);
+    }
+  }
+
+  return states;
+}
+
+function collectMatchReasons(filters) {
   const reasons = [];
 
-  // Check RAI filters (Responsible AI: hate speech, harassment, dangerous, sexually explicit)
   if (filters.rai?.raiFilterResult?.matchState === 'MATCH_FOUND') {
     const raiResults = filters.rai.raiFilterResult.raiFilterTypeResults || {};
-    for (const key in raiResults) {
-      if (raiResults[key].matchState === 'MATCH_FOUND') {
-        reasons.push('RAI: ' + key.replace(/_/g, ' '));
+    for (const [filterType, filterResult] of Object.entries(raiResults)) {
+      if (filterResult?.matchState === 'MATCH_FOUND') {
+        reasons.push(`RAI: ${filterType.replace(/_/g, ' ')}`);
       }
     }
   }
 
-  // Check prompt injection/jailbreak filter
-  if (filters.pi_and_jailbreak?.piAndJailbreakFilterResult?.matchState === 'MATCH_FOUND') {
-    const confidence = filters.pi_and_jailbreak.piAndJailbreakFilterResult.confidenceLevel || '';
-    reasons.push('Prompt Injection' + (confidence ? ' (' + confidence + ')' : ''));
+  const jailbreak = filters.pi_and_jailbreak?.piAndJailbreakFilterResult;
+  if (jailbreak?.matchState === 'MATCH_FOUND') {
+    reasons.push(
+      `Prompt Injection${jailbreak.confidenceLevel ? ` (${jailbreak.confidenceLevel})` : ''}`,
+    );
   }
-
-  // Check malicious URLs filter
   if (filters.malicious_uris?.maliciousUriFilterResult?.matchState === 'MATCH_FOUND') {
     reasons.push('Malicious URL');
   }
-
-  // Check CSAM filter (always enabled, cannot be disabled)
-  if (filters.csam?.csamFilterResult?.matchState === 'MATCH_FOUND') {
+  if (filters.csam?.csamFilterFilterResult?.matchState === 'MATCH_FOUND') {
     reasons.push('CSAM');
   }
-
-  // Check sensitive data filter (credit cards, SSNs, API keys, etc.)
   if (filters.sdp?.sdpFilterResult?.inspectResult?.matchState === 'MATCH_FOUND') {
     reasons.push('Sensitive Data');
   }
 
-  const reasonStr = reasons.join('; ');
+  return reasons;
+}
 
+export default function transformModelArmorResponse(json, _text, context) {
+  const status = context?.response?.status;
+  if ((status && (status < 200 || status >= 300)) || json?.error) {
+    throw new Error(
+      json?.error?.message || `Model Armor request failed with HTTP ${status ?? 'unknown'}`,
+    );
+  }
+
+  const result = json?.sanitizationResult;
+  if (!result) {
+    throw new Error('Model Armor response did not include sanitizationResult');
+  }
+  if (result.invocationResult !== 'SUCCESS') {
+    throw new Error(`Model Armor invocation was ${result.invocationResult ?? 'unknown'}`);
+  }
+
+  const executionStates = collectExecutionStates(result.filterResults);
+  const incompleteState = executionStates.find((state) => state !== 'EXECUTION_SUCCESS');
+  if (incompleteState) {
+    throw new Error(`Model Armor filter execution was ${incompleteState}`);
+  }
+
+  const matchState = result.filterMatchState;
+  if (matchState !== 'MATCH_FOUND' && matchState !== 'NO_MATCH_FOUND') {
+    throw new Error(`Unknown Model Armor filter match state: ${matchState ?? 'missing'}`);
+  }
+
+  const flagged = matchState === 'MATCH_FOUND';
+  const filters = result.filterResults || {};
+  const reasons = collectMatchReasons(filters);
+  const reason = reasons.join('; ') || (flagged ? 'Content flagged by Model Armor' : undefined);
   return {
-    output: flagged ? 'BLOCKED: ' + (reasonStr || 'Content flagged') : 'ALLOWED',
+    output: flagged ? `FLAGGED: ${reason}` : 'NO MATCH',
     guardrails: {
       flagged,
       flaggedInput: flagged,
       flaggedOutput: false,
-      reason: reasonStr || (flagged ? 'Content flagged by Model Armor' : ''),
+      ...(reason ? { reason } : {}),
     },
-    metadata: {
-      modelArmor: result,
-    },
+    metadata: { modelArmor: result },
   };
-})();
+}
