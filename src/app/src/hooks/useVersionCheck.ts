@@ -107,35 +107,47 @@ export function useVersionCheck(): UseVersionCheckResult {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [runtimePolicyUpdatedAt, setRuntimePolicyUpdatedAt] = useState(() => Date.now());
   const isMountedRef = useRef(true);
+  const runtimePolicyRetryTimerRef = useRef<number | undefined>(undefined);
 
-  const checkVersion = useCallback(async (background: boolean = false): Promise<boolean> => {
-    try {
-      const response = await callApi('/version');
-      if (!response.ok) {
-        throw new Error('Failed to fetch version information');
-      }
-      const data: VersionInfo = await response.json();
-
-      if (isMountedRef.current) {
-        setVersionInfo(data);
-        setRuntimeNoticeDismissed(
-          data.runtimeNotice ? isRuntimeNoticeSnoozed(data.runtimeNotice) : false,
-        );
-        setUpdateDismissed(localStorage.getItem(STORAGE_KEY) === data.latestVersion);
-        setError(null);
-      }
-      return true;
-    } catch (err) {
-      if (isMountedRef.current && !background) {
-        setError(err instanceof Error ? err : new Error('Unknown error'));
-      }
-      return false;
-    } finally {
-      if (isMountedRef.current && !background) {
-        setLoading(false);
-      }
+  const clearRuntimePolicyRetry = useCallback(() => {
+    if (runtimePolicyRetryTimerRef.current !== undefined) {
+      window.clearTimeout(runtimePolicyRetryTimerRef.current);
+      runtimePolicyRetryTimerRef.current = undefined;
     }
   }, []);
+
+  const checkVersion = useCallback(
+    async (background: boolean = false): Promise<boolean> => {
+      try {
+        const response = await callApi('/version');
+        if (!response.ok) {
+          throw new Error('Failed to fetch version information');
+        }
+        const data: VersionInfo = await response.json();
+
+        clearRuntimePolicyRetry();
+        if (isMountedRef.current) {
+          setVersionInfo(data);
+          setRuntimeNoticeDismissed(
+            data.runtimeNotice ? isRuntimeNoticeSnoozed(data.runtimeNotice) : false,
+          );
+          setUpdateDismissed(localStorage.getItem(STORAGE_KEY) === data.latestVersion);
+          setError(null);
+        }
+        return true;
+      } catch (err) {
+        if (isMountedRef.current && !background) {
+          setError(err instanceof Error ? err : new Error('Unknown error'));
+        }
+        return false;
+      } finally {
+        if (isMountedRef.current && !background) {
+          setLoading(false);
+        }
+      }
+    },
+    [clearRuntimePolicyRetry],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -144,8 +156,9 @@ export function useVersionCheck(): UseVersionCheckResult {
 
     return () => {
       isMountedRef.current = false;
+      clearRuntimePolicyRetry();
     };
-  }, [checkVersion]);
+  }, [checkVersion, clearRuntimePolicyRetry]);
 
   useEffect(() => {
     const notice = versionInfo?.runtimeNotice;
@@ -158,10 +171,8 @@ export function useVersionCheck(): UseVersionCheckResult {
       return;
     }
 
-    let cancelled = false;
-    let retryTimer: number | undefined;
     const refresh = async () => {
-      if (cancelled || !isMountedRef.current) {
+      if (!isMountedRef.current) {
         return;
       }
 
@@ -170,20 +181,20 @@ export function useVersionCheck(): UseVersionCheckResult {
       setRuntimePolicyUpdatedAt(Date.now());
       setRuntimeNoticeDismissed(isRuntimeNoticeSnoozed(notice));
       const succeeded = await checkVersion(true);
-      if (!succeeded && !cancelled && isMountedRef.current) {
-        retryTimer = window.setTimeout(refresh, REFRESH_RETRY_MS);
+      if (!succeeded && isMountedRef.current) {
+        clearRuntimePolicyRetry();
+        runtimePolicyRetryTimerRef.current = window.setTimeout(() => {
+          runtimePolicyRetryTimerRef.current = undefined;
+          void refresh();
+        }, REFRESH_RETRY_MS);
       }
     };
     const refreshTimer = window.setTimeout(refresh, delay);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(refreshTimer);
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
-      }
     };
-  }, [checkVersion, runtimeNoticeDismissed, versionInfo?.runtimeNotice]);
+  }, [checkVersion, clearRuntimePolicyRetry, runtimeNoticeDismissed, versionInfo?.runtimeNotice]);
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {

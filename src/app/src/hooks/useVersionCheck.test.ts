@@ -301,7 +301,7 @@ describe('useVersionCheck', () => {
     });
     rejectCallApiOnce(new Error('Policy refresh failed'));
 
-    const { result } = renderHook(() => useVersionCheck());
+    const { result, unmount } = renderHook(() => useVersionCheck());
     await act(async () => {});
     const initialPolicyTime = result.current.runtimePolicyUpdatedAt;
     expect(result.current.runtimeNoticeDismissed).toBe(true);
@@ -314,9 +314,15 @@ describe('useVersionCheck', () => {
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(false);
     expect(result.current.runtimePolicyUpdatedAt).toBe(Date.parse('2026-07-30T00:00:00.000Z'));
     expect(result.current.runtimePolicyUpdatedAt).not.toBe(initialPolicyTime);
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('should not schedule a retry after the refresh effect is replaced', async () => {
+  it('should preserve a retry after the refresh effect is replaced', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
     const runtimeNotice = {
@@ -349,6 +355,13 @@ describe('useVersionCheck', () => {
           rejectRefresh = reject;
         }),
     );
+    mockCallApiResponseOnce({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: { ...runtimeNotice, reminderIntervalDays: 1 },
+    });
 
     const { result } = renderHook(() => useVersionCheck());
     await act(async () => {});
@@ -367,7 +380,7 @@ describe('useVersionCheck', () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(callApi).toHaveBeenCalledTimes(3);
   });
 
   it('should only call the API once on mount and not refresh', async () => {
