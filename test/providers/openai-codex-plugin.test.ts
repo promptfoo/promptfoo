@@ -114,6 +114,34 @@ describe('OpenAICodexPluginProvider', () => {
     expect(mocks.shutdown).toHaveBeenCalledOnce();
   });
 
+  it('renders runtime vars and resolves plugin paths from config base', async () => {
+    const configRoot = path.join(root, 'config');
+    fs.mkdirSync(configRoot);
+    const relativePluginRoot = writePlugin(configRoot);
+    const provider = new OpenAICodexPluginProvider({
+      config: {
+        basePath: configRoot,
+        plugin: { path: '{{ pluginPath }}' },
+        workspace: '{{ workspacePath }}',
+        skill: '{{ skillName }}',
+      },
+    });
+
+    await provider.callApi('Return JSON', {
+      ...context(),
+      vars: { pluginPath: './plugin', workspacePath: '../workspace', skillName: 'demo-skill' },
+    });
+
+    const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
+    expect(relativePluginRoot).toBe(path.join(configRoot, 'plugin'));
+    expect(sdkConfig.working_dir).toBe(workspace);
+    expect(mocks.callApi).toHaveBeenCalledWith(
+      'Use the demo-plugin:demo-skill skill.\n\nReturn JSON',
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
   it('exports only provider-owned artifact references before cleanup', async () => {
     const exportedArtifacts = path.join(root, 'exported-artifacts');
     mocks.callApi.mockImplementationOnce(async () => {

@@ -19,7 +19,7 @@ after the result is recorded.
 CODEX_PLUGIN_WORKSPACE="$PWD/../../.." \
 CODEX_PLUGIN_CURRENT="$PWD/../../../plugins/demo-plugin" \
 CODEX_PLUGIN_BASELINE="/trusted/distinct/codex-plugin-baseline" \
-npm run local -- eval -c examples/openai-codex-plugin/promptfooconfig.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
 The current and baseline values must be distinct plugin paths or pinned package

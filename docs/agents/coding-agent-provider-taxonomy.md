@@ -18,12 +18,12 @@ single-turn model APIs. A coding-agent provider usually has some combination of:
 
 The main providers in this family today are:
 
-| Provider family         | Provider IDs                                          | Runtime boundary                           |
-| ----------------------- | ----------------------------------------------------- | ------------------------------------------ |
-| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`                    | `@openai/codex-sdk` library                |
-| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`     | Local `codex app-server` JSON-RPC process  |
-| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library   |
-| OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server |
+| Provider family         | Provider IDs                                              | Runtime boundary                           |
+| ----------------------- | --------------------------------------------------------- | ------------------------------------------ |
+| OpenAI Codex SDK        | `openai:codex-sdk`, `openai:codex`, `openai:codex-plugin` | `@openai/codex-sdk` library                |
+| OpenAI Codex app-server | `openai:codex-app-server`, `openai:codex-desktop`         | Local `codex app-server` JSON-RPC process  |
+| Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code`     | `@anthropic-ai/claude-agent-sdk` library   |
+| OpenCode SDK            | `opencode:sdk`, `opencode`                                | OpenCode SDK plus local or existing server |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -183,6 +183,7 @@ Provider IDs:
 - `openai:codex-sdk:<model>`
 - `openai:codex`
 - `openai:codex:<model>`
+- `openai:codex-plugin`
 
 Implemented capabilities:
 
@@ -194,6 +195,7 @@ Implemented capabilities:
 - JSON schema output.
 - Text and local-image input items.
 - Skill usage heuristics from `SKILL.md` reads.
+- Isolated trusted plugin evals through `openai:codex-plugin`.
 - Token usage and cost estimation for known Codex models.
 - Streaming aggregation for metadata and tracing.
 - Deep tracing into the Codex runtime.
@@ -211,6 +213,8 @@ Docs and examples:
 
 - `site/docs/providers/openai-codex-sdk.md`
 - `examples/openai-codex-sdk/`
+- `site/docs/providers/openai-codex-plugin.md`
+- `examples/openai-codex-plugin/`
 
 ### OpenAI Codex App Server
 

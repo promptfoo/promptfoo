@@ -22,6 +22,7 @@ const AGENTIC_PROVIDER_IDS = [
   'anthropic:claude-code',
   'openai:codex',
   'openai:codex-app-server',
+  'openai:codex-plugin',
   'openai:codex-desktop',
   'openai:codex-sdk',
   'opencode',

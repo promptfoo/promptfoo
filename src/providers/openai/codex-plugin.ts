@@ -6,6 +6,8 @@ import path from 'path';
 
 import { z } from 'zod';
 import logger from '../../logger';
+import { renderVarsInObject } from '../../util/render';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { type OpenAICodexSDKConfig, OpenAICodexSDKProvider } from './codex-sdk';
 
@@ -194,6 +196,25 @@ async function withDeadline<T>(
 
 function cleanupTimeoutMs(config: OpenAICodexPluginConfig): number {
   return config.timeout_ms ?? DEFAULT_CLEANUP_TIMEOUT_MS;
+}
+
+function resolveConfiguredPath(configuredPath: string | undefined, basePath: string | undefined) {
+  return configuredPath ? resolveAgenticWorkingDir(configuredPath, basePath) : undefined;
+}
+
+function resolveCodexPluginPaths(config: OpenAICodexPluginConfig): OpenAICodexPluginConfig {
+  const pluginPath = resolveConfiguredPath(config.plugin.path, config.basePath);
+  const workspace = resolveConfiguredPath(config.workspace, config.basePath);
+  const workingDir = resolveConfiguredPath(config.working_dir, config.basePath);
+  const artifactsDir = resolveConfiguredPath(config.artifacts_dir, config.basePath);
+
+  return {
+    ...config,
+    plugin: { ...config.plugin, ...(pluginPath ? { path: pluginPath } : {}) },
+    ...(workspace ? { workspace } : {}),
+    ...(workingDir ? { working_dir: workingDir } : {}),
+    ...(artifactsDir ? { artifacts_dir: artifactsDir } : {}),
+  };
 }
 
 function remainingDeadlineMs(deadline: number): number {
@@ -1020,10 +1041,15 @@ export class OpenAICodexPluginProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const config = parseCodexPluginConfig({
+    const mergedConfig = {
       ...this.config,
       ...(context?.prompt?.config as OpenAICodexPluginConfig | undefined),
-    });
+    };
+    const config = resolveCodexPluginPaths(
+      parseCodexPluginConfig(
+        renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexPluginConfig,
+      ),
+    );
     const startedAt = Date.now();
     const controller = new AbortController();
     let timedOut = false;
