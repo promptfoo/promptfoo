@@ -61,8 +61,13 @@ export function projectErrorForOutput(
   return error && hasAnyStripFlag(stripFlags) ? '[error details stripped]' : error;
 }
 
-function projectRedteamHistoryForOutput(history: unknown, stripFlags: OutputStripFlags): unknown {
+function projectRedteamHistoryForOutput(
+  history: unknown,
+  stripFlags: OutputStripFlags,
+  forceProjection = false,
+): unknown {
   const shouldProjectHistory =
+    forceProjection ||
     stripFlags.shouldStripPromptText ||
     stripFlags.shouldStripResponseOutput ||
     stripFlags.shouldStripTestVars;
@@ -107,6 +112,7 @@ function projectRedteamHistoryForOutput(history: unknown, stripFlags: OutputStri
 export function projectMetadataForOutput(
   metadata: Record<string, unknown> | undefined,
   stripFlags: OutputStripFlags,
+  forceHistoryProjection = false,
 ): Record<string, unknown> | undefined {
   if (stripFlags.shouldStripMetadata) {
     return undefined;
@@ -132,6 +138,7 @@ export function projectMetadataForOutput(
       const projectedHistory = projectRedteamHistoryForOutput(
         projectedMetadata[historyKey],
         stripFlags,
+        forceHistoryProjection,
       );
       if (projectedHistory === undefined) {
         delete projectedMetadata[historyKey];

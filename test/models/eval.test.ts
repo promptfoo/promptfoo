@@ -2207,9 +2207,12 @@ describe('evaluator', () => {
     });
 
     it('projects sensitive attack histories when metadata remains enabled', async () => {
+      const rawError = `ERROR_SECRET_PAYLOAD:${'x'.repeat(1_000_000)}`;
       const createHistoryResult = () =>
         createEvaluateResult({
-          error: 'sensitive error prompt and output',
+          error: rawError,
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
           metadata: {
             pluginId: 'harmful',
             redteamHistory: [
@@ -2221,16 +2224,17 @@ describe('evaluator', () => {
                 outputAudio: { data: 'sensitive output audio', format: 'wav' },
                 outputImage: { data: 'sensitive output image', format: 'png' },
                 inputVars: { attackInput: 'sensitive input var' },
-                trace: { insights: ['sensitive trace output'] },
-                traceSummary: 'sensitive trace summary',
+                trace: { insights: ['TRACE_SECRET_PAYLOAD'] },
+                traceSummary: 'TRACE_SUMMARY_SECRET_PAYLOAD',
                 metadata: {
                   inputMaterialization: {
-                    prompt: { injectedInstruction: 'sensitive injected instruction' },
+                    prompt: { injectedInstruction: 'INJECTED_SECRET_PAYLOAD' },
                   },
+                  apiKey: 'API_KEY_SECRET_PAYLOAD',
                 },
-                guardrails: { reason: 'sensitive guardrail reason' },
-                improvement: 'sensitive improvement prompt',
-                sessionId: 'sensitive session id',
+                guardrails: { reason: 'GUARDRAIL_SECRET_PAYLOAD' },
+                improvement: 'IMPROVEMENT_SECRET_PAYLOAD',
+                sessionId: 'SESSION_SECRET_PAYLOAD',
                 score: 1,
               },
               null,
@@ -2240,6 +2244,8 @@ describe('evaluator', () => {
                 id: 'node-1',
                 prompt: 'sensitive tree prompt',
                 output: 'sensitive tree output',
+                trace: { payload: 'TREE_TRACE_SECRET_PAYLOAD' },
+                sessionId: 'TREE_SESSION_SECRET_PAYLOAD',
                 score: 1,
               },
             ],
@@ -2249,6 +2255,57 @@ describe('evaluator', () => {
       await persistedEval.addResult(createHistoryResult());
       const legacyEval = new Eval({});
       legacyEval.oldResults = createEvaluateSummaryV2({ results: [createHistoryResult()] });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createHistoryResult());
+      const evals = [persistedEval, legacyEval, inMemoryEval];
+
+      for (const eval_ of evals) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const fullResult = full.results.results[0];
+
+        expect(compactResult.error).toBe('[error details stripped]');
+        expect(compactResult.failureReason).toBe(fullResult.failureReason);
+        expect(compactResult.metadata?.redteamHistory).toEqual([
+          {
+            prompt: 'sensitive history prompt',
+            promptAudio: { data: 'sensitive prompt audio', format: 'wav' },
+            promptImage: { data: 'sensitive prompt image', format: 'png' },
+            output: 'sensitive history output',
+            outputAudio: { data: 'sensitive output audio', format: 'wav' },
+            outputImage: { data: 'sensitive output image', format: 'png' },
+            inputVars: { attackInput: 'sensitive input var' },
+            score: 1,
+          },
+        ]);
+        expect(compactResult.metadata?.redteamTreeHistory).toEqual([
+          {
+            id: 'node-1',
+            prompt: 'sensitive tree prompt',
+            output: 'sensitive tree output',
+            score: 1,
+          },
+        ]);
+        for (const secret of [
+          'ERROR_SECRET_PAYLOAD',
+          'TRACE_SECRET_PAYLOAD',
+          'TRACE_SUMMARY_SECRET_PAYLOAD',
+          'INJECTED_SECRET_PAYLOAD',
+          'API_KEY_SECRET_PAYLOAD',
+          'GUARDRAIL_SECRET_PAYLOAD',
+          'IMPROVEMENT_SECRET_PAYLOAD',
+          'SESSION_SECRET_PAYLOAD',
+          'TREE_TRACE_SECRET_PAYLOAD',
+          'TREE_SESSION_SECRET_PAYLOAD',
+        ]) {
+          expect(JSON.stringify(compactResult)).not.toContain(secret);
+        }
+        expect(JSON.stringify(compactResult).length).toBeLessThan(100_000);
+        expect(fullResult.error).toBe(rawError);
+        expect(JSON.stringify(fullResult.metadata)).toContain('TRACE_SECRET_PAYLOAD');
+        expect(JSON.stringify(fullResult.metadata)).toContain('TREE_TRACE_SECRET_PAYLOAD');
+      }
       const restoreEnv = mockProcessEnv({
         PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
         PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
@@ -2256,7 +2313,7 @@ describe('evaluator', () => {
       });
 
       try {
-        for (const eval_ of [persistedEval, legacyEval]) {
+        for (const eval_ of evals) {
           const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
           const result = projected.results.results[0];
 

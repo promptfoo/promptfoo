@@ -62,7 +62,6 @@ import EvalResult, {
   type OutputStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
-  projectErrorForOutput,
   projectEvaluateResultForOutput,
   projectMetadataForOutput,
   sanitizeResultForJsonlArtifact,
@@ -97,7 +96,7 @@ interface RedteamReportResultRow {
   responseOutput: string | null;
   responsePrompt: string | null;
   responseRedteamFinalPrompt: string | null;
-  error: string | null;
+  errorExists: number;
   failureReason: number;
   success: boolean;
   score: number;
@@ -121,6 +120,8 @@ interface RedteamReportResultRow {
 }
 
 type RedteamReportStripFlags = OutputStripFlags;
+
+const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
 
 export type ResultsFileOptions = {
   includeTraces?: boolean;
@@ -326,6 +327,7 @@ function createRedteamReportMetadata(
   return projectMetadataForOutput(
     Object.keys(metadata).length > 0 ? metadata : undefined,
     stripFlags,
+    true,
   );
 }
 
@@ -376,7 +378,7 @@ function createRedteamReportResult(
     prompt,
     vars,
     response,
-    error: projectErrorForOutput(row.error, stripFlags),
+    error: row.errorExists ? REDTEAM_REPORT_ERROR_MARKER : null,
     failureReason: row.failureReason as ResultFailureReason,
     success: row.success,
     score: row.score,
@@ -433,7 +435,7 @@ function projectResultForRedteamReport(
         }),
       }
     : undefined;
-  const projectedMetadata = projectMetadataForOutput(allowlistedMetadata, stripFlags);
+  const projectedMetadata = projectMetadataForOutput(allowlistedMetadata, stripFlags, true);
 
   const redteamFinalPrompt =
     stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
@@ -479,7 +481,7 @@ function projectResultForRedteamReport(
     prompt: projectPromptForRedteamReport(normalizedPrompt, stripFlags.shouldStripPromptText),
     vars: stripFlags.shouldStripTestVars ? {} : projectVarsForRedteamReport(result.vars, injectVar),
     response,
-    error: projectErrorForOutput(result.error, stripFlags),
+    error: result.error ? REDTEAM_REPORT_ERROR_MARKER : result.error,
     failureReason: result.failureReason,
     success: result.success,
     score: result.score,
@@ -2244,7 +2246,10 @@ export default class Eval {
         responseRedteamFinalPrompt: sql<
           string | null
         >`json_extract(${validResponseJson}, '$.metadata.redteamFinalPrompt')`,
-        error: evalResultsTable.error,
+        errorExists: sql<number>`CASE
+          WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
+          ELSE 0
+        END`,
         failureReason: evalResultsTable.failureReason,
         success: evalResultsTable.success,
         score: evalResultsTable.score,
