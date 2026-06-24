@@ -510,13 +510,16 @@ type ResultMetricCategory = 'pass' | 'fail' | 'error';
 type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
 type RatingEvalResult = Pick<
   PersistedEvalResult,
+  | 'error'
   | 'failureReason'
   | 'gradingResult'
   | 'manualRatingState'
   | 'metadata'
   | 'promptIdx'
+  | 'response'
   | 'score'
   | 'success'
+  | 'testCase'
 >;
 
 const HUMAN_ASSERTION_TYPE = 'human';
@@ -816,9 +819,9 @@ function normalizeRatingSubmission(
   gradingResult.score = submitted.score;
   gradingResult.reason = manualReason;
   gradingResult.componentResults = [
-    ...(previous
-      ? previousAutomatedComponents
-      : submittedComponents.filter((componentResult) => !isHumanGradingResult(componentResult))),
+    // Non-human components are evaluation output, not rating input. A result without a
+    // server baseline must not let a rating request invent assertions that alter metrics.
+    ...previousAutomatedComponents,
     humanRating,
   ];
   if (isHumanAssertion(gradingResult.assertion)) {
@@ -878,6 +881,14 @@ function getManualRatingFailureReason(
   return success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
 }
 
+function hasExecutionError(result: RatingEvalResult): boolean {
+  return (
+    normalizeFailureReason(result.failureReason) === ResultFailureReason.ERROR ||
+    (typeof result.error === 'string' && result.error.length > 0) ||
+    typeof asRecord(result.response)?.error === 'string'
+  );
+}
+
 function getEditedManualRatingState(
   result: RatingEvalResult,
   existingState: ManualRatingState | undefined,
@@ -888,31 +899,87 @@ function getEditedManualRatingState(
   return existingState.status === 'cleared' ? undefined : existingState;
 }
 
+type AutomatedClearComponent = {
+  pass: boolean;
+  score: number;
+  weight: number;
+  failedContentSafetyCheck: boolean;
+};
+
+function getAutomatedClearComponents(componentResults: unknown): AutomatedClearComponent[] {
+  const rawComponents = Array.isArray(componentResults) ? componentResults : [];
+  const automatedComponents: AutomatedClearComponent[] = [];
+  for (let index = 0; index < rawComponents.length; index++) {
+    const component = asRecord(rawComponents[index]);
+    if (!component || isHumanAssertion(component.assertion)) {
+      continue;
+    }
+    const assertion = asRecord(component.assertion);
+    const assertionSet = asRecord(asRecord(component.metadata)?.assertionSet);
+    const rawWeight = assertionSet?.weight ?? assertion?.weight ?? 1;
+    if (
+      typeof component.pass === 'boolean' &&
+      typeof component.score === 'number' &&
+      Number.isFinite(component.score)
+    ) {
+      automatedComponents.push({
+        pass: component.pass,
+        score: component.score,
+        weight: typeof rawWeight === 'number' && Number.isFinite(rawWeight) ? rawWeight : 1,
+        failedContentSafetyCheck:
+          component.pass === false &&
+          assertion?.type === 'guardrails' &&
+          asRecord(assertion.config)?.purpose === 'redteam',
+      });
+    }
+    // Assertion-set children are flattened after their aggregate parent for display. The
+    // evaluator weights only the parent, so skip the duplicated children here too.
+    if (Array.isArray(component.componentResults)) {
+      index += component.componentResults.length;
+    }
+  }
+  return automatedComponents;
+}
+
 function buildServerOwnedClearGradingResult(
+  result: RatingEvalResult,
   current: GradingResult,
   normalized: GradingResult,
 ): GradingResult {
-  const automatedComponents = Array.isArray(normalized.componentResults)
-    ? normalized.componentResults.filter(
-        (componentResult) => !isHumanAssertion(componentResult.assertion),
-      )
-    : [];
-  const componentScores = automatedComponents
-    .map((componentResult) => componentResult.score)
-    .filter((score): score is number => typeof score === 'number');
+  const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
+  const totalWeight = automatedComponents.reduce((sum, component) => sum + component.weight, 0);
+  const automatedScore =
+    totalWeight > 0
+      ? automatedComponents.reduce(
+          (sum, component) => sum + component.score * component.weight,
+          0,
+        ) / totalWeight
+      : 0;
+  const testCase = asRecord(result.testCase);
+  const threshold = testCase?.threshold;
+  let automatedPass =
+    typeof threshold === 'number' && Number.isFinite(threshold)
+      ? automatedScore >= threshold
+      : automatedComponents.every((component) => component.pass);
+  if (automatedComponents.some((component) => component.failedContentSafetyCheck)) {
+    automatedPass = true;
+  }
+  if (hasExecutionError(result)) {
+    automatedPass = false;
+  }
+  const fallbackPass =
+    !hasExecutionError(result) &&
+    normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
+  const canReconstructAutomatedOutcome =
+    automatedComponents.length > 0 && !hasOwn(testCase ?? {}, 'assertScoringFunction');
   const cleared = {
     ...current,
-    // A legacy clear submits the whole grading result. Recompute its aggregate outcome from
-    // the server-owned automated components instead of trusting caller-supplied pass/score.
-    pass:
-      automatedComponents.length > 0
-        ? automatedComponents.every((componentResult) => componentResult.pass)
-        : normalized.pass,
-    score:
-      componentScores.length > 0
-        ? componentScores.reduce((sum, componentScore) => sum + componentScore, 0) /
-          componentScores.length
-        : normalized.score,
+    // A legacy clear submits the whole grading result. Recompute from the server-owned
+    // automated components using the evaluator's weighting/threshold rules. Component-less or
+    // custom-scored legacy rows have no recoverable standard score, so use the failure category's
+    // canonical baseline rather than accepting caller-controlled aggregate fields.
+    pass: canReconstructAutomatedOutcome ? automatedPass : fallbackPass,
+    score: canReconstructAutomatedOutcome ? automatedScore : fallbackPass ? 1 : 0,
   } as GradingResult;
   cleared.reason = current.reason;
   if (hasOwn(normalized, 'componentResults')) {
@@ -951,7 +1018,11 @@ function resolveClearingManualRating(
   const failureReason =
     existingState?.status === 'legacy-active'
       ? existingState.original.failureReason
-      : normalizeFailureReason(result.failureReason);
+      : hasExecutionError(result)
+        ? ResultFailureReason.ERROR
+        : success
+          ? ResultFailureReason.NONE
+          : ResultFailureReason.ASSERT;
   return {
     gradingResult: clearedGradingResult,
     success,
@@ -1056,7 +1127,7 @@ function resolveRatingTransition(
       : normalized.gradingResult;
   const serverOwnedClearGradingResult =
     result.gradingResult && isClearingManualRating
-      ? buildServerOwnedClearGradingResult(result.gradingResult, normalized.gradingResult)
+      ? buildServerOwnedClearGradingResult(result, result.gradingResult, normalized.gradingResult)
       : normalized.gradingResult;
 
   if (isRepeatedClear) {

@@ -1375,6 +1375,181 @@ describe('eval routes', () => {
       expect(updateSignalFile).not.toHaveBeenCalled();
     });
 
+    it('reconstructs weighted threshold outcomes when clearing a legacy rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      const automatedComponents = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Weighted pass',
+          assertion: { type: 'equals' as const, value: 'yes', weight: 9 },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Weighted failure',
+          assertion: { type: 'equals' as const, value: 'no', weight: 1 },
+        },
+      ];
+      result.testCase = {
+        ...result.testCase,
+        threshold: 0.8,
+        assert: automatedComponents.map(({ assertion }) => assertion),
+      };
+      result.gradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Legacy manual failure',
+        componentResults: [
+          null,
+          ...automatedComponents,
+          {
+            pass: false,
+            score: 0,
+            reason: 'Legacy manual failure',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as unknown as NonNullable<typeof result.gradingResult>;
+      result.success = false;
+      result.score = 0;
+      result.failureReason = ResultFailureReason.NONE;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      Object.assign(prompt.metrics, {
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 3,
+      });
+      await eval_.save();
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          pass: true,
+          score: 999,
+          componentResults: [null, ...automatedComponents],
+        });
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: true,
+        score: 0.9,
+        failureReason: ResultFailureReason.NONE,
+      });
+      expect(clearResponse.body.gradingResult.componentResults).toEqual([
+        null,
+        ...automatedComponents,
+      ]);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        score: expect.closeTo(0.9, 10),
+        testPassCount: 1,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 2,
+      });
+    });
+
+    it('fails closed on caller aggregate fields when a legacy error has no components', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.gradingResult = null;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.assertFailCount -= 1;
+      await eval_.save();
+      await markResultAsError(eval_, result);
+      const errorMetrics = structuredClone(prompt.metrics);
+
+      result.gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Legacy manual pass',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Legacy manual pass',
+            assertion: { type: 'human' },
+          },
+        ],
+      };
+      result.success = true;
+      result.score = 1;
+      await result.save();
+      prompt.metrics.score += 1;
+      prompt.metrics.testErrorCount -= 1;
+      prompt.metrics.testPassCount += 1;
+      prompt.metrics.assertPassCount += 1;
+      await eval_.save();
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 31_337, componentResults: [] });
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: { pass: false, score: 0, componentResults: [] },
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        errorMetrics,
+      );
+    });
+
+    it('discards caller-supplied automated components when no server baseline exists', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      result.gradingResult = null;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.assertPassCount -= 1;
+      await eval_.save();
+      const baselineMetrics = structuredClone(prompt.metrics);
+
+      const rateResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          pass: true,
+          score: 1,
+          ratingAction: 'rate',
+          componentResults: [
+            { pass: true, score: 1, assertion: { type: 'equals', value: 'forged-1' } },
+            { pass: true, score: 1, assertion: { type: 'equals', value: 'forged-2' } },
+            { pass: false, score: 0, assertion: { type: 'equals', value: 'forged-3' } },
+          ],
+        });
+
+      expect(rateResponse.status).toBe(200);
+      expect(rateResponse.body.gradingResult.componentResults).toEqual([
+        expect.objectContaining({ pass: true, score: 1, assertion: { type: 'human' } }),
+      ]);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        ...baselineMetrics,
+        assertPassCount: baselineMetrics.assertPassCount + 1,
+      });
+    });
+
     it('restores server-owned automated components when a clear payload mutates them', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
