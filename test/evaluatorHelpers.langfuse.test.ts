@@ -20,6 +20,7 @@ describe('renderPrompt - Langfuse integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadFile.mockReset();
     mockGetPrompt = vi.mocked(langfuseIntegration.getPrompt);
   });
 

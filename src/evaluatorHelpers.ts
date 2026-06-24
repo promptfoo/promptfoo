@@ -32,7 +32,6 @@ import {
   isSupportedNestedTextFile,
   isVideoFile,
 } from './util/fileExtensions';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -346,12 +345,19 @@ function getDirectTopLevelReference(value: string): string | undefined {
   return /^\s*\{\{\s*([A-Za-z_]\w*)\s*\}\}\s*$/.exec(value)?.[1];
 }
 
+function getNestedFileReferencePath(value: string): string {
+  const referencedPath = value.slice('file://'.length);
+  return process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencedPath)
+    ? referencedPath.slice(1)
+    : referencedPath;
+}
+
 async function loadNestedFileRef(
   value: string,
   basePath: string,
   varName: string,
 ): Promise<NestedFileRefLoadResult> {
-  const { filePath: referencedPath } = parseFileUrl(value);
+  const referencedPath = getNestedFileReferencePath(value);
   const filePath = path.resolve(process.cwd(), basePath, referencedPath);
   if (!isSupportedNestedTextFile(filePath)) {
     // Unlike top-level vars, JavaScript/Python/PDF/media references are intentionally
