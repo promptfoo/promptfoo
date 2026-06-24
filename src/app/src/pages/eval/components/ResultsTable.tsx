@@ -22,7 +22,6 @@ import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
-  type EvaluateResult,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
@@ -30,7 +29,11 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import {
+  EVAL_TABLE_MAX_PAGE_SIZE,
+  type SubmitRatingResponse,
+  SubmitRatingResponseSchema,
+} from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -47,7 +50,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
@@ -562,10 +565,23 @@ type ManualRatingUpdate = {
   modifiedComponentResults: boolean;
 };
 
-type PersistedRatingResult = Pick<
-  EvaluateResult,
-  'failureReason' | 'gradingResult' | 'score' | 'success'
->;
+type PersistedRatingResult = SubmitRatingResponse;
+
+function isAppliedResultFilter(filter: ResultsFilter): boolean {
+  if (filter.type === 'metadata' && filter.operator === 'exists') {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metadata') {
+    return Boolean(filter.value && filter.field);
+  }
+  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metric') {
+    return Boolean(filter.value && filter.field);
+  }
+  return Boolean(filter.value);
+}
 
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
   if (typeof prompt.provider === 'string') {
@@ -968,33 +984,59 @@ function buildRatingTableUpdate({
   };
 }
 
+function findRatingOutput(table: EvaluateTable, resultId: string) {
+  for (let rowIndex = 0; rowIndex < table.body.length; rowIndex++) {
+    const promptIndex = table.body[rowIndex].outputs.findIndex((output) => output?.id === resultId);
+    if (promptIndex !== -1) {
+      const output = table.body[rowIndex].outputs[promptIndex];
+      if (output) {
+        return { output, promptIndex, rowIndex };
+      }
+    }
+  }
+  return undefined;
+}
+
+function replaceRatingOutput(
+  table: EvaluateTable,
+  resultId: string,
+  output: EvaluateTableOutput,
+): EvaluateTable {
+  const location = findRatingOutput(table, resultId);
+  if (!location) {
+    return table;
+  }
+  const body = [...table.body];
+  const row = { ...body[location.rowIndex] };
+  const outputs = [...row.outputs];
+  outputs[location.promptIndex] = output;
+  row.outputs = outputs;
+  body[location.rowIndex] = row;
+  return { ...table, body };
+}
+
 function applyPersistedRatingResult({
   table,
-  rowIndex,
-  promptIndex,
+  resultId,
   result,
 }: {
   table: EvaluateTable;
-  rowIndex: number;
-  promptIndex: number;
+  resultId: string;
   result: PersistedRatingResult;
 }): EvaluateTable {
-  const body = [...table.body];
-  const row = { ...body[rowIndex] };
-  const outputs = [...row.outputs];
-  const output = outputs[promptIndex];
+  const location = findRatingOutput(table, resultId);
+  const output = location?.output;
   invariant(output, 'Cannot apply a rating response to a missing output');
-  outputs[promptIndex] = {
+  return replaceRatingOutput(table, resultId, {
     ...output,
     pass: result.success,
     score: result.score,
     gradingResult: result.gradingResult,
     failureReason: result.failureReason,
-  };
-  row.outputs = outputs;
-  body[rowIndex] = row;
-  return { ...table, body };
+  });
 }
+
+class ConfirmedRatingPersistenceError extends Error {}
 
 async function saveManualRating({
   evalId,
@@ -1029,11 +1071,11 @@ async function saveManualRating({
       });
 
   if (!response.ok) {
-    throw new Error('Network response was not ok');
+    throw new ConfirmedRatingPersistenceError('Network response was not ok');
   }
 
   return isVersion4 && typeof response.json === 'function'
-    ? ((await response.json()) as PersistedRatingResult)
+    ? SubmitRatingResponseSchema.parse(await response.json())
     : undefined;
 }
 
@@ -1656,6 +1698,9 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+  const latestTableRef = useRef(table);
+  latestTableRef.current = table;
+  const pendingRatingRequestsRef = useRef(new Map<string, Promise<void>>());
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -1693,7 +1738,6 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -1703,58 +1747,119 @@ function ResultsTable({
       score?: number,
       comment?: string,
     ) => {
-      const existingOutput = body[rowIndex].outputs[promptIndex];
-      const ratingUpdate = getManualRatingUpdate({
-        existingOutput,
-        isPass,
-        score,
-        comment,
-      });
-      const gradingResult = buildManualGradingResult({
-        existingOutput,
-        ratingUpdate,
-        isPass,
-        score,
-        comment,
-      });
-      const newTable = buildRatingTableUpdate({
-        head,
-        body,
-        rowIndex,
-        promptIndex,
-        ratingUpdate,
-        gradingResult,
-      });
+      const previousRequest = pendingRatingRequestsRef.current.get(resultId);
+      if (previousRequest) {
+        await previousRequest;
+      }
 
-      setTable(newTable);
-      if (inComparisonMode) {
-        showToast('Ratings are not saved in comparison mode', 'warning');
-      } else {
-        try {
-          const persistedResult = await saveManualRating({
-            evalId,
-            resultId,
-            version,
-            gradingResult,
-            table: newTable,
-          });
-          if (persistedResult) {
-            setTable(
-              applyPersistedRatingResult({
-                table: newTable,
-                rowIndex,
-                promptIndex,
+      const currentRequest = (async () => {
+        const currentTable = latestTableRef.current;
+        const currentLocation = findRatingOutput(currentTable, resultId);
+        const currentRowIndex = currentLocation?.rowIndex ?? rowIndex;
+        const currentPromptIndex = currentLocation?.promptIndex ?? promptIndex;
+        const existingOutput =
+          currentLocation?.output ?? currentTable.body[currentRowIndex].outputs[currentPromptIndex];
+        invariant(existingOutput, 'Cannot rate a missing output');
+        const ratingUpdate = getManualRatingUpdate({
+          existingOutput,
+          isPass,
+          score,
+          comment,
+        });
+        const gradingResult = buildManualGradingResult({
+          existingOutput,
+          ratingUpdate,
+          isPass,
+          score,
+          comment,
+        });
+        const newTable = buildRatingTableUpdate({
+          head: currentTable.head,
+          body: currentTable.body,
+          rowIndex: currentRowIndex,
+          promptIndex: currentPromptIndex,
+          ratingUpdate,
+          gradingResult,
+        });
+
+        latestTableRef.current = newTable;
+        setTable(newTable);
+        if (inComparisonMode) {
+          showToast('Ratings are not saved in comparison mode', 'warning');
+        } else {
+          try {
+            const persistedResult = await saveManualRating({
+              evalId,
+              resultId,
+              version,
+              gradingResult,
+              table: newTable,
+            });
+            if (persistedResult) {
+              const reconciledTable = applyPersistedRatingResult({
+                table: latestTableRef.current,
+                resultId,
                 result: persistedResult,
-              }),
-            );
+              });
+              latestTableRef.current = reconciledTable;
+              setTable(reconciledTable);
+            }
+          } catch (error) {
+            console.error('Failed to update table:', error);
+            if (error instanceof ConfirmedRatingPersistenceError) {
+              const rolledBackTable = replaceRatingOutput(
+                latestTableRef.current,
+                resultId,
+                existingOutput,
+              );
+              latestTableRef.current = rolledBackTable;
+              setTable(rolledBackTable);
+              return;
+            }
+
+            // The server may have committed before the connection or response parsing failed.
+            // Refetch the current page instead of asserting that the optimistic state is wrong.
+            if (evalId) {
+              await fetchEvalData(evalId, {
+                pageIndex: pagination.pageIndex,
+                pageSize: pagination.pageSize,
+                filterMode,
+                searchText: debouncedSearchText,
+                filters: Object.values(filters.values).filter(isAppliedResultFilter),
+                skipSettingEvalId: true,
+                skipLoadingState: true,
+              }).catch((refreshError) => {
+                console.error(
+                  'Failed to refresh table after an ambiguous rating response:',
+                  refreshError,
+                );
+              });
+            }
           }
-        } catch (error) {
-          console.error('Failed to update table:', error);
-          setTable({ head, body });
+        }
+      })();
+      pendingRatingRequestsRef.current.set(resultId, currentRequest);
+      try {
+        await currentRequest;
+      } finally {
+        if (pendingRatingRequestsRef.current.get(resultId) === currentRequest) {
+          pendingRatingRequestsRef.current.delete(resultId);
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [
+      debouncedSearchText,
+      evalId,
+      fetchEvalData,
+      filterMode,
+      filters.values,
+      inComparisonMode,
+      pagination.pageIndex,
+      pagination.pageSize,
+      setTable,
+      showToast,
+      version,
+    ],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
@@ -1875,26 +1980,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
+      .filter(isAppliedResultFilter)
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -1983,21 +2069,7 @@ function ResultsTable({
       // For metric filters with is_defined operator, only field is required.
       // For metric filters with comparison operators, both field and value are required.
       // For non-metadata/non-metric filters, value is required.
-      filters: Object.values(filters.values).filter((filter) => {
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        return Boolean(filter.value);
-      }),
+      filters: Object.values(filters.values).filter(isAppliedResultFilter),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [

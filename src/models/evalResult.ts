@@ -531,14 +531,12 @@ const ManualRatingStateSchema = z.object({
         score: z.number(),
         reason: z.unknown().optional(),
         assertion: z.unknown().optional(),
-        componentResults: z.array(z.unknown()).optional(),
         hadReason: z.boolean(),
         hadAssertion: z.boolean(),
         hadComponentResults: z.boolean(),
       })
       .nullable(),
   }),
-  clearRequestHash: z.string().optional(),
 });
 
 type ManualRatingState = z.infer<typeof ManualRatingStateSchema>;
@@ -559,20 +557,12 @@ function hasOwn(value: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function getClearRequestHash(gradingResult: GradingResult): string | undefined {
-  if (
-    !Array.isArray(gradingResult.componentResults) ||
-    gradingResult.componentResults.some(isHumanGradingResult) ||
-    isHumanAssertion(gradingResult.assertion)
-  ) {
-    return undefined;
-  }
-
-  // A repeated clear may contain reordered automated components or unrelated passthrough
-  // fields. Neither is authoritative for this endpoint, so bind idempotency only to the
-  // requested top-level outcome. This flat serialization is bounded even when passthrough
-  // data contains deeply nested objects.
-  return JSON.stringify([gradingResult.pass, gradingResult.score]);
+function isExplicitClearRequest(gradingResult: GradingResult): boolean {
+  return (
+    Array.isArray(gradingResult.componentResults) &&
+    !gradingResult.componentResults.some(isHumanGradingResult) &&
+    !isHumanAssertion(gradingResult.assertion)
+  );
 }
 
 function getManualRatingState(metadata: unknown): ManualRatingState | undefined {
@@ -638,7 +628,6 @@ function captureManualRatingState(result: RatingEvalResult): ManualRatingState {
             score: gradingResult.score,
             reason: gradingResult.reason,
             assertion: gradingResult.assertion,
-            componentResults: gradingResult.componentResults,
             hadReason: hasOwn(gradingResult, 'reason'),
             hadAssertion: hasOwn(gradingResult, 'assertion'),
             hadComponentResults: hasOwn(gradingResult, 'componentResults'),
@@ -676,9 +665,7 @@ function restoreOriginalGradingResult(
   } else {
     delete restored.assertion;
   }
-  if (original.hadComponentResults) {
-    restored.componentResults = (original.componentResults ?? []) as GradingResult[];
-  } else {
+  if (!original.hadComponentResults) {
     delete restored.componentResults;
   }
 
@@ -789,7 +776,6 @@ function normalizeRatingSubmission(
 function resolveRatingTransition(
   result: RatingEvalResult,
   submittedGradingResult: GradingResult,
-  clearRequestHash: string | undefined,
 ): {
   gradingResult: GradingResult | null;
   success: boolean;
@@ -818,8 +804,7 @@ function resolveRatingTransition(
   if (
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
-    clearRequestHash !== undefined &&
-    existingState.clearRequestHash === clearRequestHash
+    isExplicitClearRequest(submittedGradingResult)
   ) {
     gradingResult = restoreOriginalGradingResult(normalized.gradingResult, existingState);
     success = existingState.original.success;
@@ -836,7 +821,7 @@ function resolveRatingTransition(
       success = existingState.original.success;
       score = existingState.original.score;
       failureReason = existingState.original.failureReason;
-      nextState = { ...existingState, status: 'cleared', clearRequestHash };
+      nextState = { ...existingState, status: 'cleared' };
     } else {
       // Ratings created before provenance was recorded cannot be restored exactly.
       failureReason = normalizeFailureReason(result.failureReason);
@@ -923,7 +908,6 @@ async function submitEvalResultRating(
   id: string,
   submittedGradingResult: GradingResult,
 ) {
-  const clearRequestHash = getClearRequestHash(submittedGradingResult);
   const db = await getDb();
   const transactionResult = await db.transaction(async (tx) => {
     const result = await tx
@@ -965,7 +949,7 @@ async function submitEvalResultRating(
 
     const previousCategory = getResultMetricCategory(result.success, result.failureReason);
     const previousAssertions = countGradingAssertions(result.gradingResult);
-    const transition = resolveRatingTransition(result, submittedGradingResult, clearRequestHash);
+    const transition = resolveRatingTransition(result, submittedGradingResult);
     const nextAssertions = countGradingAssertions(transition.gradingResult);
     const nextCategory = getResultMetricCategory(transition.success, transition.failureReason);
 

@@ -793,11 +793,17 @@ describe('eval routes', () => {
       const firstClear = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(clearPayload);
+      const freshlyRestoredResult = await EvalResult.findById(result.id);
+      invariant(freshlyRestoredResult, 'Freshly restored result is required');
+      const equivalentFreshClear = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(freshlyRestoredResult));
       const repeatedClear = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send({ ...clearPayload, ignoredPassthroughField: { order: ['does', 'not', 'matter'] } });
 
       expect(firstClear.status).toBe(200);
+      expect(equivalentFreshClear.status).toBe(200);
       expect(repeatedClear.status).toBe(200);
       const restoredResult = await EvalResult.findById(result.id);
       expect(restoredResult?.success).toBe(false);
@@ -1040,7 +1046,6 @@ describe('eval routes', () => {
               failureReason: ResultFailureReason.NONE,
               gradingResult: null,
             },
-            clearRequestHash: JSON.stringify([false, 0.123]),
           },
         },
       };

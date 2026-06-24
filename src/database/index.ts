@@ -143,7 +143,7 @@ async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T
   }
 }
 
-function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
+function serializeTopLevelOperations(client: Client, db: Drizzle, skipWalMode: boolean): Drizzle {
   const transaction = db.transaction.bind(db);
   const execute = client.execute.bind(client);
   const beginTransaction = client.transaction.bind(client);
@@ -160,6 +160,15 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
       () => undefined,
     );
     return result;
+  };
+
+  const configureReplacementConnection = async () => {
+    await execute('PRAGMA foreign_keys = ON');
+    await execute('PRAGMA busy_timeout = 5000');
+    if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+      await execute('PRAGMA wal_autocheckpoint = 1000');
+      await execute('PRAGMA synchronous = NORMAL');
+    }
   };
 
   const serializeClientMethod = <TArgs extends unknown[], TResult>(
@@ -197,11 +206,9 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   client.transaction = (async (mode) => {
     return withTransientLockRetry(async () => {
       try {
-        // A completed libSQL transaction detaches its connection. Reapply the
-        // connection-local integrity setting before BEGIN on the replacement connection.
-        // Contention is handled by the asynchronous retry below so it does not block the
-        // event loop like SQLite's synchronous busy timeout can.
-        await execute('PRAGMA foreign_keys = ON');
+        // A completed libSQL transaction detaches its connection. Reapply all
+        // connection-local settings before BEGIN on the replacement connection.
+        await configureReplacementConnection();
         return await beginTransaction(mode);
       } catch (error) {
         if (isTransientDatabaseLockError(error)) {
@@ -220,9 +227,21 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
       return callback(currentTransaction);
     }
 
-    return runSerialized(() =>
-      transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
-    );
+    return runSerialized(async () => {
+      try {
+        return await transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config);
+      } finally {
+        // libSQL detaches the transaction connection after commit/rollback. Configure the
+        // fresh root connection before releasing the serialized queue to later statements.
+        try {
+          await configureReplacementConnection();
+        } catch (error) {
+          // The transaction outcome is already final. Do not turn a committed write into an
+          // ambiguous application error solely because replacement-connection tuning failed.
+          logger.warn('Failed to configure the post-transaction database connection', { error });
+        }
+      }
+    });
   }) as typeof db.transaction;
 
   return db;
@@ -254,7 +273,11 @@ export async function getDb() {
       await configureDatabase(client, isTesting);
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-      dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
+      dbInstance = serializeTopLevelOperations(
+        client,
+        drizzle(client, { logger: drizzleLogger }),
+        isTesting,
+      );
       return dbInstance;
     })().catch((error) => {
       if (sqliteInstance) {

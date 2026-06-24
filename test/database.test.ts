@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -203,12 +204,42 @@ describe('database WAL mode', () => {
       await tx.run("INSERT INTO transaction_lock_probe VALUES ('warm')");
     });
 
-    const lockHolder = createClient({ url: pathToFileURL(database.getDbPath()).href });
-    const lockTransaction = await lockHolder.transaction('write');
-    let lockReleased = false;
+    const worker = new Worker(
+      `
+        const { parentPort, workerData } = require('node:worker_threads');
+        const { createClient } = require('@libsql/client/node');
+        (async () => {
+          const client = createClient({ url: workerData.url });
+          const transaction = await client.transaction('write');
+          await transaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
+          parentPort.postMessage('locked');
+          setTimeout(async () => {
+            await transaction.commit();
+            client.close();
+            parentPort.postMessage('released');
+          }, 1500);
+        })().catch((error) => {
+          parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) });
+        });
+      `,
+      {
+        eval: true,
+        workerData: { url: pathToFileURL(database.getDbPath()).href },
+      },
+    );
     try {
-      await lockTransaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
+      await new Promise<void>((resolve, reject) => {
+        worker.once('error', reject);
+        worker.on('message', (message) => {
+          if (message === 'locked') {
+            resolve();
+          } else if (message && typeof message === 'object' && 'error' in message) {
+            reject(new Error(String(message.error)));
+          }
+        });
+      });
 
+      const startedAt = Date.now();
       const transactionOutcome = db
         .transaction(async (tx) => {
           await tx.run("INSERT INTO transaction_lock_probe VALUES ('retried')");
@@ -218,21 +249,18 @@ describe('database WAL mode', () => {
           (error) => ({ ok: false as const, error }),
         );
 
-      await new Promise((resolve) => setTimeout(resolve, 30));
-      await lockTransaction.commit();
-      lockReleased = true;
-
       expect(await transactionOutcome).toEqual({ ok: true });
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1000);
       await expect(db.all('SELECT id FROM transaction_lock_probe ORDER BY id')).resolves.toEqual([
         { id: 'holder' },
         { id: 'retried' },
         { id: 'warm' },
       ]);
+      await expect(db.get(sql`PRAGMA foreign_keys;`)).resolves.toEqual({ foreign_keys: 1 });
+      await expect(db.get(sql`PRAGMA busy_timeout;`)).resolves.toEqual({ timeout: 5000 });
+      await expect(db.get(sql`PRAGMA synchronous;`)).resolves.toEqual({ synchronous: 1 });
     } finally {
-      if (!lockReleased) {
-        await lockTransaction.rollback();
-      }
-      lockHolder.close();
+      await worker.terminate();
     }
   });
 });

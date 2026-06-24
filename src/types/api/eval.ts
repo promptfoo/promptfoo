@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  type GradingResult,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -306,6 +311,11 @@ export const SubmitRatingResponseSchema = z
     id: z.string(),
     success: z.boolean(),
     score: z.number(),
+    failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    gradingResult: z.custom<GradingResult | null>(
+      (value) => value === null || (typeof value === 'object' && !Array.isArray(value)),
+      'Expected grading result object or null',
+    ),
   })
   .passthrough();
 
