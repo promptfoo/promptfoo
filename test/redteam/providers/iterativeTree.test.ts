@@ -14,6 +14,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getNunjucksEngine } from '../../../src/util/templates';
 import {
   accumulateResponseTokenUsage,
@@ -37,7 +38,7 @@ import type {
 vi.mock('../../../src/providers/openai');
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
   ...(await importOriginal()),
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  shouldGenerateRemote: vi.fn(),
 }));
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
@@ -45,6 +46,11 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
     ...(await importOriginal()),
     getGraderById: vi.fn(),
   };
+});
+
+beforeEach(() => {
+  vi.mocked(shouldGenerateRemote).mockReset();
+  vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 });
 
 describe('RedteamIterativeProvider', () => {
