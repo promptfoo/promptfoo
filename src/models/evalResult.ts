@@ -416,6 +416,8 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 // which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
+// Rating provenance lives in eval_results.manual_rating_state. Strip this reserved path so
+// historical or externally supplied metadata can never be mistaken for authoritative state.
 const MANUAL_RATING_METADATA_KEY = 'manualRating';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -477,21 +479,14 @@ export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> 
   return strippedMetadata as T;
 }
 
-function surfaceTraceMetadata(
-  metadata: Record<string, unknown> | null | undefined,
-  includeManualRatingState = false,
-): {
+function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
   traceId?: string;
   evaluationId?: string;
   metadata: Record<string, unknown>;
-  manualRatingState?: ManualRatingState;
 } {
   const metadataRecord = metadata ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
-  const manualRatingState = includeManualRatingState
-    ? getManualRatingState(metadataRecord)
-    : undefined;
 
   const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
   const evaluationId =
@@ -507,7 +502,6 @@ function surfaceTraceMetadata(
     traceId,
     evaluationId,
     metadata: publicMetadata ?? {},
-    manualRatingState,
   };
 }
 
@@ -515,7 +509,13 @@ type ResultMetricCategory = 'pass' | 'fail' | 'error';
 type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
 type RatingEvalResult = Pick<
   PersistedEvalResult,
-  'failureReason' | 'gradingResult' | 'metadata' | 'promptIdx' | 'score' | 'success'
+  | 'failureReason'
+  | 'gradingResult'
+  | 'manualRatingState'
+  | 'metadata'
+  | 'promptIdx'
+  | 'score'
+  | 'success'
 >;
 
 const HUMAN_ASSERTION_TYPE = 'human';
@@ -572,33 +572,9 @@ function getLegacyClearRequestHash(gradingResult: GradingResult): string | undef
   return JSON.stringify([gradingResult.pass, gradingResult.score]);
 }
 
-function getManualRatingState(metadata: unknown): ManualRatingState | undefined {
-  const promptfooMetadata = asRecord(asRecord(metadata)?.[PROMPTFOO_METADATA_KEY]);
-  const parsed = ManualRatingStateSchema.safeParse(promptfooMetadata?.[MANUAL_RATING_METADATA_KEY]);
+function parseManualRatingState(value: unknown): ManualRatingState | undefined {
+  const parsed = ManualRatingStateSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
-}
-
-function setManualRatingState(
-  metadata: unknown,
-  state: ManualRatingState | undefined,
-): Record<string, unknown> | null {
-  const metadataRecord = { ...(asRecord(metadata) ?? {}) };
-  const promptfooMetadata = {
-    ...(asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]) ?? {}),
-  };
-
-  if (state) {
-    promptfooMetadata[MANUAL_RATING_METADATA_KEY] = state;
-  } else {
-    delete promptfooMetadata[MANUAL_RATING_METADATA_KEY];
-  }
-
-  if (Object.keys(promptfooMetadata).length > 0) {
-    metadataRecord[PROMPTFOO_METADATA_KEY] = promptfooMetadata;
-  } else {
-    delete metadataRecord[PROMPTFOO_METADATA_KEY];
-  }
-  return Object.keys(metadataRecord).length > 0 ? metadataRecord : null;
 }
 
 function stripManualRatingStateFromMetadata<T extends Record<string, unknown> | null | undefined>(
@@ -946,6 +922,7 @@ function resolveRatingTransition(
   success: boolean;
   score: number;
   failureReason: ResultFailureReason;
+  manualRatingState: ManualRatingState | null;
   metadata: PersistedEvalResult['metadata'];
 } {
   const previousHasManualRating = hasManualRating(result.gradingResult);
@@ -966,7 +943,7 @@ function resolveRatingTransition(
     result.score,
     ratingAction,
   );
-  const existingState = getManualRatingState(result.metadata);
+  const existingState = parseManualRatingState(result.manualRatingState);
   const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
   const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
     submittedGradingResult,
@@ -1065,16 +1042,13 @@ function resolveRatingTransition(
     gradingResult.pass = success;
     gradingResult.score = score;
   }
-  const shouldUpdateManualRatingState = existingState !== undefined || nextState !== undefined;
-  const metadata = shouldUpdateManualRatingState
-    ? setManualRatingState(result.metadata, nextState)
-    : result.metadata;
   return {
     gradingResult,
     success,
     score,
     failureReason,
-    metadata: metadata as PersistedEvalResult['metadata'],
+    manualRatingState: nextState ?? null,
+    metadata: result.metadata,
   };
 }
 
@@ -1176,6 +1150,7 @@ async function submitEvalResultRating(
       result.score !== transition.score ||
       normalizeFailureReason(result.failureReason) !== transition.failureReason ||
       !isDeepStrictEqual(result.gradingResult, transition.gradingResult) ||
+      !isDeepStrictEqual(result.manualRatingState, transition.manualRatingState) ||
       !isDeepStrictEqual(result.metadata, transition.metadata);
     if (!transitionChanged) {
       return { status: 'unchanged' as const, result };
@@ -1210,6 +1185,7 @@ async function submitEvalResultRating(
         success: transition.success,
         score: transition.score,
         failureReason: transition.failureReason,
+        manualRatingState: transition.manualRatingState,
         metadata: transition.metadata,
         updatedAt: getCurrentTimestamp(),
       })
@@ -1665,6 +1641,7 @@ export default class EvalResult {
     cost?: number | null;
     // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any> | null;
+    manualRatingState?: unknown;
     failureReason: ResultFailureReason | number;
     persisted?: boolean;
   }) {
@@ -1689,8 +1666,8 @@ export default class EvalResult {
       metadata: this.metadata,
       traceId: this.traceId,
       evaluationId: this.evaluationId,
-      manualRatingState: this.#manualRatingState,
-    } = surfaceTraceMetadata(opts.metadata, opts.persisted === true));
+    } = surfaceTraceMetadata(opts.metadata));
+    this.#manualRatingState = parseManualRatingState(opts.manualRatingState);
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -1707,10 +1684,8 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
-      metadata: setManualRatingState(
-        persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
-        this.#manualRatingState,
-      ),
+      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      manualRatingState: this.#manualRatingState ?? null,
     };
     //check if this exists in the db
     if (this.persisted) {

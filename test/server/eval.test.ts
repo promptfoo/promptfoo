@@ -1391,7 +1391,18 @@ describe('eval routes', () => {
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(createManualRatingPayload(result, true));
       expect(rateResponse.status).toBe(200);
+      expect(rateResponse.body).not.toHaveProperty('manualRatingState');
       expect(rateResponse.body.metadata?.__promptfoo?.manualRating).toBeUndefined();
+
+      const storedRatingState = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(storedRatingState?.manualRatingState).toMatchObject({
+        version: 1,
+        status: 'active',
+      });
 
       const manualResult = await EvalResult.findById(result.id);
       invariant(manualResult, 'Manual result is required');
@@ -1441,6 +1452,54 @@ describe('eval routes', () => {
       expect(persistedResult?.success).toBe(false);
       expect(persistedResult?.score).toBe(0.123);
       expect(persistedResult?.metadata).toEqual({ source: 'provider' });
+    });
+
+    it('ignores pre-existing metadata that collides with manual-rating provenance', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const originalResult = {
+        success: result.success,
+        score: result.score,
+        failureReason: result.failureReason,
+        gradingResult: structuredClone(result.gradingResult),
+      };
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      const db = await getDb();
+      await db
+        .update(evalResultsTable)
+        .set({
+          metadata: {
+            __promptfoo: {
+              manualRating: {
+                version: 1,
+                status: 'active',
+                original: {
+                  success: false,
+                  score: 0.123,
+                  failureReason: ResultFailureReason.ASSERT,
+                  gradingResult: null,
+                },
+              },
+            },
+          } as unknown as Record<string, string>,
+        })
+        .where(eq(evalResultsTable.id, result.id));
+      vi.mocked(updateSignalFile).mockClear();
+
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: false, score: 0, ratingAction: 'clear' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject(originalResult);
+      const persistedResult = await EvalResult.findById(result.id);
+      expect(persistedResult).toMatchObject(originalResult);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
+      expect(updateSignalFile).not.toHaveBeenCalled();
     });
 
     it('rejects deeply nested passthrough data without recursively hashing it', async () => {
