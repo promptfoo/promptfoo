@@ -1354,6 +1354,20 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('should reject sparse retry status policies before sending a request', async () => {
+    const retryOnStatusCodes: number[] = [];
+    retryOnStatusCodes.length = 1;
+    retryOnStatusCodes.push(503);
+
+    await expect(
+      fetchWithRetries('https://example.com', { retryOnStatusCodes }, 1000, 0),
+    ).rejects.toThrow(
+      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('should honor retry context maxRetries when explicit argument is omitted', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 

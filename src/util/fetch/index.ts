@@ -32,9 +32,10 @@ export function normalizeRetryOnStatusCodes(value: unknown): readonly number[] {
   if (value === undefined) {
     return [];
   }
+  const statusCodes = Array.isArray(value) ? Array.from(value) : undefined;
   if (
-    !Array.isArray(value) ||
-    !value.every(
+    !statusCodes ||
+    !statusCodes.every(
       (status) =>
         Number.isInteger(status) && Number.isFinite(status) && status >= 100 && status <= 599,
     )
@@ -43,7 +44,7 @@ export function normalizeRetryOnStatusCodes(value: unknown): readonly number[] {
       'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
     );
   }
-  return [...new Set(value)].sort((a, b) => a - b);
+  return [...new Set(statusCodes)].sort((a, b) => a - b);
 }
 
 function getAbortError(signal: AbortSignal, fallback: unknown): unknown {
