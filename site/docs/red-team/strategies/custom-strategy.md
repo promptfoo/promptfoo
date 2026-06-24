@@ -263,8 +263,9 @@ with no additional grading evidence:
 
 This helps find alternative paths to the objective.
 
-Unknown or mixed responses and responses with image, provider-action, exfiltration, or indirect-web
-evidence continue to outcome grading instead of being discarded.
+Unknown or mixed responses and responses with image, provider-action, confirmed exfiltration, or
+unavailable indirect-web tracking continue to outcome grading instead of being discarded. An
+authoritative zero indirect-web result does not by itself block backtracking.
 
 ## Best Practices
 
