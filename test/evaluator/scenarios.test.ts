@@ -280,6 +280,46 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     expect(summary.results).toHaveLength(2);
   });
 
+  it('applies provider filters before appending scenario override prompt columns', async () => {
+    const suiteProviderA: ApiProvider = {
+      id: () => 'suite-a',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-a' }),
+    };
+    const suiteProviderB: ApiProvider = {
+      id: () => 'suite-b',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-b' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn(async (prompt) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProviderA, suiteProviderB],
+      prompts: [toPrompt('one'), toPrompt('two')],
+      providerPromptMap: {
+        'suite-a': ['one'],
+        'suite-b': ['two'],
+      },
+      scenarios: [
+        {
+          config: [{ provider: scenarioProvider, providers: ['suite-a'] }],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('scenario-override');
+    expect(summary.results[0].prompt.raw).toBe('one');
+    expect(summary.prompts.filter((prompt) => prompt.provider === 'scenario-override')).toEqual([
+      expect.objectContaining({ raw: 'one' }),
+    ]);
+  });
+
   it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {
     const suiteProviderA: ApiProvider = {
       id: () => 'suite-a',

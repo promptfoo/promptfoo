@@ -385,6 +385,7 @@ function resolveScenarioProviderRef(
   basePath: string,
   provider: unknown,
   envOverrides?: EnvOverrides,
+  seen = new WeakMap<object, unknown>(),
 ): unknown {
   if (typeof provider === 'string') {
     const renderedProvider = renderSourceEnvTemplates(provider, envOverrides);
@@ -419,19 +420,27 @@ function resolveScenarioProviderRef(
     return resolvedRecord;
   }
 
-  let resolved: Record<string, unknown> | undefined;
+  const cached = seen.get(record);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const resolved: Record<string, unknown> = {};
+  seen.set(record, resolved);
+  let changed = false;
   for (const [key, value] of Object.entries(record)) {
     const renderedKey = renderSourceEnvTemplates(key, envOverrides);
-    const renderedValue = renderSourceEnvTemplates(value, envOverrides);
     const resolvedKey = resolveFileRefFromBase(basePath, renderedKey, envOverrides);
-    const resolvedValue = resolveNestedFileRefs(basePath, renderedValue, envOverrides);
+    const resolvedValue = resolveScenarioProviderRef(basePath, value, envOverrides, seen);
     if (resolvedKey !== key || resolvedValue !== value) {
-      resolved ??= { ...record };
-      delete resolved[key];
-      defineRecordProperty(resolved, resolvedKey, resolvedValue);
+      changed = true;
     }
+    defineRecordProperty(resolved, resolvedKey, resolvedValue);
   }
-  return resolved ?? provider;
+  if (!changed) {
+    seen.set(record, provider);
+  }
+  return changed ? resolved : provider;
 }
 
 function resolveScenarioScoringFunctionRef(

@@ -381,6 +381,35 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
     });
 
+    it('resolves bare typed grader refs in matrix rows against the matrix file', async () => {
+      const matrixPath = write(
+        'matrices/typed-graders.yaml',
+        `- vars:
+    case: typed-grader
+  options:
+    provider:
+      text: ./grader.cjs
+  assert:
+    - type: llm-rubric
+      value: pass
+      provider:
+        text: ./assert-grader.cjs
+`,
+      );
+
+      const [expanded] = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }]);
+      const matrixDir = path.dirname(matrixPath);
+
+      expect(expanded.options?.provider).toEqual({
+        text: path.join(matrixDir, 'grader.cjs'),
+      });
+      expect(expanded.assert?.[0]).toMatchObject({
+        provider: {
+          text: path.join(matrixDir, 'assert-grader.cjs'),
+        },
+      });
+    });
+
     it('preserves live provider identity while canonicalizing scenario rows', async () => {
       const liveProvider = {
         id: () => 'live-provider',
@@ -845,6 +874,26 @@ describe('scenarioMatrix (real filesystem)', () => {
 
       expect(tests?.[0].assertScoringFunction).toBe(
         `file://${path.join(path.dirname(testsPath), 'score.js')}:customScore`,
+      );
+    });
+
+    it('keeps file-backed scenario test provider refs serializable', async () => {
+      const testsPath = write(
+        'tests/provider-ref.yaml',
+        `- vars:
+    case: provider-ref
+  provider: file://provider.cjs
+`,
+      );
+      write(
+        'tests/provider.cjs',
+        'module.exports = class FixtureProvider { id() { return "runtime-provider"; } async callApi() { return { output: "ok" }; } };\n',
+      );
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests?.[0].provider).toBe(
+        `file://${path.join(path.dirname(testsPath), 'provider.cjs')}`,
       );
     });
 

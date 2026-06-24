@@ -601,7 +601,14 @@ async function appendLoadedTestCases(
     const normalizedTest = allowPartialTests
       ? resolveScenarioTestCaseProviderRefs(testBasePath, testCase, envOverrides)
       : testCase;
-    destination.push(await readTest(normalizedTest, testBasePath, allowPartialTests));
+    const hasProvider =
+      allowPartialTests && Object.prototype.hasOwnProperty.call(normalizedTest, 'provider');
+    const providerRef = hasProvider ? normalizedTest.provider : undefined;
+    const loadedTest = await readTest(normalizedTest, testBasePath, allowPartialTests);
+    if (hasProvider) {
+      loadedTest.provider = providerRef as TestCase['provider'];
+    }
+    destination.push(loadedTest);
   }
 }
 
@@ -818,19 +825,23 @@ async function normalizeLoadedScenarioTests(
     if (!isScenarioTestRecord(loadedTest)) {
       throw new Error(`test case ${index + 1} must be a plain object`);
     }
-    normalizedTests.push(
-      shouldNormalize
-        ? await readTest(
-            resolveScenarioTestCaseProviderRefs(
-              sourceBasePath,
-              loadedTest,
-              envOverrides,
-            ) as TestCaseWithVarsFile,
-            sourceBasePath,
-            true,
-          )
-        : (loadedTest as TestCase),
-    );
+    if (!shouldNormalize) {
+      normalizedTests.push(loadedTest as TestCase);
+      continue;
+    }
+
+    const resolvedTest = resolveScenarioTestCaseProviderRefs(
+      sourceBasePath,
+      loadedTest,
+      envOverrides,
+    ) as TestCaseWithVarsFile;
+    const hasProvider = Object.prototype.hasOwnProperty.call(resolvedTest, 'provider');
+    const providerRef = hasProvider ? resolvedTest.provider : undefined;
+    const normalizedTest = await readTest(resolvedTest, sourceBasePath, true);
+    if (hasProvider) {
+      normalizedTest.provider = providerRef as TestCase['provider'];
+    }
+    normalizedTests.push(normalizedTest);
   }
   return normalizedTests;
 }

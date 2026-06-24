@@ -2096,6 +2096,9 @@ function appendScenarioTargetOverridePrompts(
     const providerKey = getProviderIdentifier(testCase.provider);
     const scenarioOverridePromptIndexes = new Set<number>();
     for (const suiteProvider of testSuite.providers) {
+      if (!isProviderAllowed(suiteProvider, testCase.providers)) {
+        continue;
+      }
       const suiteProviderKey = getProviderIdentifier(suiteProvider);
       for (const [promptIndex, prompt] of testSuite.prompts.entries()) {
         if (scenarioOverridePromptIndexes.has(promptIndex)) {

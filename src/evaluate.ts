@@ -100,6 +100,25 @@ function toSerializableProviderRef(provider: unknown, ancestors = new Set<object
     ancestors.delete(provider);
     return sanitized;
   }
+  if (isRecord(provider)) {
+    if (ancestors.has(provider)) {
+      return undefined;
+    }
+    ancestors.add(provider);
+    const sanitized = Object.fromEntries(
+      Object.entries(provider)
+        .map(([providerKey, nestedProvider]) => [
+          providerKey,
+          toSerializableProviderRef(nestedProvider, ancestors),
+        ])
+        .filter((entry) => entry[1] !== undefined),
+    );
+    ancestors.delete(provider);
+    return sanitizeObject(sanitized, {
+      context: 'provider map',
+      maxDepth: Number.POSITIVE_INFINITY,
+    });
+  }
   return provider;
 }
 

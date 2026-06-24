@@ -524,6 +524,67 @@ describe('programmatic scenario config expansion', () => {
     });
   });
 
+  it('redacts provider option maps in serialized scenario rows', async () => {
+    const secret = 'SCENARIO_PROVIDER_MAP_SECRET_SENTINEL';
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [
+        {
+          config: [
+            {
+              provider: { echo: { config: { custom: 'keep', apiKey: secret } } } as never,
+            },
+          ],
+          tests: [{}],
+        },
+      ],
+      writeLatestResults: false,
+    });
+
+    const scenario = record.config.scenarios?.[0];
+    const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
+    expect(JSON.stringify(record.config)).not.toContain(secret);
+    expect(row && !('$values' in row) ? row.provider : undefined).toEqual({
+      echo: { config: { custom: 'keep', apiKey: REDACTED } },
+    });
+  });
+
+  it('persists file-backed scenario test provider refs instead of runtime provider ids', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioDir = path.join(tmpDir, 'scenarios');
+    fs.mkdirSync(scenarioDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenarioDir, 'provider.cjs'),
+      `module.exports = class ScenarioTestProvider {
+        id() { return 'runtime-scenario-test-provider'; }
+        async callApi() { return { output: 'scenario-test-output' }; }
+      };`,
+    );
+    const testsPath = path.join(scenarioDir, 'tests.yaml');
+    fs.writeFileSync(testsPath, '- provider: file://provider.cjs\n');
+    const scenarioPath = path.join(scenarioDir, 'scenario.json');
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify([{ config: [{}], tests: `file://${testsPath}` }]),
+    );
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [`file://${scenarioPath}`],
+      writeLatestResults: false,
+    });
+
+    const summary = await record.toEvaluateSummary();
+    const scenario = record.config.scenarios?.[0];
+    const persistedTest = typeof scenario === 'object' ? scenario.tests[0] : undefined;
+
+    expect(summary.results[0].response?.output).toBe('scenario-test-output');
+    expect(persistedTest?.provider).toBe(`file://${path.join(scenarioDir, 'provider.cjs')}`);
+  });
+
   it('fails before provider execution when a scenario generator returns no tests', async () => {
     const tmpDir = makeTmpDir();
     const generatorPath = path.join(tmpDir, 'empty.cjs');
