@@ -95,6 +95,22 @@ describe('API Health Utilities', () => {
       );
     });
 
+    it('should preserve late cancellation when response parsing also fails', async () => {
+      const controller = new AbortController();
+      const abortReason = new DOMException('Cancelled', 'AbortError');
+      mockedFetchWithTimeout.mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          controller.abort(abortReason);
+          throw new SyntaxError('Invalid JSON');
+        },
+      } as Response);
+
+      await expect(checkRemoteHealth('https://test.api/health', controller.signal)).rejects.toBe(
+        abortReason,
+      );
+    });
+
     it('should return OK status when API is healthy', async () => {
       mockIsEnabled.mockReturnValue(false);
       mockedFetchWithTimeout.mockResolvedValueOnce({

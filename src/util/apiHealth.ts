@@ -83,7 +83,10 @@ export async function checkRemoteHealth(
       message: data.message || 'Unknown error',
     };
   } catch (err) {
-    if (signal?.aborted || isAbortError(err)) {
+    if (signal?.aborted) {
+      signal.throwIfAborted();
+    }
+    if (isAbortError(err)) {
       throw err;
     }
     // Type guard for Error objects
