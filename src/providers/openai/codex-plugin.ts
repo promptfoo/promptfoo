@@ -270,6 +270,9 @@ async function copyTree(source: string, destination: string, signal: AbortSignal
     signal,
   )) {
     throwIfAborted(signal);
+    if (VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
     const sourcePath = path.join(source, entry.name);
     const destinationPath = path.join(destination, entry.name);
     const stat = await withAbort(fs.promises.lstat(sourcePath), signal);
@@ -277,9 +280,6 @@ async function copyTree(source: string, destination: string, signal: AbortSignal
       throw new Error(`Codex plugin trees may not contain symlinks: ${sourcePath}`);
     }
     if (stat.isDirectory()) {
-      if (VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
-        continue;
-      }
       await copyTree(sourcePath, destinationPath, signal);
     } else if (stat.isFile()) {
       await withAbort(
@@ -552,12 +552,12 @@ async function digestTree(root: string, signal: AbortSignal): Promise<string> {
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       throwIfAborted(signal);
+      if (VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
+        continue;
+      }
       const entryPath = path.join(directory, entry.name);
       const relativePath = path.relative(root, entryPath).split(path.sep).join('/');
       const stat = await withAbort(fs.promises.lstat(entryPath), signal);
-      if (stat.isDirectory() && VCS_INTERNAL_DIRECTORIES.has(entry.name)) {
-        continue;
-      }
       digest.update(`${entry.isDirectory() ? 'd' : 'f'}:${relativePath}\0`);
       if (stat.isDirectory()) {
         await visit(entryPath);
