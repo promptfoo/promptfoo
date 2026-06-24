@@ -808,12 +808,15 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
   if (!isSupportedAssertionType(assertion.type)) {
     return 'Select a supported assertion type before running.';
   }
+  const thresholdError = getThresholdError(assertion);
+  if (thresholdError) {
+    return thresholdError;
+  }
   if (isRuntimeResolvedAssertionValue(assertion.value)) {
     return undefined;
   }
 
   return (
-    getThresholdError(assertion) ||
     getWordCountError(assertion) ||
     getStructuredValueError(assertion) ||
     getExpectedValueError(assertion)

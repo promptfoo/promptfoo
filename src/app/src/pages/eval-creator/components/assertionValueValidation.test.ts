@@ -184,6 +184,17 @@ describe('structured value assertions', () => {
     expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
   });
 
+  it('still validates thresholds for runtime-resolved values', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'latency', value: 'file://expected.js' })),
+    ).toMatch(/maximum latency/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'similar', value: 'package:expected', threshold: -0.1 }),
+      ),
+    ).toMatch(/score threshold/);
+  });
+
   it('rejects optional SQL config that is not an object', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'is-sql', value: 'not-json' as any })),
