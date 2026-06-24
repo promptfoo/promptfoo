@@ -24,6 +24,7 @@ export function createTogetherAiProvider(
   const config = options.config?.config || {};
   const togetherAiConfig = {
     ...options,
+    genAIProviderName: 'togetherai',
     config: {
       apiBaseUrl: 'https://api.together.xyz/v1',
       apiKeyEnvar: 'TOGETHER_API_KEY',

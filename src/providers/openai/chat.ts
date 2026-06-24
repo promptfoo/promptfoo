@@ -53,7 +53,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiCompletionOptions;
+      id?: string;
+      env?: EnvOverrides;
+      genAIProviderName?: string;
+    } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown chat model: ${modelName}`);
@@ -190,7 +195,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   /** Latest-convention provider identity; subclasses override for known backends. */
   protected getGenAIProviderName(): string {
-    return 'openai';
+    return this.configuredGenAIProviderName;
   }
 
   async getOpenAiBody(

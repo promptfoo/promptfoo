@@ -43,6 +43,7 @@ export function createCerebrasProvider(
 
   const cerebrasConfig = {
     ...options,
+    genAIProviderName: 'cerebras',
     config: {
       apiBaseUrl: 'https://api.cerebras.ai/v1',
       apiKeyEnvar: 'CEREBRAS_API_KEY',

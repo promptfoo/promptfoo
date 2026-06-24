@@ -442,6 +442,30 @@ describe('ResponsesProcessor', () => {
       expect(result.metadata).toHaveProperty('model', 'gpt-5-mini');
     });
 
+    it('should extract an available conversation ID', async () => {
+      const mockData = {
+        id: 'resp_conversation123',
+        model: 'gpt-5-mini',
+        conversation: { id: 'conv_123' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response in a conversation' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toMatchObject({
+        responseId: 'resp_conversation123',
+        model: 'gpt-5-mini',
+        conversationId: 'conv_123',
+      });
+    });
+
     it('should handle missing id and model gracefully', async () => {
       const mockData = {
         // No id or model fields

@@ -614,11 +614,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
       let turnStartedAt = Date.now();
       let response;
+      let conversationId: string | undefined;
       try {
         response = await openAIClient.responses.create(
           body as ResponseCreateParamsNonStreaming,
           responseOptions,
         );
+        conversationId = response.conversation?.id;
         emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
       } catch (err) {
         emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
@@ -651,6 +653,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             } as ResponseCreateParamsNonStreaming,
             responseOptions,
           );
+          conversationId ??= response.conversation?.id;
           emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
         } catch (err) {
           emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
@@ -665,6 +668,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       const result = await this.processResponse(response, effectiveConfig);
+      if (conversationId) {
+        result.metadata = { ...result.metadata, conversationId };
+      }
       if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();

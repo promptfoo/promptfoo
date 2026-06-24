@@ -390,6 +390,10 @@ describe('AzureFoundryAgentProvider', () => {
         },
       );
       expect(result.output).toBe('Tool finished');
+      expect(result.metadata).toMatchObject({
+        responseId: 'resp_123',
+        conversationId: 'conv_123',
+      });
     });
 
     it('should emit a gen_ai.turn span for each model request in a function loop', async () => {
@@ -452,6 +456,35 @@ describe('AzureFoundryAgentProvider', () => {
         'gen_ai.system': 'azure',
         'gen_ai.operation.name': 'chat',
       });
+    });
+
+    it('emits distinct response and conversation IDs in latest mode', async () => {
+      const restoreLatest = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse('Hello'),
+        conversation: { id: 'conv_123' },
+      });
+
+      try {
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        await provider.callApi('test prompt');
+
+        const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+        expect(agentSpan?.attributes).toMatchObject({
+          'gen_ai.provider.name': 'azure.ai.inference',
+          'gen_ai.operation.name': 'invoke_agent',
+          'gen_ai.response.id': 'resp_123',
+          'gen_ai.conversation.id': 'conv_123',
+        });
+      } finally {
+        restoreLatest();
+      }
     });
 
     it('emits a chat span but no gen_ai.turn spans on a cache hit', async () => {

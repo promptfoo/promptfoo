@@ -47,6 +47,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,
+      genAIProviderName: 'truefoundry',
       config: {
         ...providerOptions.config,
         apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',

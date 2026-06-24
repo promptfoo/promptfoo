@@ -656,7 +656,7 @@ export function setGenAIResponseAttributes(
   if (useLatest && result.conversationId) {
     span.setAttribute(GenAIAttributes.CONVERSATION_ID, result.conversationId);
   }
-  if (result.responseId && (!useLatest || !result.conversationId)) {
+  if (result.responseId && (!useLatest || result.responseId !== result.conversationId)) {
     span.setAttribute(GenAIAttributes.RESPONSE_ID, result.responseId);
   }
   if (result.finishReasons && result.finishReasons.length > 0) {
@@ -799,6 +799,9 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   }
   if (typeof response.metadata?.responseId === 'string') {
     result.responseId = response.metadata.responseId;
+  }
+  if (typeof response.metadata?.conversationId === 'string') {
+    result.conversationId = response.metadata.conversationId;
   }
   if (response.cached !== undefined) {
     result.cacheHit = response.cached;

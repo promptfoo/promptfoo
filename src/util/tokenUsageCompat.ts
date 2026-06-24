@@ -126,21 +126,53 @@ export async function getTokenUsageFromEvaluation(evalId: string): Promise<Token
 export function aggregateUsageFromSpans(spans: SpanData[]): TokenUsage {
   const result = createEmptyTokenUsage();
   const spansById = new Map(spans.map((span) => [span.spanId, span]));
-  const nonTurnSpansWithUsage = new Set(
+  const usageBySpanId = new Map(
+    spans
+      .map((span) => [span.spanId, extractUsageFromSpan(span)] as const)
+      .filter((entry): entry is readonly [string, TokenUsage] => entry[1] !== undefined),
+  );
+  const isValidTokenCount = (value: number | undefined): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const hasCompletePrimaryUsage = (usage: TokenUsage): boolean =>
+    isValidTokenCount(usage.prompt) && isValidTokenCount(usage.completion);
+  const completeNonTurnSpans = new Set(
     spans
       .filter(
         (span) =>
           span.attributes?.['gen_ai.turn.index'] === undefined &&
-          extractUsageFromSpan(span) !== undefined,
+          usageBySpanId.has(span.spanId) &&
+          hasCompletePrimaryUsage(usageBySpanId.get(span.spanId)!),
       )
       .map((span) => span.spanId),
   );
+  const partialNonTurnAncestorsOfUsageTurns = new Set<string>();
 
-  const hasUsageAncestor = (span: SpanData): boolean => {
+  for (const span of spans) {
+    if (span.attributes?.['gen_ai.turn.index'] === undefined || !usageBySpanId.has(span.spanId)) {
+      continue;
+    }
     const visited = new Set<string>();
     let parentSpanId = span.parentSpanId;
     while (parentSpanId && !visited.has(parentSpanId)) {
-      if (nonTurnSpansWithUsage.has(parentSpanId)) {
+      const parentSpan = spansById.get(parentSpanId);
+      const parentUsage = usageBySpanId.get(parentSpanId);
+      if (
+        parentSpan?.attributes?.['gen_ai.turn.index'] === undefined &&
+        parentUsage &&
+        !hasCompletePrimaryUsage(parentUsage)
+      ) {
+        partialNonTurnAncestorsOfUsageTurns.add(parentSpanId);
+      }
+      visited.add(parentSpanId);
+      parentSpanId = parentSpan?.parentSpanId;
+    }
+  }
+
+  const hasCompleteUsageAncestor = (span: SpanData): boolean => {
+    const visited = new Set<string>();
+    let parentSpanId = span.parentSpanId;
+    while (parentSpanId && !visited.has(parentSpanId)) {
+      if (completeNonTurnSpans.has(parentSpanId)) {
         return true;
       }
       visited.add(parentSpanId);
@@ -150,13 +182,16 @@ export function aggregateUsageFromSpans(spans: SpanData[]): TokenUsage {
   };
 
   for (const span of spans) {
-    // Agent turn spans provide a diagnostic breakdown. When their parent call
-    // already reports the billable total, count the parent only. Retain turn
-    // usage for historical/imported traces whose parent has no usage data.
-    if (span.attributes?.['gen_ai.turn.index'] !== undefined && hasUsageAncestor(span)) {
+    if (partialNonTurnAncestorsOfUsageTurns.has(span.spanId)) {
       continue;
     }
-    const usage = extractUsageFromSpan(span);
+    // Agent turn spans provide a diagnostic breakdown. When their parent call
+    // already reports complete input/output usage, count the parent only. When
+    // an imported parent is partial, prefer its richer turn breakdown instead.
+    if (span.attributes?.['gen_ai.turn.index'] !== undefined && hasCompleteUsageAncestor(span)) {
+      continue;
+    }
+    const usage = usageBySpanId.get(span.spanId);
     if (usage) {
       accumulateTokenUsage(result, usage);
     }

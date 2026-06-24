@@ -460,6 +460,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     return {
       output: outputBlocks.join('\n\n').trim(),
       tokenUsage: getTokenUsage(run, false),
+      metadata: { conversationId: run.thread_id },
     };
   }
 }

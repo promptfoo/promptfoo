@@ -432,6 +432,54 @@ describe('tokenUsageCompat', () => {
       expect(result.completion).toBe(50);
       expect(result.numRequests).toBe(1);
     });
+
+    it.each([
+      {
+        name: 'detail-only',
+        parentAttributes: { 'gen_ai.usage.reasoning.output_tokens': 7 },
+      },
+      {
+        name: 'input-only',
+        parentAttributes: { 'gen_ai.usage.input_tokens': 100 },
+      },
+      {
+        name: 'total-only',
+        parentAttributes: { 'gen_ai.usage.total_tokens': 150 },
+      },
+      {
+        name: 'non-finite',
+        parentAttributes: { 'gen_ai.usage.input_tokens': Number.NaN },
+      },
+    ])('should prefer complete turn usage over a $name parent', ({ parentAttributes }) => {
+      const spans: SpanData[] = [
+        {
+          spanId: 'request-span',
+          name: 'invoke_agent',
+          startTime: 0,
+          attributes: parentAttributes,
+        },
+        {
+          spanId: 'turn-span',
+          parentSpanId: 'request-span',
+          name: 'codex.turn',
+          startTime: 1,
+          attributes: {
+            'gen_ai.turn.index': 1,
+            'gen_ai.usage.input_tokens': 100,
+            'gen_ai.usage.output_tokens': 50,
+            'gen_ai.usage.total_tokens': 150,
+            'gen_ai.usage.reasoning.output_tokens': 20,
+          },
+        },
+      ];
+
+      const result = aggregateUsageFromSpans(spans);
+      expect(result.prompt).toBe(100);
+      expect(result.completion).toBe(50);
+      expect(result.total).toBe(150);
+      expect(result.completionDetails?.reasoning).toBe(20);
+      expect(result.numRequests).toBe(1);
+    });
   });
 
   describe('getTokenUsageFromTrace', () => {

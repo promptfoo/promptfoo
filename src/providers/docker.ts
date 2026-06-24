@@ -100,6 +100,7 @@ export function createDockerProvider(
 
   const openaiOptions = {
     ...options,
+    genAIProviderName: 'docker-model-runner',
     config: {
       ...(options.config || {}),
       apiBaseUrl,

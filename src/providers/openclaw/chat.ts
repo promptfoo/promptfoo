@@ -29,7 +29,10 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   private agentId: string;
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
+    super(buildOpenClawModelName(agentId), {
+      ...buildOpenClawProviderOptions(agentId, providerOptions),
+      genAIProviderName: 'openclaw',
+    });
     this.agentId = agentId;
   }
 

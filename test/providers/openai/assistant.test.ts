@@ -149,6 +149,7 @@ describe('OpenAI Provider', () => {
         }),
       );
       expect(result.output).toBe('[Assistant] Test response');
+      expect(result.metadata).toEqual({ conversationId: 'thread_123' });
       expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
@@ -231,6 +232,34 @@ describe('OpenAI Provider', () => {
       expect(chatSpan?.ended).toBe(true);
       // SpanStatusCode.OK === 1
       expect(chatSpan?.status?.code).toBe(1);
+    });
+
+    it('emits the Assistant thread identity in latest mode', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+      const spans = installTracerSpy();
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue({ data: [] });
+
+      try {
+        const localProvider = new OpenAiAssistantProvider('test-assistant-id', {
+          config: { apiKey: 'test-key' },
+        });
+        await localProvider.callApi('Test prompt');
+
+        const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+        expect(agentSpan?.attributes).toMatchObject({
+          'gen_ai.provider.name': 'openai',
+          'gen_ai.operation.name': 'invoke_agent',
+          'gen_ai.agent.id': 'test-assistant-id',
+          'gen_ai.conversation.id': 'thread_123',
+        });
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('marks the chat span ERROR when the assistant run fails', async () => {

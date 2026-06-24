@@ -133,14 +133,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   /** Latest-convention provider identity; subclasses override for known backends. */
   protected getGenAIProviderName(): string {
-    return 'openai';
+    return this.configuredGenAIProviderName;
   }
 
   config: OpenAiCompletionOptions;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: {
+      config?: OpenAiCompletionOptions;
+      id?: string;
+      env?: EnvOverrides;
+      genAIProviderName?: string;
+    } = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};

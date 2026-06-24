@@ -15,6 +15,8 @@ import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
+import { AtlasCloudProvider } from '../../src/providers/atlascloud';
 import { createBedrockMantleChatProvider } from '../../src/providers/bedrock/mantleChat';
 import { createBedrockOpenAiResponsesProvider } from '../../src/providers/bedrock/openaiResponses';
 import { createDeepSeekProvider } from '../../src/providers/deepseek';
@@ -674,6 +676,32 @@ describe('Provider Instrumentation Validation', () => {
       }
     });
 
+    it('should emit the configured identity from an inherited provider call', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'chatcmpl-atlas',
+          model: 'atlas-model-v2',
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 3, prompt_tokens: 2, completion_tokens: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AtlasCloudProvider('atlas-model', {
+        config: { apiKey: 'test-key' },
+      });
+      await provider.callApi('hello');
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes).toMatchObject({
+        [GenAIAttributes.PROVIDER_NAME]: 'atlascloud',
+        [PromptfooAttributes.PROVIDER_ID]: 'atlascloud:atlas-model',
+      });
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBeUndefined();
+    });
+
     // Test all Category A providers (directly instrumented)
     const categoryAProviders = [
       { system: 'openai', model: 'gpt-4' },
@@ -795,15 +823,20 @@ describe('Provider Instrumentation Validation', () => {
   });
 
   describe('Response Metadata', () => {
-    it('should extract model and response ID from provider metadata', () => {
+    it('should extract model, response ID, and conversation ID from provider metadata', () => {
       expect(
         extractProviderResponseAttributes({
           output: 'ok',
-          metadata: { model: 'gpt-4.1-2026-01-01', responseId: 'resp-123' },
+          metadata: {
+            model: 'gpt-4.1-2026-01-01',
+            responseId: 'resp-123',
+            conversationId: 'conv-123',
+          },
         }),
       ).toMatchObject({
         responseModel: 'gpt-4.1-2026-01-01',
         responseId: 'resp-123',
+        conversationId: 'conv-123',
       });
     });
 

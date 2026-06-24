@@ -114,6 +114,7 @@ class MiniMaxProvider extends OpenAiChatCompletionProvider {
     super(modelName, {
       id: providerOptions.config?.id ?? providerOptions.id,
       env: providerOptions.config?.env ?? providerOptions.env,
+      genAIProviderName: 'minimax',
       config: {
         ...minimaxConfig,
         apiKeyEnvar: minimaxConfig.apiKeyEnvar ?? MINIMAX_API_KEY_ENV_VAR,

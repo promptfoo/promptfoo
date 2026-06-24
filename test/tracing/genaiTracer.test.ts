@@ -396,6 +396,21 @@ describe('genaiTracer', () => {
       );
     });
 
+    it('should preserve a distinct response ID alongside conversation identity', () => {
+      const result: GenAISpanResult = {
+        responseId: 'resp-123',
+        conversationId: 'thread-123',
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result, true, true);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.CONVERSATION_ID,
+        'thread-123',
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
+    });
+
     it('should preserve response ID in legacy mode when a conversation ID is available', () => {
       const result: GenAISpanResult = {
         responseId: 'thread-123',

@@ -52,6 +52,7 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
     // Call parent constructor with the model and modified config
     super(model, {
       ...options,
+      genAIProviderName: 'helicone',
       config: openAiConfig,
     });
 

@@ -595,6 +595,7 @@ export const providerMap: ProviderFactory[] = [
       }
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
+        genAIProviderName: 'f5',
         config: {
           ...providerOptions.config,
           apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
