@@ -132,7 +132,11 @@ describe('Prompts', () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPrompts });
 
-    await user.click(screen.getByRole('button', { name: 'View prompt prompt:fedcba987654' }));
+    const promptAction = screen.getByRole('button', {
+      name: 'This is the second sample prompt.',
+    });
+    expect(promptAction).toHaveTextContent('This is the second sample prompt.');
+    await user.click(promptAction);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(within(dialog).getByText('This is the second sample prompt.')).toBeInTheDocument();

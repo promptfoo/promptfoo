@@ -805,7 +805,6 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       size="sm"
                       className="h-auto rounded-full px-2.5 py-0.5 text-xs font-medium"
                       onClick={() => setIsToolsDialogOpen(true)}
-                      aria-label={`View ${tools.length} available tools`}
                     >
                       <strong>Tools:</strong> {tools.length} available
                     </Button>

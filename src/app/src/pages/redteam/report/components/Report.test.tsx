@@ -716,6 +716,36 @@ describe('App component target selector rendering', () => {
     );
   });
 
+  it('uses the visible tools label as the button accessible name', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    evalData.config.providers = [
+      {
+        id: 'openai:gpt-4o-mini',
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup',
+                description: 'Look up a value',
+                parameters: { type: 'object', properties: {}, required: [] },
+              },
+            },
+          ],
+        },
+      },
+    ];
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const toolsButton = await screen.findByRole('button', { name: 'Tools: 1 available' });
+    expect(toolsButton).toHaveTextContent('Tools: 1 available');
+  });
+
   it('exposes a section navigator for long report detail pages', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);

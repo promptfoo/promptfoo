@@ -87,7 +87,6 @@ export default function Prompts({
             variant="link"
             size="sm"
             className="h-auto max-w-full justify-start px-0 text-left"
-            aria-label={`View prompt ${row.original.id}`}
             onClick={(event) => {
               event.stopPropagation();
               openPromptDetails(row.original);
