@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI frontier models (GPT-5.5 / GPT-5.4) via AWS Bedrock'
+
+# Frontier models are served through Bedrock's OpenAI-compatible Responses API and
+# authenticate with an Amazon Bedrock API key. Export it before running (promptfoo reads it
+# automatically — no apiKey field needed):
+#   export AWS_BEARER_TOKEN_BEDROCK="..."
+
+prompts:
+  - |
+    Answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+providers:
+  # GPT-5.5 is available in us-east-2 (Ohio). promptfoo routes bedrock:openai.gpt-5.x to
+  # the OpenAI-compatible Responses API on the regional Bedrock mantle endpoint.
+  - id: bedrock:openai.gpt-5.5
+    label: GPT-5.5 (high reasoning)
+    config:
+      region: us-east-2
+      reasoning_effort: high
+      max_output_tokens: 2048
+  # GPT-5.4 is available in us-east-2 (Ohio) and us-west-2 (Oregon).
+  - id: bedrock:openai.gpt-5.4
+    label: GPT-5.4 (low reasoning)
+    config:
+      region: us-east-2
+      # Valid: none | low | medium | high | xhigh (minimal is NOT supported)
+      reasoning_effort: low
+      max_output_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France? Reply with only the city name.
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      question: 'If a train travels 120 miles in 2 hours, what is its average speed in mph? Reply with just the number and unit.'
+    assert:
+      - type: contains
+        value: '60'
+      - type: icontains-any
+        value: ['mph', 'miles per hour']
+  - vars:
+      question: 'Explain the concept of machine learning in two sentences.'
+    assert:
+      # Deterministic assertions keep this example runnable with only a Bedrock API key.
+      # (A model-graded assertion like `llm-rubric` would require a separate grader provider
+      # with its own credentials — see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
+      - type: icontains-any
+        value: ['data', 'model', 'train', 'learn', 'pattern']

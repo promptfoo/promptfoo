@@ -38,6 +38,9 @@ export function isProviderResponseRateLimited(
   if (result?.metadata?.rateLimitKind === 'quota') {
     return false;
   }
+  if (result?.metadata?.rateLimitKind === 'rate_limit') {
+    return true;
+  }
   if (isHttpRateLimitError(error) && error.kind === 'quota') {
     return false;
   }

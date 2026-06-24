@@ -8,7 +8,7 @@ via a simple control protocol over stdin/stdout.
 Protocol:
   - Node sends: "CALL|<function_name>|<request_file>|<response_file>\n"
   - Worker executes function, writes response to file
-  - Worker sends: "DONE\n"
+  - Worker sends: "DONE|<response_file>\n"
   - Node sends: "SHUTDOWN\n" to exit
 
 Data transfer uses files (proven UTF-8 handling), control uses stdin/stdout.
@@ -437,8 +437,9 @@ def handle_call(command_line, user_module, default_function_name):
                 )
                 # Still send DONE to avoid hanging Node, but Node will handle missing file
 
-        # Signal done
-        print("DONE", flush=True)
+        # Signal completion with the response path so provider stdout cannot
+        # accidentally satisfy another request's control message.
+        print(f"DONE|{response_file}", flush=True)
 
     except Exception as e:
         print(f"ERROR handling call: {e}", file=sys.stderr, flush=True)
@@ -466,8 +467,10 @@ def handle_call(command_line, user_module, default_function_name):
                     flush=True,
                 )
 
-        # Signal done after attempting to write error
-        print("DONE", flush=True)
+            # Signal done so Node can read the error response.
+            print(f"DONE|{response_file}", flush=True)
+        # No DONE| when response_file is unknown: Node's path match would fail
+        # and the call would resolve via timeout anyway; the stderr is the signal.
 
 
 if __name__ == "__main__":

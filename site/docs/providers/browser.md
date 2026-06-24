@@ -102,6 +102,9 @@ providers:
 For multi-turn strategies like Hydra, Crescendo, or GOAT, you can persist the browser session across turns. This keeps the same page open and maintains conversation state in chat-based applications.
 
 ```yaml
+evaluateOptions:
+  maxConcurrency: 1 # Persistent sessions share one stateful browser workflow
+
 providers:
   - id: browser
     config:
@@ -145,7 +148,7 @@ providers:
 
 **Key options:**
 
-- `persistSession: true` - Keep the browser page open between `callApi()` invocations
+- `persistSession: true` - Keep the browser page open between `callApi()` invocations. Because this is a stateful workflow, Promptfoo runs it with concurrency `1`.
 - `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns)
 
 This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
@@ -230,15 +233,15 @@ Wait for a specified duration (in milliseconds).
     ms: 3000 # Wait 3 seconds
 ```
 
-#### 6. `waitForNewChildren` - Wait for dynamic content
+#### 6. `waitForNewChildren` - Wait for newly added direct children
 
-Wait for new elements to appear under a parent element. Useful for content loaded via AJAX.
+Use this action to detect dynamic content that adds elements under a parent. It waits for the number of direct child elements to increase, so it does not detect streamed text or nested content updates inside an existing child element.
 
 ```yaml
 - action: waitForNewChildren
   args:
     parentSelector: '#results-container'
-    delay: 500 # Check every 500ms
+    delay: 500 # Wait before capturing the initial child count
     timeout: 10000 # Max wait time 10 seconds
 ```
 
@@ -262,7 +265,7 @@ Take a screenshot of the current page state.
 | type               | `selector`, `text`             | -                  | CSS selector and text to type                |
 | extract            | `selector` OR `script`, `name` | -                  | CSS selector or JS script, and variable name |
 | wait               | `ms`                           | -                  | Milliseconds to wait                         |
-| waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent element to watch                      |
+| waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent whose direct children are counted     |
 | screenshot         | `path`                         | `fullPage`         | File path to save screenshot                 |
 
 ## Response Parsing
@@ -347,15 +350,15 @@ The implementation uses `playwright-extra` with the Chromium engine for enhanced
 
 The `steps` array in the configuration can include the following actions:
 
-| Action             | Description                                          | Required Args                                    | Optional Args                           |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
-| navigate           | Navigate to a specified URL                          | `url`: string                                    | `runOnce`: boolean                      |
-| click              | Click on an element                                  | `selector`: string                               | `optional`: boolean, `runOnce`: boolean |
-| extract            | Extract text content from element or run JS script   | (`selector` OR `script`): string, `name`: string |                                         |
-| screenshot         | Take a screenshot of the page                        | `path`: string                                   | `fullPage`: boolean                     |
-| type               | Type text into an input field                        | `selector`: string, `text`: string               | `runOnce`: boolean                      |
-| wait               | Wait for a specified amount of time                  | `ms`: number                                     | `runOnce`: boolean                      |
-| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
+| Action             | Description                                        | Required Args                                    | Optional Args                           |
+| ------------------ | -------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| navigate           | Navigate to a specified URL                        | `url`: string                                    | `runOnce`: boolean                      |
+| click              | Click on an element                                | `selector`: string                               | `optional`: boolean, `runOnce`: boolean |
+| extract            | Extract text content from element or run JS script | (`selector` OR `script`): string, `name`: string |                                         |
+| screenshot         | Take a screenshot of the page                      | `path`: string                                   | `fullPage`: boolean                     |
+| type               | Type text into an input field                      | `selector`: string, `text`: string               | `runOnce`: boolean                      |
+| wait               | Wait for a specified amount of time                | `ms`: number                                     | `runOnce`: boolean                      |
+| waitForNewChildren | Wait for new direct child elements under a parent  | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
 
 Each action in the `steps` array should be an object with the following structure:
 

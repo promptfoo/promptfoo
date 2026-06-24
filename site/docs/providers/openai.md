@@ -69,6 +69,10 @@ providers:
 
 > **Note:** OpenAI models can also be accessed through [Azure OpenAI](/docs/providers/azure/), which offers additional enterprise features, compliance options, and regional availability.
 
+Requests sent by built-in OpenAI providers to the OpenAI API include the
+`X-OpenAI-Originator: promptfoo` header for source attribution. To route requests with a
+different originator value, override this header through the `headers` configuration option.
+
 ## Formatting chat messages
 
 For information on setting up chat conversation, see [chat threads](/docs/configuration/chat).

@@ -13,6 +13,7 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -22,7 +23,7 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
 import {
   isSecretField,
@@ -30,6 +31,7 @@ import {
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
+  sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -260,39 +262,51 @@ function renderRawRequestWithNunjucks(template: string, vars: Record<string, any
 // This function is used to encode the URL in the first line of a raw request
 export function urlEncodeRawRequestPath(rawRequest: string) {
   const firstLine = rawRequest.split('\n')[0];
+  // The first line can embed credentials in the request-target query string. These
+  // error paths surface via logger.error (always on) and the thrown message (persisted
+  // to result.error), so sanitize the line before interpolating it. Computed lazily:
+  // for a valid request line sanitizeUrl would otherwise console.warn on every call
+  // (the whole line is not a URL), so only pay it when an error actually fires.
+  const safeFirstLine = () => sanitizeUrl(firstLine);
 
   const firstSpace = firstLine.indexOf(' ');
   const method = firstLine.slice(0, firstSpace);
   if (!method || !http.METHODS.includes(method)) {
-    logger.error(`[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`);
+    logger.error(
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
+    );
     throw new Error(
-      `[Http Provider] HTTP request method ${method} is not valid. From: ${firstLine}`,
+      `[Http Provider] HTTP request method ${method} is not valid. From: ${safeFirstLine()}`,
     );
   }
   const lastSpace = firstLine.lastIndexOf(' ');
   if (lastSpace === -1) {
     logger.error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
     throw new Error(
-      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${firstLine}`,
+      `[Http Provider] HTTP request URL is not valid. Protocol is missing. From: ${safeFirstLine()}`,
     );
   }
   const url = firstLine.slice(firstSpace + 1, lastSpace);
 
   if (url.length === 0) {
-    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request URL is not valid. From: ${safeFirstLine()}`);
   }
 
   const protocol = lastSpace < firstLine.length ? firstLine.slice(lastSpace + 1) : '';
 
   if (!protocol.toLowerCase().startsWith('http')) {
-    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
-    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
+    logger.error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
+    throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${safeFirstLine()}`);
   }
 
-  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+  const sanitizedUrl = sanitizeUrl(url);
+  const sanitizedFirstLine = `${method} ${sanitizedUrl}${protocol ? ` ${protocol}` : ''}`;
+  logger.debug(
+    `[Http Provider] Encoding URL: ${sanitizedUrl} from first line of raw request: ${sanitizedFirstLine}`,
+  );
 
   try {
     // Use the built-in URL class to parse and encode the URL
@@ -852,6 +866,10 @@ type CachedAuthToken = {
   expiresAt?: number;
 };
 
+type AuthTokenRefreshLock = {
+  promise: Promise<CachedAuthToken>;
+};
+
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
  * The session endpoint returns a session ID that is then used in the main request.
@@ -1367,32 +1385,6 @@ function getHeaderValue(
   return entry?.[1];
 }
 
-function sanitizeUrlEncodedBody(body: string): string {
-  if (!body.includes('=')) {
-    return body;
-  }
-
-  try {
-    const params = new URLSearchParams(body);
-    const entries = Array.from(params.entries());
-    if (entries.length === 0) {
-      return body;
-    }
-
-    let changed = false;
-    for (const [key, value] of entries) {
-      if (isSecretField(key) || looksLikeSecret(value)) {
-        params.set(key, REDACTED);
-        changed = true;
-      }
-    }
-
-    return changed ? params.toString() : body;
-  } catch {
-    return body;
-  }
-}
-
 function getMultipartBoundary(contentType: string): string | undefined {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
@@ -1404,7 +1396,7 @@ function sanitizeMultipartFallbackBody(body: string): string {
     return body;
   }
 
-  const sanitizedTrimmedBody = sanitizeUrlEncodedBody(trimmedBody);
+  const sanitizedTrimmedBody = sanitizeUrlEncodedString(trimmedBody);
   return sanitizedTrimmedBody === trimmedBody
     ? body
     : body.replace(trimmedBody, sanitizedTrimmedBody);
@@ -1464,7 +1456,7 @@ function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, 
     return sanitizeMultipartBody(sanitizedBody, contentType);
   }
   if (normalizedContentType?.includes('application/x-www-form-urlencoded')) {
-    return sanitizeUrlEncodedBody(sanitizedBody);
+    return sanitizeUrlEncodedString(sanitizedBody);
   }
 
   return sanitizedBody;
@@ -1550,6 +1542,21 @@ function sanitizeTransformedRequestForMetadata(
     .join('\n');
 }
 
+function logTransformedPrompt(
+  transformedPrompt: unknown,
+  prompt: unknown,
+  headers?: Record<string, string>,
+): void {
+  const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+    transformedPrompt,
+    headers,
+  );
+  const sanitizedOriginalPrompt = sanitizeTransformedRequestForMetadata(prompt, headers);
+  logger.debug(
+    `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(sanitizedOriginalPrompt)}`,
+  );
+}
+
 function formatRawRequestForDebugMetadata(
   parsedRequest: ReturnType<typeof parseRawRequest>,
   bodyContent?: string,
@@ -1565,7 +1572,7 @@ function formatRawRequestForDebugMetadata(
     requestLines.push(`${key}: ${value}`);
   }
 
-  const sanitizedBody = sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers);
+  const sanitizedBody = sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers);
   if (sanitizedBody !== undefined) {
     requestLines.push('', String(sanitizedBody));
   }
@@ -1863,7 +1870,9 @@ async function createHttpsAgent(
   // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1880,7 +1889,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
-  private tokenRefreshLocks = new Map<string, TokenRefreshLock>();
+  private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
   private httpsAgent?: Dispatcher;
   private httpsAgentPromise?: Promise<Dispatcher>;
   /**
@@ -2025,12 +2034,9 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
-    await this.refreshTokenWithLock(cacheKey, () =>
+    return this.refreshTokenWithLock(cacheKey, () =>
       this.performTokenRefresh(oauthConfig, cacheKey),
     );
-    const refreshedToken = this.authTokenCache.get(cacheKey);
-    invariant(refreshedToken, 'OAuth token should be cached after refresh');
-    return refreshedToken;
   }
 
   private async performTokenRefresh(
@@ -2044,7 +2050,7 @@ export class HttpProvider implements ApiProvider {
       password?: string;
     },
     cacheKey: string,
-  ): Promise<void> {
+  ): Promise<CachedAuthToken> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
@@ -2108,22 +2114,22 @@ export class HttpProvider implements ApiProvider {
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
       const expiresInSeconds = tokenData.expires_in || 3600;
       const expiresAt = Date.now() + expiresInSeconds * 1000;
-      this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
+      const cachedToken = this.cacheToken(cacheKey, tokenData.access_token, expiresAt);
 
       logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+      return cachedToken;
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
       throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
     }
-
-    invariant(this.authTokenCache.has(cacheKey), 'OAuth token should be cached at this point');
   }
 
-  private cacheToken(cacheKey: string, token: string, expiresAt?: number): void {
+  private cacheToken(cacheKey: string, token: string, expiresAt?: number): CachedAuthToken {
     const cachedToken = { token, expiresAt };
     this.pruneExpiredAuthTokens();
     this.authTokenCache.set(cacheKey, cachedToken);
     this.enforceAuthTokenCacheLimit();
+    return cachedToken;
   }
 
   private getValidCachedToken(cacheKey: string, now = Date.now()): CachedAuthToken | undefined {
@@ -2169,20 +2175,18 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async waitForInFlightTokenRefresh(cacheKey: string): Promise<boolean> {
+  private async waitForInFlightTokenRefresh(
+    cacheKey: string,
+  ): Promise<CachedAuthToken | undefined> {
     const refreshLock = this.tokenRefreshLocks.get(cacheKey);
     if (refreshLock == null) {
-      return false;
+      return undefined;
     }
 
     logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
 
     try {
-      await refreshLock.promise;
-      if (this.getValidCachedToken(cacheKey)) {
-        return true;
-      }
-      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+      return await refreshLock.promise;
     } catch {
       if (this.tokenRefreshLocks.get(cacheKey) === refreshLock) {
         this.tokenRefreshLocks.delete(cacheKey);
@@ -2190,27 +2194,27 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
     }
 
-    return false;
+    return undefined;
   }
 
   private async refreshTokenWithLock(
     cacheKey: string,
-    refreshToken: () => Promise<void>,
+    refreshToken: () => Promise<CachedAuthToken>,
     onLockAcquired?: () => void,
-  ): Promise<void> {
+  ): Promise<CachedAuthToken> {
     while (this.tokenRefreshLocks.has(cacheKey)) {
-      if (await this.waitForInFlightTokenRefresh(cacheKey)) {
-        return;
+      const refreshedToken = await this.waitForInFlightTokenRefresh(cacheKey);
+      if (refreshedToken) {
+        return refreshedToken;
       }
     }
 
-    const refreshLock = { promise: Promise.resolve() as Promise<void> };
+    const refreshLock = { promise: Promise.resolve().then(refreshToken) };
     this.tokenRefreshLocks.set(cacheKey, refreshLock);
     onLockAcquired?.();
-    refreshLock.promise = Promise.resolve().then(refreshToken);
 
     try {
-      await refreshLock.promise;
+      return await refreshLock.promise;
     } finally {
       // Only clear the lock if it's still the one we created (prevents race conditions)
       if (this.tokenRefreshLocks.get(cacheKey) === refreshLock) {
@@ -2238,22 +2242,19 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
-    await this.refreshTokenWithLock(
+    return this.refreshTokenWithLock(
       cacheKey,
       () => this.performFileTokenRefresh(authContext, cacheKey),
       () => {
         logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
       },
     );
-    const refreshedToken = this.authTokenCache.get(cacheKey);
-    invariant(refreshedToken, 'File auth token should be cached after refresh');
-    return refreshedToken;
   }
 
   private async performFileTokenRefresh(
     authContext: CallApiContextParams,
     cacheKey?: string,
-  ): Promise<void> {
+  ): Promise<CachedAuthToken> {
     invariant(this.config.auth?.type === 'file', 'File auth should be configured');
     invariant(cacheKey, 'File auth cache key should be defined');
 
@@ -2272,16 +2273,15 @@ export class HttpProvider implements ApiProvider {
         defaultFunctionName,
       });
       const result = FileAuthResultSchema.parse(await authFn(authContext));
-      this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);
+      const cachedToken = this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);
       logger.info(
         `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
       );
+      return cachedToken;
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
       throw new Error(`Failed to refresh file auth token: ${String(err)}`);
     }
-
-    invariant(this.authTokenCache.has(cacheKey), 'File auth token should be cached at this point');
   }
 
   private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
@@ -2735,9 +2735,7 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
+    logTransformedPrompt(transformedPrompt, prompt, headers);
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
@@ -2802,8 +2800,14 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    const sanitizedRenderedConfig = sanitizeObject(renderedConfig, {
+      context: 'request config',
+    }) as Partial<HttpProviderConfig>;
+    sanitizedRenderedConfig.body = sanitizeRequestBodyForMetadata(renderedConfig.body, headers) as
+      | HttpProviderConfig['body']
+      | undefined;
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
-      config: renderedConfig,
+      config: sanitizedRenderedConfig,
     });
 
     const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
@@ -2964,9 +2968,6 @@ export class HttpProvider implements ApiProvider {
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
 
     // JSON-escape all string variables for safe substitution in raw request body
     // This prevents control characters and quotes from breaking JSON strings
@@ -2977,6 +2978,7 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
+    logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
@@ -3049,16 +3051,6 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
-    );
-
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
-
     // Determine body content:
     // - For JSON/text bodies, http-z provides body.text
     // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
@@ -3069,6 +3061,22 @@ export class HttpProvider implements ApiProvider {
     } else if (parsedRequest.body?.params) {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
+      {
+        request: {
+          method: parsedRequest.method,
+          url: sanitizeUrl(parsedRequest.url),
+          httpVersion: parsedRequest.httpVersion,
+          headers: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+          body: sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers),
+        },
+      },
+    );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
 
     const fetchOptions: any = {
       method: parsedRequest.method,
