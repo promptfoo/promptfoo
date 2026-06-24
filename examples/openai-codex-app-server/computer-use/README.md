@@ -1,4 +1,4 @@
-# Codex Computer Use UI-only red-team eval
+# openai-codex-app-server/computer-use (Codex Computer Use UI-Only Red Team Eval)
 
 This example drives a real native macOS chatbot through the Codex app-server
 provider and the Computer Use plugin. The disposable AppKit target has no chat
@@ -67,20 +67,38 @@ The no-cache eval and its recorded trajectory are the readiness gate. Inspect
 desktop or missing Accessibility permission should produce a failed eval, not
 a passing result.
 
-The runner forwards additional arguments as the Promptfoo command. Custom
-commands write only the output path that you explicitly pass.
+The runner forwards additional arguments as the Promptfoo command and resolves
+relative paths from this example directory. Custom commands write only the
+output path that you explicitly pass.
 
 ## Run a bounded red team
 
-The config also contains one targeted `policy` plugin case. From the initialized
-example directory (or this directory in a source checkout):
+The config also contains one targeted `policy` plugin case. In a source
+checkout, generate it with the local build from the repository root:
 
 ```bash
+install -d -m 700 examples/openai-codex-app-server/computer-use/.tmp
+npm run local -- redteam generate \
+  -c examples/openai-codex-app-server/computer-use/promptfooconfig.yaml \
+  -o examples/openai-codex-app-server/computer-use/.tmp/redteam.yaml \
+  --force --strict
+
+cd examples/openai-codex-app-server/computer-use
+```
+
+In an initialized standalone example after the compatible Promptfoo release:
+
+```bash
+install -d -m 700 .tmp
 npx promptfoo@latest redteam generate \
   -c promptfooconfig.yaml \
   -o .tmp/redteam.yaml \
   --force --strict
+```
 
+Then run the generated suite from the example directory:
+
+```bash
 bash run-e2e.sh \
   redteam eval \
   -c .tmp/redteam.yaml \

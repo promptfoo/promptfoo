@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 EXAMPLE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-CODEX_HOME_DIR="$EXAMPLE_DIR/.tmp/codex-home"
+TMP_DIR="$EXAMPLE_DIR/.tmp"
+CODEX_HOME_DIR="$TMP_DIR/codex-home"
 CODEX_HOME_MARKER="$CODEX_HOME_DIR/.promptfoo-computer-use-fixture"
-WORKSPACE_DIR="$EXAMPLE_DIR/.tmp/workspace"
-TARGET_APP_DIR="$EXAMPLE_DIR/.tmp/PromptfooComputerUseTarget.app"
+WORKSPACE_DIR="$TMP_DIR/workspace"
+TARGET_APP_DIR="$TMP_DIR/PromptfooComputerUseTarget.app"
 TARGET_APP_BINARY="$TARGET_APP_DIR/Contents/MacOS/PromptfooComputerUseTarget"
 PROMPTFOO_COMMAND=(npx promptfoo@latest)
 
@@ -63,8 +65,12 @@ NODE
 if REPO_ROOT="$(git -C "$EXAMPLE_DIR" rev-parse --show-toplevel 2>/dev/null)" &&
   [[ "$EXAMPLE_DIR" == "$REPO_ROOT/examples/openai-codex-app-server/computer-use" ]] &&
   [[ "$(node -e 'process.stdout.write(require(process.argv[1]).name ?? "")' "$REPO_ROOT/package.json")" == "promptfoo" ]]; then
-  require_command npm
-  PROMPTFOO_COMMAND=(npm --prefix "$REPO_ROOT" run local --)
+  LOCAL_ENTRYPOINT="$REPO_ROOT/node_modules/.bin/tsx"
+  if [[ ! -x "$LOCAL_ENTRYPOINT" ]]; then
+    echo "Promptfoo source dependencies are missing; run npm ci in $REPO_ROOT" >&2
+    exit 1
+  fi
+  PROMPTFOO_COMMAND=("$LOCAL_ENTRYPOINT" "$REPO_ROOT/src/localEntrypoint.ts")
 else
   require_command npx
 fi
@@ -74,10 +80,20 @@ if (($# == 0)); then
     -c "$EXAMPLE_DIR/promptfooconfig.yaml" \
     --no-cache \
     --no-share \
-    -o "$EXAMPLE_DIR/.tmp/results.json"
+    -o "$TMP_DIR/results.json"
 fi
 
-mkdir -p "$EXAMPLE_DIR/.tmp"
+if [[ -L "$TMP_DIR" || (-e "$TMP_DIR" && ! -d "$TMP_DIR") ]]; then
+  echo "Refusing unsafe generated-artifact path: $TMP_DIR" >&2
+  exit 1
+fi
+mkdir -p "$TMP_DIR"
+if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
+  echo "Refusing generated-artifact path outside the example: $TMP_DIR" >&2
+  exit 1
+fi
+chmod 700 "$TMP_DIR"
+
 if [[ -L "$CODEX_HOME_DIR" ]]; then
   echo "Refusing to replace symlinked Codex home: $CODEX_HOME_DIR" >&2
   exit 1
@@ -128,10 +144,10 @@ isolated_codex() {
 
 isolated_codex features enable plugins
 isolated_codex plugin marketplace add --json "$MARKETPLACE_ROOT" \
-  >"$EXAMPLE_DIR/.tmp/marketplace-add.json"
+  >"$TMP_DIR/marketplace-add.json"
 isolated_codex plugin add --json "computer-use@$MARKETPLACE_NAME" \
-  >"$EXAMPLE_DIR/.tmp/plugin-add.json"
-isolated_codex plugin list --json >"$EXAMPLE_DIR/.tmp/plugin-list.json"
+  >"$TMP_DIR/plugin-add.json"
+isolated_codex plugin list --json >"$TMP_DIR/plugin-list.json"
 
 rm -rf -- "$WORKSPACE_DIR"
 mkdir -p "$WORKSPACE_DIR"
@@ -173,24 +189,27 @@ terminate_target_processes
 rm -rf -- "$TARGET_APP_DIR"
 mkdir -p \
   "$TARGET_APP_DIR/Contents/MacOS" \
-  "$EXAMPLE_DIR/.tmp/clang-module-cache" \
-  "$EXAMPLE_DIR/.tmp/swift-module-cache"
+  "$TMP_DIR/clang-module-cache" \
+  "$TMP_DIR/swift-module-cache"
 cp "$EXAMPLE_DIR/target/Info.plist" "$TARGET_APP_DIR/Contents/Info.plist"
-CLANG_MODULE_CACHE_PATH="$EXAMPLE_DIR/.tmp/clang-module-cache" \
-  SWIFT_MODULE_CACHE_PATH="$EXAMPLE_DIR/.tmp/swift-module-cache" \
+CLANG_MODULE_CACHE_PATH="$TMP_DIR/clang-module-cache" \
+  SWIFT_MODULE_CACHE_PATH="$TMP_DIR/swift-module-cache" \
   xcrun swiftc "$EXAMPLE_DIR/target/App.swift" -o "$TARGET_APP_BINARY"
 
-"$TARGET_APP_BINARY" >"$EXAMPLE_DIR/.tmp/target.log" 2>&1 &
+"$TARGET_APP_BINARY" >"$TMP_DIR/target.log" 2>&1 &
 TARGET_PID=$!
 sleep 1
 if ! kill -0 "$TARGET_PID" 2>/dev/null; then
-  cat "$EXAMPLE_DIR/.tmp/target.log" >&2
+  cat "$TMP_DIR/target.log" >&2
   exit 1
 fi
 
-CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
-  COMPUTER_USE_WORKING_DIR="$WORKSPACE_DIR" \
-  COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
-  PROMPTFOO_DISABLE_TELEMETRY=true \
-  PROMPTFOO_DISABLE_UPDATE=true \
-  "${PROMPTFOO_COMMAND[@]}" "$@"
+(
+  cd "$EXAMPLE_DIR"
+  CODEX_HOME_OVERRIDE="$CODEX_HOME_DIR" \
+    COMPUTER_USE_WORKING_DIR="$WORKSPACE_DIR" \
+    COMPUTER_USE_TARGET_APP="$TARGET_APP_DIR" \
+    PROMPTFOO_DISABLE_TELEMETRY=true \
+    PROMPTFOO_DISABLE_UPDATE=true \
+    "${PROMPTFOO_COMMAND[@]}" "$@"
+)

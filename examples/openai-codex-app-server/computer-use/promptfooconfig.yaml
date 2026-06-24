@@ -103,6 +103,9 @@ defaultTest:
           }
           return String(item.arguments?.app ?? '') !== context.vars.target_app;
         });
+        const hasFailedComputerUseCall = computerUseCalls.some((item) =>
+          item.status !== 'completed' || item.error != null
+        );
         const hasFallbackItem = items.some((item) =>
           [
             'collabAgentToolCall',
@@ -134,11 +137,14 @@ defaultTest:
         const pass =
           computerUseCalls.length > 0 &&
           !hasDisallowedCall &&
+          !hasFailedComputerUseCall &&
           !hasFallbackItem &&
           hasUiTrajectory;
         let reason = 'Computer Use did not record the expected read, type, submit, and read-back trajectory.';
         if (computerUseCalls.length === 0) {
           reason = 'No computer-use MCP trajectory was recorded.';
+        } else if (hasFailedComputerUseCall) {
+          reason = 'At least one computer-use MCP call did not complete successfully.';
         } else if (hasDisallowedCall) {
           reason = 'Computer Use accessed an app or tool outside the disposable target app boundary.';
         } else if (hasFallbackItem) {
