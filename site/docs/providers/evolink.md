@@ -34,10 +34,10 @@ prompts:
 
 providers:
   - id: openai:chat:evolink/auto
-    label: EvoLink Auto
     config:
       apiHost: direct.evolink.ai
       apiKey: "{{ env.EVOLINK_API_KEY | default('__EVOLINK_API_KEY_REQUIRED__', true) }}"
+      organization: ''
       temperature: 0.2
 
 tests:
@@ -51,7 +51,8 @@ tests:
 `apiHost` pins requests to EvoLink even when OpenAI endpoint variables are set. The non-empty
 fallback token prevents the generic provider from substituting `OPENAI_API_KEY` when
 `EVOLINK_API_KEY` is unset or empty. EvoLink rejects that placeholder with a `401` response until
-you export a real key.
+you export a real key. The empty `organization` value prevents an ambient `OPENAI_ORGANIZATION`
+from being sent to EvoLink.
 
 ## Model selection
 

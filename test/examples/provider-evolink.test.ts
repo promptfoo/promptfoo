@@ -32,10 +32,12 @@ describe('provider-evolink example', () => {
       EVOLINK_API_KEY: apiKey,
       OPENAI_API_HOST: 'ambient-openai.example.test',
       OPENAI_API_KEY: 'openai-decoy-key',
+      OPENAI_ORGANIZATION: 'openai-decoy-org',
     });
 
     expect(provider.getApiUrl()).toBe('https://direct.evolink.ai/v1');
     expect(provider.getApiKey()).toBe('__EVOLINK_API_KEY_REQUIRED__');
+    expect(provider.getOpenAiRequestHeaders()).not.toHaveProperty('OpenAI-Organization');
   });
 
   it('uses the configured EvoLink key', async () => {
@@ -50,6 +52,8 @@ describe('provider-evolink example', () => {
   });
 
   it('keeps a valid temperature when only the documented model ID changes', async () => {
+    expect(readProvider()).not.toHaveProperty('label');
+
     const provider = await loadEvoLinkProvider(
       { EVOLINK_API_KEY: 'evolink-test-key' },
       'openai:chat:MiniMax-M2.5',
