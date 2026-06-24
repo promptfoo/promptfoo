@@ -49,6 +49,9 @@ describe('traceAssertionConfig shared validators', () => {
       expect(traceSpanDurationConfigError({ max: 10, pattern: '' })).toBe(
         'trace-span-duration assertion pattern must be a non-empty string',
       );
+      expect(traceSpanDurationConfigError({ max: 10, pattern: '   ' })).toBe(
+        'trace-span-duration assertion pattern must be a non-empty string',
+      );
       expect(traceSpanDurationConfigError({ max: 10, requirePresence: 'yes' })).toBe(
         'trace-span-duration assertion requirePresence must be a boolean',
       );

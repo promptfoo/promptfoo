@@ -589,6 +589,19 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it('throws for a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 0, pattern: '   ' } },
+      renderedValue: { max: 0, pattern: '   ' },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion pattern must be a non-empty string',
+    );
+  });
+
   it('throws for a non-boolean requirePresence', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -108,7 +108,7 @@ export function traceSpanDurationConfigError(value: {
   if (maxError) {
     return maxError;
   }
-  if (typeof pattern !== 'string' || !pattern) {
+  if (typeof pattern !== 'string' || !pattern.trim()) {
     return 'trace-span-duration assertion pattern must be a non-empty string';
   }
   if (typeof requirePresence !== 'boolean') {
