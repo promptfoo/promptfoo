@@ -310,6 +310,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should ignore disabled basic strategy message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'basic', config: { enabled: false, minCharsPerMessage: 6 } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should allow unrelated strategy and plugin message length ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({

@@ -301,6 +301,12 @@ type PromptLimitConfig = {
   strategies?: ScopedPromptLimit[];
 };
 
+function isDisabledBasicStrategy(strategy: ScopedPromptLimit): boolean {
+  return (
+    typeof strategy !== 'string' && strategy.id === 'basic' && strategy.config?.enabled === false
+  );
+}
+
 function addCharsPerMessageRangeIssue(ctx: z.RefinementCtx, path: (string | number)[]): void {
   ctx.addIssue({
     code: 'custom',
@@ -346,10 +352,12 @@ function validateEffectiveCharsPerMessageRanges(
     index,
     plugin: typeof plugin === 'string' ? { id: plugin } : plugin,
   }));
-  const strategyConfigs = (data.strategies ?? []).map((strategy, index) => ({
-    index,
-    strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
-  }));
+  const strategyConfigs = (data.strategies ?? [])
+    .filter((strategy) => !isDisabledBasicStrategy(strategy))
+    .map((strategy, index) => ({
+      index,
+      strategy: typeof strategy === 'string' ? { id: strategy } : strategy,
+    }));
   const effectivePlugins =
     pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
   const effectiveStrategies =
