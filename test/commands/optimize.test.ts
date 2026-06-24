@@ -263,6 +263,30 @@ describe('optimize command', () => {
     );
   });
 
+  it('leaves scenario ranges for the evaluator to apply after expansion', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: { evaluateOptions: { filterRange: '1:2' } },
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [],
+        scenarios: [{ config: [{ vars: { group: 'scenario' } }], tests: [{ vars: { id: 0 } }] }],
+      },
+      basePath: '',
+      commandLineOptions: {},
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      { evaluateOptions: { filterRange: '1:2' } },
+      expect.objectContaining({
+        scenarios: expect.arrayContaining([expect.any(Object)]),
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('passes validation split through to the optimizer', async () => {
     await doOptimize({
       defaultConfig: {},

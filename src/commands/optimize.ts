@@ -76,7 +76,7 @@ async function applyOptimizationTestFilters(
 
   return {
     config:
-      range === undefined
+      range === undefined || hasScenarios
         ? config
         : { ...config, evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } },
     testSuite: {
