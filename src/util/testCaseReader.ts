@@ -484,7 +484,9 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
+    const rawTestCase = (
+      isDefaultTest ? rawContent : maybeLoadConfigFromExternalFile(rawContent)
+    ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
     rebaseTestCaseVarFileReferences(testCase, effectiveBasePath, basePath || process.cwd());
   } else {

@@ -956,6 +956,22 @@ describe('readTest', () => {
     expect(result.vars).toBeUndefined();
   });
 
+  it('preserves nested file references in an external defaultTest', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          id: 'file://../providers/grader.cjs',
+        },
+      },
+    };
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(defaultTestInput));
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+    expect(result.options?.provider).toEqual(defaultTestInput.options.provider);
+  });
+
   it('should skip validation for defaultTest with model-graded eval provider', async () => {
     const defaultTestInput = {
       options: {
