@@ -368,10 +368,11 @@ function npmPackageSpec(source: CodexPluginSource): string {
 }
 
 function checkTarEntry(entry: string): void {
+  const normalizedEntry = entry.replace(/\\/g, '/');
   if (
     entry.length === 0 ||
     path.isAbsolute(entry) ||
-    entry.split('/').some((segment) => segment === '..')
+    normalizedEntry.split('/').some((segment) => segment === '..')
   ) {
     throw new Error(`Codex plugin package archive contains an unsafe path: ${entry}`);
   }
