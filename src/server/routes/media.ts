@@ -9,7 +9,7 @@ import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
 import { replyValidationError } from '../utils/errors';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
@@ -172,4 +172,14 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     logger.error('[Media API] Error serving media', { error });
     res.status(500).json({ error: 'Failed to serve media' });
   }
+});
+
+mediaRouter.use((error: unknown, _req: Request, res: Response, next: NextFunction): void => {
+  if (!(error instanceof URIError)) {
+    next(error);
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.status(400).json({ error: 'Invalid media path' });
 });
