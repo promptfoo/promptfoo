@@ -91,6 +91,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
   const loadEvalGenerationRef = useRef(0);
+  const successfulBackgroundLoadRef = useRef<{ evalId: string; generation: number } | null>(null);
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -124,8 +125,22 @@ export default function Eval({ fetchId }: EvalOptions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
-      const loadGeneration = ++loadEvalGenerationRef.current;
+      const isSameEvalBackgroundUpdate =
+        isBackgroundUpdate && useTableStore.getState().evalId === id;
+      const loadGeneration = isSameEvalBackgroundUpdate
+        ? loadEvalGenerationRef.current
+        : ++loadEvalGenerationRef.current;
+      if (!isBackgroundUpdate) {
+        successfulBackgroundLoadRef.current = null;
+      }
       const isCurrentLoad = () => loadEvalGenerationRef.current === loadGeneration;
+      const shouldReportForegroundFailure = () =>
+        !(
+          successfulBackgroundLoadRef.current?.evalId === id &&
+          successfulBackgroundLoadRef.current.generation === loadGeneration
+        ) &&
+        isCurrentLoad() &&
+        !isBackgroundUpdate;
       try {
         setEvalId(id);
 
@@ -143,10 +158,13 @@ export default function Eval({ fetchId }: EvalOptions) {
         });
 
         if (!data) {
-          if (isCurrentLoad() && !isBackgroundUpdate) {
+          if (shouldReportForegroundFailure()) {
             setFailed(true);
           }
           return false;
+        }
+        if (isBackgroundUpdate && isCurrentLoad()) {
+          successfulBackgroundLoadRef.current = { evalId: id, generation: loadGeneration };
         }
         if (isCurrentLoad()) {
           setFailed(false);
@@ -154,7 +172,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return true;
       } catch (error) {
         console.error('Error loading eval:', error);
-        if (isCurrentLoad() && !isBackgroundUpdate) {
+        if (shouldReportForegroundFailure()) {
           setFailed(true);
         }
         return false;

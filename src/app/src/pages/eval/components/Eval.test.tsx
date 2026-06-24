@@ -496,6 +496,148 @@ describe('Eval', () => {
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
   });
 
+  it('surfaces a pinned initial load failure when a newer background refresh also fails', async () => {
+    let resolveForeground!: (value: null) => void;
+    let resolveBackground!: (value: null) => void;
+    const foregroundLoad = new Promise<null>((resolve) => {
+      resolveForeground = resolve;
+    });
+    const backgroundLoad = new Promise<null>((resolve) => {
+      resolveBackground = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(foregroundLoad)
+      .mockReturnValueOnce(backgroundLoad);
+    const tableStore = {
+      ...baseMockTableStore,
+      table: null,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(1);
+
+    let socketWork: Promise<void> | undefined;
+    await act(async () => {
+      socketWork = mockSocketHandlers.get('init')?.({ evalId: 'selected-eval' });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveBackground(null);
+      await backgroundLoad;
+      await socketWork;
+    });
+    await act(async () => {
+      resolveForeground(null);
+      await foregroundLoad;
+    });
+
+    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+    expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
+  });
+
+  it('keeps a successful same-eval background load when the initial foreground load fails', async () => {
+    const successfulLoad = {
+      table: mockTable,
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+    let resolveForeground!: (value: null) => void;
+    let resolveBackground!: (value: typeof successfulLoad) => void;
+    const foregroundLoad = new Promise<null>((resolve) => {
+      resolveForeground = resolve;
+    });
+    const backgroundLoad = new Promise<typeof successfulLoad>((resolve) => {
+      resolveBackground = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(foregroundLoad)
+      .mockReturnValueOnce(backgroundLoad);
+    const tableStore = {
+      ...baseMockTableStore,
+      table: null,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    let currentTable: EvaluateTable | null = null;
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      table: currentTable,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { queryByText, queryByTestId, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    let socketWork: Promise<void> | undefined;
+    await act(async () => {
+      socketWork = mockSocketHandlers.get('init')?.({ evalId: 'selected-eval' });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      currentTable = mockTable;
+      resolveBackground(successfulLoad);
+      await backgroundLoad;
+      await socketWork;
+    });
+    await act(async () => {
+      resolveForeground(null);
+      await foregroundLoad;
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({ ...tableStore, table: mockTable });
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+  });
+
   it('does not navigate away for a scoped background socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
