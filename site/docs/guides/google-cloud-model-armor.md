@@ -127,6 +127,10 @@ gcloud model-armor templates create basic-safety \
   --basic-config-filter-enforcement=enabled
 ```
 
+Basic SDP covers credit cards, US SSNs, financial account numbers, US ITINs, Google Cloud
+credentials, and Google Cloud API keys. Use an advanced Sensitive Data Protection inspect template
+for generic passwords, non-Google API keys, or custom secret formats.
+
 ### 4. Authenticate
 
 ```bash
@@ -304,6 +308,7 @@ The sanitization API returns detailed filter results and a separate execution st
     "filterResults": {
       "pi_and_jailbreak": {
         "piAndJailbreakFilterResult": {
+          "executionState": "EXECUTION_SUCCESS",
           "matchState": "MATCH_FOUND",
           "confidenceLevel": "MEDIUM_AND_ABOVE"
         }

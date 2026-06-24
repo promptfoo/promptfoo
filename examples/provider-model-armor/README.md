@@ -15,7 +15,7 @@ Model Armor is a managed service that can screen LLM prompts and responses for:
 - **CSAM**: Child safety content detection (always enabled)
 - **Prompt Injection & Jailbreak**: Detects manipulation attempts
 - **Malicious URLs**: Phishing and threat detection
-- **Sensitive Data Protection (SDP)**: Credit cards, SSNs, API keys, etc.
+- **Sensitive Data Protection (SDP)**: Credit cards, SSNs, financial identifiers, and Google Cloud credentials
 
 ## Prerequisites
 
@@ -111,6 +111,11 @@ tests: file://datasets/model-armor-test.csv
 ```
 
 Each row includes a prompt and expected behavior (benign vs. adversarial).
+
+The example uses Model Armor's basic SDP configuration, whose built-in coverage is limited to
+credit cards, US SSNs, financial account numbers, US ITINs, Google Cloud credentials, and Google
+Cloud API keys. Use an advanced Sensitive Data Protection inspect template when testing generic
+passwords, non-Google API keys, or custom secret formats.
 
 ## Understanding Results
 

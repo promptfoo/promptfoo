@@ -67,7 +67,15 @@ export default function transformModelArmorResponse(json, _text, context) {
     throw new Error(`Model Armor invocation was ${result.invocationResult ?? 'unknown'}`);
   }
 
-  const filterResults = result.filterResults || {};
+  const filterResults = result.filterResults;
+  if (
+    !filterResults ||
+    typeof filterResults !== 'object' ||
+    Array.isArray(filterResults) ||
+    Object.keys(filterResults).length === 0
+  ) {
+    throw new Error('Model Armor response did not include any filter results');
+  }
   for (const [filterName, filterResult] of Object.entries(filterResults)) {
     const executionStates = collectExecutionStates(filterResult);
     if (executionStates.length === 0) {

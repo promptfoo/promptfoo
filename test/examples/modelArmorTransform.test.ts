@@ -30,7 +30,14 @@ function response(overrides: Record<string, unknown> = {}) {
     sanitizationResult: {
       invocationResult: 'SUCCESS',
       filterMatchState: 'NO_MATCH_FOUND',
-      filterResults: {},
+      filterResults: {
+        csam: {
+          csamFilterFilterResult: {
+            executionState: 'EXECUTION_SUCCESS',
+            matchState: 'NO_MATCH_FOUND',
+          },
+        },
+      },
       ...overrides,
     },
   };
@@ -139,6 +146,15 @@ describe('Model Armor example response transform', () => {
         }),
       ),
     ).toThrow(/did not include an execution state/);
+  });
+
+  it('rejects a response with no filter evidence', () => {
+    expect(() => run(response({ filterResults: {} }))).toThrow(
+      /did not include any filter results/,
+    );
+    expect(() => run(response({ filterResults: undefined }))).toThrow(
+      /did not include any filter results/,
+    );
   });
 
   it.each([
