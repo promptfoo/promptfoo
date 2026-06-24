@@ -2259,7 +2259,8 @@ export class HttpProvider implements ApiProvider {
     invariant(cacheKey, 'File auth cache key should be defined');
 
     const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
-    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const defaultFunctionName =
+      path.extname(filePath).toLowerCase() === '.py' ? 'get_auth' : 'default';
 
     try {
       logger.debug(

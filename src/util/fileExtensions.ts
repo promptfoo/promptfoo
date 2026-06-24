@@ -20,7 +20,9 @@ export function isJavascriptFile(filePath: string): boolean {
  * @returns True if the file has a Python source extension, false otherwise.
  */
 export function isPythonFile(filePath: string): boolean {
-  return !/[?#]/.test(filePath) && filePath.toLowerCase().endsWith('.py');
+  const basenameStart = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1;
+  const basename = filePath.slice(basenameStart);
+  return !/[?#]/.test(basename) && basename.toLowerCase().endsWith('.py');
 }
 
 /**
@@ -29,15 +31,19 @@ export function isPythonFile(filePath: string): boolean {
 export function parsePythonFileReference(
   filePath: string,
 ): { filePath: string; functionName?: string } | undefined {
-  if (/[?#]/.test(filePath)) {
-    return undefined;
-  }
-
   const separator = filePath.lastIndexOf(':');
   if (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
+    const functionName = filePath.slice(separator + 1);
+    if (
+      parseRubyFileReference(filePath) ||
+      (isJavascriptFile(candidateFilePath) &&
+        functionName.length > 0 &&
+        !/[\\/]/.test(functionName))
+    ) {
+      return undefined;
+    }
     if (isPythonFile(candidateFilePath)) {
-      const functionName = filePath.slice(separator + 1);
       const parts = functionName.split('.');
       if (parts.length <= 2 && parts.every((part) => part.length > 0 && !/[\\/:?#]/.test(part))) {
         return { filePath: candidateFilePath, functionName };
@@ -46,6 +52,29 @@ export function parsePythonFileReference(
   }
 
   return isPythonFile(filePath) ? { filePath } : undefined;
+}
+
+/**
+ * Parses a Ruby file path with an optional namespaced method selector.
+ */
+export function parseRubyFileReference(
+  filePath: string,
+): { filePath: string; functionName: string } | undefined {
+  const rubyMarker = filePath.lastIndexOf('.rb:');
+  if (rubyMarker === -1) {
+    return undefined;
+  }
+
+  const rubySeparator = rubyMarker + '.rb'.length;
+  const functionName = filePath.slice(rubySeparator + 1);
+  if (!functionName || /[\\/]/.test(functionName)) {
+    return undefined;
+  }
+
+  return {
+    filePath: filePath.slice(0, rubySeparator),
+    functionName,
+  };
 }
 
 /**
@@ -63,24 +92,12 @@ export function parseExecutableFileReference(filePath: string): {
   const separator = filePath.lastIndexOf(':');
   if (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
-    if (isJavascriptFile(candidateFilePath) || candidateFilePath.endsWith('.rb')) {
+    if (isJavascriptFile(candidateFilePath)) {
       return {
         filePath: candidateFilePath,
         functionName: filePath.slice(separator + 1),
       };
     }
-  }
-
-  // Ruby selectors may contain namespace separators (for example,
-  // Validators::Format.check_length), so the final colon is not necessarily
-  // the separator after the file path.
-  const rubyMarker = filePath.lastIndexOf('.rb:');
-  if (rubyMarker !== -1) {
-    const rubySeparator = rubyMarker + '.rb'.length;
-    return {
-      filePath: filePath.slice(0, rubySeparator),
-      functionName: filePath.slice(rubySeparator + 1),
-    };
   }
 
   return { filePath };

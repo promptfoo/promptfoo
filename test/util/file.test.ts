@@ -107,6 +107,8 @@ describe('file utilities', () => {
       expect(isPythonFile('test.py\n')).toBe(false);
       expect(isPythonFile('test?loader=script.py')).toBe(false);
       expect(isPythonFile('test#loader.py')).toBe(false);
+      expect(isPythonFile('fixtures#1/test.py')).toBe(true);
+      expect(isPythonFile('C#/test.PY')).toBe(true);
       expect(isPythonFile('test.txt')).toBe(false);
     });
   });
@@ -868,6 +870,20 @@ describe('file utilities', () => {
         };
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://good_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve mixed-case Python assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://fixtures#1/good_assertion.PY:get_assert',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://fixtures#1/good_assertion.PY:get_assert');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

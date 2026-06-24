@@ -39,6 +39,7 @@ import {
   isJavascriptFile,
   parseExecutableFileReference,
   parsePythonFileReference,
+  parseRubyFileReference,
 } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -483,8 +484,9 @@ export async function runAssertion({
       const basePath = cliState.basePath || '';
       const fileReference = renderedValue.slice('file://'.length);
       const pythonReference = parsePythonFileReference(fileReference);
+      const rubyReference = parseRubyFileReference(fileReference);
       const { filePath: referencedPath, functionName } =
-        pythonReference ?? parseExecutableFileReference(fileReference);
+        rubyReference ?? pythonReference ?? parseExecutableFileReference(fileReference);
       const filePath = path.resolve(basePath, referencedPath);
 
       if (isJavascriptFile(filePath)) {
