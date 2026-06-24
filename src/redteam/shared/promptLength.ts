@@ -190,11 +190,23 @@ export function getGeneratedTestCaseLengthViolation(
 export function getGeneratedPromptObjectLengthViolation(
   prompt: { __prompt: string } | Record<string, string>,
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  { isMultiInput = false }: { isMultiInput?: boolean } = {},
 ): PromptLengthViolation | undefined {
-  return getFirstGeneratedPromptLengthViolation(
-    '__prompt' in prompt ? [prompt.__prompt] : Object.values(prompt),
-    charLimits,
-  );
+  let generatedPrompts = '__prompt' in prompt ? [prompt.__prompt] : Object.values(prompt);
+  if (isMultiInput && '__prompt' in prompt) {
+    try {
+      const parsedPrompt = JSON.parse(prompt.__prompt) as unknown;
+      if (
+        isRecord(parsedPrompt) &&
+        Object.values(parsedPrompt).every((value) => typeof value === 'string')
+      ) {
+        generatedPrompts = Object.values(parsedPrompt) as string[];
+      }
+    } catch {
+      // Preserve the serialized prompt fallback for malformed custom plugin output.
+    }
+  }
+  return getFirstGeneratedPromptLengthViolation(generatedPrompts, charLimits);
 }
 
 export function getGeneratedPromptOverLimit(

@@ -209,10 +209,16 @@ export abstract class RedteamPluginBase {
       }> = [];
 
       for (const prompt of parsedPrompts) {
-        const violation = getGeneratedPromptObjectLengthViolation(prompt, {
-          maxCharsPerMessage: this.config.maxCharsPerMessage,
-          minCharsPerMessage: this.config.minCharsPerMessage,
-        });
+        const violation = getGeneratedPromptObjectLengthViolation(
+          prompt,
+          {
+            maxCharsPerMessage: this.config.maxCharsPerMessage,
+            minCharsPerMessage: this.config.minCharsPerMessage,
+          },
+          {
+            isMultiInput: Boolean(this.config.inputs && Object.keys(this.config.inputs).length > 0),
+          },
+        );
         if (violation) {
           rejectedPromptViolations.push(violation);
         } else {
