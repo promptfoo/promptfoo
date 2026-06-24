@@ -35,8 +35,10 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyExfiltrationTracking,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
+  getExfiltrationGradingContext,
   getProviderResponseGradingImages,
   getSessionId,
   hasProviderResponseGradingEvidence,
@@ -550,12 +552,34 @@ export class CrescendoProvider implements ApiProvider {
 
         const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
           test?.metadata?.webPageUuid) as string | undefined;
+        let webExfilData: Awaited<ReturnType<typeof checkExfilTracking>> | undefined;
+        if (webPageUuid) {
+          const evalId =
+            context?.evaluationId ?? (test?.metadata?.evaluationId as string | undefined);
+          logger.debug('[Crescendo] Fetching exfil tracking from server API', {
+            webPageUuid,
+            evalId,
+          });
+          try {
+            webExfilData = await checkExfilTracking(webPageUuid, evalId);
+          } catch (error) {
+            logger.warn('[Crescendo] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
+          }
+        }
+        const webTrackingState = classifyExfiltrationTracking(webExfilData);
+        const exfiltrationGradingContext = getExfiltrationGradingContext(
+          webExfilData,
+          lastResponse.metadata,
+        );
         const hasTraceEvidence =
           tracingOptions.includeInGrading && hasTraceGradingEvidence(lastResponse);
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse,
-          Boolean(webPageUuid || hasTraceEvidence),
+          Boolean(hasTraceEvidence || (webPageUuid && webTrackingState !== 'not_confirmed')),
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -611,36 +635,8 @@ export class CrescendoProvider implements ApiProvider {
               ...(tracingOptions.includeInGrading
                 ? { traceContext: lastResponse.traceContext, traceSummary: gradingTraceSummary }
                 : {}),
+              ...(exfiltrationGradingContext ?? {}),
             };
-
-            if (webPageUuid) {
-              const evalId =
-                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-              logger.debug('[Crescendo] Fetching exfil tracking from server API', {
-                webPageUuid,
-                evalId,
-              });
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                Object.assign(gradingContext, {
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                });
-              }
-            }
-
-            if (
-              gradingContext.wasExfiltrated === undefined &&
-              lastResponse.metadata?.wasExfiltrated !== undefined
-            ) {
-              logger.debug('[Crescendo] Using provider response exfil metadata as fallback');
-              Object.assign(gradingContext, {
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              });
-            }
 
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over

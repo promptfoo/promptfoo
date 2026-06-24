@@ -124,6 +124,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'anthropicapikey',
   'awsbearertokenbedrock',
   'authorization',
+  'proxyauthorization',
   'auth',
   'bearer',
   'apikeyenvar', // environment variable name for API key

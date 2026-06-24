@@ -2191,6 +2191,25 @@ describe('RedteamGraderBase', () => {
         },
       },
       {
+        name: 'structured provider action beyond the former head sample',
+        context: {
+          providerResponse: {
+            output: 'I cannot help.',
+            raw: {
+              items: Array.from({ length: 500 }, (_, index) =>
+                index === 200
+                  ? {
+                      type: 'command_execution',
+                      command: 'cat .env',
+                      aggregated_output: 'TOOL_OUTPUT_SENTINEL',
+                    }
+                  : { type: 'reasoning', text: `reasoning ${index}` },
+              ),
+            },
+          },
+        },
+      },
+      {
         name: 'provider-native tool call',
         context: {
           providerResponse: {
@@ -2426,6 +2445,12 @@ describe('RedteamGraderBase', () => {
 
     it('redacts embedded credentials from trace and provider grading evidence', async () => {
       const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz123456';
+      const structuredCredentials = {
+        'x-api-key': 'PF_RUBRIC_X_API_KEY_123456789',
+        access_token: 'PF_RUBRIC_ACCESS_TOKEN_123456789',
+        client_secret: 'PF_RUBRIC_CLIENT_SECRET_123456789',
+        'proxy-authorization': 'Basic PF_RUBRIC_PROXY_AUTH_123456789',
+      };
       vi.mocked(matchesLlmRubric).mockResolvedValue({
         pass: false,
         score: 0,
@@ -2441,7 +2466,7 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         {
-          traceSummary: `request failed with Authorization: Bearer ${secret}`,
+          traceSummary: JSON.stringify(structuredCredentials),
           providerResponse: {
             output: 'I cannot help.',
             raw: {
@@ -2451,7 +2476,11 @@ describe('RedteamGraderBase', () => {
                   command: `curl -H "Authorization: Bearer ${secret}" https://example.test`,
                   aggregated_output: `OPENAI_API_KEY=${secret}`,
                 },
+                { type: 'dynamic_tool_call', arguments: structuredCredentials },
               ],
+            },
+            metadata: {
+              toolCalls: [{ name: 'request', input: structuredCredentials }],
             },
           },
         },
@@ -2460,6 +2489,9 @@ describe('RedteamGraderBase', () => {
       expect(result.rubric).toContain('curl');
       expect(result.rubric).toContain('[REDACTED]');
       expect(result.rubric).not.toContain(secret);
+      for (const credential of Object.values(structuredCredentials)) {
+        expect(result.rubric).not.toContain(credential);
+      }
     });
 
     it('normalizes non-JSON provider action values before grading', async () => {
@@ -2611,6 +2643,37 @@ describe('RedteamGraderBase', () => {
         reason: expect.stringContaining('Data exfiltration detected: 1 request(s)'),
       });
       expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('does not refetch tracking after a layer reports an authoritative zero', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'No exfiltration detected',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await new DataExfilGrader().getResult(
+        'test prompt',
+        'The request completed without contacting an external endpoint.',
+        {
+          ...mockTest,
+          metadata: { ...mockTest.metadata, webPageUuid: 'tracked-page' },
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          wasExfiltrated: false,
+          exfilCount: 0,
+          exfilRecords: [],
+        },
+      );
+
+      expect(mockCheckExfilTracking).not.toHaveBeenCalled();
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      expect(result.grade).toEqual(mockResult);
     });
 
     it('should grade substantive content that ends with a refusal', async () => {

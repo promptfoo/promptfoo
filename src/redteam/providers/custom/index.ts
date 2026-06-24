@@ -20,6 +20,8 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyExfiltrationTracking,
+  getExfiltrationGradingContext,
   getProviderResponseGradingImages,
   getSessionId,
   hasProviderResponseGradingEvidence,
@@ -515,10 +517,28 @@ export class CustomProvider implements ApiProvider {
 
         const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
           test?.metadata?.webPageUuid) as string | undefined;
+        let webExfilData: Awaited<ReturnType<typeof checkExfilTracking>> | undefined;
+        if (webPageUuid) {
+          const evalId =
+            context?.evaluationId ?? (test?.metadata?.evaluationId as string | undefined);
+          try {
+            webExfilData = await checkExfilTracking(webPageUuid, evalId);
+          } catch (error) {
+            logger.warn('[Custom] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
+          }
+        }
+        const webTrackingState = classifyExfiltrationTracking(webExfilData);
+        const exfiltrationGradingContext = getExfiltrationGradingContext(
+          webExfilData,
+          lastResponse.metadata,
+        );
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse,
-          Boolean(webPageUuid),
+          Boolean(webPageUuid && webTrackingState !== 'not_confirmed'),
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -561,29 +581,8 @@ export class CustomProvider implements ApiProvider {
             const gradingContext: RedteamGradingContext = {
               providerResponse: lastResponse,
               ...(responseImages.length ? { imageOutputs: responseImages } : {}),
+              ...(exfiltrationGradingContext ?? {}),
             };
-            if (webPageUuid) {
-              const evalId =
-                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                Object.assign(gradingContext, {
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                });
-              }
-            }
-            if (
-              gradingContext.wasExfiltrated === undefined &&
-              lastResponse.metadata?.wasExfiltrated !== undefined
-            ) {
-              Object.assign(gradingContext, {
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              });
-            }
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,

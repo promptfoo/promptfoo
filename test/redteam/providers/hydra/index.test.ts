@@ -1403,7 +1403,7 @@ describe('HydraProvider', () => {
       expect(result.metadata?.storedGraderResult).toBeDefined();
     });
 
-    it('grades external web evidence even when response text is backtrackable', async () => {
+    it('backtracks when authoritative web tracking confirms no exfiltration', async () => {
       mockIsBacktrackableRefusal.mockReturnValue(true);
       mockApplyRuntimeTransforms.mockResolvedValueOnce({
         prompt: 'transformed attack',
@@ -1441,7 +1441,129 @@ describe('HydraProvider', () => {
       const result = await provider.callApi('', context);
 
       expect(mockCheckExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-123');
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+      expect(result.metadata?.hydraBacktrackCount).toBe(1);
+    });
+
+    it('passes an authoritative zero result to outcome grading', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(false);
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed attack',
+        transformedPrompt: 'transformed attack',
+        metadata: { webPageUuid: 'page-uuid' },
+      });
+      mockCheckExfilTracking.mockResolvedValue({
+        wasExfiltrated: false,
+        exfilCount: 0,
+        exfilRecords: [],
+      });
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Here are the requested instructions.',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+      await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        evaluationId: 'eval-123',
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(mockCheckExfilTracking).toHaveBeenCalledOnce();
+      expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+        wasExfiltrated: false,
+        exfilCount: 0,
+      });
+    });
+
+    it.each([
+      { description: 'tracking is unavailable', trackingResult: null },
+      {
+        description: 'tracking is malformed',
+        trackingResult: { wasExfiltrated: false, exfilCount: 'invalid', exfilRecords: [] },
+      },
+    ])('grades a refusal when $description', async ({ trackingResult }) => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed attack',
+        transformedPrompt: 'transformed attack',
+        metadata: { webPageUuid: 'page-uuid' },
+      });
+      mockCheckExfilTracking.mockResolvedValue(trackingResult as any);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'I cannot help.' });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        evaluationId: 'eval-123',
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(mockCheckExfilTracking).toHaveBeenCalledOnce();
       expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
+    });
+
+    it('preserves positive provider exfiltration after a negative web result', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed attack',
+        transformedPrompt: 'transformed attack',
+        metadata: { webPageUuid: 'page-uuid' },
+      });
+      mockCheckExfilTracking.mockResolvedValue({
+        wasExfiltrated: false,
+        exfilCount: 0,
+        exfilRecords: [],
+      });
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help.',
+        metadata: { wasExfiltrated: true, exfilCount: 1 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        evaluationId: 'eval-123',
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+        wasExfiltrated: true,
+        exfilCount: 1,
+      });
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
     });
   });

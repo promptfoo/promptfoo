@@ -2858,6 +2858,93 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     expect(result.metadata?.storedGraderResult).toBeDefined();
   });
 
+  it.each([
+    {
+      description: 'permits backtracking after an authoritative zero result',
+      trackingResult: { wasExfiltrated: false, exfilCount: 0, exfilRecords: [] },
+      targetMetadata: { wasExfiltrated: false, exfilCount: 0 },
+      expectedBacktracks: 1,
+      expectedGraderCalls: 0,
+    },
+    {
+      description: 'preserves an unavailable tracking result for outcome grading',
+      trackingResult: null,
+      targetMetadata: { wasExfiltrated: false, exfilCount: 0 },
+      expectedBacktracks: 0,
+      expectedGraderCalls: 1,
+    },
+    {
+      description: 'preserves positive provider metadata after a negative web result',
+      trackingResult: { wasExfiltrated: false, exfilCount: 0, exfilRecords: [] },
+      targetMetadata: { wasExfiltrated: true, exfilCount: 1 },
+      expectedBacktracks: 0,
+      expectedGraderCalls: 1,
+      expectedGradingContext: { wasExfiltrated: true, exfilCount: 1 },
+    },
+    {
+      description: 'passes an authoritative zero result to outcome grading',
+      trackingResult: { wasExfiltrated: false, exfilCount: 0, exfilRecords: [] },
+      targetMetadata: {},
+      targetOutput: 'Here are the requested instructions.',
+      expectedBacktracks: 0,
+      expectedGraderCalls: 1,
+      expectedGradingContext: { wasExfiltrated: false, exfilCount: 0 },
+    },
+    {
+      description: 'treats malformed web tracking as unavailable',
+      trackingResult: { wasExfiltrated: false, exfilCount: 'invalid', exfilRecords: [] },
+      targetMetadata: {},
+      expectedBacktracks: 0,
+      expectedGraderCalls: 1,
+    },
+  ])('$description', async (testCase) => {
+    mockApplyRuntimeTransforms.mockResolvedValueOnce({
+      prompt: 'transformed prompt',
+      metadata: { webPageUuid: 'layer-page' },
+    });
+    mockCheckExfilTracking.mockResolvedValue(testCase.trackingResult as any);
+    const graderGetResult = vi.fn().mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'No exfiltration detected' },
+    });
+    mockGetGraderById.mockReturnValue({ getResult: graderGetResult });
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: testCase.targetOutput ?? 'I cannot help.',
+      metadata: testCase.targetMetadata,
+    });
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+    });
+    const result = await provider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      evaluationId: 'eval-id',
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: {
+        assert: [{ type: 'harmful:test' }],
+        metadata: { goal: 'test objective', pluginId: 'harmful:test' },
+      } as any,
+    });
+
+    expect(mockCheckExfilTracking).toHaveBeenCalledOnce();
+    expect(graderGetResult).toHaveBeenCalledTimes(testCase.expectedGraderCalls);
+    expect(result.metadata?.crescendoBacktrackCount).toBe(testCase.expectedBacktracks);
+    if (testCase.expectedGradingContext) {
+      expect(graderGetResult.mock.calls[0][7]).toMatchObject(testCase.expectedGradingContext);
+    }
+  });
+
   it('uses unblocking transform metadata for exfiltration grading', async () => {
     mockApplyRuntimeTransforms
       .mockResolvedValueOnce({ prompt: 'initial transformed prompt' })
