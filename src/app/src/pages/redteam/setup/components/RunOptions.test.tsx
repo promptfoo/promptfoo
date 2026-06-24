@@ -70,6 +70,19 @@ describe('RunOptionsContent', () => {
       expect(debugSwitch).not.toBeChecked();
     });
 
+    it('should sync message limits after config import updates props', () => {
+      const { rerender } = renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+
+      rerender(
+        <TooltipProvider>
+          <RunOptionsContent {...defaultProps} maxCharsPerMessage={120} minCharsPerMessage={80} />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByLabelText('Max chars per message')).toHaveValue(120);
+      expect(screen.getByLabelText('Min chars per message')).toHaveValue(80);
+    });
+
     it('should disable the delay field and show a tooltip when maxConcurrency is greater than 1', () => {
       const props = {
         ...defaultProps,

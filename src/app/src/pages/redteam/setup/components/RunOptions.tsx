@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
@@ -406,6 +406,24 @@ export const RunOptionsContent = ({
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState<string>(
     runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
   );
+
+  useEffect(() => {
+    setNumTestsInput(numTests === undefined ? '0' : String(numTests));
+  }, [numTests]);
+  useEffect(() => {
+    setMaxCharsPerMessageInput(maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage));
+  }, [maxCharsPerMessage]);
+  useEffect(() => {
+    setMinCharsPerMessageInput(minCharsPerMessage === undefined ? '' : String(minCharsPerMessage));
+  }, [minCharsPerMessage]);
+  useEffect(() => {
+    setDelayInput(runOptions?.delay === undefined ? '0' : String(runOptions.delay));
+  }, [runOptions?.delay]);
+  useEffect(() => {
+    setMaxConcurrencyInput(
+      runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
+    );
+  }, [runOptions?.maxConcurrency]);
 
   // Normalize language to array
   const languageArray = useMemo<string[]>(() => {
