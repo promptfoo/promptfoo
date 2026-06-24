@@ -242,9 +242,24 @@ function strategyTargetsPlugin(
   return (
     !targetPlugins ||
     targetPlugins.length === 0 ||
-    targetPlugins.some(
-      (targetPlugin) => targetPlugin === pluginId || pluginId.startsWith(`${targetPlugin}:`),
-    )
+    targetPlugins.some((targetPlugin) => pluginMatchesTarget(pluginId, targetPlugin))
+  );
+}
+
+function pluginMatchesTarget(pluginId: string, targetPlugin: string): boolean {
+  if (pluginIdsOverlap(pluginId, targetPlugin)) {
+    return true;
+  }
+  return Object.values(ALIASED_PLUGIN_MAPPINGS[pluginId] ?? {}).some(({ plugins }) =>
+    plugins.some((aliasedPlugin) => pluginIdsOverlap(aliasedPlugin, targetPlugin)),
+  );
+}
+
+function pluginIdsOverlap(pluginId: string, targetPlugin: string): boolean {
+  return (
+    pluginId === targetPlugin ||
+    pluginId.startsWith(`${targetPlugin}:`) ||
+    targetPlugin.startsWith(`${pluginId}:`)
   );
 }
 
