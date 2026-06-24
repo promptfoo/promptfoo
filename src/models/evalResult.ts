@@ -8,7 +8,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
-import { PromptfooAttributes } from '../tracing/genaiTracer';
+import { PromptfooAttributes, TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../tracing/genaiTracer';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -56,6 +56,63 @@ export interface OutputStripFlags {
 
 function hasAnyStripFlag(flags: OutputStripFlags): boolean {
   return Object.values(flags).some(Boolean);
+}
+
+const TRACE_PROMPT_TEXT_ATTRIBUTE_KEYS = [
+  PromptfooAttributes.PROMPT_LABEL,
+  PromptfooAttributes.REQUEST_BODY,
+  'tool.output',
+  'tool.result',
+  'ai.toolCall.result',
+  'codex.output',
+] as const;
+
+const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
+  PromptfooAttributes.RESPONSE_BODY,
+  ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  'codex.command',
+  'codex.search.query',
+  'codex.message',
+  'codex.reasoning',
+  'codex.reasoning.summary',
+] as const;
+
+function projectTraceSpanErrorDetails(span: TraceData['spans'][number]) {
+  const runtimeSpan = span as typeof span & {
+    status?: Record<string, unknown>;
+  };
+  return {
+    ...runtimeSpan,
+    ...(typeof runtimeSpan.statusMessage === 'string' && {
+      statusMessage: '[error details stripped]',
+    }),
+    ...(isRecord(runtimeSpan.status) &&
+      typeof runtimeSpan.status.message === 'string' && {
+        status: {
+          ...runtimeSpan.status,
+          message: '[error details stripped]',
+        },
+      }),
+  };
+}
+
+function projectTraceSpanName(
+  span: TraceData['spans'][number],
+  shouldStripResponseOutput: boolean,
+): string {
+  if (!shouldStripResponseOutput || !span.attributes) {
+    return span.name;
+  }
+  if (
+    typeof span.attributes['codex.search.query'] === 'string' &&
+    span.name.startsWith('search "')
+  ) {
+    return 'search "[output stripped]"';
+  }
+  if (typeof span.attributes['codex.command'] === 'string' && span.name.startsWith('exec ')) {
+    return 'exec [output stripped]';
+  }
+  return span.name;
 }
 
 export function projectErrorForOutput(
@@ -160,7 +217,7 @@ function projectProviderResponse(
   response: ProviderResponse | undefined,
   stripFlags: OutputStripFlags,
 ): ProviderResponse | undefined {
-  if (!response) {
+  if (response === undefined || response === null) {
     return response;
   }
 
@@ -873,49 +930,33 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
       };
     }
 
-    if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripResponseOutput) {
-      return projectedTrace;
-    }
-
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
-        const runtimeSpan = span as typeof span & {
-          status?: Record<string, unknown>;
-        };
-        const projectedSpan = {
-          ...runtimeSpan,
-          ...(typeof runtimeSpan.statusMessage === 'string' && {
-            statusMessage: '[error details stripped]',
-          }),
-          ...(isRecord(runtimeSpan.status) &&
-            typeof runtimeSpan.status.message === 'string' && {
-              status: {
-                ...runtimeSpan.status,
-                message: '[error details stripped]',
-              },
-            }),
-        };
+        const projectedSpan = projectTraceSpanErrorDetails(span);
         if (!span.attributes) {
           return projectedSpan;
         }
 
         const projectedAttributes = { ...span.attributes };
+        if ('codex.error' in projectedAttributes) {
+          projectedAttributes['codex.error'] = '[error details stripped]';
+        }
         if (stripFlags.shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-          delete projectedAttributes['tool.output'];
+          for (const key of TRACE_PROMPT_TEXT_ATTRIBUTE_KEYS) {
+            delete projectedAttributes[key];
+          }
         }
         if (stripFlags.shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-          delete projectedAttributes['tool.arguments'];
-          delete projectedAttributes['tool.input'];
-          delete projectedAttributes['codex.reasoning.summary'];
+          for (const key of TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS) {
+            delete projectedAttributes[key];
+          }
         }
 
         const { attributes: _attributes, ...spanWithoutAttributes } = projectedSpan;
         return {
           ...spanWithoutAttributes,
+          name: projectTraceSpanName(span, stripFlags.shouldStripResponseOutput),
           ...(Object.keys(projectedAttributes).length > 0 && {
             attributes: projectedAttributes,
           }),
@@ -960,30 +1001,30 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     redacted.metadata as EvaluateResult['metadata'],
     stripFlags,
   );
+  const testCase =
+    artifactResult.testCase === undefined
+      ? undefined
+      : projectTestCase(
+          sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
+          stripFlags,
+        );
+  const prompt =
+    artifactResult.prompt === undefined
+      ? undefined
+      : projectPromptForOutput(
+          sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
+          shouldStripPromptText,
+        );
 
-  return {
+  const projectedResult = {
     ...result,
-    ...(artifactResult.testCase
-      ? {
-          testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
-            stripFlags,
-          ),
-        }
-      : {}),
+    ...(testCase === undefined ? {} : { testCase }),
     ...(artifactResult.vars === undefined
       ? {}
       : {
           vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
         }),
-    ...(artifactResult.prompt
-      ? {
-          prompt: projectPromptForOutput(
-            sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
-            shouldStripPromptText,
-          ),
-        }
-      : {}),
+    ...(prompt === undefined ? {} : { prompt }),
     ...(artifactResult.provider
       ? {
           provider: sanitizeProvider(
@@ -996,7 +1037,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata,
     error: projectErrorForOutput(artifactResult.error as EvaluateResult['error'], stripFlags),
-  } as T;
+  } as T & Record<string, unknown>;
+  if (artifactResult.testCase !== undefined && testCase === undefined) {
+    delete projectedResult.testCase;
+  }
+  return projectedResult as T;
 }
 
 export default class EvalResult {

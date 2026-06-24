@@ -1468,7 +1468,7 @@ describe('evaluator', () => {
         spans: [
           {
             spanId: 'span-id',
-            name: 'provider call',
+            name: 'search "V4_TRACE_SEARCH_QUERY"',
             startTime: 0,
             statusMessage: 'V4_TRACE_STATUS_MESSAGE',
             status: { code: 'error', message: 'V4_TRACE_RUNTIME_STATUS' },
@@ -1478,8 +1478,18 @@ describe('evaluator', () => {
               [PromptfooAttributes.RESPONSE_BODY]: 'V4_TRACE_RESPONSE',
               'tool.arguments': 'V4_TRACE_TOOL_ARGUMENTS',
               'tool.input': 'V4_TRACE_TOOL_INPUT',
+              'function.arguments': 'V4_TRACE_FUNCTION_ARGUMENTS',
+              'codex.mcp.input': 'V4_TRACE_MCP_INPUT',
               'tool.output': 'V4_TRACE_TOOL_OUTPUT',
+              'tool.result': 'V4_TRACE_TOOL_RESULT',
+              'ai.toolCall.result': 'V4_TRACE_VERCEL_TOOL_RESULT',
+              'codex.command': 'V4_TRACE_COMMAND',
+              'codex.search.query': 'V4_TRACE_SEARCH_QUERY',
+              'codex.output': 'V4_TRACE_COMMAND_OUTPUT',
+              'codex.message': 'V4_TRACE_MESSAGE',
+              'codex.reasoning': 'V4_TRACE_REASONING',
               'codex.reasoning.summary': 'V4_TRACE_REASONING_SUMMARY',
+              'codex.error': 'V4_TRACE_ERROR',
               safe: 'retained',
             },
           },
@@ -1527,7 +1537,13 @@ describe('evaluator', () => {
           gradingResult: null,
         });
         expect(projected.traces?.[0]).not.toHaveProperty('metadata');
-        expect(projected.traces?.[0].spans[0].attributes).toEqual({ safe: 'retained' });
+        expect(projected.traces?.[0].spans[0]).toMatchObject({
+          name: 'search "[output stripped]"',
+          attributes: {
+            'codex.error': '[error details stripped]',
+            safe: 'retained',
+          },
+        });
         expect(projected.traces?.[0].spans[0].statusMessage).toBe('[error details stripped]');
         expect(
           (projected.traces?.[0].spans[0] as unknown as { status: { message: string } }).status

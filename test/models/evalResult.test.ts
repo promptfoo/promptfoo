@@ -8,6 +8,7 @@ import EvalResult, {
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
+import { TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../../src/tracing/toolAttributes';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -1430,6 +1431,42 @@ describe('EvalResult', () => {
       }
     });
 
+    it.each([0, false, ''])('fails closed on malformed falsy output fields: %j', (value) => {
+      const malformed = createEvaluateResult({
+        prompt: value,
+        response: value,
+        testCase: value,
+      } as unknown as Partial<EvaluateResult>);
+
+      expect(projectEvaluateResultForOutput(malformed)).toBe(malformed);
+      const unstrippedArtifact = sanitizeResultForJsonlArtifact(malformed);
+      expect(unstrippedArtifact.prompt).toBe(value);
+      expect(unstrippedArtifact.response).toBe(value);
+      expect(unstrippedArtifact.testCase).toBe(value);
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        for (const result of [
+          projectEvaluateResultForOutput(malformed),
+          sanitizeResultForJsonlArtifact(malformed),
+        ]) {
+          expect(result.prompt).toEqual({
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+          });
+          expect(result.response).toEqual({ output: '[output stripped]' });
+          expect(result).not.toHaveProperty('testCase');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should strip prompt-bearing fields when prompt-text stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
 
@@ -1675,15 +1712,24 @@ describe('EvalResult', () => {
           spans: [
             {
               spanId: 'span-id',
-              name: 'tool call',
+              name: 'search "sensitive search query"',
               startTime: 0,
               statusMessage: 'sensitive persisted status',
               status: { code: 'error', message: 'sensitive runtime status' },
               attributes: {
-                'tool.arguments': 'sensitive tool arguments',
-                'tool.input': 'sensitive tool input',
+                ...Object.fromEntries(
+                  TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => [key, `sensitive ${key}`]),
+                ),
                 'tool.output': 'sensitive tool output',
+                'tool.result': 'sensitive tool result',
+                'ai.toolCall.result': 'sensitive Vercel tool result',
+                'codex.command': 'sensitive command',
+                'codex.search.query': 'sensitive search query',
+                'codex.output': 'sensitive command output',
+                'codex.message': 'sensitive agent message',
+                'codex.reasoning': 'sensitive reasoning',
                 'codex.reasoning.summary': 'sensitive reasoning',
+                'codex.error': 'sensitive Codex error',
                 safe: 'retained',
               },
             },
@@ -1692,6 +1738,14 @@ describe('EvalResult', () => {
               name: 'failed provider call',
               startTime: 1,
               statusMessage: 'sensitive status without attributes',
+            },
+            {
+              spanId: 'command-span',
+              name: 'exec sensitive-command',
+              startTime: 2,
+              attributes: {
+                'codex.command': 'sensitive-command --secret',
+              },
             },
           ],
         },
@@ -1707,16 +1761,40 @@ describe('EvalResult', () => {
       {
         name: 'prompt text',
         env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
-        removed: ['tool.output'],
-        retained: ['tool.arguments', 'tool.input', 'codex.reasoning.summary'],
+        removed: ['tool.output', 'tool.result', 'ai.toolCall.result', 'codex.output'],
+        retained: [
+          ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+          'codex.command',
+          'codex.search.query',
+          'codex.message',
+          'codex.reasoning',
+          'codex.reasoning.summary',
+        ],
+        expectedSearchName: 'search "sensitive search query"',
+        expectedCommandName: 'exec sensitive-command',
       },
       {
         name: 'response output',
         env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' },
-        removed: ['tool.arguments', 'tool.input', 'codex.reasoning.summary'],
-        retained: ['tool.output'],
+        removed: [
+          ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+          'codex.command',
+          'codex.search.query',
+          'codex.message',
+          'codex.reasoning',
+          'codex.reasoning.summary',
+        ],
+        retained: ['tool.output', 'tool.result', 'ai.toolCall.result', 'codex.output'],
+        expectedSearchName: 'search "[output stripped]"',
+        expectedCommandName: 'exec [output stripped]',
       },
-    ])('projects $name trace payload aliases', ({ env, removed, retained }) => {
+    ])('projects $name trace payload aliases', ({
+      env,
+      removed,
+      retained,
+      expectedSearchName,
+      expectedCommandName,
+    }) => {
       const restoreEnv = mockProcessEnv(env);
 
       try {
@@ -1732,8 +1810,35 @@ describe('EvalResult', () => {
           expect(span.attributes).toHaveProperty(key);
         }
         expect(span.attributes).toHaveProperty('safe', 'retained');
+        expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
+        expect(span.name).toBe(expectedSearchName);
+        expect(projected[0].spans[2].name).toBe(expectedCommandName);
         expect(span.statusMessage).toBe('[error details stripped]');
         expect(span.status.message).toBe('[error details stripped]');
+        expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['prompt text', { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' }],
+      ['response output', { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' }],
+      ['test variables', { PROMPTFOO_STRIP_TEST_VARS: 'true' }],
+      ['grading results', { PROMPTFOO_STRIP_GRADING_RESULT: 'true' }],
+      ['metadata', { PROMPTFOO_STRIP_METADATA: 'true' }],
+    ])('masks trace error details when stripping %s', (_name, env) => {
+      const restoreEnv = mockProcessEnv(env);
+
+      try {
+        const projected = projectTracesForOutput(createTraces());
+        const span = projected[0].spans[0] as (typeof projected)[0]['spans'][0] & {
+          status: { message: string };
+        };
+
+        expect(span.statusMessage).toBe('[error details stripped]');
+        expect(span.status.message).toBe('[error details stripped]');
+        expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
         expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
       } finally {
         restoreEnv();
