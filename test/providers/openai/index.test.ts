@@ -59,6 +59,18 @@ describe('OpenAI Provider', () => {
       expect(envProvider.getOrganization()).toBe('env-org');
     });
 
+    it('should preserve organization for OpenAI endpoints configured through env', () => {
+      mockProcessEnv({
+        OPENAI_API_BASE_URL: 'https://proxy.openai.example.com/v1',
+        OPENAI_ORGANIZATION: 'env-org',
+      });
+      const envProvider = new OpenAiGenericProvider('test-model');
+
+      expect(envProvider.getOpenAiRequestHeaders()).toEqual({
+        'OpenAI-Organization': 'env-org',
+      });
+    });
+
     it('should include the default originator header and allow explicit overrides', () => {
       expect(provider.getOpenAiRequestHeaders()).toEqual({
         [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR,
@@ -114,6 +126,16 @@ describe('OpenAI Provider', () => {
         }),
       ).toMatchObject({
         [OPENAI_ORIGINATOR_HEADER]: 'custom-originator',
+      });
+
+      const explicitlyConfiguredProvider = new OpenAiGenericProvider('test-model', {
+        config: {
+          apiBaseUrl: 'https://custom.api.com/openai',
+          organization: 'custom-org',
+        },
+      });
+      expect(explicitlyConfiguredProvider.getOpenAiRequestHeaders()).toEqual({
+        'OpenAI-Organization': 'custom-org',
       });
     });
 

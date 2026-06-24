@@ -286,6 +286,28 @@ describe('Shared Provider Functions', () => {
       expect(calculateCost('model1', {}, 1000, Infinity, models)).toBeUndefined();
     });
 
+    it('should return undefined for negative tokens or effective costs', () => {
+      expect(calculateCost('model1', {}, -1, 500, models)).toBeUndefined();
+      expect(calculateCost('model1', {}, 1000, -1, models)).toBeUndefined();
+      expect(calculateCost('nonexistent', { inputCost: -1 }, 1000, 0, models)).toBeUndefined();
+      expect(calculateCost('nonexistent', { outputCost: -1 }, 0, 500, models)).toBeUndefined();
+    });
+
+    it('should return undefined for non-finite costs, including zero-token sides', () => {
+      expect(
+        calculateCost('nonexistent', { inputCost: Number.NaN, outputCost: 1 }, 0, 2, models),
+      ).toBeUndefined();
+      expect(
+        calculateCost('nonexistent', { inputCost: 1, outputCost: Infinity }, 2, 0, models),
+      ).toBeUndefined();
+    });
+
+    it('should return undefined when finite operands overflow', () => {
+      expect(
+        calculateCost('nonexistent', { inputCost: Number.MAX_VALUE }, 2, 0, models),
+      ).toBeUndefined();
+    });
+
     it('should return undefined if tokens are undefined', () => {
       expect(calculateCost('model1', {}, undefined, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, undefined, models)).toBeUndefined();

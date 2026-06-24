@@ -525,6 +525,49 @@ function getNumericValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function getExplicitTokenCount(...values: unknown[]): number | undefined {
+  const value = values.find((candidate) => candidate !== undefined);
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function getUnknownModelTextUsage(
+  rawUsage: any,
+): { inputTokens: number; outputTokens: number } | undefined {
+  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
+  const rawInputTokens = usage.prompt_tokens ?? usage.input_tokens;
+  const rawOutputTokens = usage.completion_tokens ?? usage.output_tokens;
+  const inputTokens = getExplicitTokenCount(rawInputTokens);
+  const outputTokens = getExplicitTokenCount(rawOutputTokens);
+
+  if (inputTokens === undefined || outputTokens === undefined) {
+    return undefined;
+  }
+
+  const nonTextTokenCounts = [
+    inputDetails.audio_tokens,
+    inputDetails.image_tokens,
+    inputDetails.cached_tokens_details?.audio_tokens,
+    inputDetails.cached_tokens_details?.image_tokens,
+    outputDetails.audio_tokens,
+    outputDetails.image_tokens,
+    usage.audio_prompt_tokens,
+    usage.audio_input_tokens,
+    usage.audio_completion_tokens,
+    usage.audio_output_tokens,
+  ];
+  if (
+    nonTextTokenCounts.some(
+      (value) =>
+        value !== undefined &&
+        (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 0),
+    )
+  ) {
+    return undefined;
+  }
+
+  return { inputTokens, outputTokens };
+}
+
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
   const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
 
@@ -683,11 +726,15 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const rates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!rates) {
+    const textUsage = getUnknownModelTextUsage(rawUsage);
+    if (!textUsage) {
+      return undefined;
+    }
     const customCost = calculateCost(
       modelName,
       config,
-      usage.totalInputTokens,
-      usage.totalOutputTokens,
+      textUsage.inputTokens,
+      textUsage.outputTokens,
       [],
     );
     return customCost === undefined || !options.cachedResponse ? customCost : 0;

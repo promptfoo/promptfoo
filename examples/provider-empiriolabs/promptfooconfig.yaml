@@ -20,14 +20,6 @@ providers:
       apiKeyEnvar: EMPIRIOLABS_API_KEY
       max_tokens: 1000
 
-  # EmpirioLabs also serves OpenAI-compatible audio transcription. Point a
-  # transcription provider at the same base URL. In a separate config, use
-  # prompts: ['{{audio_file}}'] and set tests[].vars.audio_file to a literal path.
-  # - id: openai:transcription:whisper-large-v3-turbo
-  #   config:
-  #     apiBaseUrl: https://api.empiriolabs.ai/v1
-  #     apiKeyEnvar: EMPIRIOLABS_API_KEY
-
 tests:
   - vars:
       question: What is the time complexity of binary search?

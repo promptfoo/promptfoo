@@ -89,6 +89,7 @@ describe('Fireworks AI', () => {
       try {
         const provider = new FireworksProvider(FIREWORKS_MODEL, {});
         expect(provider.config.apiBaseUrl).toBe('https://self-hosted.example.com/v1');
+        expect(provider.getApiUrl()).toBe('https://self-hosted.example.com/v1');
       } finally {
         restoreEnv();
       }
@@ -103,6 +104,21 @@ describe('Fireworks AI', () => {
           config: { apiBaseUrl: 'https://explicit.example.com/v1' },
         });
         expect(provider.config.apiBaseUrl).toBe('https://explicit.example.com/v1');
+        expect(provider.getApiUrl()).toBe('https://explicit.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('prefers provider-level FIREWORKS_API_BASE_URL over process env', () => {
+      const restoreEnv = mockProcessEnv({
+        FIREWORKS_API_BASE_URL: 'https://process.example.com/v1',
+      });
+      try {
+        const provider = new FireworksProvider(FIREWORKS_MODEL, {
+          env: { FIREWORKS_API_BASE_URL: 'https://provider.example.com/v1' },
+        });
+        expect(provider.getApiUrl()).toBe('https://provider.example.com/v1');
       } finally {
         restoreEnv();
       }
@@ -207,6 +223,20 @@ describe('Fireworks AI', () => {
     it('falls back to the default Fireworks endpoint and key envar', () => {
       const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {});
       expect(provider.getApiUrl()).toBe(FIREWORKS_API_BASE);
+    });
+
+    it('prefers provider-level FIREWORKS_API_BASE_URL over process env', () => {
+      const restoreEnv = mockProcessEnv({
+        FIREWORKS_API_BASE_URL: 'https://process.example.com/v1',
+      });
+      try {
+        const provider = new FireworksEmbeddingProvider(EMBEDDING_MODEL, {
+          env: { FIREWORKS_API_BASE_URL: 'https://provider.example.com/v1' },
+        });
+        expect(provider.getApiUrl()).toBe('https://provider.example.com/v1');
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('does not fall back to OPENAI_API_KEY when FIREWORKS_API_KEY is missing', () => {

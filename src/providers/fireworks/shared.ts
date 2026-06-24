@@ -47,15 +47,3 @@ export function resolveFireworksApiKey(
   const envar = config?.apiKeyEnvar || DEFAULT_FIREWORKS_API_KEY_ENVAR;
   return config?.apiKey || env?.[envar as keyof EnvOverrides] || getEnvString(envar as EnvVarKey);
 }
-
-// Resolve the request URL. The OpenAI base class consults OPENAI_API_HOST /
-// OPENAI_API_BASE_URL / OPENAI_BASE_URL before config.apiBaseUrl, which would
-// let an OpenAI-targeted environment silently reroute fireworks:* requests. We
-// still honor an explicitly configured `apiHost` so users wiring a Fireworks
-// proxy or gateway through config keep working.
-export function resolveFireworksApiUrl(config: FireworksCredentialConfig): string {
-  if (config?.apiHost) {
-    return `https://${config.apiHost}/v1`;
-  }
-  return config?.apiBaseUrl || FIREWORKS_API_BASE_URL;
-}

@@ -166,12 +166,21 @@ export function createLiteLLMProvider(
     options.env?.LITELLM_API_BASE ||
     getEnvString('LITELLM_API_BASE') ||
     'http://0.0.0.0:4000';
+  const resolvedLiteLLMApiKey =
+    options.config?.env?.LITELLM_API_KEY ||
+    options.env?.LITELLM_API_KEY ||
+    getEnvString('LITELLM_API_KEY');
+  const resolvedOpenAIApiKey =
+    options.config?.env?.OPENAI_API_KEY ||
+    options.env?.OPENAI_API_KEY ||
+    getEnvString('OPENAI_API_KEY');
 
   // Build the config object with proper defaults
   // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
   // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
   const litellmConfigDefaults: LiteLLMCompletionOptions = {
-    apiKeyEnvar: 'LITELLM_API_KEY',
+    apiKeyEnvar:
+      resolvedLiteLLMApiKey || !resolvedOpenAIApiKey ? 'LITELLM_API_KEY' : 'OPENAI_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: resolvedApiBaseUrl,
     omitDefaults: true,

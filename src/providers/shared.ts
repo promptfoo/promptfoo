@@ -60,10 +60,12 @@ export function calculateCost(
   models: ProviderModel[],
 ): number | undefined {
   if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
     !Number.isFinite(promptTokens) ||
     !Number.isFinite(completionTokens) ||
-    typeof promptTokens === 'undefined' ||
-    typeof completionTokens === 'undefined'
+    promptTokens < 0 ||
+    completionTokens < 0
   ) {
     return undefined;
   }
@@ -79,13 +81,18 @@ export function calculateCost(
     config.outputCost ?? config.cost ?? longContextCost?.output ?? modelCost?.output;
 
   if (
-    (promptTokens !== 0 && !Number.isFinite(inputCost)) ||
-    (completionTokens !== 0 && !Number.isFinite(outputCost))
+    (inputCost !== undefined && (!Number.isFinite(inputCost) || inputCost < 0)) ||
+    (outputCost !== undefined && (!Number.isFinite(outputCost) || outputCost < 0)) ||
+    (promptTokens !== 0 && inputCost === undefined) ||
+    (completionTokens !== 0 && outputCost === undefined)
   ) {
     return undefined;
   }
 
-  return (inputCost ?? 0) * promptTokens + (outputCost ?? 0) * completionTokens;
+  const inputTotal = promptTokens === 0 ? 0 : inputCost! * promptTokens;
+  const outputTotal = completionTokens === 0 ? 0 : outputCost! * completionTokens;
+  const total = inputTotal + outputTotal;
+  return Number.isFinite(total) ? total : undefined;
 }
 
 /**

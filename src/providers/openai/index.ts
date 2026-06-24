@@ -79,10 +79,16 @@ export class OpenAiGenericProvider implements ApiProvider {
     const hasOriginatorOverride = hasHeaderOverride(customHeaders, OPENAI_ORIGINATOR_HEADER);
     const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
 
+    const usesOpenAiEndpointConfiguration =
+      sendsToOpenAiApi ||
+      (!this.config.apiHost &&
+        !this.config.apiBaseUrl &&
+        this.getApiUrlDefault() === 'https://api.openai.com/v1');
     const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
     const organization = hasOrganizationOverride
       ? undefined
-      : (this.config.organization ?? (sendsToOpenAiApi ? this.getOrganization() : undefined));
+      : (this.config.organization ??
+        (usesOpenAiEndpointConfiguration ? this.getOrganization() : undefined));
 
     return {
       ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),

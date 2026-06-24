@@ -29,4 +29,4 @@ provider.
 
 See the
 [EmpirioLabs integration documentation](https://www.promptfoo.dev/docs/providers/empiriolabs/)
-for embeddings, model-specific request fields, and cost overrides.
+for embeddings, transcription, model-specific request fields, and cost overrides.

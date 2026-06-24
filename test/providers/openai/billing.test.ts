@@ -208,6 +208,16 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.000028, 10);
   });
 
+  it('supports explicit input/output token aliases and nested usage', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { cost: 0.000001 },
+        { usage: { input_tokens: 100, output_tokens: 50 } },
+      ),
+    ).toBeCloseTo(0.00015, 10);
+  });
+
   it('prices zero-token sides without requiring an explicit cost', () => {
     expect(
       calculateOpenAIUsageCost(
@@ -232,6 +242,53 @@ describe('OpenAI billing helpers', () => {
         },
       ),
     ).toBeUndefined();
+  });
+
+  it.each([
+    ['empty usage', {}],
+    ['input-only usage', { prompt_tokens: 100 }],
+    ['output-only usage', { completion_tokens: 50 }],
+    ['total-only usage', { total_tokens: 150 }],
+    ['non-finite usage', { prompt_tokens: Number.NaN, completion_tokens: 50 }],
+    [
+      'audio usage',
+      {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        prompt_tokens_details: { audio_tokens: 10 },
+      },
+    ],
+    [
+      'image usage',
+      {
+        input_tokens: 100,
+        output_tokens: 50,
+        input_tokens_details: { image_tokens: 10 },
+      },
+    ],
+  ])('leaves unknown models unpriced for %s', (_label, usage) => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        usage,
+      ),
+    ).toBeUndefined();
+  });
+
+  it('accepts explicit zero non-text usage for unknown models', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/model',
+        { inputCost: 0.00000014, outputCost: 0.00000028 },
+        {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          prompt_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+          completion_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+        },
+      ),
+    ).toBeCloseTo(0.000028, 10);
   });
 
   it('does not charge for cached unknown-model responses with explicit costs', () => {

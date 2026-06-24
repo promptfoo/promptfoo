@@ -29,7 +29,11 @@ const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 describe('LiteLLM Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({
+      LITELLM_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      OPENAI_TEMPERATURE: undefined,
+    });
   });
 
   afterEach(() => {
@@ -128,6 +132,32 @@ describe('LiteLLM Provider', () => {
           mockProcessEnv({ LITELLM_API_KEY: originalEnv });
         }
       }
+    });
+
+    it.each([
+      'litellm:chat:gpt-4',
+      'litellm:completion:gpt-3.5-turbo-instruct',
+      'litellm:embedding:text-embedding-3-small',
+    ])('should preserve the documented OPENAI_API_KEY fallback for %s', (providerPath) => {
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+      const provider = createLiteLLMProvider(providerPath, {});
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe('OPENAI_API_KEY');
+      expect(wrappedProvider.getApiKey()).toBe('test-openai-key');
+    });
+
+    it('should prefer a provider-level LiteLLM key over the OpenAI fallback', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          env: { LITELLM_API_KEY: 'test-litellm-key' },
+        },
+      });
+      const wrappedProvider = (provider as any).provider;
+
+      expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+      expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
     });
 
     it('should handle model names with colons', () => {
