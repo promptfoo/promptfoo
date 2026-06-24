@@ -383,6 +383,25 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should preserve minCharsPerMessage when expanding plugin collections', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'long enough' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'harmful', numTests: 1, config: { minCharsPerMessage: 10 } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ minCharsPerMessage: 10 }),
+        }),
+      );
+    });
+
     it('should pass shared generation options through custom file plugins', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-shared-options.yaml';
