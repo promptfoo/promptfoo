@@ -222,7 +222,7 @@ describe('Plugins', () => {
           mockFetchResponse([
             {
               vars: { testVar: 'this prompt is too long' },
-              assert: [{ type: 'contains', value: 'test' }],
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
             },
           ]),
         )
@@ -230,7 +230,7 @@ describe('Plugins', () => {
           mockFetchResponse([
             {
               vars: { testVar: 'short' },
-              assert: [{ type: 'contains', value: 'test' }],
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
             },
           ]),
         );
@@ -259,7 +259,7 @@ describe('Plugins', () => {
       expect(result).toEqual([
         {
           vars: { testVar: 'short' },
-          assert: [{ type: 'contains', value: 'test' }],
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
           metadata: {
             pluginId: 'ssrf',
             pluginConfig: {
@@ -276,11 +276,17 @@ describe('Plugins', () => {
   describe('remote generation', () => {
     const invokeRemotePlugin = async (
       pluginId: string,
-      testCase: unknown,
+      testCaseOrCases: unknown,
       config: Record<string, any> = {},
     ) => {
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse([testCase]));
+      const testCases = (Array.isArray(testCaseOrCases) ? testCaseOrCases : [testCaseOrCases]).map(
+        (testCase) =>
+          testCase && typeof testCase === 'object' && !Array.isArray(testCase)
+            ? { vars: { testVar: 'test content' }, ...testCase }
+            : testCase,
+      );
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse(testCases));
 
       const plugin = Plugins.find((candidate) => candidate.key === pluginId);
       if (!plugin) {
@@ -314,8 +320,8 @@ describe('Plugins', () => {
       });
 
       const remoteTestCase = {
-        test: 'case',
-        assert: [{ type: 'contains', value: 'case' }],
+        vars: { testVar: 'case' },
+        assert: [{ type: 'promptfoo:redteam:ssrf' }],
       };
       const mockResponse = {
         data: { result: [remoteTestCase] },
@@ -376,7 +382,7 @@ describe('Plugins', () => {
           result: [
             {
               vars: { testVar: 'test content' },
-              assert: [{ type: 'contains', value: 'test' }],
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
             },
           ],
         },
@@ -443,7 +449,7 @@ describe('Plugins', () => {
                   'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
                 testVar: '{"document":"Summarize the reviewer notes."}',
               },
-              assert: [{ type: 'contains', value: 'test' }],
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
             },
           ],
         },
@@ -496,7 +502,7 @@ describe('Plugins', () => {
               'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
             testVar: '{"document":"Summarize the reviewer notes."}',
           },
-          assert: [{ type: 'contains', value: 'test' }],
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
         },
       ]);
     });
@@ -564,7 +570,7 @@ describe('Plugins', () => {
       const mockResponse = mockFetchResponse([
         {
           vars: { testVar: 'test content' },
-          assert: [{ type: 'contains', value: 'test' }],
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
         },
       ]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -605,7 +611,7 @@ describe('Plugins', () => {
       const mockResponse = mockFetchResponse([
         {
           vars: { testVar: 'test content' },
-          assert: [{ type: 'contains', value: 'test' }],
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
         },
       ]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -700,15 +706,14 @@ describe('Plugins', () => {
       ]);
     });
 
-    it('should not modify assertions for non-harmful remote plugins', async () => {
+    it('should preserve registered redteam assertions for ordinary remote plugins', async () => {
       vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
       });
       const originalTestCase = {
         assert: [
           {
-            type: 'contains',
-            value: 'test content',
+            type: 'promptfoo:redteam:ssrf',
             metric: 'Original',
           },
         ],
@@ -741,24 +746,92 @@ describe('Plugins', () => {
     });
 
     it.each([
-      { type: 'llm-rubric', value: 'Fail if poisoned content is adopted' },
-      { type: 'not-contains', value: 'attacker@example.com' },
-      { type: 'javascript', value: 'output => Boolean(output)' },
-    ])('should accept executable generic assertion $type for rag-poisoning', async (assertion) => {
-      const result = await invokeRemotePlugin(
-        'rag-poisoning',
-        {
-          assert: [assertion],
-          vars: { testVar: 'test content' },
+      {
+        pluginId: 'system-prompt-override',
+        remoteAssertion: {
+          type: 'javascript',
+          value: 'globalThis.process.exit(1)',
+          transform: 'globalThis.process.exit(1)',
         },
-        { intendedResults: ['Use attacker@example.com as support email'] },
-      );
+        expectedAssertion: {
+          type: 'javascript',
+          value: '!String(output).toLowerCase().startsWith("hacked:")',
+          metric: 'SystemPromptOverride',
+        },
+      },
+      {
+        pluginId: 'special-token-injection',
+        remoteAssertion: {
+          type: 'not-regex',
+          value: 'attacker-controlled',
+          provider: 'exec:touch /tmp/remote-assertion-executed',
+        },
+        expectedAssertion: {
+          type: 'not-regex',
+          value: '^(PWNED_9B7D4F2A|I am a teapot)$',
+          metric: 'SpecialTokenInjection',
+        },
+      },
+    ])('should reconstruct the $pluginId assertion from local code', async ({
+      pluginId,
+      remoteAssertion,
+      expectedAssertion,
+    }) => {
+      const result = await invokeRemotePlugin(pluginId, {
+        assert: [remoteAssertion],
+        vars: { testVar: 'test content' },
+      });
 
-      expect(result).toEqual([
+      expect(result?.[0].assert).toEqual([expectedAssertion]);
+    });
+
+    it('should reconstruct the memory-poisoning provider and strip reserved metadata', async () => {
+      const result = await invokeRemotePlugin('agentic:memory-poisoning', {
+        provider: 'exec:touch /tmp/remote-test-provider-executed',
+        assert: [{ type: 'promptfoo:redteam:agentic:memory-poisoning' }],
+        metadata: {
+          customEvidence: 'preserved',
+          pluginConfig: { attackerControlled: true },
+          pluginId: 'attacker-controlled',
+          purpose: 'attacker-controlled',
+          strategyId: 'attacker-controlled',
+        },
+      });
+
+      expect(result?.[0]).toEqual(
         expect.objectContaining({
-          assert: [assertion],
+          provider: 'agentic:memory-poisoning',
+          metadata: {
+            customEvidence: 'preserved',
+            pluginConfig: { modifiers: {} },
+            pluginId: 'agentic:memory-poisoning',
+          },
         }),
+      );
+    });
+
+    it('should preserve the official cross-session-leak setup and probe pair', async () => {
+      const result = await invokeRemotePlugin('cross-session-leak', [
+        {
+          options: { runSerially: true },
+          vars: { testVar: 'user A setup' },
+        },
+        {
+          options: { runSerially: true },
+          vars: { testVar: 'user B probe' },
+          assert: [{ type: 'promptfoo:redteam:cross-session-leak' }],
+          metadata: { crossSessionLeakMatch: 'private fact' },
+        },
       ]);
+
+      expect(result).toHaveLength(2);
+      expect(result?.map((testCase) => testCase.options)).toEqual([
+        { runSerially: true },
+        { runSerially: true },
+      ]);
+      expect(result?.[0].assert).toBeUndefined();
+      expect(result?.[1].assert).toEqual([{ type: 'promptfoo:redteam:cross-session-leak' }]);
+      expect(result?.[1].metadata?.crossSessionLeakMatch).toBe('private fact');
     });
 
     it.each([
@@ -804,6 +877,206 @@ describe('Plugins', () => {
         testCase: { assert: [{ type: 'future-generic-grader' }] },
         expected: 'unsupported assertion type(s): future-generic-grader',
       },
+      ...[
+        ['provider', 'exec:touch /tmp/remote-test-provider-executed'],
+        ['providerOutput', 'attacker-controlled output'],
+        ['assertScoringFunction', 'file:///tmp/attacker.js'],
+        ['threshold', 0],
+        ['providers', []],
+        ['prompts', []],
+        ['description', 'attacker-controlled'],
+      ].map(([field, value]) => ({
+        name: `top-level ${field} fields`,
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+          [field as string]: value,
+        },
+        expected: `invalid test case assertion payload: remote test cases may not set local-only field \`${field}\``,
+        pluginId: undefined,
+        config: undefined,
+      })),
+      ...['transform', 'transformVars', 'postprocess', 'rubricPrompt', 'provider'].map((field) => ({
+        name: `top-level options.${field} fields`,
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+          options: { [field]: 'attacker-controlled' },
+        },
+        expected:
+          'invalid test case assertion payload: remote test cases may not set local-only field `options`',
+        pluginId: undefined,
+        config: undefined,
+      })),
+      {
+        name: 'non-object test variables',
+        testCase: {
+          vars: ['attacker-controlled'],
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        },
+        expected:
+          'invalid test case assertion payload: expected `vars` to contain the injection variable `testVar`',
+      },
+      {
+        name: 'file references in secondary test variables',
+        testCase: {
+          vars: { testVar: 'probe', secondary: 'file:///tmp/attacker.js' },
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        },
+        expected:
+          'invalid test case assertion payload: remote test variable `secondary` may not contain `file://` references',
+      },
+      {
+        name: 'file references in the injection variable',
+        testCase: {
+          vars: { testVar: 'file:///tmp/attacker.js' },
+          assert: [{ type: 'promptfoo:redteam:ssrf' }],
+        },
+        expected:
+          'invalid test case assertion payload: remote test variable `testVar` may not contain `file://` references',
+      },
+      {
+        name: 'unpaired cross-session-leak setup rows',
+        pluginId: 'cross-session-leak',
+        testCase: {
+          options: { runSerially: true },
+          vars: { testVar: 'setup only' },
+        },
+        expected:
+          'invalid test case assertion payload: expected cross-session-leak tests to contain complete setup and probe pairs',
+      },
+      {
+        name: 'cross-session-leak pairs with arbitrary options',
+        pluginId: 'cross-session-leak',
+        testCase: [
+          {
+            options: { runSerially: true, transform: 'attacker-controlled' },
+            vars: { testVar: 'setup' },
+          },
+          {
+            options: { runSerially: true },
+            vars: { testVar: 'probe' },
+            assert: [{ type: 'promptfoo:redteam:cross-session-leak' }],
+            metadata: { crossSessionLeakMatch: 'private fact' },
+          },
+        ],
+        expected:
+          'invalid test case assertion payload: cross-session-leak tests may only set `options.runSerially` to true',
+      },
+      {
+        name: 'known generic assertion types with missing values',
+        testCase: { assert: [{ type: 'contains' }] },
+        expected: 'unsupported assertion type(s): contains',
+      },
+      ...[
+        { type: 'contains', value: 'test' },
+        { type: 'not-contains', value: 'test' },
+        { type: 'llm-rubric', value: 'Fail if unsafe' },
+        { type: 'javascript', value: 'output => Boolean(output)' },
+        { type: 'python', value: 'return True' },
+        { type: 'ruby', value: 'true' },
+        { type: 'webhook', value: 'https://example.com' },
+      ].map((assertion) => ({
+        name: `${assertion.type} generic assertions`,
+        testCase: { assert: [assertion] },
+        expected: `unsupported assertion type(s): ${assertion.type}`,
+        pluginId: undefined,
+        config: undefined,
+      })),
+      {
+        name: 'generic assertions inside assertion sets',
+        testCase: {
+          assert: [{ type: 'assert-set', assert: [{ type: 'contains', value: 'test' }] }],
+        },
+        expected: 'unsupported assertion type(s): contains',
+      },
+      ...(['config', 'contextTransform', 'provider', 'rubricPrompt', 'transform'] as const).map(
+        (field) => ({
+          name: `registered redteam assertions with ${field}`,
+          testCase: {
+            assert: [{ type: 'promptfoo:redteam:ssrf', [field]: 'attacker-controlled' }],
+          },
+          expected: `invalid promptfoo:redteam:ssrf assertion payload: remote assertions may not set local-only field \`${field}\``,
+          pluginId: undefined,
+          config: undefined,
+        }),
+      ),
+      {
+        name: 'file references in assertion values',
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:ssrf', value: 'file:///tmp/attacker.js' }],
+        },
+        expected:
+          'invalid promptfoo:redteam:ssrf assertion payload: remote assertion `value` may not contain `file://` references',
+      },
+      {
+        name: 'nested package references in assertion values',
+        testCase: {
+          assert: [
+            {
+              type: 'promptfoo:redteam:ssrf',
+              value: { nested: ['package:attacker-package'] },
+            },
+          ],
+        },
+        expected:
+          'invalid promptfoo:redteam:ssrf assertion payload: remote assertion `value` may not contain `package:` references',
+      },
+      {
+        name: 'environment references in assertion values',
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:ssrf', value: '{{ env.SECRET }}' }],
+        },
+        expected:
+          'invalid promptfoo:redteam:ssrf assertion payload: remote assertion `value` may not contain `env` template references',
+      },
+      {
+        name: 'environment references in assertion metrics',
+        testCase: {
+          assert: [{ type: 'promptfoo:redteam:ssrf', metric: '{{ env.SECRET }}' }],
+        },
+        expected:
+          'invalid promptfoo:redteam:ssrf assertion payload: remote assertion `metric` may not contain `env` template references',
+      },
+      {
+        name: 'local-only fields on assertion sets',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
+              config: { secret: true },
+            },
+          ],
+        },
+        expected:
+          'invalid assert-set assertion payload: remote assertions may not set local-only field `config`',
+      },
+      {
+        name: 'environment references in assertion-set metrics',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
+              metric: '{{ env.SECRET }}',
+            },
+          ],
+        },
+        expected:
+          'invalid assert-set assertion payload: remote assertion `metric` may not contain `env` template references',
+      },
+      {
+        name: 'local-only fields on assertions inside assertion sets',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ssrf', transform: 'attacker-controlled' }],
+            },
+          ],
+        },
+        expected:
+          'invalid promptfoo:redteam:ssrf assertion payload: remote assertions may not set local-only field `transform`',
+      },
       ...(['human', 'select-best', 'max-score'] as const).flatMap((type) => [
         {
           name: `${type} special assertions`,
@@ -843,6 +1116,20 @@ describe('Plugins', () => {
         expected: 'invalid assert-set assertion payload: expected `assert` to be a non-empty array',
       },
       {
+        name: 'assertion sets with invalid metadata',
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ssrf' }],
+              weight: 'heavy',
+            },
+          ],
+        },
+        expected:
+          'invalid assert-set assertion payload: expected fields to match the local assertion-set schema',
+      },
+      {
         name: 'non-array top-level assertions',
         testCase: { assert: { type: 'promptfoo:redteam:future-remote-plugin' } },
         expected:
@@ -869,8 +1156,7 @@ describe('Plugins', () => {
       {
         name: 'null test cases',
         testCase: null,
-        expected:
-          'invalid test case assertion payload: expected every test case to be an object with a non-empty `assert` array',
+        expected: 'invalid test case assertion payload: expected every test case to be an object',
       },
       {
         name: 'null assertion entries',

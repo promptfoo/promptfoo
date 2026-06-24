@@ -507,7 +507,7 @@ export class UnsupportedRemoteRedteamAssertionsError extends RemoteRedteamAssert
   constructor(pluginId: string, assertionTypes: string[]) {
     const sortedAssertionTypes = [...assertionTypes].sort();
     super(
-      `Remote test generation for ${pluginId} returned unsupported assertion type(s): ${sortedAssertionTypes.join(', ')}. Promptfoo ${VERSION} cannot evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+      `Remote test generation for ${pluginId} returned unsupported assertion type(s): ${sortedAssertionTypes.join(', ')}. Promptfoo ${VERSION} cannot safely evaluate these remote-generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
     );
     this.name = 'UnsupportedRemoteRedteamAssertionsError';
     this.pluginId = pluginId;
