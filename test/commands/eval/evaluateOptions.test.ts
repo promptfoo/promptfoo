@@ -4,10 +4,10 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { doEval } from '../../../src/node/doEval';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
@@ -580,6 +580,116 @@ describe('evaluateOptions behavior', () => {
       const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
       expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
       expect(options.filterRange).toBeUndefined();
+    });
+
+    it.each([
+      ['--filter-targets', 'filterTargets'],
+      ['--filter-providers', 'filterProviders'],
+    ] as const)('should persist and restore %s for resumed evaluations', async (_flag, key) => {
+      const tempConfig = writeTempConfig(tmpDir, `test-${key}.yaml`, {
+        providers: [
+          { id: 'echo', label: 'excluded-target' },
+          { id: 'echo', label: 'selected-target' },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          [key]: 'selected-target',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(initialSuite.providers.map((provider) => provider.label)).toEqual(['selected-target']);
+      expect(initialEval.runtimeOptions?.providerFilter).toBe('selected-target');
+
+      const resumeEval = new Eval(initialEval.config, {
+        id: `eval-resume-${key}`,
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: resumeEval.id,
+          } as any,
+          {},
+          undefined,
+          {},
+        );
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.providers.map((provider) => provider.label)).toEqual([
+          'selected-target',
+        ]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should not treat evaluateOptions.providerFilter as a provider selection', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-ignored-provider-filter.yaml', {
+        evaluateOptions: {
+          providerFilter: 'selected-target',
+        },
+        providers: [
+          { id: 'echo', label: 'excluded-target' },
+          { id: 'echo', label: 'selected-target' },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.providers.map((provider) => provider.label)).toEqual([
+        'excluded-target',
+        'selected-target',
+      ]);
+      expect(evalRecord.runtimeOptions?.providerFilter).toBeUndefined();
+      expect(options).not.toHaveProperty('providerFilter');
+    });
+
+    it('should make commandLineOptions.filterSample repeatable with a configured seed', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-sample-seed.yaml', {
+        commandLineOptions: {
+          filterSample: 2,
+          filterSampleSeed: 42,
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const firstSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
+      const secondSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(['two', 'three']);
+      expect(firstSuite.tests?.map((test) => test.vars?.input)).toEqual(
+        secondSuite.tests?.map((test) => test.vars?.input),
+      );
     });
 
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {

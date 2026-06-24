@@ -65,7 +65,10 @@ describe('System Purpose Extractor', () => {
       cached: false,
     });
 
-    const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
+    const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2'], {
+      providerTargetIds: ['file://local-provider.ts'],
+      cloudTargetId: 'cloud-target-123',
+    });
 
     expect(result).toBe('Remote extracted purpose');
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -77,6 +80,7 @@ describe('System Purpose Extractor', () => {
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
           email: null,
+          targetId: 'cloud-target-123',
         }),
       }),
       expect.any(Number),

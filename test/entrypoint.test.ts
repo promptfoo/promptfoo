@@ -120,6 +120,27 @@ const nodeEngineComparatorSets: NodeEngineComparator[][] = [
   ],
   [{ operator: '>=', version: '22.22.0' }],
 ];
+const deprecatedNodeMajorVersions = new Set([20]);
+
+function shouldWarnForDeprecatedNodeVersion(currentVersion: string): boolean {
+  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
+  return (
+    parsedCurrentVersion !== null &&
+    isSupportedNodeEngineVersion(currentVersion, nodeEngineComparatorSets) === true &&
+    deprecatedNodeMajorVersions.has(parsedCurrentVersion[0])
+  );
+}
+
+function formatDeprecatedNodeVersionMessage(currentVersion: string): string {
+  return [
+    '\x1b[33mWarning: Node.js 20 has reached end-of-life and is deprecated in promptfoo.',
+    '',
+    `Detected: ${currentVersion}`,
+    'Recommended: Node.js >=22.22.0 (Node.js 24 LTS preferred)',
+    '',
+    'Upgrade your Node.js runtime to avoid disruption in a future promptfoo release.\x1b[0m',
+  ].join('\n');
+}
 
 describe('entrypoint version check logic', () => {
   describe('Node.js version parsing', () => {
@@ -265,6 +286,52 @@ describe('entrypoint version check logic', () => {
       expect(errorMessage).toContain('Unable to parse the current Node.js version');
       expect(errorMessage).toContain('node-20.9.0');
       expect(errorMessage).toContain(`Required: ${nodeEngineRange}`);
+    });
+  });
+
+  describe('deprecation warning', () => {
+    it('warns for supported Node.js 20 versions', () => {
+      const deprecatedVersions = ['v20.20.0', 'v20.20.2', 'v20.21.1'];
+
+      for (const version of deprecatedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(true);
+      }
+    });
+
+    it('does not warn for unsupported Node.js versions', () => {
+      const unsupportedVersions = ['v20.19.0', 'v21.0.0', 'v22.13.0'];
+
+      for (const version of unsupportedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
+    });
+
+    it('does not warn for supported Node.js versions outside the deprecated majors', () => {
+      const recommendedVersions = ['v22.22.0', 'v24.16.0'];
+
+      for (const version of recommendedVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
+    });
+
+    it('does not warn for prerelease or unparsable Node.js versions', () => {
+      const unparsableVersions = ['v20.20.0-rc.1', 'node-20.20.0', 'invalid'];
+
+      for (const version of unparsableVersions) {
+        expect(shouldWarnForDeprecatedNodeVersion(version)).toBe(false);
+      }
+    });
+
+    it('formats an actionable warning for Node.js 20', () => {
+      const warningMessage = formatDeprecatedNodeVersionMessage('v20.20.2');
+
+      expect(warningMessage).toContain('Node.js 20 has reached end-of-life');
+      expect(warningMessage).toContain('deprecated in promptfoo');
+      expect(warningMessage).toContain('Detected: v20.20.2');
+      expect(warningMessage).toContain('Recommended: Node.js >=22.22.0');
+      expect(warningMessage).toContain('Upgrade your Node.js runtime');
+      expect(warningMessage).toContain('\x1b[33m');
+      expect(warningMessage).toContain('\x1b[0m');
     });
   });
 
