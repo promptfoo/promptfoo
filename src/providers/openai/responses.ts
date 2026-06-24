@@ -2,6 +2,11 @@ import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
@@ -11,12 +16,7 @@ import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import {
-  formatOpenAiError,
-  getTokenUsage,
-  isOpenAiGpt5ModelName,
-  isOpenAiReasoningModelName,
-} from './util';
+import { formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -149,27 +149,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return isOpenAiGpt5ModelName(this.modelName);
-  }
-
-  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
-    if (config.isReasoningModel !== undefined) {
-      return config.isReasoningModel;
-    }
-
-    return isOpenAiReasoningModelName(this.modelName, { includeCodexMini: true });
-  }
-
-  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel(config);
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName;
+  protected isReasoningModel(): boolean {
+    return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -230,9 +211,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
-    const isReasoningModel =
-      config.isReasoningModel ??
-      (this.isReasoningModel(config) || isAzureResponsesDeploymentWithReasoningConfig);
+    const isReasoningModel = this.resolveReasoningModel(
+      config,
+      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig,
+    );
     const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
@@ -396,7 +378,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
-    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
+    // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it
+    // leaked in via passthrough or YAML anchors.
     if ('max_tokens' in body) {
       delete body.max_tokens;
     }
@@ -420,10 +403,51 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    // Resolve the effective request config first so spanContext reflects what
+    // we actually send (merged config from getOpenAiBody, not raw this.config).
+    // The Responses API uses `max_output_tokens` rather than `max_tokens`.
+    const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const effectiveBody = resolved.body as Record<string, any>;
+    // Read request params from the resolved body (what we actually send) rather
+    // than the raw config, so defaults/env-derived values (e.g. a default
+    // temperature, OPENAI_TOP_P) are reflected on the span. The Responses API
+    // has no `stop` param, so stopSequences is only set if the body carries it.
+    const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
-    // Validate deep research models have required tools
-    const isDeepResearchModel = this.modelName.includes('deep-research');
+    const spanContext = buildChatSpanContext({
+      system: 'openai',
+      model: this.modelName,
+      providerId: this.id(),
+      prompt,
+      context,
+      request: {
+        maxTokens: asNumber(effectiveBody.max_output_tokens),
+        temperature: asNumber(effectiveBody.temperature),
+        topP: asNumber(effectiveBody.top_p),
+        stopSequences: Array.isArray(effectiveBody.stop) ? effectiveBody.stop : undefined,
+      },
+    });
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(context, resolved),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    context: CallApiContextParams | undefined,
+    // `callApi` always resolves the body once (so spanContext reflects what we
+    // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
+    // is already baked into `prepared.body`, so it is not needed here.
+    prepared: { body: any; config: any },
+  ): Promise<ProviderResponse> {
+    const { body, config } = prepared;
+
+    // Validate deep research models have required tools. Use the capability model name so
+    // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
+    // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
+    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
     if (isDeepResearchModel) {
       const hasWebSearchTool = config.tools?.some(
         (tool: any) => tool.type === 'web_search_preview',
@@ -447,7 +471,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
@@ -502,14 +526,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+            ...this.getOpenAiRequestHeaders(config.headers),
           },
           body: JSON.stringify(body),
         },
         timeout,
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 

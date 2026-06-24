@@ -118,23 +118,47 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it('should force reasoning model behavior via config.isReasoningModel override', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_override',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'forced reasoning output' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
         isReasoningModel: true,
         reasoning_effort: 'high',
+        max_output_tokens: 2048,
+        stream: true,
         temperature: 0.7,
       },
     });
 
-    expect(provider['isReasoningModel']()).toBe(true);
     expect(provider['supportsTemperature']()).toBe(false);
 
-    const { body } = await provider.getOpenAiBody('Test prompt');
+    await provider.callApi('Test prompt');
+    const request = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as { body: string };
+    const body = JSON.parse(request.body);
 
     expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2048);
+    expect(body.stream).toBe(true);
     expect(body.temperature).toBeUndefined();
-    expect(body.max_output_tokens).toBeUndefined();
+    expect(body.isReasoningModel).toBeUndefined();
   });
 
   it('should disable reasoning model behavior via config.isReasoningModel: false', async () => {
@@ -147,7 +171,6 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       },
     });
 
-    expect(provider['isReasoningModel']()).toBe(false);
     expect(provider['supportsTemperature']()).toBe(true);
 
     const { body } = await provider.getOpenAiBody('Test prompt');
@@ -189,6 +212,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     const provider = new OpenAiResponsesProvider('o3-mini', {
       config: {
         apiKey: 'test-key',
+        isReasoningModel: true,
         reasoning: { effort: 'high' },
       },
     });
@@ -209,6 +233,16 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(body.max_output_tokens).toBe(256);
     expect(body.reasoning).toBeUndefined();
     expect(body.temperature).toBe(0.6);
+  });
+
+  it.each(['false', null])('should reject malformed isReasoningModel value %j', async (value) => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', isReasoningModel: value as unknown as boolean },
+    });
+
+    await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+      'isReasoningModel must be a boolean',
+    );
   });
 
   it.each([

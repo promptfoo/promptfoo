@@ -1,23 +1,15 @@
 import type { Buffer } from 'node:buffer';
 
+import type { BlobRef } from '../contracts/blobs';
+
+export type { BlobRef } from '../contracts/blobs';
+
 export interface BlobMetadata {
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
   provider: string;
   key: string;
-}
-
-/**
- * Blob reference format used across API/UI.
- * Example URI: promptfoo://blob/<hash>
- */
-export interface BlobRef {
-  uri: string;
-  hash: string;
-  mimeType: string;
-  sizeBytes: number;
-  provider: string;
 }
 
 export interface StoredBlob {

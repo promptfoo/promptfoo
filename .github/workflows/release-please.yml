@@ -42,7 +42,7 @@ jobs:
       # PR #8796 landed green, then main broke on the next release-please run).
       # If we want to narrow here, first widen the App installation permissions
       # in the GitHub App settings, then re-add the `permission-*` inputs.
-      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         id: app-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
@@ -206,7 +206,7 @@ jobs:
       # installation is confirmed to grant every requested permission — see
       # the matching note on the release-please job above.
       - name: Create app token for code-scan-action mirror
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         id: mirror-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}

@@ -83,9 +83,34 @@ describe('OpenAI Provider', () => {
       );
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['X-OpenAI-Originator']).toBe('promptfoo');
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+    });
+
+    it('should send a case-variant originator override on the wire instead of the default', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { headers: { 'x-openai-originator': 'custom-originator' } },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test prompt' }]));
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const requestHeaders = mockFetchWithCache.mock.calls[0][1]?.headers as Record<string, string>;
+      expect(requestHeaders['x-openai-originator']).toBe('custom-originator');
+      expect(requestHeaders).not.toHaveProperty('X-OpenAI-Originator');
     });
 
     it('should include HTTP metadata in response', async () => {
@@ -1100,6 +1125,72 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
       });
 
+      it('should load external function callbacks from Windows-style file paths', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'external_function',
+                        arguments: '{"param": "test_value"}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
+        mockImportModule.mockResolvedValue({
+          testFunction: mockExternalFunction,
+        });
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'external_function',
+                  description: 'An external function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      param: { type: 'string' },
+                    },
+                    required: ['param'],
+                  },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              external_function: 'file://C:/test/callbacks.js:testFunction',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call external function');
+
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('/test/base/path', 'C:/test/callbacks.js'),
+          'testFunction',
+        );
+        expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
+        expect(result.output).toBe('External function result');
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
+      });
+
       it('should cache external functions and not reload them on subsequent calls', async () => {
         const mockResponse = {
           data: {
@@ -1680,12 +1771,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Non-reasoning model name, but forced to reasoning by config
       const forcedProvider = new OpenAiChatCompletionProvider('gpt-4o', {
-        config: { isReasoningModel: true, reasoning_effort: 'medium' },
+        config: {
+          isReasoningModel: true,
+          reasoning_effort: 'medium',
+          max_completion_tokens: 2048,
+        },
       });
       // Standard non-reasoning model without override
       const normalProvider = new OpenAiChatCompletionProvider('gpt-4o');
 
-      expect(forcedProvider['isReasoningModel']()).toBe(true);
       expect(forcedProvider['supportsTemperature']()).toBe(false);
       expect(normalProvider['isReasoningModel']()).toBe(false);
       expect(normalProvider['supportsTemperature']()).toBe(true);
@@ -1695,8 +1789,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const forcedCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const requestBody = JSON.parse(forcedCall[1].body);
       expect(requestBody.reasoning_effort).toBe('medium');
+      expect(requestBody.max_completion_tokens).toBe(2048);
       expect(requestBody.temperature).toBeUndefined();
       expect(requestBody.max_tokens).toBeUndefined();
+      expect(requestBody.isReasoningModel).toBeUndefined();
     });
 
     it('should disable reasoning model behavior via config.isReasoningModel: false', async () => {
@@ -1715,7 +1811,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         config: { isReasoningModel: false, temperature: 0.7 },
       });
 
-      expect(provider['isReasoningModel']()).toBe(false);
       expect(provider['supportsTemperature']()).toBe(true);
 
       // Verify the request body reflects non-reasoning behavior
@@ -1730,11 +1825,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should honor prompt-level isReasoningModel: true over provider config', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
-        config: { max_tokens: 512, temperature: 0.8 },
+        config: { isReasoningModel: false, max_tokens: 512, temperature: 0.8 },
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt', {
-        vars: {},
+        vars: { effort: 'medium' },
         prompt: {
           raw: 'Test prompt',
           label: 'Test prompt',
@@ -1742,13 +1837,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
             isReasoningModel: true,
             max_completion_tokens: 2048,
             reasoning: { effort: 'medium' },
-            reasoning_effort: 'medium',
+            reasoning_effort: '{{ effort }}' as any,
           },
         },
       });
 
       expect(body.max_completion_tokens).toBe(2048);
-      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.reasoning).toBeUndefined();
       expect(body.reasoning_effort).toBe('medium');
       expect(body.temperature).toBeUndefined();
       expect(body.max_tokens).toBeUndefined();
@@ -1756,7 +1851,12 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should honor prompt-level isReasoningModel: false over model-name detection', async () => {
       const provider = new OpenAiChatCompletionProvider('o3-mini', {
-        config: { max_completion_tokens: 2048, reasoning_effort: 'high' },
+        config: {
+          isReasoningModel: true,
+          max_completion_tokens: 2048,
+          reasoning: { effort: 'high' },
+          reasoning_effort: 'high',
+        },
       });
 
       const { body } = await provider.getOpenAiBody('Test prompt', {
@@ -1775,6 +1875,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.max_tokens).toBe(256);
       expect(body.temperature).toBe(0.6);
       expect(body.max_completion_tokens).toBeUndefined();
+      expect(body.reasoning).toBeUndefined();
       expect(body.reasoning_effort).toBeUndefined();
     });
 
@@ -1807,6 +1908,52 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(body.reasoning).toBeUndefined();
       expect(body.reasoning_effort).toBe('medium');
+    });
+
+    it('should render legacy GPT-OSS reasoning_effort without changing token semantics', async () => {
+      const provider = new OpenAiChatCompletionProvider('openai/gpt-oss-120b', {
+        config: {
+          reasoning_effort: '{{ effort }}' as any,
+          max_tokens: 256,
+          temperature: 0.6,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: { effort: 'high' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      });
+
+      expect(body.reasoning_effort).toBe('high');
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+    });
+
+    it('should let an explicit false disable legacy GPT-OSS reasoning_effort', async () => {
+      const provider = new OpenAiChatCompletionProvider('openai/gpt-oss-120b', {
+        config: {
+          isReasoningModel: false,
+          reasoning_effort: 'high',
+          max_tokens: 256,
+          temperature: 0.6,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.max_tokens).toBe(256);
+      expect(body.temperature).toBe(0.6);
+    });
+
+    it.each(['false', null])('should reject malformed isReasoningModel value %j', async (value) => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: { isReasoningModel: value as unknown as boolean },
+      });
+
+      await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+        'isReasoningModel must be a boolean',
+      );
     });
 
     it('should identify GPT-5 models correctly including prefixed names', async () => {

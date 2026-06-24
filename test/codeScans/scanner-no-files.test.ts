@@ -75,23 +75,41 @@ describe('Scanner - No Files to Scan', () => {
 });
 
 describe('Scanner machine-readable output', () => {
-  function mockNoFilesScanner() {
+  function mockScanner({
+    initialLogLevel = 'info',
+    loadConfigError,
+    processDiffError,
+  }: {
+    initialLogLevel?: string;
+    loadConfigError?: Error;
+    processDiffError?: Error;
+  } = {}) {
+    let currentLogLevel = initialLogLevel;
+
+    const disconnect = vi.fn();
+
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
-      processDiff: vi.fn().mockResolvedValue([]),
+      processDiff: processDiffError
+        ? vi.fn().mockRejectedValue(processDiffError)
+        : vi.fn().mockResolvedValue([]),
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../src/codeScan/config/loader', () => ({
-      loadConfigOrDefault: vi.fn().mockResolvedValue({
-        minimumSeverity: 'medium',
-        diffsOnly: true,
-      }),
+      loadConfigOrDefault: loadConfigError
+        ? vi.fn().mockImplementation(() => {
+            throw loadConfigError;
+          })
+        : vi.fn().mockReturnValue({
+            minimumSeverity: 'medium',
+            diffsOnly: true,
+          }),
       mergeConfigWithOptions: vi.fn().mockImplementation((config, options) => ({
         ...config,
         diffsOnly: options.diffsOnly ?? config.diffsOnly,
       })),
-      resolveGuidance: vi.fn().mockResolvedValue(undefined),
+      resolveGuidance: vi.fn().mockReturnValue(undefined),
       resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
     }));
     vi.doMock('simple-git', () => ({
@@ -109,7 +127,7 @@ describe('Scanner machine-readable output', () => {
         onError: vi.fn(),
         on: vi.fn(),
         emit: vi.fn(),
-        disconnect: vi.fn(),
+        disconnect,
         socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() },
       }),
     }));
@@ -121,8 +139,10 @@ describe('Scanner machine-readable output', () => {
     }));
     vi.doMock('../../src/logger', () => ({
       default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
-      getLogLevel: vi.fn().mockReturnValue('info'),
-      setLogLevel: vi.fn(),
+      getLogLevel: vi.fn().mockImplementation(() => currentLogLevel),
+      setLogLevel: vi.fn().mockImplementation((level: string) => {
+        currentLogLevel = level;
+      }),
     }));
     vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
       registerCleanupHandlers: vi.fn(),
@@ -131,6 +151,8 @@ describe('Scanner machine-readable output', () => {
       createSpinner: vi.fn().mockReturnValue(undefined),
       displayScanResults: vi.fn(),
     }));
+
+    return { disconnect };
   }
 
   beforeEach(() => {
@@ -149,11 +171,12 @@ describe('Scanner machine-readable output', () => {
       CodeScanOutputFormat.SARIF,
     ],
   ])('emits an empty machine-readable response when no files are available with %s', async (_label, options, expectedFormat) => {
-    mockNoFilesScanner();
+    mockScanner();
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-    const { setLogLevel } = await import('../../src/logger');
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
+    const setLogLevelMock = vi.mocked(setLogLevel);
 
     await executeScan('/test/repo', options);
 
@@ -162,6 +185,65 @@ describe('Scanner machine-readable output', () => {
       expect.any(Number),
       { format: expectedFormat, githubPr: undefined },
     );
-    expect(setLogLevel).toHaveBeenCalledWith('error');
+    expect(setLogLevelMock).toHaveBeenCalledWith('error');
+    expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
+    expect(getLogLevel()).toBe('info');
+  });
+
+  it('restores the original log level when structured config loading fails early', async () => {
+    mockScanner({ loadConfigError: new Error('missing config') });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
+    const setLogLevelMock = vi.mocked(setLogLevel);
+
+    await executeScan('/test/repo', { json: true, config: '/missing.yaml' });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: missing config');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(setLogLevelMock).toHaveBeenNthCalledWith(1, 'error');
+    expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
+    expect(getLogLevel()).toBe('info');
+  });
+
+  it('keeps invalid structured output flag combinations off stdout', async () => {
+    mockScanner();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
+    const setLogLevelMock = vi.mocked(setLogLevel);
+
+    await executeScan('/test/repo', { json: true, format: CodeScanOutputFormat.SARIF });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Scan failed: Cannot combine --json with --format sarif',
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(setLogLevelMock).not.toHaveBeenCalled();
+    expect(getLogLevel()).toBe('info');
+  });
+
+  it('keeps structured-output suppression active until cleanup finishes', async () => {
+    const { disconnect } = mockScanner({
+      initialLogLevel: 'debug',
+      processDiffError: new Error('diff failed'),
+    });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
+    const setLogLevelMock = vi.mocked(setLogLevel);
+
+    await executeScan('/test/repo', { json: true });
+
+    expect(disconnect).toHaveBeenCalled();
+    expect(setLogLevelMock.mock.calls).toEqual([['error'], ['debug']]);
+    expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(
+      setLogLevelMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(getLogLevel()).toBe('debug');
   });
 });

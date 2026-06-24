@@ -23,11 +23,8 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
-  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
-    if (config.isReasoningModel !== undefined) {
-      return config.isReasoningModel;
-    }
-    return isGroqReasoningModel(this.modelName) || super.isReasoningModel(config);
+  protected isReasoningModel(): boolean {
+    return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
   }
 
   protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {

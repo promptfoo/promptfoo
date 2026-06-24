@@ -24,6 +24,8 @@ function restoreTestEnv(): void {
 afterEach(() => {
   restoreTestEnv();
   Reflect.deleteProperty(globalThis, testGlobalName);
+  vi.doUnmock('node:fs');
+  vi.resetModules();
   vi.clearAllMocks();
 });
 
@@ -95,5 +97,43 @@ describe('mockGlobal', () => {
     restoreGlobal();
 
     expect((globalThis as Record<string, unknown>)[testGlobalName]).toBe('original');
+  });
+});
+
+describe('removeTempDir', () => {
+  it('retries transient recursive cleanup failures', async () => {
+    // Reset the module registry first so the dynamic import below re-evaluates
+    // ./utils against the mocked node:fs, even when this test runs in isolation
+    // (the top-level static import has already cached ./utils with the real fs).
+    vi.resetModules();
+    const rmSync = vi.fn();
+    vi.doMock('node:fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('node:fs')>();
+      return { ...actual, rmSync };
+    });
+    const { removeTempDir } = await import('./utils');
+
+    removeTempDir('/tmp/promptfoo-test-dir');
+
+    expect(rmSync).toHaveBeenCalledWith('/tmp/promptfoo-test-dir', {
+      force: true,
+      maxRetries: 3,
+      recursive: true,
+      retryDelay: 100,
+    });
+  });
+
+  it('does not attempt cleanup without a directory', async () => {
+    vi.resetModules();
+    const rmSync = vi.fn();
+    vi.doMock('node:fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('node:fs')>();
+      return { ...actual, rmSync };
+    });
+    const { removeTempDir } = await import('./utils');
+
+    removeTempDir(undefined);
+
+    expect(rmSync).not.toHaveBeenCalled();
   });
 });

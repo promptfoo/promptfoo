@@ -109,6 +109,66 @@ describe('GroqResponsesProvider', () => {
       const json = provider.toJSON();
       expect(json.config.apiKey).toBeUndefined();
     });
+
+    it('should preserve an explicit false reasoning override', () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: { isReasoningModel: false },
+      });
+
+      expect(provider.toJSON().config.isReasoningModel).toBe(false);
+    });
+  });
+
+  describe('reasoning overrides', () => {
+    it('should honor true and false overrides in request bodies', async () => {
+      const forcedProvider = new GroqResponsesProvider('custom-alias', {
+        config: {
+          isReasoningModel: true,
+          max_output_tokens: 64,
+          reasoning_effort: 'low',
+          temperature: 0.7,
+        },
+      });
+      const disabledProvider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          isReasoningModel: false,
+          max_output_tokens: 128,
+          reasoning_effort: 'high',
+          temperature: 0.6,
+        },
+      });
+
+      const [{ body: forcedBody }, { body: disabledBody }] = await Promise.all([
+        forcedProvider.getOpenAiBody('Test prompt'),
+        disabledProvider.getOpenAiBody('Test prompt'),
+      ]);
+
+      expect(forcedBody).toMatchObject({
+        max_output_tokens: 64,
+        reasoning: { effort: 'low' },
+      });
+      expect(forcedBody.temperature).toBeUndefined();
+      expect(disabledBody).toMatchObject({ max_output_tokens: 128, temperature: 0.6 });
+      expect(disabledBody.reasoning).toBeUndefined();
+    });
+
+    it('should honor a prompt-level false override over provider true', async () => {
+      const provider = new GroqResponsesProvider('custom-alias', {
+        config: { isReasoningModel: true, reasoning_effort: 'high' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: { isReasoningModel: false, max_output_tokens: 128, temperature: 0.5 },
+        },
+      });
+
+      expect(body).toMatchObject({ max_output_tokens: 128, temperature: 0.5 });
+      expect(body.reasoning).toBeUndefined();
+    });
   });
 
   describe('callApi', () => {

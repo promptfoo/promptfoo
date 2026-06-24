@@ -127,6 +127,14 @@ describe('GroqProvider', () => {
       // But the actual provider should still have the key
       expect(provider['apiKey']).toBe('secret-api-key');
     });
+
+    it('should preserve an explicit false reasoning override', () => {
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: { isReasoningModel: false },
+      });
+
+      expect(provider.toJSON().config.isReasoningModel).toBe(false);
+    });
   });
 
   describe('getOpenAiBody', () => {
@@ -225,6 +233,57 @@ describe('GroqProvider', () => {
 
       expect(body.model).toBe('mixtral-8x7b-32768');
       expect(body.messages).toEqual([{ role: 'user', content: 'Test prompt' }]);
+    });
+
+    it('should honor true and false reasoning overrides', async () => {
+      const forcedProvider = new GroqProvider('custom-alias', {
+        config: {
+          isReasoningModel: true,
+          max_completion_tokens: 64,
+          reasoning_effort: 'low',
+          temperature: 0.7,
+        },
+      });
+      const disabledProvider = new GroqProvider('openai/gpt-oss-120b', {
+        config: {
+          isReasoningModel: false,
+          max_tokens: 128,
+          reasoning_effort: 'high',
+          temperature: 0.6,
+        },
+      });
+
+      const [{ body: forcedBody }, { body: disabledBody }] = await Promise.all([
+        forcedProvider.getOpenAiBody('Test prompt'),
+        disabledProvider.getOpenAiBody('Test prompt'),
+      ]);
+
+      expect(forcedBody).toMatchObject({
+        max_completion_tokens: 64,
+        reasoning_effort: 'low',
+      });
+      expect(forcedBody.max_tokens).toBeUndefined();
+      expect(forcedBody.temperature).toBeUndefined();
+      expect(disabledBody).toMatchObject({ max_tokens: 128, temperature: 0.6 });
+      expect(disabledBody.reasoning_effort).toBeUndefined();
+    });
+
+    it('should honor a prompt-level false override over provider true', async () => {
+      const provider = new GroqProvider('custom-alias', {
+        config: { isReasoningModel: true, max_completion_tokens: 64 },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: { isReasoningModel: false, max_tokens: 128, temperature: 0.5 },
+        },
+      });
+
+      expect(body).toMatchObject({ max_tokens: 128, temperature: 0.5 });
+      expect(body.max_completion_tokens).toBeUndefined();
     });
   });
 });
