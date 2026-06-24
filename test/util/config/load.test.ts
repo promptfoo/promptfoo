@@ -444,7 +444,9 @@ describe('combineConfigs', () => {
     };
     vi.mocked(globSync).mockImplementation((input) => [String(input)]);
     vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
-      String(filePath).includes('/a/') ? JSON.stringify(firstConfig) : JSON.stringify(secondConfig),
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
     );
 
     const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
