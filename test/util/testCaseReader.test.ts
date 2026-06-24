@@ -2274,7 +2274,9 @@ describe('readVarsFiles', () => {
 
     expect(result).toEqual({ context: { marker: 'rendered-before-resolution' } });
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
-    expect(loadConfigFromFilePath).toHaveBeenCalledWith(path.resolve('/external/context.json'));
+    expect(loadConfigFromFilePath).toHaveBeenCalledWith(
+      path.resolve('/external/context.json').replace(/\\/g, '/'),
+    );
   });
 });
 
