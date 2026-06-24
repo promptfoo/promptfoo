@@ -427,12 +427,16 @@ function astReferencesVariable(
  * Nunjucks is always enabled in grader mode.
  * @returns A configured Nunjucks environment.
  */
+export function isTemplatingDisabled(): boolean {
+  return getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
+}
+
 export function getNunjucksEngine(
   filters?: NunjucksFilterMap,
   throwOnUndefined: boolean = false,
   isGrader: boolean = false,
 ): nunjucks.Environment {
-  if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (!isGrader && isTemplatingDisabled()) {
     return {
       renderString: (template: string) => template,
     } as unknown as nunjucks.Environment;

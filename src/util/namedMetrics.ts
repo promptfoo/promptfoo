@@ -1,4 +1,4 @@
-import { getEnvBool } from '../envars';
+import { isTemplatingDisabled } from './templates';
 
 import type { GradingResult, Vars } from '../types/index';
 
@@ -40,7 +40,7 @@ export function renderPersistedMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
 ): string | undefined {
-  if (!metric || !metric.includes('{') || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (!metric || !metric.includes('{') || isTemplatingDisabled()) {
     return metric;
   }
 
