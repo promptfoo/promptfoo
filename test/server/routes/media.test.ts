@@ -108,12 +108,17 @@ describe('Media Routes', () => {
   it.each([
     '/api/media/info/audio/%FF',
     '/api/media/audio/%E0%A4%A',
+    '/api/media/audio/../../../%FF',
+    '/api/media/info/audio/../../../%FF',
+    '/api/media/audio/%2e%2e/%2e%2e/%2e%2e/%FF',
+    '/%FF',
+    '/api/%FF/media',
   ])('should safely reject malformed path encoding for %s', async (path) => {
     const response = await api.get(path).set('Origin', 'https://attacker.example');
 
     expect(response.status).toBe(400);
     expect(response.type).toBe('application/json');
-    expect(response.body).toEqual({ error: 'Invalid media path' });
+    expect(response.body).toEqual({ error: 'Invalid request path' });
     expect(response.headers['cache-control']).toBe('private, no-store');
     expect(response.text).not.toContain('/home/');
     expect(mockedMediaExists).not.toHaveBeenCalled();
