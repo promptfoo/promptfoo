@@ -238,7 +238,7 @@ function strategyTargetsPlugin(
     return false;
   }
   if (
-    CANARY_BREAKING_STRATEGY_IDS.includes(strategyId) &&
+    (CANARY_BREAKING_STRATEGY_IDS as readonly string[]).includes(strategyId) &&
     getExpandedPluginIds(pluginId).some((expandedPluginId) =>
       expandedPluginId.startsWith('coding-agent:'),
     )
