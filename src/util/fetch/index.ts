@@ -44,6 +44,7 @@ async function sleepForRetry(ms: number, signal?: AbortSignal | null): Promise<v
     return;
   }
 
+  signal.throwIfAborted();
   try {
     await sleepWithAbort(ms, signal);
   } catch (error) {
@@ -779,8 +780,13 @@ export async function fetchWithRetries(
   maxRetries?: number,
 ): Promise<Response> {
   const { retryOnStatusCodes = [], ...requestOptions } = options;
+  const signal = requestOptions.signal ?? (url instanceof Request ? url.signal : undefined);
+  const effectiveRequestOptions = signal ? { ...requestOptions, signal } : requestOptions;
   maxRetries = resolveFetchRetryMaxRetries(maxRetries);
-  const { hasReplayableBody, isIdempotent } = getRequestRetryProperties(url, requestOptions);
+  const { hasReplayableBody, isIdempotent } = getRequestRetryProperties(
+    url,
+    effectiveRequestOptions,
+  );
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
@@ -791,18 +797,12 @@ export async function fetchWithRetries(
       // Disable transient retries in fetchWithProxy to avoid double-retrying
       response = await fetchWithTimeout(
         url,
-        { ...requestOptions, disableTransientRetries: true },
+        { ...effectiveRequestOptions, disableTransientRetries: true },
         timeout,
       );
 
       if (isRateLimited(response)) {
-        await handleRateLimitedResponse(
-          response,
-          url,
-          i,
-          maxRetries,
-          requestOptions.signal ?? undefined,
-        );
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal ?? undefined);
         continue;
       }
 
@@ -819,7 +819,7 @@ export async function fetchWithRetries(
           backoff,
           maxRetries,
           response,
-          signal: requestOptions.signal,
+          signal,
           url,
         });
         continue;
@@ -832,7 +832,7 @@ export async function fetchWithRetries(
       return response;
     } catch (error) {
       // Don't retry on abort - propagate immediately
-      throwIfFetchAborted(requestOptions.signal, error);
+      throwIfFetchAborted(signal, error);
 
       // Structured rate-limit errors are already final (quota fail-fast or
       // retries exhausted) and carry retry-after / reset metadata. Don't
@@ -848,7 +848,7 @@ export async function fetchWithRetries(
       );
       if (i < maxRetries) {
         const waitTime = getRetryDelayMs(i, backoff);
-        await sleepForRetry(waitTime, requestOptions.signal);
+        await sleepForRetry(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }

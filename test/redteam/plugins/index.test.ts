@@ -299,6 +299,26 @@ describe('Plugins', () => {
       expect(result).toEqual([]);
       expect(fetchWithCache).toHaveBeenCalledOnce();
     });
+
+    it('should retain empty-result retries for local max-chars generation', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({ output: '', error: undefined })
+        .mockResolvedValueOnce({ output: 'Prompt: tiny', error: undefined });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result?.map((testCase) => testCase.vars?.testVar)).toEqual(['tiny']);
+    });
   });
 
   describe('remote generation', () => {
@@ -720,6 +740,36 @@ describe('Plugins', () => {
         }),
       ).rejects.toMatchObject({ name: 'AbortError' });
       expect(abortController.signal.aborted).toBe(true);
+      expect(deleteFromCache).not.toHaveBeenCalled();
+    });
+
+    it('should evict an invalid response before propagating late cancellation', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const abortController = new AbortController();
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+        abortController.abort();
+        return {
+          data: 'not-json',
+          cached: false,
+          deleteFromCache,
+          status: 200,
+          statusText: 'OK',
+        };
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+          abortSignal: abortController.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
       expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 

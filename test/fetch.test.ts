@@ -1453,6 +1453,25 @@ describe('fetchWithRetries', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('should honor an AbortSignal carried by a Request during response retries', async () => {
+    const controller = new AbortController();
+    const request = new Request('https://example.com', { signal: controller.signal });
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    vi.mocked(global.fetch).mockImplementationOnce(async () => {
+      controller.abort();
+      return transientResponse;
+    });
+
+    await expect(fetchWithRetries(request, {}, 1000, 1)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+
+    expect(global.fetch).toHaveBeenCalledOnce();
+  });
+
   it('should return the final recognized transient response after retries are exhausted', async () => {
     const transientResponse = createMockResponse({
       status: 503,

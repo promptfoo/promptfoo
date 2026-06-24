@@ -99,6 +99,26 @@ type PluginClass<T extends PluginConfig> = new (
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
 
+class RemoteGenerationFailure extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RemoteGenerationFailure';
+  }
+}
+
+async function suppressRemoteGenerationFailure(
+  operation: () => Promise<TestCase[]>,
+): Promise<TestCase[]> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof RemoteGenerationFailure) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 /**
  * Computes modifiers from config (same logic as appendModifiers in base.ts).
  * Used to ensure modifiers are available for strategies when using remote generation.
@@ -288,11 +308,10 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
     action: async (params: PluginActionParams) => {
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
       if (!maxCharsPerMessage) {
-        return pluginFactory.action(params);
+        return suppressRemoteGenerationFailure(() => pluginFactory.action(params));
       }
 
       let retryInstructions: string | undefined;
-      let lastGenerationReturnedTestCases = true;
       const generateValidTestCases = async (currentTestCases: TestCase[]): Promise<TestCase[]> => {
         const retryConfig = buildRetryConfig(params.config, retryInstructions);
         const generatedTestCases = await pluginFactory.action({
@@ -300,7 +319,6 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
           n: Math.max(params.n - currentTestCases.length, 0),
           config: retryConfig,
         });
-        lastGenerationReturnedTestCases = generatedTestCases.length > 0;
 
         const validTestCases: TestCase[] = [];
         const rejectedPromptLengths: number[] = [];
@@ -328,12 +346,8 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
         return validTestCases;
       };
 
-      const testCases = await retryWithDeduplication(
-        generateValidTestCases,
-        params.n,
-        2,
-        dedupeTestCases,
-        () => lastGenerationReturnedTestCases,
+      const testCases = await suppressRemoteGenerationFailure(() =>
+        retryWithDeduplication(generateValidTestCases, params.n, 2, dedupeTestCases),
       );
 
       return testCases.map(stripRetryModifier);
@@ -350,7 +364,6 @@ async function fetchRemoteTestCases(
   redteamGenerationContext?: RedteamGenerationContext | string,
   abortSignal?: AbortSignal,
 ): Promise<TestCase[]> {
-  let deleteFromCache: (() => Promise<void>) | undefined;
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
@@ -367,7 +380,7 @@ async function fetchRemoteTestCases(
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+    throw new RemoteGenerationFailure(`Remote health check failed for ${key}`);
   }
 
   // Strip graderExamples before sending - they're not used during generation,
@@ -399,7 +412,12 @@ async function fetchRemoteTestCases(
   }
 
   try {
-    const response = await fetchWithCache<string>(
+    const {
+      data: responseText,
+      deleteFromCache,
+      status,
+      statusText,
+    } = await fetchWithCache<string>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -412,13 +430,11 @@ async function fetchRemoteTestCases(
       getRequestTimeoutMs(),
       'text',
     );
-    deleteFromCache = response.deleteFromCache;
-    const { data: responseText, status, statusText } = response;
-    abortSignal?.throwIfAborted();
     if (status !== 200) {
       await deleteFromCache?.();
+      abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, { status, statusText });
-      return [];
+      throw new RemoteGenerationFailure(`Remote generation returned HTTP ${status} for ${key}`);
     }
 
     let data: PluginGenerationResponse;
@@ -426,22 +442,24 @@ async function fetchRemoteTestCases(
       data = JSON.parse(responseText) as PluginGenerationResponse;
     } catch {
       await deleteFromCache?.();
+      abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
         statusText,
         responseFormat: 'invalid-json',
       });
-      return [];
+      throw new RemoteGenerationFailure(`Remote generation returned invalid JSON for ${key}`);
     }
 
     if (!data || !Array.isArray(data.result)) {
       await deleteFromCache?.();
+      abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, {
         status,
         statusText,
         resultType: Array.isArray(data?.result) ? 'array' : typeof data?.result,
       });
-      return [];
+      throw new RemoteGenerationFailure(`Remote generation returned an invalid result for ${key}`);
     }
     if (data.error) {
       await deleteFromCache?.();
@@ -451,19 +469,30 @@ async function fetchRemoteTestCases(
         assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
       } catch (error) {
         await deleteFromCache?.();
+        abortSignal?.throwIfAborted();
         throw error;
       }
     }
     const ret = data.result;
+    abortSignal?.throwIfAborted();
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
-    if (abortSignal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
-      await deleteFromCache?.();
+    if (abortSignal?.aborted) {
+      abortSignal.throwIfAborted();
+    }
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
+    if (err instanceof RemoteGenerationFailure) {
       throw err;
     }
     logger.error(`Error generating test cases for ${key}`, { error: err });
-    return [];
+    const failure = new RemoteGenerationFailure(`Remote generation failed for ${key}`) as Error & {
+      cause?: unknown;
+    };
+    failure.cause = err;
+    throw failure;
   }
 }
 
