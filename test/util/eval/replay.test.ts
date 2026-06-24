@@ -69,10 +69,9 @@ describe('evaluation replay helpers', () => {
     });
 
     expect(
-      getPromptsForReplay(
-        [first, firstExpandedForAnotherProvider, second],
-        resolvedPrompts,
-      ).map((prompt) => prompt.raw),
+      getPromptsForReplay([first, firstExpandedForAnotherProvider, second], resolvedPrompts).map(
+        (prompt) => prompt.raw,
+      ),
     ).toEqual(['first content', 'second content']);
   });
 
