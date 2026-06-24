@@ -23,6 +23,12 @@ const buildExists = fs.existsSync(distDir);
 // Skip all tests if build doesn't exist (e.g., in CI Jest run before build)
 const describeIfBuildExists = buildExists ? describe : describe.skip;
 
+const contractsRuntimeBudgetBytes = {
+  'contracts.js': 60_000,
+  'contracts.cjs': 70_000,
+} as const;
+const contractsDeclarationBudgetBytes = 75_000;
+
 /**
  * Follows the relative chunk imports out of a built entry file and returns the byte size of the
  * full reachable local graph plus the set of bare (external) specifiers it pulls. Used to measure
@@ -79,10 +85,11 @@ describeIfBuildExists('Library Exports', () => {
       // The contracts entry files are thin re-export shims; the real footprint lives in the shared
       // chunks they import. Measure the whole transitive closure (entry + every reachable local
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
-      for (const entry of ['contracts.js', 'contracts.cjs']) {
+      for (const [entry, budgetBytes] of Object.entries(contractsRuntimeBudgetBytes)) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        // ~14KB (ESM) / ~19KB (CJS) today; a heavy dep or inlined zod would blow well past this.
-        expect(totalBytes).toBeLessThan(50000);
+        // Shared local API routes and response schemas bring the closures to ~47KB ESM / ~57KB
+        // CJS. Keep format-specific headroom while still catching a leaked or inlined dependency.
+        expect(totalBytes).toBeLessThan(budgetBytes);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
@@ -91,7 +98,7 @@ describeIfBuildExists('Library Exports', () => {
       for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
-        expect(fs.statSync(declarationPath).size).toBeLessThan(50000);
+        expect(fs.statSync(declarationPath).size).toBeLessThan(contractsDeclarationBudgetBytes);
       }
     });
 
@@ -150,6 +157,16 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
+      expect(
+        contractsModule.ServerResponseSchemas.Health.Response.safeParse({
+          status: 'OK',
+          version: 'test',
+        }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success,
+      ).toBe(true);
     });
   });
 
@@ -196,6 +213,16 @@ describeIfBuildExists('Library Exports', () => {
       expect(contractsModule.GetUserResponseSchema).toBeDefined();
       expect(contractsModule.InputsSchema).toBeDefined();
       expect(contractsModule.PromptSchema).toBeDefined();
+      expect(contractsModule.ApiRoutes.Health.expressPath).toBe('/health');
+      expect(
+        contractsModule.ServerResponseSchemas.Health.Response.safeParse({
+          status: 'OK',
+          version: 'test',
+        }).success,
+      ).toBe(true);
+      expect(
+        contractsModule.ModelAuditSchemas.ListScans.Query.safeParse({ limit: 1 }).success,
+      ).toBe(true);
     });
   });
 });
