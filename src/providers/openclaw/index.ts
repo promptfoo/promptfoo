@@ -13,7 +13,6 @@ export { OpenClawEmbeddingProvider } from './embedding';
 export { OpenClawResponsesProvider } from './responses';
 export {
   buildOpenClawModelName,
-  normalizeOpenClawAgentId,
   readOpenClawConfig,
   resetConfigCache,
   resolveAuthSecret,
@@ -48,18 +47,17 @@ export function createOpenClawProvider(
   const splits = providerPath.split(':');
   const keyword = splits[1];
   const opts = { ...providerOptions, env };
-  const subtypeAgentId = splits.slice(2).join(':') || undefined;
 
   if (keyword === 'responses') {
-    return new OpenClawResponsesProvider(subtypeAgentId, opts);
+    return new OpenClawResponsesProvider(splits[2], opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    return new OpenClawEmbeddingProvider(subtypeAgentId, opts);
+    return new OpenClawEmbeddingProvider(splits[2], opts);
   }
 
   if (keyword === 'agent') {
-    return new OpenClawAgentProvider(subtypeAgentId, opts);
+    return new OpenClawAgentProvider(splits[2], opts);
   }
 
   if (keyword === 'tools') {

@@ -39,7 +39,7 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   }
 
   id(): string {
-    return `openclaw:${this.agentId ?? 'default'}`;
+    return this.agentId ? `openclaw:${this.agentId}` : 'openclaw';
   }
 
   toString(): string {

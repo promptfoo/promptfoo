@@ -59,7 +59,7 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
   }
 
   id(): string {
-    return `openclaw:responses:${this.agentId ?? 'default'}`;
+    return this.agentId ? `openclaw:responses:${this.agentId}` : 'openclaw:responses';
   }
 
   toString(): string {

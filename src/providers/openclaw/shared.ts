@@ -326,24 +326,31 @@ export function resolveAuthToken(
 }
 
 /**
- * Normalize supported OpenClaw agent aliases to the optional agent id used by downstream routing.
+ * Normalize an explicit OpenClaw agent selector to the optional agent id used downstream.
+ * Only the canonical slash-form default alias is implicit. Colon-form compatibility aliases
+ * still name explicit agents, including valid agents named `default` or `openclaw`.
  */
 export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
   const trimmedAgentId = agentId?.trim() ?? '';
-  if (!trimmedAgentId || trimmedAgentId === 'default' || trimmedAgentId === 'openclaw') {
+  if (!trimmedAgentId) {
     return undefined;
   }
-  if (trimmedAgentId.startsWith('openclaw/')) {
+
+  const lowerAgentId = trimmedAgentId.toLowerCase();
+  if (lowerAgentId === 'openclaw/default') {
+    return undefined;
+  }
+  if (lowerAgentId.startsWith('openclaw/')) {
     const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
-    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
+    return targetAgentId || trimmedAgentId;
   }
-  if (trimmedAgentId.startsWith('openclaw:')) {
+  if (lowerAgentId.startsWith('openclaw:')) {
     const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
-    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
+    return targetAgentId || trimmedAgentId;
   }
-  if (trimmedAgentId.startsWith('agent:')) {
+  if (lowerAgentId.startsWith('agent:')) {
     const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
-    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
+    return targetAgentId || trimmedAgentId;
   }
   return trimmedAgentId;
 }
@@ -359,6 +366,23 @@ export function buildOpenClawModelName(agentId?: string): string {
 function normalizeHeaderValue(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+/**
+ * Scope an unqualified session key to an explicit agent. OpenClaw canonicalizes unscoped keys
+ * under the configured default agent, so explicit agents must carry their scope in the key.
+ */
+export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey: string): string {
+  const trimmedSessionKey = sessionKey.trim();
+  if (
+    !trimmedSessionKey ||
+    !agentId?.trim() ||
+    trimmedSessionKey.toLowerCase().startsWith('agent:')
+  ) {
+    return trimmedSessionKey;
+  }
+
+  return `agent:${agentId.trim()}:${trimmedSessionKey}`;
 }
 
 /**
@@ -413,7 +437,7 @@ export function buildOpenClawHeaders(
     headers['x-openclaw-agent-id'] = agentId;
   }
   if (config?.session_key) {
-    headers['x-openclaw-session-key'] = config.session_key;
+    headers['x-openclaw-session-key'] = buildOpenClawSessionKey(agentId, config.session_key);
   }
   return {
     ...headers,
@@ -436,6 +460,11 @@ export function buildOpenClawProviderOptions(
     config as { auth_password?: string; auth_token?: string },
     env,
   );
+  const customHeaders = Object.fromEntries(
+    Object.entries((config.headers as Record<string, string> | undefined) ?? {}).filter(
+      ([name]) => !['x-openclaw-agent-id', 'x-openclaw-agent'].includes(name.toLowerCase()),
+    ),
+  );
 
   return {
     ...providerOptions,
@@ -447,7 +476,7 @@ export function buildOpenClawProviderOptions(
       // Prevent OpenAI base class from falling back to OPENAI_API_KEY
       apiKeyRequired: false,
       headers: {
-        ...(config.headers as Record<string, string> | undefined),
+        ...customHeaders,
         ...buildOpenClawHeaders(agentId, config as OpenClawConfig),
       },
     },
