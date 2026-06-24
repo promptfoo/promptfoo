@@ -232,5 +232,27 @@ describe('Snowflake Cortex Provider', () => {
         },
       ]);
     });
+
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      // A 200 response whose `choices` array is empty (e.g. when the model is
+      // filtered) must not throw "Cannot read properties of undefined".
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { choices: [], usage: { total_tokens: 0 } },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('Malformed response data');
+      expect(result.output).toBeUndefined();
+    });
   });
 });

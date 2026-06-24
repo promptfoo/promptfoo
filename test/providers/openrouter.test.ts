@@ -166,6 +166,29 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        // A 200 response whose `choices` array is empty (e.g. when an upstream
+        // model is filtered) must not throw "Cannot read properties of undefined".
+        const response = new Response(JSON.stringify({ choices: [], usage: { total_tokens: 0 } }), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.output).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
