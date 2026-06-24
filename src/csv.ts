@@ -124,6 +124,38 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function isNumericCell(value: string): boolean {
+  return value.trim() !== '' && Number.isFinite(Number(value));
+}
+
+/**
+ * Neutralize spreadsheet formula (CSV) injection at export time (CWE-1236).
+ *
+ * Spreadsheet applications execute cells beginning with `=`, `+`, `-`, or `@`
+ * as formulas. Prefix dangerous values with the spreadsheet-native text marker
+ * while preserving finite signed numbers.
+ *
+ * Leading whitespace and zero-width characters are ignored when identifying a
+ * trigger because spreadsheet applications can strip them before evaluation.
+ */
+export function escapeCsvFormula(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+
+  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
+  const firstChar = unpadded[0];
+  if (firstChar === undefined) {
+    return value;
+  }
+
+  const isFormulaTrigger =
+    firstChar === '=' ||
+    firstChar === '@' ||
+    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
+  return isFormulaTrigger ? `'${value}` : value;
+}
+
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (

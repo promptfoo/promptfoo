@@ -159,20 +159,20 @@ const RiskCategoryDrawer = ({
     results: new Map(),
   });
   const detailsRequestRef = React.useRef(0);
-  const previousEvalIdRef = React.useRef(evalId);
+  const detailsContextRef = React.useRef({ category, evalId, open });
+  detailsContextRef.current = { category, evalId, open };
 
   React.useEffect(() => {
-    if (previousEvalIdRef.current === evalId) {
-      return;
-    }
-    previousEvalIdRef.current = evalId;
+    detailsContextRef.current = { category, evalId, open };
     detailsRequestRef.current += 1;
-    detailsCacheRef.current = { evalId, results: new Map() };
+    if (detailsCacheRef.current.evalId !== evalId) {
+      detailsCacheRef.current = { evalId, results: new Map() };
+    }
     setLoadingDetailsKey(null);
     setDetailsLoadError(null);
     setSelectedTest(null);
     setDetailsDialogOpen(false);
-  }, [evalId]);
+  }, [category, evalId, open]);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -192,15 +192,26 @@ const RiskCategoryDrawer = ({
 
   const loadFullTestDetails = async (test: TestWithMetadata, detailsKey: string) => {
     const compactResult = test.result;
-    setSelectedTest(test);
-    setDetailsDialogOpen(true);
+    setSelectedTest(null);
+    setDetailsDialogOpen(false);
     setDetailsLoadError(null);
 
     if (!compactResult) {
+      setDetailsLoadError('Detailed evaluation data is unavailable for this result.');
       return;
     }
 
     const requestId = ++detailsRequestRef.current;
+    const requestContext = { category, evalId, open };
+    const isCurrentRequest = () => {
+      const currentContext = detailsContextRef.current;
+      return (
+        requestId === detailsRequestRef.current &&
+        currentContext.category === requestContext.category &&
+        currentContext.evalId === requestContext.evalId &&
+        currentContext.open === requestContext.open
+      );
+    };
     setLoadingDetailsKey(detailsKey);
 
     try {
@@ -209,8 +220,11 @@ const RiskCategoryDrawer = ({
       }
       let fullResult = detailsCacheRef.current.results.get(detailsKey);
       if (!fullResult) {
+        const resultIdQuery = compactResult.id
+          ? `?resultId=${encodeURIComponent(compactResult.id)}`
+          : '';
         const response = await callApi(
-          `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}`,
+          `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
           { cache: 'no-store' },
         );
         if (!response.ok) {
@@ -218,12 +232,12 @@ const RiskCategoryDrawer = ({
         }
         const body = (await response.json()) as { data: EvaluateResult };
         fullResult = body.data;
-        if (requestId !== detailsRequestRef.current || detailsCacheRef.current.evalId !== evalId) {
+        if (!isCurrentRequest() || detailsCacheRef.current.evalId !== evalId) {
           return;
         }
         detailsCacheRef.current.results.set(detailsKey, fullResult);
       }
-      if (requestId !== detailsRequestRef.current) {
+      if (!isCurrentRequest()) {
         return;
       }
 
@@ -232,14 +246,15 @@ const RiskCategoryDrawer = ({
         gradingResult: fullResult.gradingResult ?? undefined,
         result: fullResult,
       });
+      setDetailsDialogOpen(true);
     } catch (error) {
-      if (requestId !== detailsRequestRef.current) {
+      if (!isCurrentRequest()) {
         return;
       }
       console.error('[RiskCategoryDrawer] Failed to load full result details', error);
       setDetailsLoadError('Some detailed evaluation data could not be loaded.');
     } finally {
-      if (requestId === detailsRequestRef.current) {
+      if (isCurrentRequest()) {
         setLoadingDetailsKey(null);
       }
     }
@@ -265,9 +280,11 @@ const RiskCategoryDrawer = ({
 
   // Helper to render a test item (used for both failures and passes)
   const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
-    const detailsKey = test.result
-      ? `${test.result.testIdx}:${test.result.promptIdx}`
-      : `${isFailed ? 'failure' : 'pass'}:${index}`;
+    const detailsKey = test.result?.id
+      ? `id:${test.result.id}`
+      : test.result
+        ? `coordinates:${test.result.testIdx}:${test.result.promptIdx}`
+        : `${isFailed ? 'failure' : 'pass'}:${index}`;
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
@@ -373,6 +390,14 @@ const RiskCategoryDrawer = ({
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
+        {detailsLoadError && (
+          <p
+            role="alert"
+            className="sticky top-0 z-10 rounded-md border border-destructive/30 bg-card px-3 py-2 text-sm text-destructive shadow-sm"
+          >
+            {detailsLoadError}
+          </p>
+        )}
         <div className="risk-category-drawer p-2">
           <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
 
@@ -480,11 +505,6 @@ const RiskCategoryDrawer = ({
           onClose={() => setSuggestionsDialogOpen(false)}
           gradingResult={currentGradingResult}
         />
-        {detailsLoadError && (
-          <p role="alert" className="px-2 text-sm text-destructive">
-            {detailsLoadError}
-          </p>
-        )}
         <EvalOutputPromptDialog
           open={detailsDialogOpen}
           onClose={() => setDetailsDialogOpen(false)}

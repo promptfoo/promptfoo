@@ -11,9 +11,11 @@ import { DownloadIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { downloadBlob } from '@app/hooks/useDownloadEval';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { escapeCsvFormula } from '@promptfoo/csv';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import {
@@ -54,6 +56,9 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
         }
       }
 
+      const pass = result.success;
+      const score = result.score;
+
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -64,17 +69,23 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
         Target: result.provider.label || result.provider.id || '',
         Prompt: getReportPrompt(result, injectVar),
         Response: result.response?.output || '',
-        Pass:
-          result.gradingResult?.pass === true
-            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
-            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
-        Score: result.gradingResult?.score || '',
+        Pass: `${pass ? 'Pass' : 'Fail'}${score === undefined ? '' : ` (${score})`}`,
+        Score: score ?? '',
         Reason: result.gradingResult?.reason || '',
         Timestamp: new Date(evalData.createdAt).toISOString(),
       };
     });
 
-    return stringify(rows, {
+    const escapedRows = rows.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? escapeCsvFormula(value) : value,
+        ]),
+      ),
+    );
+
+    return stringify(escapedRows, {
       header: true,
       quoted: true,
       quoted_string: true,
@@ -108,15 +119,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
     try {
       const csv = convertEvalDataToCsv(evalData);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('csv'));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      downloadBlob(blob, getFilename('csv'));
     } catch (error) {
       console.error('Error generating CSV:', error);
       showDownloadError('CSV', error);
@@ -144,15 +147,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       const body = (await response.json()) as SharedResults;
       const jsonData = JSON.stringify(body.data, null, 2);
       const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('json'));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      downloadBlob(blob, getFilename('json'));
     } catch (error) {
       console.error('Error generating JSON:', error);
       showDownloadError('JSON', error);

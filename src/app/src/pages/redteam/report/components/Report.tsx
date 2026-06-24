@@ -35,12 +35,11 @@ import {
   type GradingResult,
   isProviderOptions,
   ResultFailureReason,
-  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
 } from '@promptfoo/types';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
@@ -54,19 +53,19 @@ import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
 
 interface ReportProps {
-  /** When provided, uses this evalId instead of reading from URL search params. */
-  evalId?: string;
+  evalId: string;
   /** When true, skips rendering the report's own header (persistent scroll header, header card, enterprise banner). Used when embedded inside EvalHeader. */
   embedded?: boolean;
   /** Called with dropdown menu items for the eval actions dropdown when embedded. */
   onActionsReady?: (actions: React.ReactNode) => void;
 }
 
-const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {}) => {
+const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps) => {
   const navigate = useNavigate();
-  const [evalId, setEvalId] = useState<string | null>(evalIdProp ?? null);
+  const [evalId, setEvalId] = useState(requestedEvalId);
   const [evalData, setEvalData] = useState<ResultsFile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const { recordEvent } = useTelemetry();
@@ -85,47 +84,49 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   // Vulnerabilities table reference for scroll navigation
   const vulnerabilitiesDataGridRef = useRef<HTMLDivElement>(null);
 
-  const [searchParams] = useSearchParams();
-  const requestedEvalId = evalIdProp ?? searchParams.get('evalId');
-
   useEffect(() => {
     recordEventRef.current = recordEvent;
   }, [recordEvent]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt intentionally retriggers the request after an explicit retry.
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
-    const fetchEvalById = async (id: string) => {
-      setEvalId(id);
+    const fetchEval = async () => {
+      setEvalId(requestedEvalId);
       setEvalData(null);
       setLoadError(null);
       setSelectedPromptIndex(0);
 
       try {
         const resp = await callApi(
-          `/results/${encodeURIComponent(id)}?includeTraces=false&resultProjection=redteamReport`,
+          `/results/${encodeURIComponent(requestedEvalId)}?includeTraces=false&resultProjection=redteamReport`,
           {
             cache: 'no-store',
+            signal: controller.signal,
           },
         );
         if (!resp.ok) {
           throw new Error(`Failed to load report data (${resp.status})`);
         }
         const body = (await resp.json()) as SharedResults;
-        if (cancelled) {
+        if (controller.signal.aborted) {
           return;
         }
         setEvalData(body.data);
 
-        // Track funnel event for report viewed
-        recordEventRef.current('funnel', {
-          type: 'redteam',
-          step: 'webui_report_viewed',
-          source: 'webui',
-          evalId: id,
-        });
+        try {
+          recordEventRef.current('funnel', {
+            type: 'redteam',
+            step: 'webui_report_viewed',
+            source: 'webui',
+            evalId: requestedEvalId,
+          });
+        } catch (error) {
+          console.error('Failed to record red team report telemetry:', error);
+        }
       } catch (error) {
-        if (cancelled) {
+        if (controller.signal.aborted) {
           return;
         }
         console.error('Failed to load red team report:', error);
@@ -133,42 +134,12 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       }
     };
 
-    if (requestedEvalId) {
-      fetchEvalById(requestedEvalId);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const fetchLatestEvalId = async () => {
-      try {
-        const resp = await callApi('/results?type=redteam', { cache: 'no-store' });
-        if (!resp.ok) {
-          throw new Error(`Failed to fetch recent red team evals (${resp.status})`);
-        }
-        const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-        if (cancelled) {
-          return;
-        }
-        if (body.data && body.data.length > 0) {
-          fetchEvalById(body.data[0].evalId);
-        } else {
-          setLoadError('No red team evaluations are available to report.');
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Error fetching latest red team eval:', error);
-          setLoadError('Unable to load report data. Please try again or inspect the evaluation.');
-        }
-      }
-    };
-
-    fetchLatestEvalId();
+    fetchEval();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [requestedEvalId]);
+  }, [loadAttempt, requestedEvalId]);
 
   // Track scroll position for persistent header visibility
   useEffect(() => {
@@ -216,7 +187,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         return;
       }
 
-      if (!result.success || !result.gradingResult?.pass) {
+      if (!result.success) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
         }
@@ -265,7 +236,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         return;
       }
 
-      if (result.success && result.gradingResult?.pass) {
+      if (result.success) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
@@ -672,21 +643,27 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   if (loadError) {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6">
-        <Card className="max-w-xl p-8 text-center">
+        <Card
+          role="alert"
+          aria-atomic="true"
+          aria-live="assertive"
+          className="max-w-xl p-8 text-center"
+        >
           <AlertTriangle className="mx-auto mb-4 size-16 text-amber-500" />
           <h1 className="mb-4 text-2xl font-bold">Report unavailable</h1>
           <p className="text-muted-foreground">{loadError}</p>
-          {evalId && (
-            <Button className="mt-6" onClick={() => navigate(EVAL_ROUTES.DETAIL(evalId))}>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</Button>
+            <Button variant="outline" onClick={() => navigate(EVAL_ROUTES.DETAIL(evalId))}>
               View evaluation details
             </Button>
-          )}
+          </div>
         </Card>
       </div>
     );
   }
 
-  if (!evalData || !evalId) {
+  if (!evalData) {
     return (
       <div className="flex h-36 flex-col items-center justify-center gap-3">
         <Spinner className="size-5" />
@@ -698,12 +675,16 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   if (!evalData.config.redteam) {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6">
-        <Card className="max-w-xl p-8 text-center">
+        <Card
+          role="alert"
+          aria-atomic="true"
+          aria-live="assertive"
+          className="max-w-xl p-8 text-center"
+        >
           <AlertTriangle className="mx-auto mb-4 size-16 text-amber-500" />
           <h1 className="mb-6 text-2xl font-bold">Report unavailable</h1>
           <p className="text-muted-foreground">
-            The {searchParams.get('evalId') ? 'selected' : 'latest'} evaluation results are not
-            displayable in report format.
+            The selected evaluation results are not displayable in report format.
           </p>
           <p className="text-muted-foreground">Please run a red team and try again.</p>
         </Card>
@@ -715,16 +696,24 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     (evalData.results.stats?.successes ?? 0) +
     (evalData.results.stats?.failures ?? 0) +
     (evalData.results.stats?.errors ?? 0);
-  if (evalData.results.results.length === 0 && savedResultCount > 0) {
+  const detailedResultCount = evalData.results.results.length;
+  if (savedResultCount > detailedResultCount) {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6">
-        <Card className="max-w-xl p-8 text-center">
+        <Card
+          role="status"
+          aria-atomic="true"
+          aria-live="polite"
+          className="max-w-xl p-8 text-center"
+        >
           <AlertTriangle className="mx-auto mb-4 size-16 text-amber-500" />
           <h1 className="mb-4 text-2xl font-bold">Report data incomplete</h1>
           <p className="text-muted-foreground">
             This evaluation saved aggregate stats for {savedResultCount.toLocaleString()} tests, but
-            no detailed result rows are available. Vulnerabilities and framework compliance cannot
-            be calculated.
+            {detailedResultCount === 0
+              ? ' no detailed result rows are available.'
+              : ` only ${detailedResultCount.toLocaleString()} detailed result ${detailedResultCount === 1 ? 'row is' : 'rows are'} available.`}{' '}
+            Vulnerabilities and framework compliance cannot be calculated reliably.
           </p>
           <Button className="mt-6" onClick={() => navigate(EVAL_ROUTES.DETAIL(evalId))}>
             View evaluation details

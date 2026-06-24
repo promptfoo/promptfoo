@@ -389,19 +389,37 @@ describe('handleModeration', () => {
     );
   });
 
-  it('should not moderate a fallback when response.prompt is explicitly empty', async () => {
-    await expect(
-      handleModeration({
-        ...baseParams,
-        prompt: 'original prompt',
-        providerResponse: {
-          output: 'output',
-          prompt: '',
-          metadata: { redteamFinalPrompt: 'redteam prompt' },
-        },
-      }),
-    ).rejects.toThrow('moderation assertion type must have a prompt');
-    expect(mockedMatchesModeration).not.toHaveBeenCalled();
+  it('should moderate the original prompt when response.prompt is empty', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    const result = await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: '',
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+      assertion: mockAssertion,
+    });
   });
 
   it('should fall back to original prompt when response.prompt is empty array', async () => {

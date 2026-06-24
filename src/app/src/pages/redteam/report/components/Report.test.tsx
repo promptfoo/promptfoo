@@ -21,6 +21,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
 };
 
 vi.mock('@app/utils/api');
+const mockRecordEvent = vi.hoisted(() => vi.fn());
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -30,7 +32,7 @@ vi.mock('react-router-dom', async () => {
 });
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
-    recordEvent: vi.fn(),
+    recordEvent: mockRecordEvent,
   }),
 }));
 
@@ -58,13 +60,27 @@ vi.mock('./Overview', () => ({
 vi.mock('@app/components/EnterpriseBanner', () => ({ default: () => null }));
 vi.mock('./StrategyStats', () => ({ default: () => null }));
 vi.mock('./RiskCategories', () => ({
-  default: ({ failuresByPlugin }: { failuresByPlugin?: Record<string, { prompt: string }[]> }) => (
-    <div data-testid="risk-categories-failure-prompts">
-      {Object.values(failuresByPlugin ?? {})
-        .flat()
-        .map((failure) => failure.prompt)
-        .join('|')}
-    </div>
+  default: ({
+    failuresByPlugin,
+    passesByPlugin,
+  }: {
+    failuresByPlugin?: Record<string, { prompt: string }[]>;
+    passesByPlugin?: Record<string, { prompt: string }[]>;
+  }) => (
+    <>
+      <div data-testid="risk-categories-failure-prompts">
+        {Object.values(failuresByPlugin ?? {})
+          .flat()
+          .map((failure) => failure.prompt)
+          .join('|')}
+      </div>
+      <div data-testid="risk-categories-pass-prompts">
+        {Object.values(passesByPlugin ?? {})
+          .flat()
+          .map((pass) => pass.prompt)
+          .join('|')}
+      </div>
+    </>
   ),
 }));
 vi.mock('./TestSuites', () => ({ default: () => null }));
@@ -625,7 +641,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const overviewTotal = await screen.findByTestId('overview-total');
     expect(overviewTotal).toHaveTextContent('1');
@@ -645,7 +661,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toHaveTextContent('Target: Provider 0');
@@ -681,7 +697,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     expect(await screen.findByText(/2 probes/)).toBeInTheDocument();
   });
@@ -704,7 +720,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
     expect(failurePrompts).toHaveTextContent('INJECTED_LAYER_PAYLOAD');
@@ -728,7 +744,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
     expect(failurePrompts).toHaveTextContent('FINAL_MULTI_TURN_ATTACK');
@@ -746,11 +762,38 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const failurePrompts = await screen.findByTestId('risk-categories-failure-prompts');
     expect(failurePrompts).toHaveTextContent('test');
     expect(failurePrompts).not.toHaveTextContent('function toString');
+  });
+
+  it('classifies compact rows by success when grading details are stripped', async () => {
+    const passingResult = {
+      ...createComponentMockResult(0, 'plugin1', true),
+      gradingResult: undefined,
+      vars: { prompt: 'PASS_WITHOUT_GRADING' },
+    } as EvaluateResult;
+    const failingResult = {
+      ...createComponentMockResult(0, 'plugin1', false),
+      gradingResult: undefined,
+      vars: { prompt: 'FAIL_WITHOUT_GRADING' },
+    } as EvaluateResult;
+    const evalData = createComponentMockEvalData(1, [passingResult, failingResult]);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App evalId="test-eval-id" />);
+
+    const passPrompts = await screen.findByTestId('risk-categories-pass-prompts');
+    const failurePrompts = screen.getByTestId('risk-categories-failure-prompts');
+    expect(passPrompts).toHaveTextContent('PASS_WITHOUT_GRADING');
+    expect(passPrompts).not.toHaveTextContent('FAIL_WITHOUT_GRADING');
+    expect(failurePrompts).toHaveTextContent('FAIL_WITHOUT_GRADING');
+    expect(failurePrompts).not.toHaveTextContent('PASS_WITHOUT_GRADING');
   });
 });
 
@@ -759,17 +802,28 @@ describe('App component report loading', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallApi.mockReset();
+    mockRecordEvent.mockReset();
     mockWindowLocation({ search: '' });
   });
 
-  it('reloads when the evalId prop changes and does not request traces', async () => {
+  it('aborts an obsolete request and loads data for the current evalId', async () => {
     const evalData = createComponentMockEvalData(1, [
       createComponentMockResult(0, 'plugin1', true),
     ]);
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    evalData.config.description = 'Evaluation two';
+    mockCallApi
+      .mockImplementationOnce((_path, options) => {
+        return new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          });
+        });
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: evalData }),
+      });
 
     const renderReport = (evalId: string) => (
       <TooltipProvider>
@@ -781,67 +835,90 @@ describe('App component report loading', () => {
     const { rerender } = render(renderReport('eval-one'));
 
     await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        1,
         '/results/eval-one?includeTraces=false&resultProjection=redteamReport',
-        {
+        expect.objectContaining({
           cache: 'no-store',
-        },
+          signal: expect.any(AbortSignal),
+        }),
       );
     });
+    const firstSignal = mockCallApi.mock.calls[0][1].signal as AbortSignal;
 
     rerender(renderReport('eval-two'));
 
     await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
+      expect(mockCallApi).toHaveBeenNthCalledWith(
+        2,
         '/results/eval-two?includeTraces=false&resultProjection=redteamReport',
-        {
+        expect.objectContaining({
           cache: 'no-store',
-        },
+          signal: expect.any(AbortSignal),
+        }),
       );
     });
+    expect(firstSignal.aborted).toBe(true);
+    expect(await screen.findAllByText('Evaluation two')).not.toHaveLength(0);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('loads the latest red team evaluation when no evalId is provided', async () => {
+  it('retries the same report request in place after a transient failure', async () => {
     const evalData = createComponentMockEvalData(1, [
       createComponentMockResult(0, 'plugin1', true),
     ]);
     mockCallApi
       .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ data: [{ evalId: 'latest-redteam-eval' }] }),
+        ok: false,
+        status: 503,
       })
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ data: evalData }),
       });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="eval-retry" />);
 
-    await waitFor(() => {
-      expect(mockCallApi).toHaveBeenNthCalledWith(1, '/results?type=redteam', {
-        cache: 'no-store',
-      });
-      expect(mockCallApi).toHaveBeenNthCalledWith(
-        2,
-        '/results/latest-redteam-eval?includeTraces=false&resultProjection=redteamReport',
-        {
-          cache: 'no-store',
-        },
-      );
-    });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Unable to load report data');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByTestId('overview-total')).toHaveTextContent('1');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApi.mock.calls.map(([path]) => path)).toEqual([
+      '/results/eval-retry?includeTraces=false&resultProjection=redteamReport',
+      '/results/eval-retry?includeTraces=false&resultProjection=redteamReport',
+    ]);
   });
 
-  it('shows an error instead of waiting forever when the report request fails', async () => {
+  it('keeps a successfully loaded report when telemetry throws', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+    ]);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRecordEvent.mockImplementationOnce(() => {
+      throw new Error('telemetry unavailable');
+    });
     mockCallApi.mockResolvedValue({
-      ok: false,
-      status: 500,
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App evalId="eval-broken" />);
+    try {
+      renderWithProviders(<App evalId="eval-telemetry" />);
 
-    expect(await screen.findByRole('heading', { name: 'Report unavailable' })).toBeInTheDocument();
-    expect(screen.getByText(/Unable to load report data/)).toBeInTheDocument();
-    expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('overview-total')).toHaveTextContent('1');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(consoleError).toHaveBeenCalledWith(
+        'Failed to record red team report telemetry:',
+        expect.any(Error),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('does not present a clean report when aggregate stats exist without result rows', async () => {
@@ -858,10 +935,33 @@ describe('App component report loading', () => {
 
     renderWithProviders(<App evalId="eval-incomplete" />);
 
-    expect(
-      await screen.findByRole('heading', { name: 'Report data incomplete' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/aggregate stats for 1,008 tests/)).toBeInTheDocument();
+    const status = await screen.findByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Report data incomplete');
+    expect(status).toHaveTextContent(/aggregate stats for 1,008 tests/);
+    expect(status).toHaveTextContent(/no detailed result rows are available/);
+    expect(screen.queryByTestId('overview-total')).not.toBeInTheDocument();
+  });
+
+  it('rejects a partially projected report when aggregate stats exceed detailed rows', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+    ]);
+    evalData.results.stats = {
+      successes: 2,
+      failures: 0,
+      errors: 0,
+    } as any;
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App evalId="eval-partial" />);
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent(/aggregate stats for 2 tests/);
+    expect(status).toHaveTextContent(/only 1 detailed result row is available/);
     expect(screen.queryByTestId('overview-total')).not.toBeInTheDocument();
   });
 });
@@ -885,7 +985,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toBeInTheDocument();
@@ -899,7 +999,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const chip = await screen.findByText('Target:');
     expect(chip).toBeInTheDocument();
@@ -916,7 +1016,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     expect(await screen.findByTestId('report-header-card')).toHaveClass('sm:pr-48');
     expect(screen.getByTestId('report-header-actions')).toHaveClass(
@@ -935,7 +1035,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    const { container } = renderWithProviders(<App embedded />);
+    const { container } = renderWithProviders(<App evalId="test-eval-id" embedded />);
 
     await screen.findByTestId('overview-total');
 
@@ -975,7 +1075,7 @@ describe('App component categoryStats calculation with moderation', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     await waitFor(() => {
       expect(screen.getByTestId('overview-category-stats')).toBeInTheDocument();
@@ -1013,7 +1113,7 @@ describe('Filter panel regression tests', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     // Wait for component to load
     await waitFor(() => {
@@ -1047,7 +1147,7 @@ describe('Filter panel regression tests', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     await waitFor(() => {
       expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();

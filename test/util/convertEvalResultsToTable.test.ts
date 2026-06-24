@@ -300,7 +300,7 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].vars[0]).toBe('modified prompt');
   });
 
-  it('should preserve an explicitly empty provider prompt over legacy fallbacks', () => {
+  it('should not overwrite vars with an empty provider prompt', () => {
     const resultsFile: ResultsFile = {
       version: 4,
       prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
@@ -342,9 +342,13 @@ describe('convertResultsToTable', () => {
         ],
       },
     };
+    const resultsFileWithoutFallback = structuredClone(resultsFile);
+    delete resultsFileWithoutFallback.results.results[0]!.metadata;
 
     const result = convertResultsToTable(resultsFile);
-    expect(result.body[0].vars[0]).toBe('');
+    expect(result.body[0].vars[0]).toBe('legacy prompt');
+    const resultWithoutFallback = convertResultsToTable(resultsFileWithoutFallback);
+    expect(resultWithoutFallback.body[0].vars[0]).toBe('original prompt');
   });
 
   it('should handle multiple redteam final prompts', () => {
