@@ -341,6 +341,8 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
   tags?: Record<string, string>;
   strict?: boolean;
 
