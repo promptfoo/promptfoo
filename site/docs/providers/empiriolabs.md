@@ -1,6 +1,6 @@
 ---
 title: EmpirioLabs
-description: Connect promptfoo to EmpirioLabs' OpenAI-compatible chat and embedding APIs, configure credential isolation, and evaluate routed models with test cases.
+description: Connect promptfoo to EmpirioLabs' OpenAI-compatible chat, embedding, and transcription APIs with isolated credentials and custom pricing.
 sidebar_position: 42
 ---
 
@@ -121,8 +121,11 @@ tests:
 ```
 
 Promptfoo sends this provider to `/v1/audio/transcriptions`. Transcription models charge per minute
-of audio, so confirm the current rate with `GET https://api.empiriolabs.ai/v1/models/<model>` before
-using cost as a release gate.
+of audio. Keep files at five minutes or less: EmpirioLabs routes longer files to its asynchronous
+job API, which the Promptfoo transcription provider does not currently poll. Promptfoo also does
+not expose EmpirioLabs' per-minute transcription cost, so `cost` assertions are not available for
+these model IDs. Check the current rate with
+`GET https://api.empiriolabs.ai/v1/models/<model>` for external budgeting.
 
 ## Model-specific request fields
 
