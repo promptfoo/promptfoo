@@ -466,8 +466,10 @@ describe('addLayerTestCases', () => {
         mockLoadStrategy,
       );
 
-      expect(result[0].provider?.config).toEqual(
-        expect.objectContaining({ minCharsPerMessage: 100 }),
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({ minCharsPerMessage: 100 }),
+        }),
       );
       expect(result[0].metadata?.strategyConfig).toEqual(
         expect.objectContaining({ minCharsPerMessage: 100 }),

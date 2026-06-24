@@ -830,6 +830,12 @@ async function doGenerateRedteamInternal(
       strategies: strategyObjs || [],
       plugins: plugins || [],
       sharing: config.sharing,
+      ...(config.maxCharsPerMessage === undefined
+        ? {}
+        : { maxCharsPerMessage: config.maxCharsPerMessage }),
+      ...(config.minCharsPerMessage === undefined
+        ? {}
+        : { minCharsPerMessage: config.minCharsPerMessage }),
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
 
