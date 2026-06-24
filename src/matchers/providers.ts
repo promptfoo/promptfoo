@@ -3,7 +3,10 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  raceWithAbortSignal,
+} from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
@@ -76,14 +79,17 @@ export function callProviderWithContext(
     executionContext?.queuedCallAbortSignal?.throwIfAborted();
 
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callApi,
-        createProviderRateLimitOptions(),
+      return raceWithAbortSignal(
+        executionContext.rateLimitRegistry.execute(
+          provider,
+          callApi,
+          createProviderRateLimitOptions(),
+        ),
+        executionContext.queuedCallAbortSignal,
       );
     }
 
-    return callApi();
+    return raceWithAbortSignal(callApi(), executionContext?.queuedCallAbortSignal);
   };
 
   if (executionContext?.providerCallQueue) {
