@@ -591,6 +591,30 @@ describe('shared redteam provider utilities', () => {
         },
       });
     });
+
+    it('infers one request per grader result when counts are omitted', () => {
+      const previousResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'first judge',
+        tokensUsed: { total: 10, prompt: 6, completion: 4 },
+      };
+      const latestResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'latest judge',
+        tokensUsed: { total: 20, prompt: 12, completion: 8 },
+      };
+
+      expect(
+        mergeStoredGraderResultTokenUsage(latestResult, previousResult).tokensUsed,
+      ).toMatchObject({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 2,
+      });
+    });
   });
 
   describe('getTargetResponse', () => {

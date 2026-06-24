@@ -231,4 +231,62 @@ describeEvaluator('evaluator token usage', () => {
       numRequests: 1,
     });
   });
+
+  it('includes generation totals without counting generation requests as probes', async () => {
+    const providerWithTokens: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      }),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: true,
+      provider: providerWithTokens,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          providerTokenUsage: {
+            total: 7,
+            prompt: 4,
+            completion: 3,
+            numRequests: 3,
+          },
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
+    });
+
+    const [laterPromptResult] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 1,
+      repeatIndex: 0,
+      isRedteam: true,
+      provider: providerWithTokens,
+      prompt: { raw: 'Second prompt', label: 'second-label' },
+      test: result.testCase,
+      conversations: {},
+      registers: {},
+    });
+    expect(laterPromptResult.tokenUsage).toMatchObject({
+      total: 10,
+      prompt: 6,
+      completion: 4,
+      numRequests: 1,
+    });
+  });
 });

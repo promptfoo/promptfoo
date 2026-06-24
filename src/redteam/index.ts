@@ -1403,6 +1403,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
+  let failedPluginError: unknown;
   let failedPluginTokenUsage: TokenUsage | undefined;
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1511,10 +1512,11 @@ export async function synthesize({
           if (result.reason instanceof Error && result.reason.name === 'AbortError') {
             throw result.reason;
           }
-          failedPluginTokenUsage = mergeProviderTokenUsage(
-            failedPluginTokenUsage,
-            getErrorTokenUsage(result.reason),
-          );
+          const errorTokenUsage = getErrorTokenUsage(result.reason);
+          failedPluginTokenUsage = mergeProviderTokenUsage(failedPluginTokenUsage, errorTokenUsage);
+          if (errorTokenUsage) {
+            failedPluginError ??= result.reason;
+          }
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
@@ -1825,12 +1827,13 @@ export async function synthesize({
       mergeProviderTokenUsage(purposeExtraction.tokenUsage, entityExtraction.tokenUsage),
     ),
   );
+  const terminalGenerationError = failedStrategyError ?? failedPluginError;
   if (
     combinedTestCases.length === 0 &&
-    failedStrategyError !== null &&
-    typeof failedStrategyError === 'object'
+    terminalGenerationError !== null &&
+    typeof terminalGenerationError === 'object'
   ) {
-    throw Object.assign(failedStrategyError, { tokenUsage: sharedGenerationTokenUsage });
+    throw Object.assign(terminalGenerationError, { tokenUsage: sharedGenerationTokenUsage });
   }
   const finalTestCases = attachProviderTokenUsage(combinedTestCases, sharedGenerationTokenUsage);
 

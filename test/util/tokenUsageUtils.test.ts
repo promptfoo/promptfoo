@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
@@ -305,6 +306,39 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateGenerationTokenUsage', () => {
+    it('adds generation totals without inflating target request counts', () => {
+      const target = createEmptyTokenUsage();
+      target.numRequests = 2;
+
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          total: 15,
+          prompt: 9,
+          completion: 6,
+          numRequests: 3,
+          assertions: { total: 99, numRequests: 4 },
+        }),
+      ).toBe(true);
+
+      expect(target).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 2,
+        assertions: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('rejects malformed generation usage', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(target.total).toBe(0);
     });
   });
 

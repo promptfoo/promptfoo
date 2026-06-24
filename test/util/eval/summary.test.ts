@@ -299,6 +299,8 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Probes: 0');
+      expect(output).toContain('Non-grading: 10');
+      expect(output).not.toContain('Eval:');
     });
 
     it('should display probe counts even when no token totals are available', () => {

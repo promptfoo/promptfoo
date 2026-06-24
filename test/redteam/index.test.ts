@@ -479,6 +479,32 @@ describe('synthesize', () => {
       });
     });
 
+    it('should rethrow a usage-bearing plugin failure when no rows survive', async () => {
+      const pluginError = Object.assign(new Error('plugin generation failed'), {
+        tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+      });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'failed-plugin',
+        action: vi.fn().mockRejectedValue(pluginError),
+      } as any);
+
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'failed-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(pluginError);
+      expect(pluginError.tokenUsage).toMatchObject({
+        total: 5,
+        prompt: 3,
+        completion: 2,
+        numRequests: 1,
+      });
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

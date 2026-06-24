@@ -738,6 +738,34 @@ describe('Redteam Routes', () => {
         });
       });
 
+      it('should infer one request for token-bearing plugin errors without a request count', async () => {
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockRejectedValue(
+            Object.assign(new Error('remote generation failed'), {
+              tokenUsage: { total: 19, prompt: 12, completion: 7 },
+            }),
+          ),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toMatchObject({
+          total: 19,
+          prompt: 12,
+          completion: 7,
+          numRequests: 1,
+        });
+      });
+
       it('should merge plugin and strategy usage when a preview strategy fails', async () => {
         mockedRedteamProviderManager.getProvider.mockResolvedValue({
           id: () => 'test-provider',

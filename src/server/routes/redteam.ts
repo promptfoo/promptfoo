@@ -73,7 +73,7 @@ function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage |
 
   const totalTokenUsage = createEmptyTokenUsage();
   for (const usage of definedUsages) {
-    accumulateTokenUsage(totalTokenUsage, usage);
+    accumulateTokenUsage(totalTokenUsage, usage, true);
   }
   return totalTokenUsage;
 }

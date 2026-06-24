@@ -107,8 +107,8 @@ export function mergeStoredGraderResultTokenUsage(
   }
 
   const tokensUsed = createEmptyTokenUsage();
-  accumulateTokenUsage(tokensUsed, previousResult?.tokensUsed);
-  accumulateTokenUsage(tokensUsed, latestResult.tokensUsed);
+  accumulateTokenUsage(tokensUsed, previousResult?.tokensUsed, true);
+  accumulateTokenUsage(tokensUsed, latestResult.tokensUsed, true);
 
   return {
     ...latestResult,

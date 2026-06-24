@@ -209,9 +209,9 @@ function getTokenUsageLines(
   if (evalTokens.total > 0) {
     const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
     lines.push(
-      `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
-        ', ',
-      )})`,
+      `  ${chalk.gray(isRedteam ? 'Non-grading:' : 'Eval:')} ${chalk.white(
+        evalTokens.total.toLocaleString(),
+      )} (${evalParts.join(', ')})`,
     );
   }
 

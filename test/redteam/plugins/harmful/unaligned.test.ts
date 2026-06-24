@@ -113,6 +113,34 @@ describe('harmful plugin', () => {
       expect(result).toHaveLength(0);
     });
 
+    it('should reject token-bearing provider failures with the accumulated usage', async () => {
+      mockCallApi.mockResolvedValue({
+        error: 'remote harmful generation failed',
+        tokenUsage: { total: 13, prompt: 8, completion: 5 },
+      });
+
+      await expect(
+        getHarmfulTests(
+          {
+            provider: mockProvider,
+            purpose: 'test purpose',
+            injectVar: 'testVar',
+            n: 1,
+            delayMs: 0,
+          },
+          'harmful:sex-crime',
+        ),
+      ).rejects.toMatchObject({
+        message: 'remote harmful generation failed',
+        tokenUsage: {
+          total: 13,
+          prompt: 8,
+          completion: 5,
+          numRequests: 1,
+        },
+      });
+    });
+
     it('should preserve one-row harmful generation usage in providerTokenUsage metadata', async () => {
       mockCallApi.mockResolvedValueOnce({
         output: ['Test harmful output'],

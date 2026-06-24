@@ -97,6 +97,9 @@ export async function getHarmfulTests(
     const result = await unalignedProvider.callApi('');
     accumulateResponseTokenUsage(generationTokenUsage, result);
     hasGenerationTokenUsage = true;
+    if (result.error && (!result.output || result.output.length === 0) && result.tokenUsage) {
+      throw Object.assign(new Error(result.error), { tokenUsage: generationTokenUsage });
+    }
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);

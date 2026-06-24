@@ -208,6 +208,60 @@ describe('calculateFilteredMetrics', () => {
       });
     });
 
+    it('includes persisted generation totals without counting generation calls as probes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+
+      const persistedResult = {
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {
+          vars: { test: 'value' },
+          metadata: {
+            providerTokenUsage: {
+              total: 7,
+              prompt: 4,
+              completion: 3,
+              numRequests: 3,
+              completionDetails: { reasoning: 2 },
+            },
+          },
+        },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { test: 'value' },
+        response: {
+          output: 'test output',
+          tokenUsage: { total: 10, prompt: 6, completion: 4 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: null,
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      };
+      await eval_.addResult(persistedResult);
+      await eval_.addResult({ ...persistedResult, testIdx: 1 });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 27,
+        prompt: 16,
+        completion: 11,
+        numRequests: 2,
+        completionDetails: { reasoning: 2 },
+      });
+    });
+
     it('should preserve nested usage details and explicit request counts', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,

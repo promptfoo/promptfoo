@@ -94,6 +94,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
@@ -1044,6 +1045,7 @@ async function applyProviderDelayIfNeeded(provider: ApiProvider, response: Provi
 
 function createEvaluateResult({
   fileMetadata,
+  includeGenerationTokenUsage,
   latencyMs,
   prompt,
   promptIdx,
@@ -1057,6 +1059,7 @@ function createEvaluateResult({
   vars,
 }: {
   fileMetadata: Record<string, unknown>;
+  includeGenerationTokenUsage: boolean;
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
@@ -1069,6 +1072,10 @@ function createEvaluateResult({
   evalId?: string;
   vars: Vars;
 }): EvaluateResult {
+  const tokenUsage = createEmptyTokenUsage();
+  if (includeGenerationTokenUsage) {
+    accumulateGenerationTokenUsage(tokenUsage, test.metadata?.providerTokenUsage);
+  }
   const ret: EvaluateResult = {
     ...setup,
     // Use the caller-provided vars (which exclude the __eval* runtime vars)
@@ -1091,7 +1098,7 @@ function createEvaluateResult({
     testIdx,
     testCase: test,
     promptId: prompt.id || '',
-    tokenUsage: createEmptyTokenUsage(),
+    tokenUsage,
     ...getTraceLinkage(traceContext, evalId),
   };
 
@@ -1524,6 +1531,7 @@ async function runEvalInternal({
 
     const ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
+      includeGenerationTokenUsage: testIndex === 0 && promptIndex === 0 && repeatIndex === 0,
       latencyMs,
       prompt,
       promptIdx: promptIndex,
@@ -1584,12 +1592,23 @@ async function runEvalInternal({
       logger.error('Provider call failed during eval', logContext);
     }
     const responseTokenUsage = getErrorTokenUsage(err);
-    const errorTokenUsage = responseTokenUsage
+    let errorTokenUsage = responseTokenUsage
       ? normalizeTokenUsage({
           ...responseTokenUsage,
           numRequests: responseTokenUsage.numRequests ?? 1,
         })
       : undefined;
+    if (
+      testIndex === 0 &&
+      promptIndex === 0 &&
+      repeatIndex === 0 &&
+      test.metadata?.providerTokenUsage
+    ) {
+      const combinedTokenUsage = errorTokenUsage ?? createEmptyTokenUsage();
+      if (accumulateGenerationTokenUsage(combinedTokenUsage, test.metadata.providerTokenUsage)) {
+        errorTokenUsage = combinedTokenUsage;
+      }
+    }
 
     return [
       {
@@ -3306,6 +3325,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+    if (row.testIdx === 0 && row.promptIdx === 0) {
+      accumulateGenerationTokenUsage(
+        metrics.tokenUsage,
+        row.testCase?.metadata?.providerTokenUsage,
+      );
+    }
 
     if (row.gradingResult?.tokensUsed) {
       updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);

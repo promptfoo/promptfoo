@@ -253,6 +253,27 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
+ * Fold generation-time provider tokens into evaluation totals without treating
+ * internal generation calls as target probes. Returns whether the payload was valid.
+ */
+export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
+  const parsed = BaseTokenUsageSchema.safeParse(update);
+  if (!parsed.success) {
+    return false;
+  }
+
+  const { assertions: _assertions, numRequests: _numRequests, ...tokenTotals } = parsed.data;
+  const hasTokenTotals =
+    Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
+    Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);
+  if (!hasTokenTotals) {
+    return false;
+  }
+  accumulateTokenUsage(target, tokenTotals);
+  return true;
+}
+
+/**
  * Normalize token usage from a provider response into a standard TokenUsage object.
  * Provides default values for all fields if not present in the response.
  * @param tokenUsage Token usage from provider response (may be partial or undefined)
