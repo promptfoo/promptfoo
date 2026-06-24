@@ -2030,6 +2030,71 @@ describe('evaluator', () => {
       }
     });
 
+    it('rejects non-text metadata scalars across compact storage modes', async () => {
+      const markers = [
+        'RESULT_PLUGIN_SECRET',
+        'HARM_CATEGORY_SECRET',
+        'RESPONSE_FINAL_PROMPT_SECRET',
+        'METADATA_FINAL_PROMPT_SECRET',
+        'TEST_PLUGIN_SECRET',
+        'TEST_STRATEGY_SECRET',
+        'TEST_POLICY_SECRET',
+      ];
+      const createMalformedResult = () =>
+        createEvaluateResult({
+          response: {
+            output: 'safe output',
+            metadata: {
+              redteamFinalPrompt: { secret: 'RESPONSE_FINAL_PROMPT_SECRET' },
+            },
+          },
+          metadata: {
+            pluginId: { secret: 'RESULT_PLUGIN_SECRET' },
+            harmCategory: ['HARM_CATEGORY_SECRET'],
+            redteamFinalPrompt: { secret: 'METADATA_FINAL_PROMPT_SECRET' },
+          },
+          testCase: {
+            metadata: {
+              pluginId: { secret: 'TEST_PLUGIN_SECRET' },
+              strategyId: ['TEST_STRATEGY_SECRET'],
+              policyId: { secret: 'TEST_POLICY_SECRET' },
+            },
+          },
+        } as unknown as Partial<EvaluateResult>);
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createMalformedResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [createMalformedResult()] });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createMalformedResult());
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const fullResult = full.results.results[0];
+
+        expect(compactResult.response).toEqual({ output: 'safe output' });
+        for (const marker of markers) {
+          expect(JSON.stringify(compactResult)).not.toContain(marker);
+        }
+        expect(fullResult.response?.metadata?.redteamFinalPrompt).toEqual({
+          secret: 'RESPONSE_FINAL_PROMPT_SECRET',
+        });
+        expect(fullResult.metadata).toMatchObject({
+          pluginId: { secret: 'RESULT_PLUGIN_SECRET' },
+          harmCategory: ['HARM_CATEGORY_SECRET'],
+          redteamFinalPrompt: { secret: 'METADATA_FINAL_PROMPT_SECRET' },
+        });
+        expect(fullResult.testCase.metadata).toMatchObject({
+          pluginId: expect.any(Object),
+          strategyId: ['TEST_STRATEGY_SECRET'],
+          policyId: expect.any(Object),
+        });
+      }
+    });
+
     it('honors output strip flags in persisted compact projections', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addPrompts([

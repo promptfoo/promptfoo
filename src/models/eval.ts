@@ -196,6 +196,12 @@ function jsonIsObject(value: SQLWrapper): SQL<number> {
   return sql<number>`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN 1 ELSE 0 END ELSE 0 END`;
 }
 
+function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<
+    string | null
+  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
 function projectPromptForRedteamReport<T extends Prompt>(
   prompt: T,
   shouldStripPromptText: boolean,
@@ -399,9 +405,9 @@ function projectTestCaseForRedteamReport(
   }
   return {
     metadata: {
-      ...(metadata.pluginId !== undefined && { pluginId: metadata.pluginId }),
-      ...(metadata.strategyId !== undefined && { strategyId: metadata.strategyId }),
-      ...(metadata.policyId !== undefined && { policyId: metadata.policyId }),
+      ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+      ...(typeof metadata.strategyId === 'string' && { strategyId: metadata.strategyId }),
+      ...(typeof metadata.policyId === 'string' && { policyId: metadata.policyId }),
     },
   };
 }
@@ -427,8 +433,8 @@ function projectResultForRedteamReport(
   const metadata = stripFlags.shouldStripMetadata ? undefined : result.metadata;
   const allowlistedMetadata = metadata
     ? {
-        ...(metadata.pluginId !== undefined && { pluginId: metadata.pluginId }),
-        ...(metadata.harmCategory !== undefined && { harmCategory: metadata.harmCategory }),
+        ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+        ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
         ...(metadata.redteamHistory !== undefined && { redteamHistory: metadata.redteamHistory }),
         ...(metadata.redteamTreeHistory !== undefined && {
           redteamTreeHistory: metadata.redteamTreeHistory,
@@ -437,10 +443,14 @@ function projectResultForRedteamReport(
     : undefined;
   const projectedMetadata = projectMetadataForOutput(allowlistedMetadata, stripFlags, true);
 
+  const redteamFinalPromptCandidate =
+    result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
   const redteamFinalPrompt =
     stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
       ? undefined
-      : (result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt);
+      : typeof redteamFinalPromptCandidate === 'string'
+        ? redteamFinalPromptCandidate
+        : undefined;
   const responsePrompt = result.response?.prompt;
   const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
   const response =
@@ -2243,9 +2253,10 @@ export default class Eval {
         responseExists: jsonIsObject(evalResultsTable.response),
         responseOutput: sql<string | null>`${validResponseJson} -> '$.output'`,
         responsePrompt: sql<string | null>`${validResponseJson} -> '$.prompt'`,
-        responseRedteamFinalPrompt: sql<
-          string | null
-        >`json_extract(${validResponseJson}, '$.metadata.redteamFinalPrompt')`,
+        responseRedteamFinalPrompt: jsonTextOrNull(
+          validResponseJson,
+          '$.metadata.redteamFinalPrompt',
+        ),
         errorExists: sql<number>`CASE
           WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
           ELSE 0
@@ -2305,26 +2316,16 @@ export default class Eval {
           )
           ELSE NULL
         END`,
-        metadataPluginId: sql<string | null>`json_extract(${validMetadataJson}, '$.pluginId')`,
-        metadataHarmCategory: sql<
-          string | null
-        >`json_extract(${validMetadataJson}, '$.harmCategory')`,
-        metadataRedteamFinalPrompt: sql<
-          string | null
-        >`json_extract(${validMetadataJson}, '$.redteamFinalPrompt')`,
+        metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
+        metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
+        metadataRedteamFinalPrompt: jsonTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
         metadataRedteamHistory: sql<string | null>`${validMetadataJson} -> '$.redteamHistory'`,
         metadataRedteamTreeHistory: sql<
           string | null
         >`${validMetadataJson} -> '$.redteamTreeHistory'`,
-        testCasePluginId: sql<
-          string | null
-        >`json_extract(${validTestCaseJson}, '$.metadata.pluginId')`,
-        testCaseStrategyId: sql<
-          string | null
-        >`json_extract(${validTestCaseJson}, '$.metadata.strategyId')`,
-        testCasePolicyId: sql<
-          string | null
-        >`json_extract(${validTestCaseJson}, '$.metadata.policyId')`,
+        testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
+        testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
+        testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),
       })
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, this.id))
