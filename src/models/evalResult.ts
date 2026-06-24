@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { z } from 'zod';
+import { NONSTANDARD_SCORING_BASELINE_METADATA_KEY } from '../assertions/assertionsResult';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable, evalsTable } from '../database/tables';
@@ -510,7 +511,6 @@ type ResultMetricCategory = 'pass' | 'fail' | 'error';
 type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
 type RatingEvalResult = Pick<
   PersistedEvalResult,
-  | 'error'
   | 'failureReason'
   | 'gradingResult'
   | 'manualRatingState'
@@ -733,6 +733,19 @@ function applyLegacyClearedRatingUpdate(
   );
 }
 
+function preserveNonstandardScoringBaseline(
+  previous: GradingResult | null,
+  gradingResult: GradingResult,
+): void {
+  const baseline = asRecord(previous?.metadata)?.[NONSTANDARD_SCORING_BASELINE_METADATA_KEY];
+  if (baseline !== undefined) {
+    gradingResult.metadata = {
+      ...(asRecord(gradingResult.metadata) ?? {}),
+      [NONSTANDARD_SCORING_BASELINE_METADATA_KEY]: baseline,
+    };
+  }
+}
+
 function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
@@ -782,6 +795,7 @@ function normalizeRatingSubmission(
       outcomeChanged ||
       (ratingAction === undefined && exactMinimalNoopRating));
   const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
+  preserveNonstandardScoringBaseline(previous, gradingResult);
 
   if (!shouldHaveManualRating) {
     if (previous && (submittedHasComponents || ratingAction === 'clear')) {
@@ -882,11 +896,15 @@ function getManualRatingFailureReason(
 }
 
 function hasExecutionError(result: RatingEvalResult): boolean {
-  return (
-    normalizeFailureReason(result.failureReason) === ResultFailureReason.ERROR ||
-    (typeof result.error === 'string' && result.error.length > 0) ||
-    typeof asRecord(result.response)?.error === 'string'
-  );
+  const failureReason = normalizeFailureReason(result.failureReason);
+  if (failureReason === ResultFailureReason.ERROR) {
+    return true;
+  }
+  if (failureReason === ResultFailureReason.ASSERT) {
+    return false;
+  }
+  const responseError = asRecord(result.response)?.error;
+  return typeof responseError === 'string' && responseError.length > 0;
 }
 
 function getEditedManualRatingState(
@@ -904,7 +922,29 @@ type AutomatedClearComponent = {
   score: number;
   weight: number;
   failedContentSafetyCheck: boolean;
+  nonstandardScoring: boolean;
 };
+
+function getFlattenedChildCount(
+  component: Record<string, unknown>,
+  rawComponents: unknown[],
+  parentIndex: number,
+): number {
+  if (!Array.isArray(component.componentResults)) {
+    return 0;
+  }
+  const flattenedChildren = component.componentResults.map((child) => {
+    const childRecord = asRecord(child);
+    return childRecord
+      ? { ...childRecord, assertion: childRecord.assertion ?? component.assertion }
+      : child;
+  });
+  return flattenedChildren.every((child, childIndex) =>
+    isDeepStrictEqual(rawComponents[parentIndex + childIndex + 1], child),
+  )
+    ? flattenedChildren.length
+    : 0;
+}
 
 function getAutomatedClearComponents(componentResults: unknown): AutomatedClearComponent[] {
   const rawComponents = Array.isArray(componentResults) ? componentResults : [];
@@ -930,13 +970,14 @@ function getAutomatedClearComponents(componentResults: unknown): AutomatedClearC
           component.pass === false &&
           assertion?.type === 'guardrails' &&
           asRecord(assertion.config)?.purpose === 'redteam',
+        nonstandardScoring:
+          assertion?.type === 'max-score' ||
+          (typeof assertion?.type === 'string' && assertion.type.startsWith('select-')),
       });
     }
     // Assertion-set children are flattened after their aggregate parent for display. The
     // evaluator weights only the parent, so skip the duplicated children here too.
-    if (Array.isArray(component.componentResults)) {
-      index += component.componentResults.length;
-    }
+    index += getFlattenedChildCount(component, rawComponents, index);
   }
   return automatedComponents;
 }
@@ -970,16 +1011,36 @@ function buildServerOwnedClearGradingResult(
   const fallbackPass =
     !hasExecutionError(result) &&
     normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
-  const canReconstructAutomatedOutcome =
-    automatedComponents.length > 0 && !hasOwn(testCase ?? {}, 'assertScoringFunction');
+  const nonstandardScoringBaseline = asRecord(
+    asRecord(current.metadata)?.[NONSTANDARD_SCORING_BASELINE_METADATA_KEY],
+  );
+  const hasNonstandardScoringBaseline =
+    typeof nonstandardScoringBaseline?.pass === 'boolean' &&
+    typeof nonstandardScoringBaseline.score === 'number' &&
+    Number.isFinite(nonstandardScoringBaseline.score);
+  const hasNonstandardScoring =
+    hasNonstandardScoringBaseline ||
+    hasOwn(testCase ?? {}, 'assertScoringFunction') ||
+    automatedComponents.some((component) => component.nonstandardScoring);
+  const canReconstructAutomatedOutcome = automatedComponents.length > 0 && !hasNonstandardScoring;
   const cleared = {
     ...current,
     // A legacy clear submits the whole grading result. Recompute from the server-owned
     // automated components using the evaluator's weighting/threshold rules. Component-less or
-    // custom-scored legacy rows have no recoverable standard score, so use the failure category's
-    // canonical baseline rather than accepting caller-controlled aggregate fields.
-    pass: canReconstructAutomatedOutcome ? automatedPass : fallbackPass,
-    score: canReconstructAutomatedOutcome ? automatedScore : fallbackPass ? 1 : 0,
+    // nonstandard-scored legacy rows have no recoverable standard score, so use the failure
+    // category's canonical baseline rather than accepting caller-controlled aggregate fields.
+    pass: hasNonstandardScoringBaseline
+      ? (nonstandardScoringBaseline.pass as boolean)
+      : canReconstructAutomatedOutcome
+        ? automatedPass
+        : fallbackPass,
+    score: hasNonstandardScoringBaseline
+      ? (nonstandardScoringBaseline.score as number)
+      : canReconstructAutomatedOutcome
+        ? automatedScore
+        : fallbackPass
+          ? 1
+          : 0,
   } as GradingResult;
   cleared.reason = current.reason;
   if (hasOwn(normalized, 'componentResults')) {

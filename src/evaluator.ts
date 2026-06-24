@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
+import { NONSTANDARD_SCORING_BASELINE_METADATA_KEY } from './assertions/assertionsResult';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -1877,6 +1878,19 @@ function mergeComparisonTokenUsage(
   }
 }
 
+function recordNonstandardScoringBaseline(result: EvaluationStoreResult) {
+  if (!result.gradingResult) {
+    return;
+  }
+  result.gradingResult.metadata = {
+    ...result.gradingResult.metadata,
+    [NONSTANDARD_SCORING_BASELINE_METADATA_KEY]: {
+      pass: result.success,
+      score: result.score,
+    },
+  };
+}
+
 function mergeSelectBestGradingResult(
   result: EvaluationStoreResult,
   gradingResult: GradingResult,
@@ -1892,6 +1906,7 @@ function mergeSelectBestGradingResult(
     }
     result.gradingResult.componentResults ||= [];
     result.gradingResult.componentResults.push(gradingResult);
+    recordNonstandardScoringBaseline(result);
     return;
   }
 
@@ -1904,6 +1919,7 @@ function mergeSelectBestGradingResult(
   if (!gradingResult.pass) {
     result.score = result.gradingResult.score = gradingResult.score;
   }
+  recordNonstandardScoringBaseline(result);
 }
 
 function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult: GradingResult) {
@@ -1937,6 +1953,7 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   if (!comparisonPassed) {
     result.score = newScore;
   }
+  recordNonstandardScoringBaseline(result);
 }
 
 function ensureDefaultTestForExtensions(testSuite: TestSuite) {

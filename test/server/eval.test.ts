@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { AssertionsResult } from '../../src/assertions/assertionsResult';
 import { getDb } from '../../src/database';
 import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
@@ -1386,7 +1387,19 @@ describe('eval routes', () => {
           pass: true,
           score: 1,
           reason: 'Weighted pass',
-          assertion: { type: 'equals' as const, value: 'yes', weight: 9 },
+          assertion: {
+            type: 'assert-set' as const,
+            assert: [{ type: 'equals' as const, value: 'yes' }],
+            weight: 9,
+          },
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Nested weighted pass',
+              assertion: { type: 'equals' as const, value: 'yes' },
+            },
+          ],
         },
         {
           pass: false,
@@ -1459,6 +1472,86 @@ describe('eval routes', () => {
       });
     });
 
+    it('restores a durable custom-scoring baseline after the function is stripped', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      const automatedComponent = {
+        pass: true,
+        score: 1,
+        reason: 'Standard component passed',
+        assertion: { type: 'equals' as const, value: 'yes' },
+      };
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({ index: 0, result: automatedComponent });
+      const customBaseline = await assertionsResult.testResult(() => ({
+        pass: false,
+        score: 0.25,
+        reason: 'Custom aggregate failed',
+      }));
+      result.gradingResult = {
+        ...customBaseline,
+        pass: true,
+        score: 1,
+        reason: 'Legacy manual pass',
+        componentResults: [
+          automatedComponent,
+          {
+            pass: true,
+            score: 1,
+            reason: 'Legacy manual pass',
+            assertion: { type: 'human' },
+          },
+        ],
+      };
+      result.success = true;
+      result.score = 1;
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = 'Expected assertion failure';
+      await result.save();
+      const reloadedLegacyRating = await EvalResult.findById(result.id);
+      invariant(reloadedLegacyRating, 'Reloaded legacy rating is required');
+      expect(
+        reloadedLegacyRating.gradingResult?.metadata?.__promptfooNonstandardScoringBaseline,
+      ).toEqual({ pass: false, score: 0.25 });
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      Object.assign(prompt.metrics, {
+        score: 1,
+        testPassCount: 1,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 2,
+        assertFailCount: 1,
+      });
+      await eval_.save();
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({
+          pass: true,
+          score: 999,
+          componentResults: [automatedComponent],
+        });
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: false,
+        score: 0.25,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        score: expect.closeTo(0.25, 10),
+        testPassCount: 0,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 1,
+      });
+    });
+
     it('fails closed on caller aggregate fields when a legacy error has no components', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -1511,6 +1604,77 @@ describe('eval routes', () => {
       expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
         errorMetrics,
       );
+    });
+
+    it('fails closed when clearing an unmarked legacy comparison result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+      const automatedComponents = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Ordinary assertion passed',
+          assertion: { type: 'equals' as const, value: 'yes' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Max-score comparison failed',
+          assertion: { type: 'max-score' as const, value: 'metric' },
+        },
+      ];
+      result.gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Legacy manual pass',
+        componentResults: [
+          ...automatedComponents,
+          {
+            pass: true,
+            score: 1,
+            reason: 'Legacy manual pass',
+            assertion: { type: 'human' },
+          },
+        ],
+      };
+      result.success = true;
+      result.score = 1;
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = 'Max-score comparison failed';
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      Object.assign(prompt.metrics, {
+        score: 1,
+        testPassCount: 1,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 2,
+        assertFailCount: 2,
+      });
+      await eval_.save();
+
+      const clearResponse = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ pass: true, score: 999, componentResults: automatedComponents });
+
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 2,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 2,
+      });
     });
 
     it('discards caller-supplied automated components when no server baseline exists', async () => {

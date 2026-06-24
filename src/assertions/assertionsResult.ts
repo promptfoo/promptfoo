@@ -4,6 +4,7 @@ import { isGradingResult } from '../types/index';
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
+export const NONSTANDARD_SCORING_BASELINE_METADATA_KEY = '__promptfooNonstandardScoringBaseline';
 
 export const DEFAULT_TOKENS_USED = {
   total: 0,
@@ -229,6 +230,16 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
+      // Function-valued test-case fields are intentionally stripped before persistence. Keep
+      // only the inert aggregate needed to restore a manual rating after export/import or when
+      // reading a pre-provenance row; never persist or re-execute the scoring function itself.
+      this.result.metadata = {
+        ...this.result.metadata,
+        [NONSTANDARD_SCORING_BASELINE_METADATA_KEY]: {
+          pass: this.result.pass,
+          score: this.result.score,
+        },
+      };
     }
 
     return this.result;
