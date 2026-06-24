@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import {
+  FINAL_RUNTIME_NOTICE_PHASE_MS,
+  getRuntimeNoticeReminderIntervalDays,
+} from '@app/utils/runtimeCompatibility';
 
 export interface RuntimeCompatibilityNotice {
   id: string;
@@ -51,23 +55,11 @@ interface UseVersionCheckResult {
 const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 const RUNTIME_NOTICE_STORAGE_PREFIX = 'promptfoo:runtime-notice:lastDismissedAt:';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const FINAL_NOTICE_PHASE_MS = 14 * DAY_MS;
 const MAX_TIMER_DELAY_MS = 2_147_000_000;
 const REFRESH_RETRY_MS = 5 * 60 * 1000;
 
 function getRuntimeNoticeStorageKey(noticeId: string): string {
   return `${RUNTIME_NOTICE_STORAGE_PREFIX}${noticeId}`;
-}
-
-function getRuntimeNoticeReminderIntervalDays(
-  notice: RuntimeCompatibilityNotice,
-  now: number = Date.now(),
-): 1 | 7 {
-  const removalTimestamp = Date.parse(`${notice.removalDate}T00:00:00.000Z`);
-  if (Number.isNaN(removalTimestamp)) {
-    return notice.reminderIntervalDays;
-  }
-  return removalTimestamp - now <= FINAL_NOTICE_PHASE_MS ? 1 : 7;
 }
 
 function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
@@ -96,7 +88,7 @@ function getRuntimePolicyRefreshDelay(
 
   const futureBoundaries = [removalTimestamp];
   if (notice) {
-    futureBoundaries.push(removalTimestamp - FINAL_NOTICE_PHASE_MS);
+    futureBoundaries.push(removalTimestamp - FINAL_RUNTIME_NOTICE_PHASE_MS);
   }
   const pendingBoundaries = futureBoundaries.filter((timestamp) => timestamp > now);
 

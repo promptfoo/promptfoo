@@ -117,6 +117,38 @@ describe('UpdateBanner', () => {
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('should show the effective final-phase cadence for a stale runtime notice', () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-07-16T00:00:00.000Z'));
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: false,
+        latestVersion: '1.9.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+          reminderIntervalDays: 7,
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimePolicyUpdatedAt: Date.parse('2026-07-16T00:00:00.000Z'),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByRole('button', { name: 'Remind me tomorrow' })).toBeInTheDocument();
+  });
+
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({

@@ -1,9 +1,10 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../../util/utils';
 
-vi.mock('../../../src/updates');
-vi.mock('../../../src/updates/updateCommands');
-vi.mock('../../../src/util/promptfooCommand');
+vi.mock('../../../src/updates', () => ({ getLatestVersion: vi.fn() }));
+vi.mock('../../../src/updates/updateCommands', () => ({ getUpdateCommands: vi.fn() }));
+vi.mock('../../../src/util/promptfooCommand', () => ({ isRunningUnderNpx: vi.fn() }));
 
 import { createApp } from '../../../src/server/server';
 import { getLatestVersion } from '../../../src/updates';
@@ -73,6 +74,24 @@ describe('Version Route', () => {
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
     expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
+  });
+
+  it('should skip upstream update checks when they are disabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(mockedGetLatestVersion).not.toHaveBeenCalled();
+      expect(response.body.latestVersion).toBe(response.body.currentVersion);
+      expect(response.body.updateAvailable).toBe(false);
+      if (process.versions.node.startsWith('20.')) {
+        expect(response.body.runtimePolicy).toEqual({ supportEndDate: '2026-07-30' });
+      }
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should include all required fields matching UpdateCommandResult shape', async () => {

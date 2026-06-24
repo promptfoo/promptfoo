@@ -70,13 +70,14 @@ const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
-    let latestVersion = versionCache.latestVersion;
+    const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+    let latestVersion = updateChecksDisabled ? VERSION : versionCache.latestVersion;
 
     const cacheExpired = now - versionCache.timestamp > CACHE_DURATION;
     const canRetry = now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
 
     // Fetch if: (no cache OR cache expired) AND we haven't tried recently
-    if ((!latestVersion || cacheExpired) && canRetry) {
+    if (!updateChecksDisabled && (!latestVersion || cacheExpired) && canRetry) {
       versionCache.lastAttempt = now; // Mark attempt time before trying
       try {
         latestVersion = await getLatestVersion();

@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
+import { getRuntimeNoticeReminderIntervalDays } from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
@@ -286,7 +287,9 @@ export default function UpdateBanner() {
         )}
         {activeRuntimeNotice ? (
           <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
-            {getReminderLabel(activeRuntimeNotice.reminderIntervalDays)}
+            {getReminderLabel(
+              getRuntimeNoticeReminderIntervalDays(activeRuntimeNotice, runtimePolicyUpdatedAt),
+            )}
           </Button>
         ) : (
           <button
