@@ -805,9 +805,11 @@ describe('Plugins', () => {
 
     it('should log invalid remote responses without including their body', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: JSON.stringify({ apiKey: 'must-not-appear' }),
         cached: false,
+        deleteFromCache,
         status: 400,
         statusText: 'Bad Request',
       } as FetchWithCacheResult<unknown>);
@@ -829,6 +831,7 @@ describe('Plugins', () => {
         statusText: 'Bad Request',
       });
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
+      expect(deleteFromCache).not.toHaveBeenCalled();
     });
 
     it('should evict unexpected successful statuses from the response cache', async () => {

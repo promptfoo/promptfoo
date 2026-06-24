@@ -449,7 +449,11 @@ async function fetchRemoteTestCases(
       'text',
     );
     if (status !== 200) {
-      await deleteFromCache?.();
+      // fetchWithCache persists only successful responses. Evict unexpected 2xx values, but do
+      // not let a non-cacheable 4xx/5xx response delete a valid result stored concurrently.
+      if (status >= 200 && status < 300) {
+        await deleteFromCache?.();
+      }
       abortSignal?.throwIfAborted();
       logger.error(`Error generating test cases for ${key}`, { status, statusText });
       throw new RemoteGenerationFailure(`Remote generation returned HTTP ${status} for ${key}`);
