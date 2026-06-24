@@ -19,7 +19,8 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 // Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 const mockGetSessionId = vi.hoisted(() => vi.fn());
-const mockIsCleanRefusal = vi.hoisted(() => vi.fn());
+const mockIsBacktrackableRefusal = vi.hoisted(() => vi.fn());
+const mockCheckExfilTracking = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
 const mockResolveTracingOptions = vi.hoisted(() =>
@@ -60,6 +61,11 @@ vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
+vi.mock('../../../../src/redteam/strategies/indirectWebPwn', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkExfilTracking: mockCheckExfilTracking,
+}));
+
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -75,7 +81,7 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
-  isCleanRefusal: mockIsCleanRefusal,
+  isBacktrackableRefusal: mockIsBacktrackableRefusal,
   getSessionId: mockGetSessionId,
 }));
 
@@ -115,6 +121,7 @@ describe('HydraProvider', () => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
+    mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
     mockGetSessionId.mockReset().mockImplementation((response, context) => {
       return response?.sessionId ?? context?.vars?.sessionId;
     });
@@ -154,7 +161,7 @@ describe('HydraProvider', () => {
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
-    mockIsCleanRefusal.mockReturnValue(false);
+    mockIsBacktrackableRefusal.mockReturnValue(false);
 
     // Reset tracing mocks to default (disabled) state
     mockResolveTracingOptions.mockReturnValue({
@@ -734,7 +741,7 @@ describe('HydraProvider', () => {
       });
 
       // First response is a refusal, second is not
-      mockIsCleanRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
+      mockIsBacktrackableRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -763,7 +770,7 @@ describe('HydraProvider', () => {
     it('should stop when max backtracks reached', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
-      mockIsCleanRefusal.mockReturnValue(true); // Always refuse
+      mockIsBacktrackableRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -800,7 +807,7 @@ describe('HydraProvider', () => {
     it('should not backtrack in stateful mode', async () => {
       // Import to trigger the mock
       await import('../../../../src/redteam/util');
-      mockIsCleanRefusal.mockReturnValue(true); // Always refuse
+      mockIsBacktrackableRefusal.mockReturnValue(true); // Always refuse
 
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -1269,6 +1276,7 @@ describe('HydraProvider', () => {
     });
 
     it('passes target response evidence and image outputs into the grader', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -1308,6 +1316,85 @@ describe('HydraProvider', () => {
         output: 'Target response',
         raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
       });
+    });
+
+    it('grades confirmed exfiltration even when response text is a clean refusal', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'I cannot help.',
+        metadata: { wasExfiltrated: true, exfilCount: 2 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        maxBacktracks: 1,
+      });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+        wasExfiltrated: true,
+        exfilCount: 2,
+      });
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
+      expect(result.metadata?.storedGraderResult).toBeDefined();
+    });
+
+    it('grades external web evidence even when response text is backtrackable', async () => {
+      mockIsBacktrackableRefusal.mockReturnValue(true);
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed attack',
+        transformedPrompt: 'transformed attack',
+        metadata: { webPageUuid: 'page-uuid', webPageUrl: '/dynamic-pages/eval-123/page-uuid' },
+      });
+      mockCheckExfilTracking.mockResolvedValue({
+        wasExfiltrated: false,
+        exfilCount: 0,
+        exfilRecords: [],
+      });
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'I cannot help.' });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        evaluationId: 'eval-123',
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockCheckExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-123');
+      expect(mockGrader.getResult).toHaveBeenCalledOnce();
+      expect(result.metadata?.hydraBacktrackCount).toBe(0);
     });
   });
 

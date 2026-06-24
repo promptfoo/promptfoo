@@ -37,7 +37,8 @@ import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   getSessionId,
-  isCleanRefusal,
+  hasProviderResponseGradingEvidence,
+  isBacktrackableRefusal,
 } from '../../util';
 import {
   buildGraderResultAssertion,
@@ -765,10 +766,14 @@ export class HydraProvider implements ApiProvider {
       });
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isCleanRefusal(targetResponse.output);
+      const hasExternalGradingEvidence = Boolean(lastTransformResult?.metadata?.webPageUuid);
+      const isRefusal =
+        !hasExternalGradingEvidence &&
+        !hasProviderResponseGradingEvidence(targetResponse) &&
+        isBacktrackableRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
-        logger.debug('[Hydra] Response rejected (classifier-clean refusal), backtracking...', {
+        logger.debug('[Hydra] Response rejected (backtrackable refusal), backtracking...', {
           turn,
           backtrackCount: backtrackCount + 1,
           maxBacktracks: this.maxBacktracks,

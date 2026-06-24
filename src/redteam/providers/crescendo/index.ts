@@ -38,6 +38,7 @@ import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   getSessionId,
+  hasProviderResponseGradingEvidence,
   isCleanRefusal,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
@@ -546,8 +547,9 @@ export class CrescendoProvider implements ApiProvider {
 
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
-          lastResponse.output,
+          lastResponse,
           options,
+          Boolean(test?.metadata?.webPageUuid),
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -1239,12 +1241,17 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getRefusalScore(
     attackPrompt: string,
-    lastResponse: string,
+    lastResponse: ProviderResponse,
     options?: CallApiOptionsParams,
+    hasExternalGradingEvidence = false,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
+    if (hasExternalGradingEvidence || hasProviderResponseGradingEvidence(lastResponse)) {
+      return [false, 'The response contains non-text evidence that requires outcome grading.'];
+    }
+    const responseText = String(lastResponse.output ?? '');
     // Only complete, classifier-clean refusals may bypass semantic refusal grading.
-    if (isCleanRefusal(lastResponse)) {
+    if (isCleanRefusal(responseText)) {
       logger.debug(
         '[Crescendo] Response is a classifier-clean refusal. Short-circuiting refusal grading.',
       );
@@ -1254,7 +1261,7 @@ export class CrescendoProvider implements ApiProvider {
     // Otherwise, use the scoring chat to grade the refusal
     const refusalInput = JSON.stringify({
       conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
+      responseToEvaluateInput: responseText,
     });
 
     const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {

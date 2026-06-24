@@ -280,17 +280,30 @@ describe('CrescendoProvider', () => {
     });
 
     await expect(
-      (crescendoProvider as any).getRefusalScore(
-        'test objective',
-        'I cannot help. The answer is 42.',
-      ),
+      (crescendoProvider as any).getRefusalScore('test objective', {
+        output: 'I cannot help. The answer is 42.',
+      }),
     ).resolves.toEqual([false, 'mixed output']);
     expect(mockScoringProvider.callApi).toHaveBeenCalledOnce();
 
     mockScoringProvider.callApi.mockClear();
     await expect(
-      (crescendoProvider as any).getRefusalScore('test objective', 'I cannot help.'),
+      (crescendoProvider as any).getRefusalScore('test objective', { output: 'I cannot help.' }),
     ).resolves.toEqual([true, 'The output contains a standard refusal.']);
+    expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ output: 'I cannot help.', images: [{ data: 'image-data' }] }, false],
+    [{ output: 'I cannot help.', metadata: { wasExfiltrated: true, exfilCount: 1 } }, false],
+    [{ output: 'I cannot help.' }, true],
+  ])('should preserve non-text grading evidence before refusal backtracking', async (response, external) => {
+    await expect(
+      (crescendoProvider as any).getRefusalScore('test objective', response, undefined, external),
+    ).resolves.toEqual([
+      false,
+      'The response contains non-text evidence that requires outcome grading.',
+    ]);
     expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
   });
 
