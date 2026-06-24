@@ -1668,10 +1668,41 @@ describe('evaluator', () => {
       expect(JSON.stringify(singletonProjection.config)).not.toContain('singleton-tool-secret');
     });
 
+    it('omits unsupported singleton tool values from compact config', async () => {
+      const configs = [
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: 'file:///private/tools.json?token=claude-file-secret' },
+        },
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: 'Bearer claude-string-secret' },
+        },
+        {
+          id: 'openai:gpt-4.1',
+          config: {
+            tools: {
+              type: 'function',
+              function: { name: 'lookup', description: 'unsupported singleton' },
+            },
+          },
+        },
+      ];
+
+      for (const provider of configs) {
+        const eval_ = new Eval({});
+        eval_.config = { providers: [provider] };
+
+        const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.config.providers).toEqual([{ id: provider.id }]);
+      }
+    });
+
     it('preserves policy row identity when compact grading details are stripped', async () => {
       const policyId = '550e8400-e29b-41d4-a716-446655440000';
       const policyResult = createEvaluateResult({
-        metadata: { pluginId: 'policy' },
+        metadata: undefined,
         testCase: {
           metadata: { pluginId: 'policy', policyId, strategyId: 'basic' },
         },

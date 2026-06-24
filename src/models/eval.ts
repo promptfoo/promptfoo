@@ -528,8 +528,13 @@ function projectToolsForRedteamReport(
   tools: unknown,
   providerId: string,
 ): (Record<string, unknown> | string)[] | undefined {
-  const toolEntries = Array.isArray(tools) ? tools : [tools];
   const supportsNamedTools = providerId === 'anthropic:claude-agent-sdk';
+  const isSupportedSingletonPreset =
+    supportsNamedTools &&
+    isRecord(tools) &&
+    tools.type === 'preset' &&
+    tools.preset === 'claude_code';
+  const toolEntries = Array.isArray(tools) ? tools : isSupportedSingletonPreset ? [tools] : [];
   const projectedTools = toolEntries
     .map((tool) =>
       supportsNamedTools && typeof tool === 'string' ? tool : projectToolForRedteamReport(tool),

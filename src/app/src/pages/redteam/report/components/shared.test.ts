@@ -19,7 +19,6 @@ describe('getReportPrompt', () => {
 describe('getPluginIdFromResult', () => {
   it('uses the canonical test-case policy ID when grading details are stripped', () => {
     const result = {
-      metadata: { pluginId: 'policy' },
       testCase: { metadata: { pluginId: 'policy', policyId: 'policy-123' } },
       gradingResult: null,
     } as unknown as Parameters<typeof getPluginIdFromResult>[0];
