@@ -160,6 +160,9 @@ describe('OpenAICodexPluginProvider', () => {
       );
       expect(marketplace.plugins[0].source.path).toMatch(/^\.\//);
       expect(path.isAbsolute(marketplace.plugins[0].source.path)).toBe(false);
+      expect(
+        fs.readFileSync(path.join(sdkConfig.cli_env.CODEX_HOME, 'config.toml'), 'utf8'),
+      ).toContain(`[marketplaces."promptfoo-eval"]\nsource = "${sdkConfig.cli_env.CODEX_HOME}"`);
       const artifactPath = path.join(
         sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR,
         'scan.json',
