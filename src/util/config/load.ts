@@ -43,6 +43,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { toPosixPath } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests, rebaseTestCaseVarFileReferences } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
@@ -535,7 +536,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       combinedBasePath,
       path.resolve(sourceBasePath, referencedPath),
     );
-    return isFileUrl ? `file://${rebasedPath}` : rebasedPath;
+    return isFileUrl ? `file://${toPosixPath(rebasedPath)}` : rebasedPath;
   };
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {
@@ -1093,9 +1094,11 @@ export async function resolveConfigs(
           if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
             const referencedPath = scenarioTests.slice('file://'.length);
             if (!path.isAbsolute(referencedPath)) {
-              (loadedScenario as { tests: string | TestCase[] }).tests = `file://${path.relative(
-                path.resolve(basePath || process.cwd()),
-                path.resolve(declaringBasePath, referencedPath),
+              (loadedScenario as { tests: string | TestCase[] }).tests = `file://${toPosixPath(
+                path.relative(
+                  path.resolve(basePath || process.cwd()),
+                  path.resolve(declaringBasePath, referencedPath),
+                ),
               )}`;
             }
             addResolvedConfigDependency(

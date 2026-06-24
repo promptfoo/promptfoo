@@ -21,6 +21,7 @@ import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile, isSupportedNestedTextFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
+import { toPosixPath } from './pathUtils';
 import { parseXlsxFile } from './xlsx';
 
 import type {
@@ -73,7 +74,7 @@ function resolveVarFileReferences(
           path.resolve(resolutionBasePath),
           path.resolve(declaringBasePath, filePath),
         );
-        const rebasedRef = `file://${rebasedPath}`;
+        const rebasedRef = `file://${toPosixPath(rebasedPath)}`;
         Object.defineProperty(value, key, {
           ...descriptor,
           value: functionName ? `${rebasedRef}:${functionName}` : rebasedRef,
