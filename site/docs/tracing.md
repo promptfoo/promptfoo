@@ -28,7 +28,7 @@ Tracing provides visibility into:
 - **Built-in OTLP receiver**: No external collector required for basic usage
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
-- **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+- **External OTLP export**: Send Promptfoo's built-in provider spans to Jaeger, Tempo, or another OTLP/HTTP-compatible backend
 
 ## Built-in Provider Instrumentation
 
@@ -438,20 +438,7 @@ tracing:
   localExport: true
 ```
 
-`tracing.forwarding` is separate: it forwards spans received by Promptfoo's built-in OTLP receiver from instrumented applications or subprocesses.
-
-```yaml
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-  forwarding:
-    enabled: true
-    endpoint: 'http://jaeger:4318' # or Tempo, Honeycomb, etc.
-    headers:
-      'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
-```
+Promptfoo's built-in OTLP receiver stores incoming spans locally; it does not relay them. Existing `tracing.forwarding` blocks remain accepted by the config schema for compatibility but have no runtime effect. To send application or subprocess spans to another backend, configure the emitting SDK with multiple exporters or route it through an OpenTelemetry Collector.
 
 ## Provider Implementation Guide
 
@@ -882,6 +869,6 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 - Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
-- Set up forwarding to your observability platform
+- Export Promptfoo's built-in provider spans to your observability platform
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance

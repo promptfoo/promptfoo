@@ -1149,6 +1149,7 @@ export const TestSuiteSchema = z.object({
           retentionDays: z.number(),
         })
         .optional(),
+      // Accepted for configuration compatibility only; the built-in receiver does not relay spans.
       forwarding: z
         .object({
           enabled: z.boolean(),
@@ -1310,6 +1311,7 @@ export const TestSuiteConfigSchema = z.object({
         .optional(),
 
       // Optional: Forward traces to another collector
+      // Accepted for configuration compatibility only; the built-in receiver does not relay spans.
       forwarding: z
         .object({
           enabled: z.boolean().prefault(false),
