@@ -420,6 +420,33 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=response');
   });
 
+  it('rejects present malformed trace token attributes instead of counting them as zero', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 0, source: 'trace' } },
+      renderedValue: { max: 0, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'malformed-token-span',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 100,
+              attributes: { 'gen_ai.usage.input_tokens': 'bogus' },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      'Invalid trace token usage attribute "gen_ai.usage.input_tokens": expected a finite non-negative number',
+    );
+  });
+
   it('uses the larger provider total when an automatic trace reports zero', () => {
     const params: AssertionParams = {
       ...baseParams,

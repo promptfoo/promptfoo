@@ -262,25 +262,27 @@ type RestoreResult<T> = {
 function collectStoredAzureBlobSasTokens(
   value: unknown,
   tokensByRedactedUri = new Map<string, string | null>(),
+  path: Array<string | number> = [],
 ): Map<string, string | null> {
   if (typeof value === 'string') {
     const redacted = redactAzureBlobSasToken(value);
     if (redacted !== value) {
-      const storedValue = tokensByRedactedUri.get(redacted);
+      const key = JSON.stringify([path, redacted]);
+      const storedValue = tokensByRedactedUri.get(key);
       if (storedValue === undefined) {
-        tokensByRedactedUri.set(redacted, value);
+        tokensByRedactedUri.set(key, value);
       } else if (storedValue !== value) {
         // Two stored secrets collapse to the same redacted URI. Leave future
         // submissions redacted rather than guessing which credential to reuse.
-        tokensByRedactedUri.set(redacted, null);
+        tokensByRedactedUri.set(key, null);
       }
     }
     return tokensByRedactedUri;
   }
 
   if (Array.isArray(value)) {
-    for (const item of value) {
-      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+    for (const [index, item] of value.entries()) {
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, index]);
     }
     return tokensByRedactedUri;
   }
@@ -289,8 +291,8 @@ function collectStoredAzureBlobSasTokens(
     return tokensByRedactedUri;
   }
 
-  for (const item of Object.values(value)) {
-    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+  for (const [key, item] of Object.entries(value)) {
+    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, key]);
   }
   return tokensByRedactedUri;
 }
@@ -298,9 +300,10 @@ function collectStoredAzureBlobSasTokens(
 function restoreAzureBlobSasTokensFromMap<T>(
   value: T,
   tokensByRedactedUri: ReadonlyMap<string, string | null>,
+  path: Array<string | number> = [],
 ): RestoreResult<T> {
   if (typeof value === 'string') {
-    const storedValue = tokensByRedactedUri.get(value);
+    const storedValue = tokensByRedactedUri.get(JSON.stringify([path, value]));
     return storedValue == null
       ? { value, restored: false }
       : { value: storedValue as T, restored: true };
@@ -308,8 +311,8 @@ function restoreAzureBlobSasTokensFromMap<T>(
 
   if (Array.isArray(value)) {
     let restored = false;
-    const restoredItems = value.map((item) => {
-      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+    const restoredItems = value.map((item, index) => {
+      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, index]);
       restored ||= result.restored;
       return result.value;
     });
@@ -322,7 +325,7 @@ function restoreAzureBlobSasTokensFromMap<T>(
 
   let restored = false;
   const restoredEntries = Object.entries(value).map(([key, item]) => {
-    const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+    const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, key]);
     restored ||= result.restored;
     return [key, result.value];
   });
@@ -341,7 +344,10 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    const storedTokensByRedactedUri = new Map<string, string | null>();
+    for (const storedItem of storedItems) {
+      collectStoredAzureBlobSasTokens(storedItem, storedTokensByRedactedUri);
+    }
     const hasSameLength = value.length === storedItems.length;
     const redactedStoredItems = storedItems.map((item) => redactAzureBlobSasTokens(item));
     let restored = false;

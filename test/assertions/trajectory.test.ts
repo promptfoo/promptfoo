@@ -1430,7 +1430,12 @@ describe('trajectory assertions', () => {
     });
 
     it('rejects blank and malformed tool matchers before applying inversion', () => {
-      for (const tools of [['   '], [{ name: 123 }]]) {
+      for (const tools of [
+        ['   '],
+        [{ name: 123 }],
+        [{ name: 'dangerous', pattern: '   ' }],
+        [{ name: 'dangerous', type: 'bogus' }],
+      ]) {
         const params: AssertionParams = {
           ...baseSetParams,
           inverse: true,
@@ -1811,6 +1816,24 @@ describe('trajectory assertions', () => {
           'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: [redacted]',
         assertion: params.assertion,
       });
+    });
+
+    it.each([
+      { name: 'search_orders', type: 'bogus', args: { order_id: '123' } },
+      { name: 'search_orders', pattern: '   ', args: { order_id: '123' } },
+    ])('rejects malformed inverse tool-args matchers before applying inversion', (value) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        inverse: true,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'not-trajectory:tool-args-match',
+          value: value as any,
+        },
+        renderedValue: value as any,
+      };
+
+      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow();
     });
 
     it('passes inverse assertions when no tool call matches the requested tool', () => {

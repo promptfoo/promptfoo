@@ -224,6 +224,12 @@ describe('traceAssertionConfig shared validators', () => {
       expect(trajectoryToolSetConfigError(['   '])).toBe(error);
       expect(trajectoryToolSetConfigError({ tools: [{ name: 123 }] })).toBe(error);
       expect(trajectoryToolSetConfigError({ tools: [{ pattern: '' }] })).toBe(error);
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 'search', pattern: '   ' }] })).toBe(
+        error,
+      );
+      expect(trajectoryToolSetConfigError({ tools: [{ name: 'search', type: 'bogus' }] })).toBe(
+        error,
+      );
       expect(trajectoryToolSetConfigError({ tools: [{ pattern: 'search_*' }] })).toBeUndefined();
     });
   });

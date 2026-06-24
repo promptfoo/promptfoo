@@ -85,8 +85,31 @@ function hasTokenUsageAttributes(attributes: Record<string, unknown> | undefined
   );
 }
 
+function invalidTokenUsageAttribute(
+  attributes: Record<string, unknown> | undefined,
+): string | null {
+  if (!attributes) {
+    return null;
+  }
+  for (const attributeName of TOKEN_USAGE_ATTRIBUTE_KEYS) {
+    const value = attributes[attributeName];
+    if (value !== undefined && value !== null && nonNegativeTokenValue(value) === undefined) {
+      return attributeName;
+    }
+  }
+  return null;
+}
+
 function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
   const matchedSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const invalidAttribute = matchedSpans
+    .map((span) => invalidTokenUsageAttribute(span.attributes))
+    .find((attributeName) => attributeName !== null);
+  if (invalidAttribute) {
+    throw new Error(
+      `Invalid trace token usage attribute "${invalidAttribute}": expected a finite non-negative number`,
+    );
+  }
 
   return {
     hasUsage: matchedSpans.some((span) => hasTokenUsageAttributes(span.attributes)),

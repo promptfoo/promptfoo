@@ -304,13 +304,26 @@ export function trajectoryToolSetConfigError(value: unknown): string | undefined
   if (tools.length === 0) {
     return 'trajectory:tool-set assertion requires at least one expected tool';
   }
-  const hasUsableMatcher = (tool: unknown): boolean =>
-    typeof tool === 'string'
-      ? tool.trim().length > 0
-      : isPlainObject(tool) &&
-        ((typeof tool.name === 'string' && tool.name.trim().length > 0) ||
-          (typeof tool.pattern === 'string' && tool.pattern.trim().length > 0));
-  if (!tools.every(hasUsableMatcher)) {
+  const hasValidToolMatcher = (tool: unknown): boolean => {
+    if (typeof tool === 'string') {
+      return tool.trim().length > 0;
+    }
+    if (!isPlainObject(tool)) {
+      return false;
+    }
+    const hasName = Object.hasOwn(tool, 'name');
+    const hasPattern = Object.hasOwn(tool, 'pattern');
+    const validName = !hasName || (typeof tool.name === 'string' && tool.name.trim().length > 0);
+    const validPattern =
+      !hasPattern || (typeof tool.pattern === 'string' && tool.pattern.trim().length > 0);
+    const rawType = tool.type;
+    const validType =
+      rawType === undefined ||
+      rawType === 'tool' ||
+      (Array.isArray(rawType) && rawType.length > 0 && rawType.every((type) => type === 'tool'));
+    return validName && validPattern && validType && (hasName || hasPattern);
+  };
+  if (!tools.every(hasValidToolMatcher)) {
     return 'Each trajectory tool set entry needs a name or pattern.';
   }
   return undefined;

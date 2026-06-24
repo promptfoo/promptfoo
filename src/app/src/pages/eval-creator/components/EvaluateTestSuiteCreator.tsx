@@ -86,7 +86,7 @@ const EvaluateTestSuiteCreator = () => {
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, setConfig, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
@@ -199,7 +199,7 @@ const EvaluateTestSuiteCreator = () => {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+              setConfig({ ...config, ...(parsedConfig as Partial<UnifiedConfig>) });
               setResetKey((k) => k + 1);
               showToast('Configuration loaded successfully', 'success');
             } else {

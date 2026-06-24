@@ -194,6 +194,25 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('does not move a stored SAS credential to a different semantic field', () => {
+      const redactedUri = 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [{ vars: { leak: redactedUri } }] },
+          {
+            tests: [
+              {
+                vars: {
+                  file: 'az://account/container/a.yaml?sp=r&sig=source-secret',
+                },
+              },
+            ],
+          },
+        ),
+      ).toEqual({ tests: [{ vars: { leak: redactedUri } }] });
+    });
+
     it('should leave ambiguous reordered Azure Blob SAS URIs redacted', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
@@ -604,7 +623,7 @@ describe('sanitizeObject', () => {
       });
     });
 
-    it('combines positional and identity restoration within the same array item', () => {
+    it('does not move a reordered credential between fields within an array item', () => {
       const stored = {
         tests: [
           {
@@ -636,7 +655,7 @@ describe('sanitizeObject', () => {
         tests: [
           {
             primary: 'az://account/container/a.yaml?sp=r&sig=secret-a',
-            secondary: 'az://account/container/c.yaml?sp=r&sig=secret-c',
+            secondary: 'az://account/container/c.yaml?sp=r&sig=%5BREDACTED%5D',
           },
           {
             primary: 'inline suite',

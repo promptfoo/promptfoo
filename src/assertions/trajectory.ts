@@ -90,14 +90,29 @@ function requireNamedTrajectoryMatcher(
   assertionType: string,
   index?: number,
 ) {
-  if (matcher.pattern || matcher.name) {
-    return;
+  const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
+  for (const field of ['name', 'pattern'] as const) {
+    const value = matcher[field];
+    if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+      throw new Error(
+        `${assertionType} assertion ${stepLabel} ${field} must be a non-empty string`,
+      );
+    }
+  }
+  if (matcher.pattern === undefined && matcher.name === undefined) {
+    throw new Error(
+      `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
+    );
   }
 
-  const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
-  throw new Error(
-    `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
-  );
+  const rawType = matcher.type as unknown;
+  const matcherTypes = Array.isArray(rawType) ? rawType : rawType === undefined ? [] : [rawType];
+  if (
+    rawType !== undefined &&
+    (matcherTypes.length === 0 || matcherTypes.some((type) => type !== 'tool'))
+  ) {
+    throw new Error(`${assertionType} assertion ${stepLabel} type must be "tool"`);
+  }
 }
 
 function resolveTrajectoryCountBounds(
