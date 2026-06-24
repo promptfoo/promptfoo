@@ -399,6 +399,47 @@ describe('synthesize', () => {
       });
     });
 
+    it('should rethrow a usage-bearing strategy failure when no rows survive', async () => {
+      vi.mocked(extractSystemPurposeWithMetadata).mockResolvedValueOnce({
+        result: 'Test purpose',
+        tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+      });
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'test-plugin',
+        action: vi.fn().mockResolvedValue([
+          {
+            vars: { query: 'generated prompt' },
+            metadata: {
+              providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            },
+          },
+        ]),
+      } as any);
+      const strategyError = Object.assign(new Error('citation generation failed'), {
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'citation',
+        action: vi.fn().mockRejectedValue(strategyError),
+      });
+
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'basic', config: { enabled: false } }, { id: 'citation' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toBe(strategyError);
+      expect(strategyError.tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 3,
+      });
+    });
+
     it('should retain failed plugin usage when another plugin produces a row', async () => {
       vi.spyOn(Plugins, 'find').mockImplementation(
         (predicate) =>

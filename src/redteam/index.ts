@@ -639,10 +639,12 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
   tokenUsage: TokenUsage | undefined;
+  error: unknown;
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
   let tokenUsage: TokenUsage | undefined;
+  let firstError: unknown;
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
@@ -730,6 +732,7 @@ async function applyStrategies(
       if (!errorTokenUsage) {
         throw error;
       }
+      firstError ??= error;
       tokenUsage = mergeProviderTokenUsage(tokenUsage, errorTokenUsage);
       logger.warn(`Strategy ${strategy.id} failed after reporting provider usage`, {
         error: error instanceof Error ? error.message : String(error),
@@ -881,7 +884,7 @@ async function applyStrategies(
     }
   }
 
-  return { testCases: newTestCases, strategyResults, tokenUsage };
+  return { testCases: newTestCases, strategyResults, tokenUsage, error: firstError };
 }
 
 /**
@@ -1741,6 +1744,7 @@ export async function synthesize({
     failedPluginTokenUsage,
   );
   let failedStrategyTokenUsage: TokenUsage | undefined;
+  let failedStrategyError: unknown;
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -1760,6 +1764,7 @@ export async function synthesize({
       testCases: retryTestCases,
       strategyResults: retryResults,
       tokenUsage: retryTokenUsage,
+      error: retryError,
     } = await applyStrategies(
       pluginTestCases,
       [retryStrategy],
@@ -1770,6 +1775,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
     );
+    failedStrategyError ??= retryError;
     failedStrategyTokenUsage = mergeProviderTokenUsage(failedStrategyTokenUsage, retryTokenUsage);
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1789,6 +1795,7 @@ export async function synthesize({
     testCases: strategyTestCases,
     strategyResults: otherStrategyResults,
     tokenUsage: strategyTokenUsage,
+    error: strategyError,
   } = await applyStrategies(
     pluginTestCases,
     nonBasicStrategies,
@@ -1799,6 +1806,7 @@ export async function synthesize({
     maxCharsPerMessage,
     redteamGenerationContext,
   );
+  failedStrategyError ??= strategyError;
   failedStrategyTokenUsage = mergeProviderTokenUsage(failedStrategyTokenUsage, strategyTokenUsage);
 
   Object.assign(strategyResults, otherStrategyResults);
@@ -1817,6 +1825,13 @@ export async function synthesize({
       mergeProviderTokenUsage(purposeExtraction.tokenUsage, entityExtraction.tokenUsage),
     ),
   );
+  if (
+    combinedTestCases.length === 0 &&
+    failedStrategyError !== null &&
+    typeof failedStrategyError === 'object'
+  ) {
+    throw Object.assign(failedStrategyError, { tokenUsage: sharedGenerationTokenUsage });
+  }
   const finalTestCases = attachProviderTokenUsage(combinedTestCases, sharedGenerationTokenUsage);
 
   // Check for abort signal
