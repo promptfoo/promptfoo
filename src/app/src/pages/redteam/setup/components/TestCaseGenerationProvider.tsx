@@ -139,7 +139,6 @@ async function callTestGenerationApi(
       : plugin;
 
   return callApiJson(ApiRoutes.Redteam.GenerateTest, RedteamResponseSchemas.GenerateTest.Response, {
-    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -167,7 +166,6 @@ async function callTestExecutionApi(
   abortController: AbortController,
 ) {
   return callApiJson(ApiRoutes.Providers.Test, ProviderResponseSchemas.Test.Response, {
-    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },

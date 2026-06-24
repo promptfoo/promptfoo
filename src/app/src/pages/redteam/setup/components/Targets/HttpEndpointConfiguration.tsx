@@ -179,7 +179,6 @@ Content-Type: application/json
         ApiRoutes.Providers.Test,
         ProviderResponseSchemas.Test.Response,
         {
-          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ providerOptions: selectedTarget }),
         },
@@ -436,7 +435,6 @@ ${exampleRequest}`;
         ApiRoutes.Providers.HttpGenerator,
         ProviderResponseSchemas.HttpGenerator.Response,
         {
-          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             requestExample: request,

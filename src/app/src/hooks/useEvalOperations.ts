@@ -25,7 +25,6 @@ export function useEvalOperations() {
           ApiRoutes.Eval.Replay,
           EvalResponseSchemas.Replay.Response,
           {
-            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },

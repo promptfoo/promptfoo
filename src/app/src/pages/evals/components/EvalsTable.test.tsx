@@ -320,7 +320,6 @@ describe('EvalsTable', () => {
 
     await waitFor(() => {
       expect(callApiEmpty).toHaveBeenCalledWith(ApiRoutes.Eval.BulkDelete, {
-        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },

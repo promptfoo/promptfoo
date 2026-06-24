@@ -984,7 +984,6 @@ async function saveManualRating({
   if (version && version >= 4) {
     await callApiJson(ApiRoutes.Eval.SubmitRating, EvalResponseSchemas.SubmitRating.Response, {
       params: { evalId, id: resultId },
-      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -993,7 +992,6 @@ async function saveManualRating({
   } else {
     await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
       params: { id: evalId },
-      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
       },

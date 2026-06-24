@@ -127,7 +127,6 @@ const legacyDirectCallApiMockFiles = new Set([
   'pages/redteam/setup/components/Purpose.test.tsx',
   'pages/redteam/setup/components/Review.test.tsx',
   'pages/redteam/setup/components/Targets/tabs/SessionsTab.test.tsx',
-  'utils/api/downloads.test.ts',
 ]);
 
 function findTestFiles(dir: string): string[] {

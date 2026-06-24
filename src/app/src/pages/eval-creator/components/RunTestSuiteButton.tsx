@@ -109,7 +109,6 @@ const RunTestSuiteButton = () => {
         ApiRoutes.Eval.CreateJob,
         EvalResponseSchemas.CreateJob.Response,
         {
-          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },

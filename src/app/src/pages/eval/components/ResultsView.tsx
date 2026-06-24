@@ -404,7 +404,6 @@ export default function ResultsView({
         ApiRoutes.Results.Share,
         ServerResponseSchemas.Share.Response,
         {
-          method: 'POST',
           body: JSON.stringify({ id }),
           headers: {
             'Content-Type': 'application/json',
@@ -590,7 +589,6 @@ export default function ResultsView({
 
         await callApiJson(ApiRoutes.Eval.Update, EvalResponseSchemas.Update.Response, {
           params: { id: evalId as string },
-          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -620,7 +618,6 @@ export default function ResultsView({
           EvalResponseSchemas.Copy.Response,
           {
             params: { id: evalId },
-            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
@@ -693,7 +690,6 @@ export default function ResultsView({
     try {
       await callApiJson(ApiRoutes.Eval.Delete, EvalResponseSchemas.Delete.Response, {
         params: { id: evalId },
-        method: 'DELETE',
       });
 
       showToast('Eval deleted', 'success');

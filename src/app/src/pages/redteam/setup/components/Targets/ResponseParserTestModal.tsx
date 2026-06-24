@@ -32,7 +32,6 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
       ApiRoutes.Providers.TestResponseTransform,
       ProviderResponseSchemas.TestResponseTransform.Response,
       {
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },

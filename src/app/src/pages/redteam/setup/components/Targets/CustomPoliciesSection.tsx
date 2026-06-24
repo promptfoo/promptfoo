@@ -390,7 +390,6 @@ export const CustomPoliciesSection = () => {
         RedteamResponseSchemas.Task.Response,
         {
           params: { taskId: 'custom-policy-generation-task' },
-          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             applicationDefinition: config.applicationDefinition,

@@ -174,7 +174,6 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
         ApiRoutes.Providers.Discover,
         ProviderResponseSchemas.Discover.Response,
         {
-          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(config.target),
         },

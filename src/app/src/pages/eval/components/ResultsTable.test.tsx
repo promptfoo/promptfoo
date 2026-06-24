@@ -4188,7 +4188,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         expect.anything(),
         expect.objectContaining({
           params: { evalId: '123', id: 'test-output-1' },
-          method: 'POST',
         }),
       );
     });

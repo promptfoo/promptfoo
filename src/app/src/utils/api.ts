@@ -65,12 +65,12 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
   return fetch(`${getApiBaseUrl()}/api${path}`, options);
 }
 
-export type ApiRequestOptions = RequestInit & {
+export type ApiRequestOptions = Omit<RequestInit, 'method'> & {
   params?: Record<string, string | number>;
   query?: URLSearchParams;
 };
 
-type CallableApiRoute = Pick<ApiRouteContract, 'expressPath' | 'method' | 'operationId'>;
+type CallableApiRoute = Pick<ApiRouteContract, 'expressPath' | 'method'>;
 
 export class ApiResponseError extends Error {
   constructor(
@@ -97,22 +97,14 @@ function createRoutePath(
   return search ? `${path}?${search}` : path;
 }
 
-async function callContractApi(
+export async function callApiResponse(
   route: CallableApiRoute,
-  params: Record<string, string | number> | undefined,
-  query: URLSearchParams | undefined,
-  requestInit: RequestInit,
+  options: ApiRequestOptions = {},
 ): Promise<Response> {
-  const expectedMethod = route.method.toUpperCase();
-  const requestedMethod = requestInit.method?.toUpperCase();
-  if (requestedMethod && requestedMethod !== expectedMethod) {
-    throw new Error(
-      `API route ${route.operationId} requires ${expectedMethod}, received ${requestedMethod}`,
-    );
-  }
+  const { params, query, ...requestInit } = options;
   return fetch(`${getApiBaseUrl()}${createRoutePath(route, params, query)}`, {
     ...requestInit,
-    method: expectedMethod,
+    method: route.method.toUpperCase(),
   });
 }
 
@@ -134,8 +126,7 @@ export async function callApiResult<T>(
   schema: ZodType<T>,
   options: ApiRequestOptions = {},
 ): Promise<ApiResult<T>> {
-  const { params, query, ...requestInit } = options;
-  const response = await callContractApi(route, params, query, requestInit);
+  const response = await callApiResponse(route, options);
   if (!response.ok) {
     return { ok: false, error: await readErrorResponse(response), response };
   }
@@ -158,8 +149,7 @@ export async function callApiEmpty(
   route: CallableApiRoute,
   options: ApiRequestOptions = {},
 ): Promise<void> {
-  const { params, query, ...requestInit } = options;
-  const response = await callContractApi(route, params, query, requestInit);
+  const response = await callApiResponse(route, options);
   if (!response.ok) {
     throw await readErrorResponse(response);
   }
@@ -167,9 +157,7 @@ export async function callApiEmpty(
 
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const data = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response, {
-      method: 'GET',
-    });
+    const data = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response);
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -179,9 +167,7 @@ export async function fetchUserEmail(): Promise<string | null> {
 
 export async function fetchUserId(): Promise<string | null> {
   try {
-    const data = await callApiJson(ApiRoutes.User.GetId, UserSchemas.GetId.Response, {
-      method: 'GET',
-    });
+    const data = await callApiJson(ApiRoutes.User.GetId, UserSchemas.GetId.Response);
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -199,7 +185,6 @@ export async function updateEvalAuthor(
       EvalResponseSchemas.UpdateAuthor.Response,
       {
         params: { id: evalId },
-        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },

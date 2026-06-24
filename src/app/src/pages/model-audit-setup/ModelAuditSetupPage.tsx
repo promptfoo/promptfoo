@@ -106,7 +106,6 @@ export default function ModelAuditSetupPage() {
         ApiRoutes.ModelAudit.Scan,
         ModelAuditSchemas.Scan.Response,
         {
-          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             paths: paths.map((p) => p.path),

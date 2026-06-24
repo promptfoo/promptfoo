@@ -226,7 +226,6 @@ export default function RedTeamSetupPage() {
 
     try {
       const data = await callApiJson(ApiRoutes.Configs.Create, ConfigSchemas.Create.Response, {
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -130,7 +130,6 @@ export default function EvalsTable({
     try {
       setIsLoading(true);
       await callApiEmpty(ApiRoutes.Eval.BulkDelete, {
-        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },

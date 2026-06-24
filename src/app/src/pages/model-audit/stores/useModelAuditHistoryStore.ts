@@ -177,7 +177,6 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     try {
       await callApiJson(ApiRoutes.ModelAudit.DeleteScan, ModelAuditSchemas.DeleteScan.Response, {
         params: { id },
-        method: 'DELETE',
       });
     } catch (error) {
       // Revert optimistic update on failure

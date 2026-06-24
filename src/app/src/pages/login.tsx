@@ -36,7 +36,6 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
 
   try {
     const response = await callApiResult(ApiRoutes.User.Login, UserSchemas.Login.Response, {
-      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },

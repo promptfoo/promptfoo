@@ -55,7 +55,6 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
       ApiRoutes.Providers.TestRequestTransform,
       ProviderResponseSchemas.TestRequestTransform.Response,
       {
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -551,7 +551,6 @@ describe('SessionsTab', () => {
         expect(callApi).toHaveBeenCalledWith(
           '/providers/test-session',
           expect.objectContaining({
-            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: expect.stringContaining(baseProvider.config.url as string),
           }),

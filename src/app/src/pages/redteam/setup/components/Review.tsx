@@ -593,7 +593,6 @@ export default function Review({
 
     try {
       const { id } = await callApiJson(ApiRoutes.Redteam.Run, RedteamResponseSchemas.Run.Response, {
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -622,9 +621,7 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApiJson(ApiRoutes.Redteam.Cancel, RedteamResponseSchemas.Cancel.Response, {
-        method: 'POST',
-      });
+      await callApiJson(ApiRoutes.Redteam.Cancel, RedteamResponseSchemas.Cancel.Response);
 
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);

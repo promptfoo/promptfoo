@@ -49,7 +49,6 @@ export const useUserStore = create<UserState>((set, getState) => ({
   logout: async () => {
     try {
       const response = await callApiResult(ApiRoutes.User.Logout, UserSchemas.Logout.Response, {
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },

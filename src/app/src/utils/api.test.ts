@@ -5,6 +5,7 @@ import {
   ApiResponseError,
   callApi,
   callApiJson,
+  callApiResponse,
   callApiResult,
   fetchUserEmail,
   fetchUserId,
@@ -163,11 +164,21 @@ describe('typed route API helpers', () => {
     expect(mockFetch).toHaveBeenCalledWith('/api/user/logout', { method: 'POST' });
   });
 
-  it('rejects request methods that conflict with the route contract', async () => {
-    await expect(
-      callApiJson(ApiRoutes.User.Logout, UserSchemas.Logout.Response, { method: 'GET' }),
-    ).rejects.toThrow('API route logoutUser requires POST, received GET');
-    expect(mockFetch).not.toHaveBeenCalled();
+  it('returns raw responses with encoded params and query values', async () => {
+    const mockResponse = new Response('name,score\nexample,1', {
+      headers: { 'Content-Type': 'text/csv' },
+    });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const response = await callApiResponse(ApiRoutes.Eval.Table, {
+      params: { id: 'suite/result 1' },
+      query: new URLSearchParams({ format: 'csv' }),
+    });
+
+    expect(response).toBe(mockResponse);
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/suite%2Fresult%201/table?format=csv', {
+      method: 'GET',
+    });
   });
 
   it('returns parsed error envelopes without requiring raw response casts', async () => {

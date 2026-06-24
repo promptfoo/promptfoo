@@ -105,7 +105,6 @@ export function useEmailVerification() {
         ApiRoutes.User.Update,
         UserSchemas.Update.Response,
         {
-          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -129,9 +128,6 @@ export function useEmailVerification() {
       const emailResponse = await callApiResult(
         ApiRoutes.User.ClearEmail,
         UserSchemas.ClearEmail.Response,
-        {
-          method: 'PUT',
-        },
       );
 
       if (!emailResponse.ok) {
