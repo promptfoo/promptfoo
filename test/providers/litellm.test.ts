@@ -24,12 +24,12 @@ const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
-const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
-
 describe('LiteLLM Provider', () => {
+  let restoreEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({
+    restoreEnv = mockProcessEnv({
       LITELLM_API_KEY: undefined,
       OPENAI_API_KEY: undefined,
       OPENAI_TEMPERATURE: undefined,
@@ -40,11 +40,7 @@ describe('LiteLLM Provider', () => {
     vi.resetAllMocks();
     mockFetch.mockReset();
     vi.unstubAllEnvs();
-    if (originalOpenAiTemperature === undefined) {
-      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
-    } else {
-      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
-    }
+    restoreEnv();
   });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
