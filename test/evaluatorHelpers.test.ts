@@ -599,7 +599,7 @@ describe('evaluatorHelpers', () => {
         expect(vars.context.message).toBe('file:///path/to/message.txt');
         expect(renderedPrompt).toBe('file:///path/to/message.txt');
         expect(renderedPrompt).not.toContain(needle);
-        expect(readFile).toHaveBeenCalledWith('/path/to/message.txt');
+        expect(readFile).toHaveBeenCalledWith(actualPathResolve('/path/to/message.txt'));
         vi.restoreAllMocks();
       }
     });
@@ -685,7 +685,7 @@ describe('evaluatorHelpers', () => {
         );
         expect(fileRendered, `file path leaked for: ${template}`).not.toContain(SECRET);
         expect(fileVars.context.message).toBe('file:///path/to/message.txt');
-        expect(readFile).toHaveBeenCalledWith('/path/to/message.txt');
+        expect(readFile).toHaveBeenCalledWith(actualPathResolve('/path/to/message.txt'));
         vi.restoreAllMocks();
 
         // form-2 path: the exotic template is a plain nested string.
