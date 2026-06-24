@@ -207,6 +207,9 @@ function resolveCodexPluginPaths(config: OpenAICodexPluginConfig): OpenAICodexPl
   const workspace = resolveConfiguredPath(config.workspace, config.basePath);
   const workingDir = resolveConfiguredPath(config.working_dir, config.basePath);
   const artifactsDir = resolveConfiguredPath(config.artifacts_dir, config.basePath);
+  const additionalDirectories = config.additional_directories?.map(
+    (directory) => resolveConfiguredPath(directory, config.basePath) ?? directory,
+  );
 
   return {
     ...config,
@@ -214,6 +217,7 @@ function resolveCodexPluginPaths(config: OpenAICodexPluginConfig): OpenAICodexPl
     ...(workspace ? { workspace } : {}),
     ...(workingDir ? { working_dir: workingDir } : {}),
     ...(artifactsDir ? { artifacts_dir: artifactsDir } : {}),
+    ...(additionalDirectories ? { additional_directories: additionalDirectories } : {}),
   };
 }
 

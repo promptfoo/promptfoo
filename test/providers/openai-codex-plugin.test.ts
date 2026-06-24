@@ -124,12 +124,14 @@ describe('OpenAICodexPluginProvider', () => {
     const configRoot = path.join(root, 'config');
     fs.mkdirSync(configRoot);
     const relativePluginRoot = writePlugin(configRoot);
+    fs.mkdirSync(path.join(configRoot, 'extra'));
     const provider = new OpenAICodexPluginProvider({
       config: {
         basePath: configRoot,
         plugin: { path: '{{ pluginPath }}' },
         workspace: '{{ workspacePath }}',
         skill: '{{ skillName }}',
+        additional_directories: ['./extra'],
       },
     });
 
@@ -141,6 +143,10 @@ describe('OpenAICodexPluginProvider', () => {
     const sdkConfig = mocks.MockOpenAICodexSDKProvider.mock.calls[0][0].config;
     expect(relativePluginRoot).toBe(path.join(configRoot, 'plugin'));
     expect(sdkConfig.working_dir).toBe(workspace);
+    expect(sdkConfig.additional_directories).toEqual([
+      path.join(configRoot, 'extra'),
+      sdkConfig.cli_env.PROMPTFOO_CODEX_PLUGIN_ARTIFACT_DIR,
+    ]);
     expect(mocks.callApi).toHaveBeenCalledWith(
       'Use the demo-plugin:demo-skill skill.\n\nReturn JSON',
       expect.any(Object),
