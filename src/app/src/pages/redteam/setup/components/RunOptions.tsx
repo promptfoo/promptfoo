@@ -142,6 +142,7 @@ export const MaxCharsPerMessageInput = ({
   setValue,
   updateConfig,
   readOnly,
+  maxCharsPerMessage,
   minCharsPerMessage,
 }: MaxCharsPerMessageInputProps) => {
   const parsedValue = Number(value);
@@ -453,6 +454,7 @@ export const RunOptionsContent = ({
         value={maxCharsPerMessageInput}
         setValue={setMaxCharsPerMessageInput}
         updateConfig={updateConfig}
+        maxCharsPerMessage={maxCharsPerMessage}
         minCharsPerMessage={minCharsPerMessage}
       />
 
