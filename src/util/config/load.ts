@@ -536,7 +536,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       combinedBasePath,
       path.resolve(sourceBasePath, referencedPath),
     );
-    return isFileUrl ? `file://${toPosixPath(rebasedPath)}` : rebasedPath;
+    const portablePath = toPosixPath(rebasedPath);
+    return isFileUrl ? `file://${portablePath}` : portablePath;
   };
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {
