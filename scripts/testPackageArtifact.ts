@@ -37,6 +37,7 @@ type ArtifactEvalOutput = {
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
 const requiredPackagedPaths = [
+  'THIRD_PARTY_NOTICES',
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
   'dist/src/entrypoint.js',
@@ -687,6 +688,12 @@ async function main(): Promise<void> {
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
+    const thirdPartyNotices = fs.readFileSync(
+      path.join(installedPackageDir, 'THIRD_PARTY_NOTICES'),
+      'utf8',
+    );
+    assert.match(thirdPartyNotices, /^Chalk\nCopyright \(c\) Sindre Sorhus/m);
+    assert.match(thirdPartyNotices, /Permission is hereby granted/);
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
     ) as {
