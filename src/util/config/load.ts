@@ -529,7 +529,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     if (!isFileUrl && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(reference)) {
       return reference;
     }
-    const referencedPath = isFileUrl ? parseFileUrl(reference).filePath : reference;
+    const parsedReference = isFileUrl ? parseFileUrl(reference) : undefined;
+    const referencedPath = parsedReference?.filePath ?? reference;
     if (path.isAbsolute(referencedPath)) {
       return reference;
     }
@@ -538,7 +539,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       path.resolve(sourceBasePath, referencedPath),
     );
     const portablePath = toPosixPath(rebasedPath);
-    return isFileUrl ? `file://${portablePath}` : portablePath;
+    return isFileUrl
+      ? `file://${portablePath}${
+          parsedReference?.functionName === undefined ? '' : `:${parsedReference.functionName}`
+        }`
+      : portablePath;
   };
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {

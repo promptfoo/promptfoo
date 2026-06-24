@@ -475,6 +475,40 @@ describe('combineConfigs', () => {
     expect(result.scenarios).toContain('file://../b/scenarios/scenario.yaml');
   });
 
+  it('preserves named exports when rebasing executable test sources', async () => {
+    const firstConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+    };
+    const secondConfig = {
+      providers: ['echo'],
+      prompts: ['prompt'],
+      tests: [
+        'file://generators/cases.js:buildCases',
+        { path: 'file://generators/cases.py:build_cases' },
+      ],
+    };
+    vi.mocked(globSync).mockImplementation((input) => [String(input)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      path.basename(path.dirname(String(filePath))) === 'a'
+        ? JSON.stringify(firstConfig)
+        : JSON.stringify(secondConfig),
+    );
+
+    const result = await combineConfigs(['/suite/a/config.json', '/suite/b/config.json']);
+
+    expect(result.tests).toEqual([
+      'file://../b/generators/cases.js:buildCases',
+      { path: 'file://../b/generators/cases.py:build_cases' },
+    ]);
+    expect(getConfigDependencyPaths(result)).toEqual(
+      expect.arrayContaining([
+        path.resolve('/suite/b/generators/cases.js'),
+        path.resolve('/suite/b/generators/cases.py'),
+      ]),
+    );
+  });
+
   it('normalizes canonical Windows URLs in combined config dependencies', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     const resolveSpy = vi

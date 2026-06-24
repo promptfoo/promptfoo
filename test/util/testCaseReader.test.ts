@@ -972,8 +972,12 @@ describe('readTest', () => {
     expect(result.vars).toBeUndefined();
   });
 
-  it('preserves nested file references in an external defaultTest', async () => {
+  it('preserves provider references while rendering var paths in an external defaultTest', async () => {
     const defaultTestInput = {
+      vars: {
+        context: 'file://context.json',
+        report: 'file://{{ env.REPORT_FILE }}',
+      },
       options: {
         provider: {
           id: 'file://../providers/grader.cjs',
@@ -981,10 +985,26 @@ describe('readTest', () => {
       },
     };
     vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(defaultTestInput));
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) =>
+      config === defaultTestInput.vars.report && context === 'vars'
+        ? 'file://reports/rendered.txt'
+        : config,
+    );
 
     const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
 
-    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      defaultTestInput.vars.report,
+      'vars',
+    );
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
+      defaultTestInput.options.provider.id,
+      expect.anything(),
+    );
+    expect(result.vars).toEqual({
+      context: 'file://context.json',
+      report: 'file://reports/rendered.txt',
+    });
     expect(result.options?.provider).toEqual(defaultTestInput.options.provider);
   });
 
@@ -1809,6 +1829,21 @@ describe('readVarsFiles', () => {
     });
   });
 
+  it('should handle cyclic YAML aliases while rebasing nested references', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      context: &context
+        self: *context
+        report: file://data/report.txt
+    `);
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+    const context = result.context as Record<string, unknown>;
+
+    expect(context.self).toBe(context);
+    expect(context.report).toBe('file://fixtures/data/report.txt');
+  });
+
   it('should parse top-level vars-file references while preserving nested references', async () => {
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
       if (context === 'vars' || typeof config !== 'string' || !config.startsWith('file://')) {
@@ -1833,6 +1868,7 @@ describe('readVarsFiles', () => {
             image: file://image.png
             audio: file://audio.mp3
             glob: file://data/*.txt
+            braceGlob: file://data/{foo,bar}.json
             extglob: file://data/+(foo|bar).json
           `
         : String(filePath).endsWith('context.json')
@@ -1853,12 +1889,14 @@ describe('readVarsFiles', () => {
         image: `file://${path.resolve('/suite/fixtures/image.png').replace(/\\/g, '/')}`,
         audio: `file://${path.resolve('/suite/fixtures/audio.mp3').replace(/\\/g, '/')}`,
         glob: `file://${path.resolve('/suite/fixtures/data/*.txt').replace(/\\/g, '/')}`,
+        braceGlob: `file://${path.resolve('/suite/fixtures/data/{foo,bar}.json').replace(/\\/g, '/')}`,
         extglob: `file://${path.resolve('/suite/fixtures/data/+(foo|bar).json').replace(/\\/g, '/')}`,
       });
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://context.json', 'vars');
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://generator.js', 'vars');
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://data/*.txt', 'vars');
       expect(hasMagic).toHaveBeenCalledWith(expect.any(String), {
+        magicalBraces: true,
         windowsPathsNoEscape: true,
       });
     } finally {
@@ -1866,6 +1904,99 @@ describe('readVarsFiles', () => {
         mockMaybeLoadConfigFromExternalFileImpl,
       );
     }
+  });
+
+  it('should parse structured references already nested in a vars file', async () => {
+    const nestedReference = `file://${path.resolve('/suite/fixtures/nested.yaml').replace(/\\/g, '/')}`;
+    const deeperReference = `file://${path.resolve('/suite/fixtures/deeper.yaml').replace(/\\/g, '/')}`;
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
+      if (context === 'vars') {
+        return config;
+      }
+      if (config === nestedReference) {
+        return { foo: 'nested-value', descendant: 'file://deeper.yaml' };
+      }
+      if (config === deeperReference) {
+        return { shouldNotLoadRecursively: true };
+      }
+      return config;
+    });
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      context:
+        structured: file://nested.yaml
+        braceGlob: file://data/{alpha,beta}.json
+    `);
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(result).toEqual({
+      context: {
+        structured: {
+          foo: 'nested-value',
+          descendant: 'file://fixtures/deeper.yaml',
+        },
+        braceGlob: 'file://fixtures/data/{alpha,beta}.json',
+      },
+    });
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(nestedReference);
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(deeperReference);
+  });
+
+  it('should rebase file references returned as structured scalar values', async () => {
+    const topReference = `file://${path.resolve('/suite/fixtures/top.yaml').replace(/\\/g, '/')}`;
+    const nestedReference = `file://${path.resolve('/suite/fixtures/nested.json').replace(/\\/g, '/')}`;
+    const topChildReference = `file://${path.resolve('/suite/fixtures/top-child.txt').replace(/\\/g, '/')}`;
+    const nestedChildReference = `file://${path.resolve('/suite/fixtures/nested-child.txt').replace(/\\/g, '/')}`;
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) => {
+      if (context === 'vars') {
+        return config;
+      }
+      if (config === topReference) {
+        return 'file://top-child.txt';
+      }
+      if (config === nestedReference) {
+        return 'file://nested-child.txt';
+      }
+      if (config === topChildReference || config === nestedChildReference) {
+        return 'should-not-load-recursively';
+      }
+      return config;
+    });
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      top: file://top.yaml
+      context:
+        nested: file://nested.json
+    `);
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(result).toEqual({
+      top: 'file://fixtures/top-child.txt',
+      context: { nested: 'file://fixtures/nested-child.txt' },
+    });
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(topChildReference);
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(nestedChildReference);
+  });
+
+  it('should render nested vars-file paths before rebasing them', async () => {
+    const reference = 'file://{{ env.REPORT_FILE }}';
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) =>
+      config === reference && context === 'vars' ? 'file://data/report.txt' : config,
+    );
+    vi.mocked(globSync).mockReturnValue([path.resolve('/suite/fixtures/vars.yaml')]);
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      context:
+        report: '${reference}'
+    `);
+
+    const result = await readTestFiles('fixtures/vars.yaml', path.resolve('/suite'));
+
+    expect(result).toEqual({
+      context: { report: 'file://fixtures/data/report.txt' },
+    });
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(reference, 'vars');
   });
 
   it.each([
