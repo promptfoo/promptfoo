@@ -804,6 +804,22 @@ describe('Plugins', () => {
         testCase: { assert: [{ type: 'future-generic-grader' }] },
         expected: 'unsupported assertion type(s): future-generic-grader',
       },
+      ...(['human', 'select-best', 'max-score'] as const).flatMap((type) => [
+        {
+          name: `${type} special assertions`,
+          testCase: { assert: [{ type }] },
+          expected: `unsupported assertion type(s): ${type}`,
+          pluginId: undefined,
+          config: undefined,
+        },
+        {
+          name: `${type} special assertions inside assertion sets`,
+          testCase: { assert: [{ type: 'assert-set', assert: [{ type }] }] },
+          expected: `unsupported assertion type(s): ${type}`,
+          pluginId: undefined,
+          config: undefined,
+        },
+      ]),
       {
         name: 'leading-whitespace assertion types',
         testCase: { assert: [{ type: ' contains', value: 'test' }] },
