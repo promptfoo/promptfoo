@@ -71,6 +71,8 @@ export function callProviderWithContext(
       : provider.callApi(prompt, callApiContext);
 
   const executeCall = () => {
+    executionContext?.abortSignal?.throwIfAborted();
+
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,

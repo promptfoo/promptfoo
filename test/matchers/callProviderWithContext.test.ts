@@ -164,4 +164,24 @@ describe('callProviderWithContext', () => {
       vars,
     });
   });
+
+  it('skips queued provider calls whose execution signal was aborted', async () => {
+    const provider = createProvider();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: abortController.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    abortController.abort();
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+
+    const group = providerCallQueue.takeNextGroup();
+    expect(group).toHaveLength(1);
+    await providerCallQueue.run(group[0]);
+
+    await rejection;
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 });
