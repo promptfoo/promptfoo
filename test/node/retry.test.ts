@@ -5,6 +5,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
 import {
+  createNamedMetricsPreservationGuard,
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
@@ -20,10 +21,12 @@ import type { TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
-  const affectedEvalRows: Array<{ evalId: string }> = [];
+  const affectedEvalRows: Array<{
+    evalId: string;
+    hasNamedScores?: number;
+  }> = [];
   const errorRowsAll = vi.fn(async () => errorRows);
-  const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
-  const deleteRun = vi.fn(async () => undefined);
+  const deleteReturning = vi.fn(async () => affectedEvalRows);
   const db = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
@@ -32,16 +35,9 @@ const dbMocks = vi.hoisted(() => {
         })),
       })),
     })),
-    selectDistinct: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          all: affectedEvalRowsAll,
-        })),
-      })),
-    })),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({
-        run: deleteRun,
+        returning: deleteReturning,
       })),
     })),
   };
@@ -49,7 +45,7 @@ const dbMocks = vi.hoisted(() => {
   return {
     affectedEvalRows,
     db,
-    deleteRun,
+    deleteReturning,
     errorRows,
   };
 });
@@ -160,17 +156,88 @@ describe('retryCommand', () => {
       'error-result-1',
       'error-result-2',
     ]);
-    await deleteErrorResults(['error-result-1', 'error-result-2']);
+    await expect(deleteErrorResults(['error-result-1', 'error-result-2'])).resolves.toBeUndefined();
 
-    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
+    expect(dbMocks.deleteReturning).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-456');
+  });
+
+  it('reports whether deleted ERROR rows contained named scores', async () => {
+    dbMocks.affectedEvalRows.push({ evalId: 'eval-123', hasNamedScores: 1 });
+
+    await expect(
+      deleteErrorResults(['error-result-1'], { reportNamedScores: true }),
+    ).resolves.toEqual({ allRequestedDeleted: true, hadNamedScores: true });
+    expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
+  });
+
+  it('does not authorize preservation when a requested ERROR row was not deleted', async () => {
+    await expect(
+      deleteErrorResults(['missing-result'], { reportNamedScores: true }),
+    ).resolves.toEqual({ allRequestedDeleted: false, hadNamedScores: false });
+  });
+
+  it('preserves named metrics only for complete reused prompt metrics without derived metrics', () => {
+    const metrics = {
+      namedScores: { quality: 3 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 4 },
+    } as any;
+    const originalEval = createEval({ prompts: [{ metrics }] as any[] });
+    const canPreserve = createNamedMetricsPreservationGuard(originalEval);
+
+    expect(canPreserve(createEval({ prompts: [{ metrics }] as any[] }), undefined)).toBe(true);
+    expect(
+      canPreserve(createEval({ prompts: [{ metrics: { ...metrics } }] as any[] }), undefined),
+    ).toBe(false);
+    expect(
+      canPreserve(createEval({ prompts: [{ metrics }] as any[] }), [
+        { name: 'average', value: 'quality / __count' },
+      ]),
+    ).toBe(false);
+
+    const derivedEval = createEval({
+      config: { derivedMetrics: [{ name: 'average', value: 'quality / __count' }] },
+      prompts: [{ metrics }] as any[],
+    });
+    expect(
+      createNamedMetricsPreservationGuard(derivedEval)(
+        createEval({ prompts: [{ metrics }] as any[] }),
+        undefined,
+      ),
+    ).toBe(false);
+
+    const incompleteMetrics = { namedScores: {}, namedScoresCount: {} } as any;
+    const incompleteEval = createEval({ prompts: [{ metrics: incompleteMetrics }] as any[] });
+    const incompleteGuard = createNamedMetricsPreservationGuard(incompleteEval);
+    incompleteMetrics.namedScoreWeights = {};
+    expect(incompleteGuard(incompleteEval, undefined)).toBe(false);
+
+    const mismatchedMetrics = {
+      namedScores: { quality: 3 },
+      namedScoresCount: {},
+      namedScoreWeights: {},
+    } as any;
+    const mismatchedEval = createEval({ prompts: [{ metrics: mismatchedMetrics }] as any[] });
+    expect(createNamedMetricsPreservationGuard(mismatchedEval)(mismatchedEval, undefined)).toBe(
+      false,
+    );
+
+    const orphanCountMetrics = {
+      namedScores: {},
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 4 },
+    } as any;
+    const orphanCountEval = createEval({ prompts: [{ metrics: orphanCountMetrics }] as any[] });
+    expect(createNamedMetricsPreservationGuard(orphanCountEval)(orphanCountEval, undefined)).toBe(
+      false,
+    );
   });
 
   it('skips database work when there are no error result ids to delete', async () => {
     await deleteErrorResults([]);
 
-    expect(dbMocks.db.selectDistinct).not.toHaveBeenCalled();
     expect(dbMocks.db.delete).not.toHaveBeenCalled();
   });
 
@@ -297,6 +364,50 @@ describe('retryCommand', () => {
     );
   });
 
+  it('preserves live rendered named metrics while rebuilding other prompt metrics', async () => {
+    const prompts = [
+      {
+        metrics: {
+          namedScores: { 'quality:ALPHA': 3 },
+          namedScoresCount: { 'quality:ALPHA': 2 },
+          namedScoreWeights: { 'quality:ALPHA': 4 },
+        },
+      },
+    ] as any[];
+    const evalRecord = createEval({
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'retried-result',
+            promptIdx: 0,
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 0.75,
+            namedScores: { 'quality:ALPHA': 0.75 },
+            testCase: { vars: { category: { name: 'alpha' } } },
+            gradingResult: {
+              componentResults: [
+                { assertion: { metric: 'quality:{{ category.name | upper }}' } },
+                { assertion: { metric: 'quality:{{ category.name | upper }}' } },
+              ],
+            },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord, { preserveNamedMetrics: true });
+
+    expect(prompts[0].metrics).toMatchObject({
+      score: 0.75,
+      testPassCount: 1,
+      namedScores: { 'quality:ALPHA': 3 },
+      namedScoresCount: { 'quality:ALPHA': 2 },
+      namedScoreWeights: { 'quality:ALPHA': 4 },
+    });
+  });
+
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
     const originalEval = createEval({
       config: { sharing: false } as UnifiedConfig,
@@ -334,7 +445,7 @@ describe('retryCommand', () => {
       { filterProviders: 'selected-target' },
       originalEval.config,
     );
-    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
+    expect(dbMocks.deleteReturning).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
     expect(shouldShareResults).toHaveBeenCalledWith({
       cliShare: undefined,
@@ -399,7 +510,7 @@ describe('retryCommand', () => {
     );
 
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
   });
 
   it('preserves error results when the stored filter cannot be applied to the config', async () => {
@@ -416,7 +527,7 @@ describe('retryCommand', () => {
     // The pattern is validated before any config resolution happens.
     expect(resolveConfigs).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
   });
@@ -434,7 +545,7 @@ describe('retryCommand', () => {
 
     expect(resolveConfigs).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
   });
 
   it('preserves error results and clears retry state when evaluation fails', async () => {
@@ -446,7 +557,7 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
     expect(cliState.maxConcurrency).toBeUndefined();
@@ -468,7 +579,7 @@ describe('retryCommand', () => {
 
     expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
     expect(retriedEval.resultPersistenceFailed).toBe(true);
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
   });
 
   it('warns when JSONL restoration and post-retry rewriting fail', async () => {
@@ -508,7 +619,7 @@ describe('retryCommand', () => {
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
     vi.mocked(evaluate).mockResolvedValue(retriedEval);
-    dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
+    dbMocks.deleteReturning.mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 

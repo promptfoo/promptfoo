@@ -7,7 +7,12 @@ export function filterFiniteScores(scores: Record<string, unknown>): Record<stri
   const filtered: Record<string, number> = {};
   for (const [key, value] of Object.entries(scores)) {
     if (typeof value === 'number' && Number.isFinite(value)) {
-      filtered[key] = value;
+      Object.defineProperty(filtered, key, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+      });
     }
   }
   return filtered;

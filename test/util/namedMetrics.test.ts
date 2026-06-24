@@ -261,14 +261,25 @@ describe('accumulateNamedMetric', () => {
 });
 
 describe('renderPersistedMetricName', () => {
-  it('renders only simple root primitive placeholders', () => {
+  it('renders root and dotted own-data primitive placeholders', () => {
     expect(
-      renderPersistedMetricName('score:{{ label }}:{{ count }}:{{ enabled }}:{{ missing }}', {
-        label: 'alpha',
-        count: 2,
-        enabled: false,
-      }),
-    ).toBe('score:alpha:2:false:');
+      renderPersistedMetricName(
+        'score:{{ label }}:{{ category.name }}:{{ category.rank }}:{{ enabled }}:{{ missing }}',
+        {
+          label: 'alpha',
+          category: { name: 'science', rank: 2 },
+          enabled: false,
+        },
+      ),
+    ).toBe('score:alpha:science:2:false:');
+  });
+
+  it.each([
+    ['missing', {}],
+    ['null', { category: null }],
+    ['undefined', { category: undefined }],
+  ])('renders a %s intermediate path as empty', (_label, vars) => {
+    expect(renderPersistedMetricName('score:{{ category.name }}', vars)).toBe('score:');
   });
 
   it.each([
@@ -293,6 +304,29 @@ describe('renderPersistedMetricName', () => {
 
     expect(renderPersistedMetricName('score:{{ accessor }}', vars)).toBe('score:{{ accessor }}');
     expect(renderPersistedMetricName('score:{{ inherited }}', vars)).toBe('score:');
+    expect(accessorCalls).toBe(0);
+  });
+
+  it('does not invoke nested accessors or traverse inherited and reserved paths', () => {
+    let accessorCalls = 0;
+    const category = Object.create({ inherited: 'secret' }) as Record<string, unknown>;
+    Object.defineProperty(category, 'accessor', {
+      enumerable: true,
+      get: () => {
+        accessorCalls++;
+        return 'secret';
+      },
+    });
+
+    expect(renderPersistedMetricName('score:{{ category.accessor }}', { category })).toBe(
+      'score:{{ category.accessor }}',
+    );
+    expect(renderPersistedMetricName('score:{{ category.inherited }}', { category })).toBe(
+      'score:',
+    );
+    expect(renderPersistedMetricName('score:{{ category.constructor.name }}', { category })).toBe(
+      'score:{{ category.constructor.name }}',
+    );
     expect(accessorCalls).toBe(0);
   });
 

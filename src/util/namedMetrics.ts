@@ -23,18 +23,58 @@ interface NamedMetricContribution {
   weightedScoreTotal: number;
 }
 
-const SIMPLE_METRIC_PLACEHOLDER = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+const SIMPLE_METRIC_PLACEHOLDER =
+  /\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\}\}/g;
+const FORBIDDEN_METRIC_PATH_SEGMENTS = new Set(['env', '__proto__', 'prototype', 'constructor']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function resolveOwnPrimitivePath(
+  vars: Record<string, unknown>,
+  path: string,
+): { safe: boolean; value: string } {
+  const segments = path.split('.');
+  if (segments.some((segment) => FORBIDDEN_METRIC_PATH_SEGMENTS.has(segment))) {
+    return { safe: false, value: '' };
+  }
+
+  let current: unknown = vars;
+  for (const segment of segments) {
+    if (current == null) {
+      return { safe: true, value: '' };
+    }
+    if (!isRecord(current)) {
+      return { safe: false, value: '' };
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(current, segment);
+    if (!descriptor) {
+      return { safe: true, value: '' };
+    }
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      return { safe: false, value: '' };
+    }
+    current = descriptor.value;
+  }
+
+  if (current == null) {
+    return { safe: true, value: '' };
+  }
+  if (['string', 'number', 'boolean'].includes(typeof current)) {
+    return { safe: true, value: String(current) };
+  }
+  return { safe: false, value: '' };
+}
+
 /**
  * Render persisted metric names without executing stored template code.
  *
- * Only documented root-variable placeholders are supported. Complex Nunjucks
- * syntax remains literal so imported rows cannot access globals, call methods,
- * invoke functions, or run unbounded template control flow during a read.
+ * Only root and dotted own-data primitive placeholders are supported. Complex
+ * Nunjucks syntax remains literal so imported rows cannot access globals, call
+ * methods, invoke functions, or run unbounded template control flow during a
+ * read.
  */
 export function renderPersistedMetricName(
   metric: string | undefined,
@@ -57,26 +97,10 @@ export function renderPersistedMetricName(
   }
 
   let safe = true;
-  const rendered = metric.replace(SIMPLE_METRIC_PLACEHOLDER, (_placeholder, variable: string) => {
-    const descriptor = Object.getOwnPropertyDescriptor(vars, variable);
-    if (!descriptor) {
-      return '';
-    }
-    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
-      safe = false;
-      return '';
-    }
-
-    const value = descriptor.value;
-    if (value == null) {
-      return '';
-    }
-    if (['string', 'number', 'boolean'].includes(typeof value)) {
-      return String(value);
-    }
-
-    safe = false;
-    return '';
+  const rendered = metric.replace(SIMPLE_METRIC_PLACEHOLDER, (_placeholder, path: string) => {
+    const resolved = resolveOwnPrimitivePath(vars, path);
+    safe &&= resolved.safe;
+    return resolved.value;
   });
 
   return safe ? rendered : metric;
