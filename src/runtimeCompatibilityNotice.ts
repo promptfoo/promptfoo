@@ -99,3 +99,28 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
     return false;
   }
 }
+
+interface StartupCheckDependencies {
+  checkForUpdates: (options: { suppressRuntimeBlockedWarning?: boolean }) => Promise<unknown>;
+  warnAboutRuntime?: () => boolean;
+  runtimeNoticeApplies?: () => boolean;
+}
+
+/**
+ * Startup precedence for the CLI entry point: show the Node.js runtime reminder first, and only
+ * fall back to the ordinary update check when the reminder was not shown this run (disabled,
+ * throttled, or persistence failed). Whether a runtime notice applies is passed through so
+ * checkForUpdates can suppress a duplicate post-cutoff "update blocked" warning while still running
+ * the check. Collaborators are injectable for testing; production passes only checkForUpdates.
+ */
+export async function runStartupRuntimeAndUpdateChecks({
+  checkForUpdates,
+  warnAboutRuntime = maybeWarnAboutRuntime,
+  runtimeNoticeApplies = () => getRuntimeCompatibilityNotice() !== null,
+}: StartupCheckDependencies): Promise<void> {
+  const noticeApplies = runtimeNoticeApplies();
+  if (warnAboutRuntime()) {
+    return;
+  }
+  await checkForUpdates({ suppressRuntimeBlockedWarning: noticeApplies });
+}

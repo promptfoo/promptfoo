@@ -4,6 +4,7 @@ import {
   NODE_20_SUPPORT_END_DATE,
   NODE_MINIMUM_UPGRADE_VERSION,
   NODE_RECOMMENDED_VERSION,
+  NODE_RUNTIME_UPGRADE_GUIDE_URL,
 } from '../runtimeCompatibility';
 
 // GET /api/version
@@ -17,7 +18,9 @@ export const RuntimeCompatibilityNoticeSchema = z.object({
   removalDate: z.literal(NODE_20_SUPPORT_END_DATE),
   minimumVersion: z.literal(NODE_MINIMUM_UPGRADE_VERSION),
   recommendedVersion: z.literal(NODE_RECOMMENDED_VERSION),
-  documentationUrl: z.string(),
+  // Locked to the announced constant so the response can't drift from the published upgrade guide,
+  // matching the policy-drift guard on the other notice fields.
+  documentationUrl: z.literal(NODE_RUNTIME_UPGRADE_GUIDE_URL),
   reminderIntervalDays: z.union([z.literal(1), z.literal(7)]),
 });
 

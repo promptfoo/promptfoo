@@ -9,12 +9,18 @@ import { getRuntimeNoticeReminderIntervalDays } from '@app/utils/runtimeCompatib
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
+  const parsed = new Date(`${removalDate}T00:00:00.000Z`);
+  // The Web UI does not validate /version responses; fall back to the raw value rather than
+  // letting Intl.DateTimeFormat throw a RangeError on an unexpected/invalid date string.
+  if (Number.isNaN(parsed.getTime())) {
+    return removalDate;
+  }
   return new Intl.DateTimeFormat('en-US', {
     day: 'numeric',
     month: 'long',
     timeZone: 'UTC',
     year: 'numeric',
-  }).format(new Date(`${removalDate}T00:00:00.000Z`));
+  }).format(parsed);
 }
 
 function getReminderLabel(reminderIntervalDays: 1 | 7): string {

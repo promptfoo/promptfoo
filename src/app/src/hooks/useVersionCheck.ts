@@ -62,8 +62,27 @@ function getRuntimeNoticeStorageKey(noticeId: string): string {
   return `${RUNTIME_NOTICE_STORAGE_PREFIX}${noticeId}`;
 }
 
+// localStorage can throw (Safari private mode, disabled storage, exceeded quota). Dismissals and
+// snooze lookups are best-effort, so swallow failures instead of letting a click handler or a
+// background refresh throw. Mirrors the try/catch convention in useThemePreference.ts.
+function safeLocalStorageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore: persistence is best-effort and the in-memory dismissal state still updates.
+  }
+}
+
 function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
-  const lastDismissedAt = localStorage.getItem(getRuntimeNoticeStorageKey(notice.id));
+  const lastDismissedAt = safeLocalStorageGet(getRuntimeNoticeStorageKey(notice.id));
   if (!lastDismissedAt) {
     return false;
   }
@@ -93,7 +112,7 @@ function getRuntimePolicyRefreshDelay(
   const pendingBoundaries = futureBoundaries.filter((timestamp) => timestamp > now);
 
   if (notice && noticeDismissed) {
-    const lastDismissedAt = localStorage.getItem(getRuntimeNoticeStorageKey(notice.id));
+    const lastDismissedAt = safeLocalStorageGet(getRuntimeNoticeStorageKey(notice.id));
     const lastDismissedTimestamp = lastDismissedAt ? Date.parse(lastDismissedAt) : Number.NaN;
     if (!Number.isNaN(lastDismissedTimestamp)) {
       const snoozeExpiry =
@@ -144,7 +163,7 @@ export function useVersionCheck(): UseVersionCheckResult {
           setRuntimeNoticeDismissed(
             data.runtimeNotice ? isRuntimeNoticeSnoozed(data.runtimeNotice) : false,
           );
-          setUpdateDismissed(localStorage.getItem(STORAGE_KEY) === data.latestVersion);
+          setUpdateDismissed(safeLocalStorageGet(STORAGE_KEY) === data.latestVersion);
           setError(null);
         }
         return true;
@@ -190,6 +209,10 @@ export function useVersionCheck(): UseVersionCheckResult {
         return;
       }
 
+      // Cancel any pending failure retry so a retry that fires mid-refresh can't start a second
+      // concurrent /version fetch.
+      clearRuntimePolicyRetry();
+
       // The refresh may fail without changing any request state. Advance this clock first so
       // consumers still re-evaluate time-based cutoff policy when the boundary is crossed.
       setRuntimePolicyUpdatedAt(Date.now());
@@ -212,8 +235,9 @@ export function useVersionCheck(): UseVersionCheckResult {
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {
-      localStorage.setItem(
+      safeLocalStorageSet(
         getRuntimeNoticeStorageKey(versionInfo.runtimeNotice.id),
+        // new Date(Date.now()) (not new Date()) so a mocked Date.now controls the timestamp.
         new Date(Date.now()).toISOString(),
       );
       setRuntimeNoticeDismissed(true);
@@ -222,7 +246,7 @@ export function useVersionCheck(): UseVersionCheckResult {
 
   const dismissUpdate = () => {
     if (versionInfo?.latestVersion) {
-      localStorage.setItem(STORAGE_KEY, versionInfo.latestVersion);
+      safeLocalStorageSet(STORAGE_KEY, versionInfo.latestVersion);
       setUpdateDismissed(true);
     }
   };

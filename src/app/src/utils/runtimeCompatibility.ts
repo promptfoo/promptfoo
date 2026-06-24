@@ -1,3 +1,7 @@
+// Frontend twin of the CLI cadence math in src/runtimeCompatibility.ts. The Web UI is a separate
+// Vite project and cannot import backend modules, so the final-phase length and the weekly→daily
+// rule are duplicated here. Keep these constants and getRuntimeNoticeReminderIntervalDays in sync
+// with the backend FINAL_NOTICE_PHASE_MS / getRuntimeNoticeReminderIntervalMs.
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const FINAL_RUNTIME_NOTICE_PHASE_MS = 14 * DAY_MS;
 

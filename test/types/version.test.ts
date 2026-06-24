@@ -84,4 +84,24 @@ describe('VersionSchemas.Response', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects a runtime notice whose documentation URL drifts from the upgrade guide', () => {
+    expect(
+      VersionSchemas.Response.safeParse({
+        ...baseResponse,
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://malicious.example.com/upgrade',
+          reminderIntervalDays: 7,
+        },
+      }).success,
+    ).toBe(false);
+  });
 });

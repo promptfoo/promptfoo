@@ -7,6 +7,8 @@ import {
   type RuntimeCompatibilityNotice,
 } from './types/runtimeCompatibility';
 
+// The Web UI duplicates this cadence math in src/app/src/utils/runtimeCompatibility.ts (it cannot
+// import backend modules). Keep the final-phase length and the weekly→daily rule in sync there.
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const FINAL_NOTICE_PHASE_MS = 14 * DAY_MS;

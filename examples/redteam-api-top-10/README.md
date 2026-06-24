@@ -34,7 +34,7 @@ npx promptfoo@latest redteam run
 ## Prerequisites
 
 - Python 3.10+
-- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 is supported through July 29, 2026; Node.js 24 LTS recommended) (for the filesystem MCP server)
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended) (for the filesystem MCP server)
 - [uv](https://docs.astral.sh/uv/) package manager
 - Anthropic API key
 

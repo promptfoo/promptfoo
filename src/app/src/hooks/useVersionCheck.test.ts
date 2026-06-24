@@ -207,6 +207,49 @@ describe('useVersionCheck', () => {
     expect(result.current.dismissed).toBe(true);
   });
 
+  it('keeps the runtime notice dismissible when localStorage writes throw (private mode / quota)', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-22T12:00:00.000Z'));
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const mockVersionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      updateBlockedByRuntime: false,
+      runtimeNotice: {
+        id: 'node20-removal-2026-07-30',
+        kind: 'runtime_deprecation' as const,
+        runtime: 'node' as const,
+        currentVersion: 'v20.20.2',
+        currentMajor: 20,
+        removalDate: '2026-07-30',
+        minimumVersion: '22.22.0',
+        recommendedVersion: '24 LTS',
+        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        reminderIntervalDays: 7 as const,
+      },
+    };
+
+    mockCallApiResponse(mockVersionInfo);
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.versionInfo).toEqual(mockVersionInfo);
+    });
+
+    expect(() => {
+      act(() => {
+        result.current.dismiss();
+      });
+    }).not.toThrow();
+
+    expect(setItemSpy).toHaveBeenCalled();
+    // The write failed, but the in-memory dismissal still updates so the banner can be dismissed.
+    expect(result.current.dismissed).toBe(true);
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+  });
+
   it('should apply the shorter reminder cadence when the final notice phase begins', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-17T12:00:00.000Z'));
     localStorage.setItem(

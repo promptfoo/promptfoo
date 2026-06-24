@@ -11,7 +11,7 @@ cd config-stateful-session-management
 
 ## Requirements
 
-- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 is supported through July 29, 2026; Node.js 24 LTS recommended)
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
 - An OpenAI API key in `OPENAI_API_KEY`
 
 ## Setup

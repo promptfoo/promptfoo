@@ -27,6 +27,7 @@ import { getRuntimeCompatibilityNotice } from '../src/runtimeCompatibility';
 import {
   formatRuntimeCompatibilityNotice,
   maybeWarnAboutRuntime,
+  runStartupRuntimeAndUpdateChecks,
 } from '../src/runtimeCompatibilityNotice';
 import telemetry from '../src/telemetry';
 
@@ -176,5 +177,44 @@ describe('runtime compatibility CLI notice', () => {
     expect(
       formatRuntimeCompatibilityNotice(notice!, true, new Date('2026-08-01T00:00:00.000Z')),
     ).toContain('support in promptfoo ended July 30, 2026');
+  });
+});
+
+describe('runStartupRuntimeAndUpdateChecks', () => {
+  it('skips the update check when the runtime reminder was shown', async () => {
+    const checkForUpdates = vi.fn().mockResolvedValue(true);
+
+    await runStartupRuntimeAndUpdateChecks({
+      checkForUpdates,
+      warnAboutRuntime: () => true,
+      runtimeNoticeApplies: () => true,
+    });
+
+    expect(checkForUpdates).not.toHaveBeenCalled();
+  });
+
+  it('runs the update check and suppresses the duplicate runtime warning when a notice applies', async () => {
+    const checkForUpdates = vi.fn().mockResolvedValue(true);
+
+    await runStartupRuntimeAndUpdateChecks({
+      checkForUpdates,
+      warnAboutRuntime: () => false,
+      runtimeNoticeApplies: () => true,
+    });
+
+    expect(checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: true });
+  });
+
+  it('runs the update check without suppression when no runtime notice applies', async () => {
+    const checkForUpdates = vi.fn().mockResolvedValue(false);
+
+    await runStartupRuntimeAndUpdateChecks({
+      checkForUpdates,
+      warnAboutRuntime: () => false,
+      runtimeNoticeApplies: () => false,
+    });
+
+    expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: false });
   });
 });

@@ -42,8 +42,7 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
-import { getRuntimeCompatibilityNotice } from './runtimeCompatibility';
-import { maybeWarnAboutRuntime } from './runtimeCompatibilityNotice';
+import { runStartupRuntimeAndUpdateChecks } from './runtimeCompatibilityNotice';
 import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
@@ -64,11 +63,7 @@ async function main() {
 
   // Keep startup messaging focused: runtime reminders take priority, while compatible update
   // checks resume without duplicating post-cutoff runtime guidance.
-  const runtimeNoticeApplies = getRuntimeCompatibilityNotice() !== null;
-  const runtimeNoticeHandled = maybeWarnAboutRuntime();
-  if (!runtimeNoticeHandled) {
-    await checkForUpdates({ suppressRuntimeBlockedWarning: runtimeNoticeApplies });
-  }
+  await runStartupRuntimeAndUpdateChecks({ checkForUpdates });
   await runDbMigrations({ suppressBindingErrorLogging: true });
 
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
