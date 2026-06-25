@@ -31,6 +31,76 @@ import type {
 } from '../../types/index';
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
+const SAFE_MESSAGE_ROLES = new Set([
+  'assistant',
+  'developer',
+  'function',
+  'system',
+  'tool',
+  'user',
+]);
+const SAFE_RESPONSE_FORMAT_TYPES = new Set(['json_object', 'json_schema', 'text']);
+
+function getAzureChatRequestMetadata(body: any) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const messageRoleCounts: Record<string, number> = {};
+
+  for (const message of messages) {
+    const role =
+      typeof message?.role === 'string' && SAFE_MESSAGE_ROLES.has(message.role)
+        ? message.role
+        : 'other';
+    messageRoleCounts[role] = (messageRoleCounts[role] ?? 0) + 1;
+  }
+
+  const responseFormatType =
+    typeof body?.response_format?.type === 'string' ? body.response_format.type : undefined;
+  const maxTokens = body?.max_tokens ?? body?.max_completion_tokens;
+
+  return {
+    messageCount: messages.length,
+    messageRoleCounts,
+    messageContentLengths: messages.map((message: any) =>
+      typeof message?.content === 'string' ? message.content.length : undefined,
+    ),
+    toolCount: Array.isArray(body?.tools) ? body.tools.length : undefined,
+    hasResponseFormat: Boolean(body?.response_format),
+    responseFormatType:
+      responseFormatType && SAFE_RESPONSE_FORMAT_TYPES.has(responseFormatType)
+        ? responseFormatType
+        : responseFormatType
+          ? 'custom'
+          : undefined,
+    maxTokens: typeof maxTokens === 'number' ? maxTokens : undefined,
+  };
+}
+
+function getAzureChatResponseMetadata(data: unknown) {
+  if (typeof data === 'string') {
+    return {
+      responseType: 'string',
+      responseLength: data.length,
+    };
+  }
+
+  if (!data || typeof data !== 'object') {
+    return {
+      responseType: typeof data,
+    };
+  }
+
+  const response = data as Record<string, any>;
+
+  return {
+    responseType: Array.isArray(data) ? 'array' : 'object',
+    responseKeyCount: Object.keys(response).length,
+    hasError: Boolean(response.error),
+    hasErrorCode: typeof response.error?.code === 'string',
+    choiceCount: Array.isArray(response.choices) ? response.choices.length : undefined,
+    hasUsage: Boolean(response.usage),
+  };
+}
+
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   declare config: AzureChatResponsesOptions;
 
@@ -337,6 +407,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let data;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
       const url = config.dataSources
@@ -352,6 +423,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         cached: isCached,
         status,
         latencyMs: fetchLatencyMs,
+        deleteFromCache: deleteCachedResponse,
       } = await fetchWithCache(
         url,
         {
@@ -364,20 +436,22 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'json',
+        'text',
         context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;
       latencyMs = fetchLatencyMs;
+      deleteFromCache = deleteCachedResponse;
 
       // Handle the response data
       if (typeof responseData === 'string') {
         try {
           data = JSON.parse(responseData);
         } catch {
+          await deleteFromCache?.();
           return {
-            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+            error: `API returned invalid JSON response (status ${status})\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(responseData), null, 2)}\n\nRequest metadata: ${JSON.stringify(getAzureChatRequestMetadata(body), null, 2)}`,
           };
         }
       } else {
@@ -414,6 +488,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     try {
       if (data.error) {
+        await deleteFromCache?.();
         // Was the input prompt deemed inappropriate?
         if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
           flaggedInput = true;
@@ -489,7 +564,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           try {
             output = JSON.parse(output);
           } catch (err) {
-            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+            logger.error('Failed to parse JSON output', {
+              errorType: err instanceof Error ? err.constructor.name : typeof err,
+              outputType: typeof output,
+              outputLength: typeof output === 'string' ? output.length : undefined,
+            });
           }
         }
 
@@ -535,8 +614,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         },
       };
     } catch (err) {
+      await deleteFromCache?.();
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API response error: ${String(err)}\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(data), null, 2)}`,
       };
     }
   }
