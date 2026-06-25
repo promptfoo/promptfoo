@@ -1,9 +1,6 @@
 import cliState from '../../cliState';
 import { MULTI_INPUT_VAR } from '../constants';
 
-import type { TestCase } from '../../types/index';
-import type { CallApiContextParams } from '../../types/providers';
-
 export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 export const MIN_CHARS_PER_MESSAGE_MODIFIER_KEY = 'minCharsPerMessage';
 
@@ -12,6 +9,17 @@ type ChatMessage = {
   path: string;
   role: string;
 };
+
+type PromptLengthContext = {
+  test?: {
+    metadata?: {
+      pluginConfig?: unknown;
+      strategyConfig?: unknown;
+    };
+  };
+};
+
+type PromptVars = Record<string, unknown>;
 
 type PromptLengthViolation = {
   kind: 'max' | 'min';
@@ -168,7 +176,7 @@ function getStringRecordValues(value: unknown): string[] | undefined {
   );
 }
 
-function getGeneratedPromptValues(vars: TestCase['vars'] | undefined, injectVar: string): string[] {
+function getGeneratedPromptValues(vars: PromptVars | undefined, injectVar: string): string[] {
   if (injectVar !== MULTI_INPUT_VAR) {
     const prompt = vars?.[injectVar];
     if (Array.isArray(prompt) && prompt.every((value) => typeof value === 'string')) {
@@ -205,7 +213,7 @@ function getFirstGeneratedPromptLengthViolation(
 }
 
 export function getGeneratedTestCaseLengthViolation(
-  vars: TestCase['vars'] | undefined,
+  vars: PromptVars | undefined,
   injectVar: string,
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
 ): PromptLengthViolation | undefined {
@@ -264,7 +272,7 @@ export function throwIfTargetPromptViolatesCharLimits(
 }
 
 export function getTargetPromptCharLimits(
-  context?: CallApiContextParams,
+  context?: PromptLengthContext,
   providerCharLimits?: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
 ): {
   maxCharsPerMessage?: number;
