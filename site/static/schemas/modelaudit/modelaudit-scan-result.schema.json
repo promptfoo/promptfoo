@@ -310,142 +310,6 @@
       "title": "FileHashesModel",
       "type": "object"
     },
-    "MemberFileIntegrityModel": {
-      "additionalProperties": true,
-      "description": "Integrity metadata for a nested archive/member payload.",
-      "properties": {
-        "file_hashes": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/FileHashesModel"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Complete member hashes"
-        },
-        "file_size": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Member size in bytes",
-          "title": "File Size"
-        },
-        "bytes_hashed": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Bytes covered by the member hash",
-          "title": "Bytes Hashed"
-        },
-        "hash_complete": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Whether the member hash covered the full payload",
-          "title": "Hash Complete"
-        },
-        "hash_status": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Hash coverage status",
-          "title": "Hash Status"
-        },
-        "sha256_prefix": {
-          "anyOf": [
-            {
-              "pattern": "^[a-fA-F0-9]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "SHA256 hash for a bounded member prefix only",
-          "title": "Sha256 Prefix"
-        },
-        "scanner_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Scanner that produced the member hash",
-          "title": "Scanner Name"
-        },
-        "logical_path": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Original logical path when duplicate keys are disambiguated",
-          "title": "Logical Path"
-        },
-        "path_segments": {
-          "description": "Raw nested archive path segments",
-          "items": {
-            "type": "string"
-          },
-          "title": "Path Segments",
-          "type": "array"
-        },
-        "occurrence": {
-          "anyOf": [
-            {
-              "minimum": 1,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Occurrence number for duplicate logical member paths",
-          "title": "Occurrence"
-        }
-      },
-      "title": "MemberFileIntegrityModel",
-      "type": "object"
-    },
     "FileMetadataModel": {
       "additionalProperties": true,
       "description": "Enhanced model for individual file metadata with structured validation",
@@ -1037,6 +901,142 @@
         }
       },
       "title": "MLFrameworkInfo",
+      "type": "object"
+    },
+    "MemberFileIntegrityModel": {
+      "additionalProperties": true,
+      "description": "Integrity metadata for a nested archive/member payload.",
+      "properties": {
+        "file_hashes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileHashesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Complete member hashes"
+        },
+        "file_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Member size in bytes",
+          "title": "File Size"
+        },
+        "bytes_hashed": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bytes covered by the member hash",
+          "title": "Bytes Hashed"
+        },
+        "hash_complete": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the member hash covered the full payload",
+          "title": "Hash Complete"
+        },
+        "hash_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hash coverage status",
+          "title": "Hash Status"
+        },
+        "sha256_prefix": {
+          "anyOf": [
+            {
+              "pattern": "^[a-fA-F0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA256 hash for a bounded member prefix only",
+          "title": "Sha256 Prefix"
+        },
+        "scanner_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scanner that produced the member hash",
+          "title": "Scanner Name"
+        },
+        "logical_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Original logical path when duplicate keys are disambiguated",
+          "title": "Logical Path"
+        },
+        "path_segments": {
+          "description": "Raw nested archive path segments",
+          "items": {
+            "type": "string"
+          },
+          "title": "Path Segments",
+          "type": "array"
+        },
+        "occurrence": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Occurrence number for duplicate logical member paths",
+          "title": "Occurrence"
+        }
+      },
+      "title": "MemberFileIntegrityModel",
       "type": "object"
     },
     "WeightAnalysisModel": {
