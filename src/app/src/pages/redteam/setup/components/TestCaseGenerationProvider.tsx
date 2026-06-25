@@ -19,7 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
-import { normalizeTestGenerationPlugins } from './testCaseGenerationUtils';
+import { normalizeTestGenerationPlugins } from './testCaseGenerationTypes';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
 import type {

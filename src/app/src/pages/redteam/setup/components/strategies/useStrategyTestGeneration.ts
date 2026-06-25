@@ -4,7 +4,7 @@ import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
-import { normalizeTestGenerationPlugins } from '../testCaseGenerationUtils';
+import { normalizeTestGenerationPlugins } from '../testCaseGenerationTypes';
 
 import type { TargetPlugin } from '../testCaseGenerationTypes';
 
