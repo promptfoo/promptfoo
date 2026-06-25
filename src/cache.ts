@@ -7,15 +7,19 @@ import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import { isTransientConnectionError } from './util/fetch/errors';
+import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
-import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
-import { isSecretField, looksLikeSecret } from './util/sanitizer';
+import {
+  getCloudBearerToken,
+  getCloudTaskTeamId,
+  getRequestUrlString,
+  PROMPTFOO_TEAM_ID_HEADER,
+} from './util/fetch/monkeyPatchFetch';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -288,14 +292,22 @@ type PreparedFetchResponse = {
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
-const FETCH_CACHE_SECRET_HMAC_KEY = crypto.randomBytes(32);
+// A fixed, compiled-in salt (NOT a secret). It must be deterministic across
+// processes so that a request carrying a static secret — or a binary body —
+// hashes to the same on-disk cache key on every run and stays cacheable. A
+// per-process random key broke that: each `promptfoo eval` run produced a new
+// key and re-hit the upstream endpoint. The salt only domain-separates the
+// one-way HMAC so raw secrets are never written into the cache key; it does not
+// need to be unpredictable, and this matches the pre-existing (pre-isolation)
+// behavior of hashing the value directly.
+const FETCH_CACHE_SECRET_HMAC_SALT = 'promptfoo:fetch-cache-secret-hmac-salt:v1';
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
 function fingerprintFetchCacheSecret(value: string) {
   return {
     __promptfooSecretFingerprint: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
       .update(FETCH_CACHE_SECRET_HMAC_CONTEXT)
       .update('\0')
       .update(value)
@@ -397,11 +409,17 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  if (isPromptfooCloudApiHost(url)) {
-    const token = cloudConfig.getApiKey();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
+  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
+  // without overriding a caller-supplied Authorization.
+  const cloudAuth = getCloudBearerToken(url);
+  if (cloudAuth && !headers.has('Authorization')) {
+    headers.set('Authorization', cloudAuth);
+  }
+
+  const cloudTaskTeamId = getCloudTaskTeamId(url);
+  if (cloudTaskTeamId && !headers.has(PROMPTFOO_TEAM_ID_HEADER)) {
+    headers.set(PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
   }
 
   return Array.from(headers.entries())
@@ -423,7 +441,7 @@ function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
   return {
     byteLength: buffer.byteLength,
     hmacSha256: crypto
-      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
       .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
       .update('\0')
       .update(buffer)
@@ -605,7 +623,24 @@ async function fetchAndReadBody(
         await sleep(backoffMs);
         continue;
       }
-      throw err;
+      // Preserve cancellation: an aborted body read rejects with an AbortError, and
+      // callers (e.g. evaluator.ts) suppress expected cancellation by checking
+      // `err.name === 'AbortError'`. Wrapping it would reset the name to 'Error' and
+      // turn cancelled evals into ordinary provider failures, so rethrow aborts as-is.
+      if (isAbortError(err)) {
+        throw err;
+      }
+      // Surface the URL and HTTP response context so opaque body-read failures
+      // (e.g. "TypeError: terminated" from a Cloudflare-originated 403) include
+      // actionable diagnostics instead of a bare platform error. Sanitize the URL so
+      // credential-bearing userinfo / query params are not leaked into logs.
+      const wrappedError = new Error(
+        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
+          (err as Error).message
+        }. HTTP ${resp.status} ${resp.statusText}`,
+      ) as Error & { cause?: unknown };
+      wrappedError.cause = err;
+      throw wrappedError;
     }
   }
   // Unreachable: loop always returns or throws, but TypeScript needs this

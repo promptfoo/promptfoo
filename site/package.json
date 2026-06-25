@@ -35,7 +35,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^9.0.0",
     "@segment/ajv-human-errors": "^2.16.0",
-    "@swc/core": "^1.15.18",
+    "@swc/core": "^1.15.41",
     "@swc/jest": "^0.2.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -51,7 +51,7 @@
     "framer-motion": "^12.34.3",
     "gray-matter": "^4.0.3",
     "jsdom": "^29.0.0",
-    "langium": "4.2.4",
+    "langium": "4.3.0",
     "lucide-react": "^1.0.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
@@ -59,10 +59,10 @@
     "satori": "^0.26.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
-    "webpack": "5.106.2"
+    "webpack": "5.107.2"
   },
   "optionalDependencies": {
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.1"
   },
   "overrides": {
     "lodash-es": "^4.18.1"
@@ -87,9 +87,9 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.0.0",
     "@mui/system": "^9.0.0",
-    "@types/react": "19.2.14",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "dompurify": "^3.4.1",
+    "dompurify": "^3.4.8",
     "react-countup": "^6.5.3",
     "swiper": "^12.1.2"
   }

@@ -97,8 +97,12 @@ vi.mock('fs/promises', () => {
 const mockQuery = vi.fn();
 const mockTransformMCPConfigToClaudeCode = vi.mocked(transformMCPConfigToClaudeCode);
 
+type MockUsage = NonNullableUsage & {
+  output_tokens_details?: { thinking_tokens: number } | null;
+};
+
 // Helper to create a complete NonNullableUsage object
-const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
+const createMockUsage = (input = 0, output = 0): MockUsage => ({
   input_tokens: input,
   output_tokens: output,
   cache_creation_input_tokens: 0,
@@ -115,6 +119,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   speed: 'standard',
   inference_geo: '',
   iterations: [],
+  output_tokens_details: { thinking_tokens: 0 },
 });
 
 // Helper to create a mock BetaMessage with required fields
@@ -145,6 +150,7 @@ const createMockBetaMessage = (
     server_tool_use: null,
     service_tier: 'standard' as const,
     speed: 'standard' as const,
+    output_tokens_details: null,
   },
 });
 
@@ -306,6 +312,33 @@ describe('ClaudeCodeSDKProvider', () => {
 
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about comma-separated fallback models that are all known', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn only about the unknown entries in a comma-separated fallback list', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022,unknown-fallback' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
         'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
       );
@@ -1081,7 +1114,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
     });
 
-    describe('assistant errors and api_error_status (SDK >= 0.3.144)', () => {
+    describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
         error: SDKAssistantMessageError | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
@@ -1089,7 +1122,8 @@ describe('ClaudeCodeSDKProvider', () => {
         type: 'assistant',
         message: createMockBetaMessage([{ type: 'text', text: 'hello' }]) as any,
         parent_tool_use_id: null,
-        uuid: (opts.uuid ?? '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
+        uuid: (opts.uuid ??
+          '11111111-1111-1111-1111-111111111111') as `${string}-${string}-${string}-${string}-${string}`,
         session_id: 'test-session-123',
         ...(error ? { error } : {}),
         ...(opts.request_id ? { request_id: opts.request_id } : {}),
@@ -1207,14 +1241,17 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata).not.toHaveProperty('assistantErrors');
       });
 
-      it('annotates error result message with the last assistant error code', async () => {
-        // Verifies the model_not_found path the SDK formalized in 0.3.144 is
-        // promoted from a dropped detail to part of the error string and
-        // metadata, so consumers can distinguish it from an unrelated turn-
-        // limit failure that happens to share the same `subtype`.
+      it.each([
+        'model_not_found',
+        'overloaded',
+      ] as const)('annotates error result messages with the %s assistant error code', async (assistantError) => {
+        // The SDK formalized model_not_found in 0.3.144 and overloaded in
+        // 0.3.161. Both should be promoted from a dropped detail to the error
+        // string and metadata so consumers can distinguish the upstream cause
+        // from the generic terminal subtype.
         mockQuery.mockReturnValue(
           createMockQuery([
-            buildAssistantMessage('model_not_found', {
+            buildAssistantMessage(assistantError, {
               uuid: '33333333-3333-3333-3333-333333333333',
             }),
             {
@@ -1241,11 +1278,11 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe(
-          'Claude Agent SDK call failed: error_during_execution (model_not_found)',
+          `Claude Agent SDK call failed: error_during_execution (${assistantError})`,
         );
         expect(result.metadata?.assistantErrors).toEqual([
           {
-            error: 'model_not_found',
+            error: assistantError,
             uuid: '33333333-3333-3333-3333-333333333333',
             parentToolUseId: null,
           },
@@ -5095,6 +5132,290 @@ describe('ClaudeCodeSDKProvider', () => {
         // The extractor (not directly returned) uses modelUsage; this test proves
         // our modelUsage payload reached metadata so the new tie-break logic can
         // operate on it.
+      });
+
+      describe('gen_ai.turn marker spans', () => {
+        it('emits one gen_ai.turn span per assistant message', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([{ type: 'text', text: 'planning' }]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([{ type: 'text', text: 'final answer' }]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 2,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          const turnSpans = emittedSpans.filter((s) => s.name.startsWith('gen_ai.turn '));
+          expect(turnSpans).toHaveLength(2);
+          expect(turnSpans[0].name).toBe('gen_ai.turn 1');
+          expect(turnSpans[1].name).toBe('gen_ai.turn 2');
+          expect(turnSpans[0].attrs['gen_ai.turn.index']).toBe(1);
+          expect(turnSpans[1].attrs['gen_ai.turn.index']).toBe(2);
+          expect(turnSpans[0].attrs['gen_ai.system']).toBe('anthropic');
+        });
+
+        it('tags tool spans with the index of the assistant turn that emitted them', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              // Turn 1: emits two parallel tool_use blocks
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([
+                  { type: 'tool_use', id: 'tool-1', name: 'Read', input: { p: '/a' } },
+                  { type: 'tool_use', id: 'tool-2', name: 'Read', input: { p: '/b' } },
+                ]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'user',
+                message: {
+                  role: 'user',
+                  content: [
+                    { type: 'tool_result', tool_use_id: 'tool-1', content: 'a', is_error: false },
+                    { type: 'tool_result', tool_use_id: 'tool-2', content: 'b', is_error: false },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              // Turn 2: emits one more tool_use
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([
+                  { type: 'tool_use', id: 'tool-3', name: 'Bash', input: { command: 'ls' } },
+                ]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'user',
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'tool-3',
+                      content: 'ls output',
+                      is_error: false,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 2,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          const toolSpans = emittedSpans.filter((s) => s.name.startsWith('tool '));
+          expect(toolSpans).toHaveLength(3);
+          // First two tool spans share turn 1 (batched); third is turn 2.
+          const turnIndexes = toolSpans.map((s) => s.attrs['gen_ai.turn.index']);
+          expect(turnIndexes).toEqual([1, 1, 2]);
+        });
+
+        it('marks subagent turns and records subagent_type when present', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: 'task-tool-1',
+                subagent_type: 'researcher',
+                message: createMockBetaMessage([{ type: 'text', text: 'subagent thinking' }]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
+          expect(turnSpan).toBeDefined();
+          expect(turnSpan!.attrs['gen_ai.turn.is_subagent']).toBe(true);
+          expect(turnSpan!.attrs['gen_ai.turn.parent_tool_use_id']).toBe('task-tool-1');
+          expect(turnSpan!.attrs['gen_ai.turn.subagent_type']).toBe('researcher');
+        });
+
+        it('marks errored assistant turns with ERROR status and surfaces the error code', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                error: 'model_not_found',
+                uuid: '12345678-1234-1234-1234-1234567890ab',
+                message: createMockBetaMessage([{ type: 'text', text: '' }]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
+          expect(turnSpan).toBeDefined();
+          expect(turnSpan!.attrs['gen_ai.turn.error']).toBe('model_not_found');
+          // SpanStatusCode.ERROR === 2
+          expect(turnSpan!.status?.code).toBe(2);
+        });
+
+        it('tags batched tools emitted by a subagent turn with that turn index', async () => {
+          const { emittedSpans } = installTracerSpy();
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              // A subagent turn that emits two parallel (batched) tool_use blocks.
+              {
+                type: 'assistant',
+                parent_tool_use_id: 'task-tool-1',
+                subagent_type: 'researcher',
+                message: createMockBetaMessage([
+                  { type: 'tool_use', id: 'sub-tool-1', name: 'Read', input: { p: '/a' } },
+                  { type: 'tool_use', id: 'sub-tool-2', name: 'Grep', input: { q: 'x' } },
+                ]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'user',
+                parent_tool_use_id: 'task-tool-1',
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'sub-tool-1',
+                      content: 'a',
+                      is_error: false,
+                    },
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'sub-tool-2',
+                      content: 'b',
+                      is_error: false,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'ok',
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.001,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('prompt');
+
+          // The single subagent turn is marked as a subagent.
+          const turnSpan = emittedSpans.find((s) => s.name === 'gen_ai.turn 1');
+          expect(turnSpan).toBeDefined();
+          expect(turnSpan!.attrs['gen_ai.turn.is_subagent']).toBe(true);
+          expect(turnSpan!.attrs['gen_ai.turn.subagent_type']).toBe('researcher');
+
+          // Both batched tools inherit that subagent turn's index.
+          const toolSpans = emittedSpans.filter((s) => s.name.startsWith('tool '));
+          expect(toolSpans).toHaveLength(2);
+          expect(toolSpans.map((s) => s.attrs['gen_ai.turn.index'])).toEqual([1, 1]);
+        });
       });
     });
   });
