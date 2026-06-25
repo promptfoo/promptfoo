@@ -390,6 +390,31 @@ describeEvaluator('evaluator scenarios and conversations', () => {
     ).toEqual([]);
   });
 
+  it('does not load scenario provider overrides excluded by filter ranges', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('only')],
+      scenarios: [
+        {
+          config: [{ provider: 'file://missing-provider.cjs' }, {}],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2', maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('suite-provider');
+    expect(suiteProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {
     const suiteProviderA: ApiProvider = {
       id: () => 'suite-a',

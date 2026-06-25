@@ -368,19 +368,54 @@ function getConfigFileChildContext(
   return isScriptAssertionValue(config, key) ? 'assertion' : key === 'vars' ? 'vars' : context;
 }
 
+function isPlainConfigRecord(value: object): value is Record<string, unknown> {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isLiveProviderRecord(value: Record<string, unknown>): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'id') &&
+    Object.prototype.hasOwnProperty.call(value, 'callApi') &&
+    typeof value.id === 'function' &&
+    typeof value.callApi === 'function'
+  );
+}
+
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: ConfigFileContext,
   envOverrides?: EnvOverrides,
+  seen = new WeakMap<object, any>(),
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context, envOverrides));
+    const cached = seen.get(config);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result: any[] = [];
+    seen.set(config, result);
+    for (const item of config) {
+      result.push(maybeLoadConfigFromExternalFile(item, context, envOverrides, seen));
+    }
+    return result;
   }
   if (typeof config === 'object' && config !== null) {
+    if (!isPlainConfigRecord(config)) {
+      return config;
+    }
+    if (isLiveProviderRecord(config)) {
+      return config;
+    }
+    const cached = seen.get(config);
+    if (cached !== undefined) {
+      return cached;
+    }
     const result: Record<string, any> = {};
+    seen.set(config, result);
     for (const key of Object.keys(config)) {
       const childContext = getConfigFileChildContext(config, key, context);
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext, envOverrides);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext, envOverrides, seen);
 
       Object.defineProperty(result, key, {
         value,

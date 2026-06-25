@@ -278,14 +278,28 @@ describe('scenarioMatrix (real filesystem)', () => {
     case: provider-string
   provider: python:./target.py
 - vars:
+    case: provider-basename
+  provider: python:provider.py
+- vars:
+    case: provider-basename-function
+  provider: python:provider.py:custom
+- vars:
     case: provider-object
   provider:
     id: exec:./target.sh
+- vars:
+    case: provider-exec-command
+  provider: exec:node ./provider.js --mode local
 - vars:
     case: provider-map
   provider:
     "golang:./target.go":
       label: local-go-provider
+- vars:
+    case: provider-ruby-map
+  provider:
+    "ruby:provider.rb":
+      label: local-ruby-provider
 `,
       );
 
@@ -300,16 +314,36 @@ describe('scenarioMatrix (real filesystem)', () => {
           provider: `python:${path.join(tmpDir, 'matrices/target.py')}`,
         },
         {
+          vars: { case: 'provider-basename' },
+          provider: `python:${path.join(tmpDir, 'matrices/provider.py')}`,
+        },
+        {
+          vars: { case: 'provider-basename-function' },
+          provider: `python:${path.join(tmpDir, 'matrices/provider.py')}:custom`,
+        },
+        {
           vars: { case: 'provider-object' },
           provider: {
             id: `exec:${path.join(tmpDir, 'matrices/target.sh')}`,
           },
         },
         {
+          vars: { case: 'provider-exec-command' },
+          provider: `exec:node ${path.join(tmpDir, 'matrices/provider.js')} --mode local`,
+        },
+        {
           vars: { case: 'provider-map' },
           provider: {
             [`golang:${path.join(tmpDir, 'matrices/target.go')}`]: {
               label: 'local-go-provider',
+            },
+          },
+        },
+        {
+          vars: { case: 'provider-ruby-map' },
+          provider: {
+            [`ruby:${path.join(tmpDir, 'matrices/provider.rb')}`]: {
+              label: 'local-ruby-provider',
             },
           },
         },
@@ -493,6 +527,30 @@ describe('scenarioMatrix (real filesystem)', () => {
       const expanded = await expandScenarioConfigValues([{ provider: liveProvider }], tmpDir);
 
       expect(expanded[0].provider).toBe(liveProvider);
+    });
+
+    it('loads file refs in rows that also contain live providers', async () => {
+      const liveProvider = {
+        id: () => 'live-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'same instance' }),
+      };
+      write('output.txt', 'MODEL_OUTPUT');
+      write('expected.txt', 'EXPECTED');
+
+      const [expanded] = await expandScenarioConfigValues(
+        [
+          {
+            provider: liveProvider,
+            providerOutput: 'file://output.txt',
+            assert: [{ type: 'contains', value: 'file://expected.txt' }],
+          },
+        ],
+        tmpDir,
+      );
+
+      expect(expanded.provider).toBe(liveProvider);
+      expect(expanded.providerOutput).toBe('MODEL_OUTPUT');
+      expect(expanded.assert).toEqual([{ type: 'contains', value: 'EXPECTED' }]);
     });
 
     it('preserves live grader provider identity inside typed provider maps', async () => {

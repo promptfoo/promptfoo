@@ -147,18 +147,104 @@ function isBareLocalProviderPath(providerPath: string): boolean {
   );
 }
 
-function isPrefixedLocalProviderPath(providerPath: string): boolean {
-  for (const prefix of ['exec:', 'python:', 'golang:']) {
-    if (providerPath.startsWith(prefix)) {
-      const scriptPath = providerPath.slice(prefix.length);
-      return scriptPath.includes('/') || scriptPath.includes('\\');
-    }
-  }
-  return false;
-}
-
 function resolveProviderPathFromBase(basePath: string, providerPath: string): string {
   return path.isAbsolute(providerPath) ? providerPath : path.resolve(basePath, providerPath);
+}
+
+function splitScriptPathAndFunctionName(
+  scriptPath: string,
+  extensions: string[],
+): { scriptPath: string; functionName?: string } {
+  const lastColonIndex = scriptPath.lastIndexOf(':');
+  if (lastColonIndex <= 1) {
+    return { scriptPath };
+  }
+  const pathWithoutFunction = scriptPath.slice(0, lastColonIndex);
+  if (extensions.some((extension) => pathWithoutFunction.endsWith(extension))) {
+    return {
+      scriptPath: pathWithoutFunction,
+      functionName: scriptPath.slice(lastColonIndex + 1),
+    };
+  }
+  return { scriptPath };
+}
+
+function quoteExecPart(part: string): string {
+  return /\s/.test(part) ? JSON.stringify(part) : part;
+}
+
+function isLocalScriptPath(scriptPath: string, extensions: string[]): boolean {
+  return (
+    path.isAbsolute(scriptPath) ||
+    /^\.{1,2}[\\/]/.test(scriptPath) ||
+    scriptPath.includes('/') ||
+    scriptPath.includes('\\') ||
+    extensions.some((extension) => scriptPath.endsWith(extension))
+  );
+}
+
+function resolveScriptProviderIdFromBase(
+  basePath: string,
+  providerId: string,
+  prefix: string,
+  extensions: string[],
+): string {
+  const scriptRef = providerId.slice(prefix.length);
+  const { scriptPath, functionName } = splitScriptPathAndFunctionName(scriptRef, extensions);
+  if (!isLocalScriptPath(scriptPath, extensions)) {
+    return providerId;
+  }
+  const resolvedScriptPath = resolveProviderPathFromBase(basePath, scriptPath);
+  return `${prefix}${resolvedScriptPath}${functionName ? `:${functionName}` : ''}`;
+}
+
+function parseExecParts(command: string): string[] {
+  const parts: string[] = [];
+  const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = scriptPartsRegex.exec(command)) !== null) {
+    parts.push(match[1] ?? match[2] ?? match[0]);
+  }
+  return parts;
+}
+
+function isLocalExecPart(part: string): boolean {
+  return (
+    path.isAbsolute(part) || /^\.{1,2}[\\/]/.test(part) || part.includes('/') || part.includes('\\')
+  );
+}
+
+function resolveExecProviderIdFromBase(basePath: string, providerId: string): string {
+  const prefix = 'exec:';
+  const command = providerId.slice(prefix.length).trimStart();
+  const leadingWhitespace = providerId.slice(prefix.length, providerId.length - command.length);
+  const parts = parseExecParts(command);
+  if (parts.length === 0) {
+    return providerId;
+  }
+  const resolvedParts = parts.map((part) =>
+    isLocalExecPart(part) ? resolveProviderPathFromBase(basePath, part) : part,
+  );
+  if (resolvedParts.every((part, index) => part === parts[index])) {
+    return providerId;
+  }
+  return `${prefix}${leadingWhitespace}${resolvedParts.map(quoteExecPart).join(' ')}`;
+}
+
+function resolvePrefixedProviderIdFromBase(basePath: string, providerId: string): string {
+  if (providerId.startsWith('exec:')) {
+    return resolveExecProviderIdFromBase(basePath, providerId);
+  }
+  if (providerId.startsWith('python:')) {
+    return resolveScriptProviderIdFromBase(basePath, providerId, 'python:', ['.py']);
+  }
+  if (providerId.startsWith('golang:')) {
+    return resolveScriptProviderIdFromBase(basePath, providerId, 'golang:', ['.go']);
+  }
+  if (providerId.startsWith('ruby:')) {
+    return resolveScriptProviderIdFromBase(basePath, providerId, 'ruby:', ['.rb']);
+  }
+  return providerId;
 }
 
 function resolveProviderIdFromBase(
@@ -172,12 +258,7 @@ function resolveProviderIdFromBase(
   if (isBareLocalProviderPath(providerId)) {
     return resolveProviderPathFromBase(basePath, providerId);
   }
-  if (isPrefixedLocalProviderPath(providerId)) {
-    const prefix = providerId.slice(0, providerId.indexOf(':') + 1);
-    const scriptPath = providerId.slice(prefix.length);
-    return `${prefix}${resolveProviderPathFromBase(basePath, scriptPath)}`;
-  }
-  return providerId;
+  return resolvePrefixedProviderIdFromBase(basePath, providerId);
 }
 
 /**
@@ -350,28 +431,6 @@ function isLiveProvider(value: Record<string, unknown>): boolean {
     typeof value.id === 'function' &&
     typeof value.callApi === 'function'
   );
-}
-
-function containsRuntimeObjectOrCycle(value: unknown, seen = new WeakSet<object>()): boolean {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  if (seen.has(value)) {
-    return true;
-  }
-  seen.add(value);
-  if (Array.isArray(value)) {
-    return value.some((item) => containsRuntimeObjectOrCycle(item, seen));
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return true;
-  }
-  const record = value as Record<string, unknown>;
-  if (isLiveProvider(record)) {
-    return true;
-  }
-  return Object.values(record).some((nested) => containsRuntimeObjectOrCycle(nested, seen));
 }
 
 function containsFileRefString(value: unknown, seen = new WeakSet<object>()): boolean {
@@ -666,7 +725,7 @@ export function materializeScenarioTestCase<T>(
   testCase: T,
   envOverrides?: EnvOverrides,
 ): T {
-  if (containsRuntimeObjectOrCycle(testCase) || !containsFileRefString(testCase)) {
+  if (!containsFileRefString(testCase)) {
     return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
   }
   const resolvedFileRefs = resolveNestedFileRefs(basePath, testCase, envOverrides);
@@ -683,7 +742,7 @@ function materializeScenarioConfigRow(
   row: unknown,
   envOverrides?: EnvOverrides,
 ): Scenario['config'][number] {
-  if (containsRuntimeObjectOrCycle(row) || !containsFileRefString(row)) {
+  if (!containsFileRefString(row)) {
     return resolveScenarioConfigRowProviders(basePath, row, envOverrides);
   }
   const resolvedFileRefs = resolveNestedFileRefs(basePath, row, envOverrides);

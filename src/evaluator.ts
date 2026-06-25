@@ -2267,6 +2267,36 @@ async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase
   return changed ? resolvedRows : rows;
 }
 
+async function resolveScenarioTargetProvidersForTests(
+  tests: AtomicTestCase[],
+  testSuite: TestSuite,
+): Promise<AtomicTestCase[]> {
+  let changed = false;
+  const resolvedTests: AtomicTestCase[] = [];
+  for (const test of tests) {
+    if (!scenarioTargetOverrideTests.has(test) || !test.provider || isApiProvider(test.provider)) {
+      resolvedTests.push(test);
+      continue;
+    }
+    const provider = await resolveRuntimeTargetProviderReference(
+      test.provider,
+      scenarioTestSourceEnvs.get(test) ?? testSuite.env,
+    );
+    if (provider === test.provider) {
+      resolvedTests.push(test);
+      continue;
+    }
+    const resolvedTest = { ...test, provider };
+    scenarioTargetOverrideTests.add(resolvedTest);
+    if (scenarioTestSourceEnvs.has(test)) {
+      scenarioTestSourceEnvs.set(resolvedTest, scenarioTestSourceEnvs.get(test));
+    }
+    resolvedTests.push(resolvedTest);
+    changed = true;
+  }
+  return changed ? resolvedTests : tests;
+}
+
 async function resolveScenarioTargetProviderReferences(testSuite: TestSuite): Promise<TestSuite> {
   if (!testSuite.scenarios) {
     return testSuite;
@@ -2378,7 +2408,7 @@ function mergeScenarioTest(
     metadata: mergedMetadata,
   } as AtomicTestCase;
 
-  if ((scenarioData.provider || test.provider) && isApiProvider(mergedTest.provider)) {
+  if (scenarioData.provider || test.provider) {
     scenarioTargetOverrideTests.add(mergedTest);
   }
   if (sourceEnv !== undefined) {
@@ -4770,9 +4800,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return this.store.evaluation;
     }
 
-    testSuite = await resolveScenarioTargetProviderReferences(testSuite);
     let tests = buildTestsFromSuite(testSuite);
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+    tests = await resolveScenarioTargetProvidersForTests(tests, testSuite);
 
     prompts.push(...buildCompletedPrompts(testSuite, this.store, tests));
     const promptIndexMap = buildPromptIndexMap(prompts);
