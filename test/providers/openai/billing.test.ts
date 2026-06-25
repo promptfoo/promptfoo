@@ -149,6 +149,27 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((100 * 5 + 60 * 5 + 40 * 0.5 + 10 * 30) / 1e6, 10);
   });
 
+  it('applies custom input costs to text-priced chat-latest image tokens', () => {
+    const usage = {
+      input_tokens: 200,
+      output_tokens: 10,
+      input_tokens_details: {
+        text_tokens: 100,
+        image_tokens: 100,
+        cached_tokens: 40,
+        cached_tokens_details: { image_tokens: 40 },
+      },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 10e-6, outputCost: 60e-6 }, usage),
+    ).toBeCloseTo(200 * 10e-6 + 10 * 60e-6, 10);
+    expect(calculateOpenAIUsageCost('chat-latest', { cost: 10e-6 }, usage)).toBeCloseTo(
+      210 * 10e-6,
+      10,
+    );
+  });
+
   it('keeps documented standard rates for chat-latest long prompts', () => {
     expect(
       calculateOpenAIUsageCost(
@@ -495,15 +516,15 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.01, 10);
   });
 
-  it('uses reasoning-model web search pricing for chat-latest aliases', () => {
+  it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {
     const output = {
       output: [{ type: 'web_search_call', action: { type: 'search' } }],
     };
     const config = { tools: [{ type: 'web_search_preview' as const }] };
 
-    expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.01, 10);
+    expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.025, 10);
     expect(calculateObservableOpenAIToolCost(output, 'openai/chat-latest', config)).toBeCloseTo(
-      0.01,
+      0.025,
       10,
     );
     expect(calculateObservableOpenAIToolCost(output, 'vendor/chat-latest', config)).toBeCloseTo(

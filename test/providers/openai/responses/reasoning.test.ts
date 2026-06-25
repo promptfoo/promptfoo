@@ -122,8 +122,6 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
-    { model: 'chat-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
-    { model: 'openai/chat-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)('should configure $model model correctly with reasoning parameters', async ({
     model,
     reasoningEffort,
@@ -175,16 +173,22 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(body.temperature).toBeUndefined();
   });
 
-  it('should not apply chat-latest reasoning defaults to custom model suffixes', async () => {
-    const provider = new OpenAiResponsesProvider('vendor/chat-latest', {
+  it.each([
+    'chat-latest',
+    'openai/chat-latest',
+    'vendor/chat-latest',
+  ])('should treat %s as a non-reasoning chat model', async (model) => {
+    const provider = new OpenAiResponsesProvider(model, {
       config: {
         apiKey: 'test-key',
+        reasoning_effort: 'medium',
         temperature: 0.7,
       },
     });
 
     const { body } = await provider.getOpenAiBody('Test prompt');
 
+    expect(body.model).toBe(model);
     expect(body.temperature).toBe(0.7);
     expect(body.reasoning).toBeUndefined();
   });

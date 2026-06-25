@@ -744,12 +744,15 @@ export function calculateOpenAIUsageCost(
       output: config.audioOutputCost ?? config.audioCost,
     },
   );
+  const imageInputCost = TEXT_PRICED_IMAGE_INPUT_MODELS.has(modelName)
+    ? (config.inputCost ?? config.cost)
+    : undefined;
   const imageCost = calculateModalCost(
     rates.image,
     usage.imageInputTokens,
     cachedInput.imageInputTokens,
     usage.imageOutputTokens,
-    {},
+    { input: imageInputCost, cachedInput: imageInputCost },
   );
 
   return textCost + audioCost + imageCost;
@@ -757,8 +760,6 @@ export function calculateOpenAIUsageCost(
 
 function isReasoningModel(modelName: string): boolean {
   return (
-    modelName === 'chat-latest' ||
-    modelName === 'openai/chat-latest' ||
     modelName.startsWith('gpt-5') ||
     modelName.startsWith('o1') ||
     modelName.startsWith('o3') ||

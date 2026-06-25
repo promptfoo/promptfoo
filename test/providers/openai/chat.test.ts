@@ -1758,7 +1758,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
-    it('should identify GPT-5 models correctly including prefixed names', async () => {
+    it('should classify GPT-5 and ChatGPT Instant aliases correctly', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
       const gpt55Provider = new OpenAiChatCompletionProvider('gpt-5.5');
@@ -1784,14 +1784,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(gpt5Provider['isGPT5Model']()).toBe(true);
       expect(gpt55Provider['isGPT5Model']()).toBe(true);
-      expect(chatLatestProvider['isGPT5Model']()).toBe(true);
+      expect(chatLatestProvider['isGPT5Model']()).toBe(false);
+      expect(chatLatestProvider['isReasoningModel']()).toBe(false);
+      expect(chatLatestProvider['supportsTemperature']()).toBe(true);
       expect(gpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt55Provider['isGPT5Model']()).toBe(true);
-      expect(prefixedChatLatestProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedChatLatestProvider['isGPT5Model']()).toBe(false);
+      expect(prefixedChatLatestProvider['isReasoningModel']()).toBe(false);
+      expect(prefixedChatLatestProvider['supportsTemperature']()).toBe(true);
       expect(prefixedChatLatestProvider['getBillingModelName']({})).toBe('chat-latest');
       expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
@@ -1802,6 +1806,25 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(customChatLatestProvider['isGPT5Model']()).toBe(false);
       expect(customChatLatestProvider['getBillingModelName']({})).toBe('vendor/chat-latest');
       expect(customChatLatestProvider['supportsTemperature']()).toBe(true);
+    });
+
+    it.each([
+      'chat-latest',
+      'openai/chat-latest',
+    ])('should send %s as a non-reasoning chat model', async (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        config: {
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe(model);
+      expect(body.temperature).toBe(0.7);
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.verbosity).toBeUndefined();
     });
 
     it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
