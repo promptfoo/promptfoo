@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { RunOptionsContent } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import type { Config } from '../types';
@@ -17,12 +16,13 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+type RunOptionsProps = ComponentProps<typeof RunOptionsContent>;
 
 const InteractiveRunOptions = () => {
   const [numTests, setNumTests] = useState<number | undefined>(10);
   const [maxCharsPerMessage, setMaxCharsPerMessage] = useState<number | undefined>(25);
   const [minCharsPerMessage, setMinCharsPerMessage] = useState<number | undefined>(50);
-  const [runOptions, setRunOptions] = useState<Partial<RedteamRunOptions>>({
+  const [runOptions, setRunOptions] = useState<NonNullable<RunOptionsProps['runOptions']>>({
     delay: 0,
     maxConcurrency: 1,
     verbose: false,
@@ -40,10 +40,7 @@ const InteractiveRunOptions = () => {
     }
   };
 
-  const updateRunOption = (
-    key: keyof RedteamRunOptions,
-    value: RedteamRunOptions[keyof RedteamRunOptions],
-  ) => {
+  const updateRunOption = (...[key, value]: Parameters<RunOptionsProps['updateRunOption']>) => {
     setRunOptions((current) => ({ ...current, [key]: value }));
   };
 
@@ -64,5 +61,10 @@ const InteractiveRunOptions = () => {
 };
 
 export const InteractiveValidationProof: Story = {
+  args: {
+    numTests: 10,
+    updateConfig: () => {},
+    updateRunOption: () => {},
+  },
   render: () => <InteractiveRunOptions />,
 };
