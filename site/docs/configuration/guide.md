@@ -389,7 +389,9 @@ assertionTemplates:
 
 Promptfoo resolves a pure local `$ref` object used to select a schema from the surrounding config. Once selected, references owned by the standalone JSON Schema are passed through unchanged. This boundary applies to provider-owned structured-output and tool schema fields, including OpenAI-compatible response formats and tools, Codex `output_schema`, OpenAI Agents output and tool schemas, Anthropic `output_format.schema`, Google response and function-declaration schemas, OpenCode `format.schema`, Vercel `responseSchema`, and Anthropic or Bedrock tool schemas in provider, target, prompt, and test-option config.
 
-Loading a complete response format with `file://` remains supported. Whether a provider accepts internal, relative, remote, cyclic, or malformed schema references depends on that provider.
+If an ordinary config `$ref` also selects that definition, Promptfoo gives the provider a detached schema copy. The reference parser processes the shared definition and all of its child refs as ordinary config. Promptfoo makes this distinction for inline values and local `#/...` selectors. If an external `$ref` loads a config that contains a schema, the reference parser keeps its existing behavior.
+
+Loading a complete response format with `file://` remains supported. A pure `$ref: file://...` object at a schema root loads that file while leaving references inside the loaded schema unchanged. Whether a provider accepts internal, relative, remote, cyclic, or malformed schema references depends on that provider.
 
 :::
 
