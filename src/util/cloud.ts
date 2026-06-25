@@ -21,7 +21,7 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  * @param path - The API endpoint path (with or without leading slash)
  * @param method - HTTP method (GET, POST, PUT, DELETE, etc.)
  * @param body - Optional request body that will be JSON stringified
- * @param options - Request options, including suppression of response-body logging
+ * @param options - Request options, including logging suppression and cancellation
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
@@ -29,7 +29,7 @@ export function makeRequest(
   path: string,
   method: string,
   body?: any,
-  options: { silent?: boolean } = {},
+  options: { signal?: AbortSignal; silent?: boolean } = {},
 ): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
@@ -46,6 +46,7 @@ export function makeRequest(
       method,
       body: JSON.stringify(body),
       headers,
+      ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -574,10 +575,14 @@ function convertErrorsToReadableMessage(
  * Checks with PromptFoo Cloud to ensure providers and other resources can be accessed.
  * Gracefully degrades if cloud is disabled or server doesn't support permission checking.
  * @param config - The configuration to validate permissions for
+ * @param signal - Optional cancellation signal
  * @throws ConfigPermissionError if permissions are insufficient (403 responses)
  * @throws Error for other critical permission check failures
  */
-export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
+export async function checkCloudPermissions(
+  config: Partial<UnifiedConfig>,
+  signal?: AbortSignal,
+): Promise<void> {
   if (!cloudConfig.isEnabled()) {
     return;
   }
@@ -588,10 +593,18 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
   }
 
   try {
-    const hasPermissionCheckServerFeature = await checkServerFeatureSupport(
-      PERMISSION_CHECK_SERVER_FEATURE_NAME,
-      PERMISSION_CHECK_SERVER_FEATURE_DATE,
-    );
+    signal?.throwIfAborted();
+    const hasPermissionCheckServerFeature = await (signal
+      ? checkServerFeatureSupport(
+          PERMISSION_CHECK_SERVER_FEATURE_NAME,
+          PERMISSION_CHECK_SERVER_FEATURE_DATE,
+          signal,
+        )
+      : checkServerFeatureSupport(
+          PERMISSION_CHECK_SERVER_FEATURE_NAME,
+          PERMISSION_CHECK_SERVER_FEATURE_DATE,
+        ));
+    signal?.throwIfAborted();
     if (!hasPermissionCheckServerFeature) {
       logger.debug(
         `[Config Permission Check] Server feature ${PERMISSION_CHECK_SERVER_FEATURE_NAME} is not supported. Skipping permission check.`,
@@ -605,12 +618,17 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       minimalConfig.redteam = {} as typeof minimalConfig.redteam;
     }
 
-    const response = await makeRequest('permissions/check', 'POST', {
-      config: minimalConfig,
-    });
+    const response = await makeRequest(
+      'permissions/check',
+      'POST',
+      { config: minimalConfig },
+      signal ? { signal } : undefined,
+    );
+    signal?.throwIfAborted();
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
+      signal?.throwIfAborted();
       const errors: { type: string; id: string; message: string }[] = Array.isArray(
         errorData.errors,
       )
@@ -643,6 +661,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     }
 
     const result = await response.json();
+    signal?.throwIfAborted();
     if (result.errors && result.errors.length > 0) {
       throw new ConfigPermissionError(
         `Not able to continue with config: ${convertErrorsToReadableMessage(result.errors)}`,
@@ -651,6 +670,9 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
 
     logger.debug('Permission check passed');
   } catch (error) {
+    if (signal?.aborted) {
+      signal.throwIfAborted();
+    }
     if (error instanceof ConfigPermissionError) {
       throw error;
     }

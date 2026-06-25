@@ -84,14 +84,37 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   return false;
 }
 
-export function getSharingDisabledReason(): string {
-  return getEnvBool('PROMPTFOO_DISABLE_SHARING')
-    ? 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.'
-    : 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
+export function isSelfHostedShareViewConfigured(evalRecord: Eval): boolean {
+  const sharing = evalRecord.config.sharing;
+  return Boolean(
+    (typeof sharing === 'object' && sharing.appBaseUrl) ||
+      getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') ||
+      getEnvString('PROMPTFOO_SHARING_APP_BASE_URL'),
+  );
 }
 
-export function checkCloudShareAuthentication(): Promise<Response> {
-  return makeCloudRequest('/users/me/teams', 'GET', undefined, { silent: true });
+export function getSharingDisabledReason(evalRecord?: Eval): string {
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    return 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.';
+  }
+  if (
+    evalRecord &&
+    !cloudConfig.isEnabled() &&
+    isSharingEnabled(evalRecord) &&
+    !isSelfHostedShareViewConfigured(evalRecord)
+  ) {
+    return 'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.';
+  }
+  return 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
+}
+
+export function checkCloudShareAuthentication(signal?: AbortSignal): Promise<Response> {
+  return makeCloudRequest(
+    '/users/me/teams',
+    'GET',
+    undefined,
+    signal ? { signal, silent: true } : { silent: true },
+  );
 }
 
 export function isModelAuditSharingEnabled(): boolean {
@@ -198,6 +221,8 @@ async function sendEvalRecord(
   );
 
   const response = await fetchWithProxy(url, {
+    // Do not abort the non-idempotent create after it starts: the remote may persist the eval
+    // before returning its ID. Waiting for that ID lets the caller roll it back on cancellation.
     method: 'POST',
     headers,
     body: jsonData,
@@ -474,7 +499,7 @@ async function sendChunkedResults(
   logger.debug(`Starting chunked results upload to ${url}`);
 
   signal?.throwIfAborted();
-  await checkCloudPermissions(evalRecord.config);
+  await checkCloudPermissions(evalRecord.config, signal);
   signal?.throwIfAborted();
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob

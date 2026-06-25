@@ -56,6 +56,7 @@ vi.mock('../../../src/share', () => {
     getSharingDisabledReason: vi.fn(),
     isAbortError: (error: unknown) =>
       error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException'),
+    isSelfHostedShareViewConfigured: vi.fn(),
     isSharingEnabled: vi.fn(),
     stripAuthFromUrl: vi.fn((url: string) => url),
   };
@@ -96,6 +97,7 @@ import {
   createShareableUrl,
   determineShareDomain,
   getSharingDisabledReason,
+  isSelfHostedShareViewConfigured,
   isSharingEnabled,
 } from '../../../src/share';
 import telemetry from '../../../src/telemetry';
@@ -117,6 +119,7 @@ const mockedCheckCloudShareAuthentication = vi.mocked(checkCloudShareAuthenticat
 const mockedCreateShareableUrl = vi.mocked(createShareableUrl);
 const mockedDetermineShareDomain = vi.mocked(determineShareDomain);
 const mockedGetSharingDisabledReason = vi.mocked(getSharingDisabledReason);
+const mockedIsSelfHostedShareViewConfigured = vi.mocked(isSelfHostedShareViewConfigured);
 const mockedIsSharingEnabled = vi.mocked(isSharingEnabled);
 const mockedTelemetry = vi.mocked(telemetry);
 const mockedSynthesizeFromTestSuite = vi.mocked(synthesizeFromTestSuite);
@@ -154,6 +157,7 @@ describe('inline server API DTO validation', () => {
     mockedGetSharingDisabledReason.mockReturnValue(
       'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
     );
+    mockedIsSelfHostedShareViewConfigured.mockReturnValue(true);
     // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
     // by one test cannot leak into another.
     promptCacheService.invalidate();
@@ -328,7 +332,32 @@ describe('inline server API DTO validation', () => {
       sharingEnabled: true,
       isRetryable: false,
     });
-    expect(mockedCheckCloudShareAuthentication).toHaveBeenCalledOnce();
+    expect(mockedCheckCloudShareAuthentication).toHaveBeenCalledWith(expect.any(AbortSignal));
+  });
+
+  it('requires an explicit viewer URL for self-hosted sharing', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(false);
+    mockedIsSharingEnabled.mockReturnValue(true);
+    mockedIsSelfHostedShareViewConfigured.mockReturnValue(false);
+    mockedGetSharingDisabledReason.mockReturnValue(
+      'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.',
+    );
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      domain: 'https://promptfoo.app',
+      isCloudEnabled: false,
+      sharingEnabled: false,
+      sharingDisabledReason:
+        'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.',
+      isRetryable: false,
+    });
+    expect(mockedGetSharingDisabledReason).toHaveBeenCalledWith(expect.anything());
+    expect(mockedCheckCloudShareAuthentication).not.toHaveBeenCalled();
   });
 
   it('reports unconfigured sharing without probing Cloud', async () => {
@@ -419,6 +448,78 @@ describe('inline server API DTO validation', () => {
       isRetryable: true,
     });
     expect(JSON.stringify(response.body)).not.toContain('private hostname');
+  });
+
+  it('cancels Cloud auth validation when the client disconnects', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    mockedIsSharingEnabled.mockReturnValue(true);
+    let authSignal: AbortSignal | undefined;
+    mockedCheckCloudShareAuthentication.mockImplementation((signal) => {
+      if (!signal) {
+        throw new Error('Expected a request-scoped availability signal');
+      }
+      authSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected the test server to listen on a TCP port');
+    }
+    const clientRequest = makeHttpRequest({
+      hostname: '127.0.0.1',
+      port: address.port,
+      path: '/api/results/share/check-domain?id=eval-1',
+      method: 'GET',
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.end();
+
+    await vi.waitFor(() => expect(authSignal).toBeDefined());
+    clientRequest.destroy();
+
+    await vi.waitFor(() => expect(authSignal?.aborted).toBe(true));
+    expect(mockedCheckCloudShareAuthentication).toHaveBeenCalledOnce();
+  });
+
+  it('does not start Cloud auth after a disconnect during the eval lookup', async () => {
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    mockedIsSharingEnabled.mockReturnValue(true);
+    let finishLookup!: (evalRecord: unknown) => void;
+    mockedEval.findById.mockReturnValue(
+      new Promise((resolve) => {
+        finishLookup = resolve;
+      }) as never,
+    );
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected the test server to listen on a TCP port');
+    }
+    const serverSawDisconnect = new Promise<void>((resolve) => {
+      server.once('connection', (socket) => socket.once('close', resolve));
+    });
+    const clientRequest = makeHttpRequest({
+      hostname: '127.0.0.1',
+      port: address.port,
+      path: '/api/results/share/check-domain?id=eval-1',
+      method: 'GET',
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.end();
+
+    await vi.waitFor(() => expect(mockedEval.findById).toHaveBeenCalledOnce());
+    clientRequest.destroy();
+    await serverSawDisconnect;
+    finishLookup({ id: 'eval-1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(mockedCheckCloudShareAuthentication).not.toHaveBeenCalled();
   });
 
   it('returns a structured 500 when the share availability lookup fails', async () => {

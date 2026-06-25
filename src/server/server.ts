@@ -33,6 +33,7 @@ import {
   determineShareDomain,
   getSharingDisabledReason,
   isAbortError,
+  isSelfHostedShareViewConfigured,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../share';
@@ -98,6 +99,79 @@ function describeCloudSharingFailure(status: number): {
     sharingDisabledReason: `Promptfoo Cloud could not validate sharing (HTTP ${status}).`,
     isRetryable: false,
   };
+}
+
+interface ShareAvailability {
+  domain: string;
+  isCloudEnabled: boolean;
+  sharingEnabled: boolean;
+  sharingDisabledReason?: string;
+  isRetryable: boolean;
+}
+
+async function loadEvalForShareAvailability(
+  id: string,
+  res: Response,
+  signal: AbortSignal,
+): Promise<Eval | null> {
+  let eval_: Eval | undefined;
+  try {
+    eval_ = await Eval.findById(id);
+  } catch (error) {
+    if (!signal.aborted) {
+      sendError(res, 500, 'Failed to load eval for share availability', error);
+    }
+    return null;
+  }
+  if (signal.aborted) {
+    return null;
+  }
+  if (!eval_) {
+    logger.warn('Eval not found for share check-domain', { id });
+    res.status(404).json({ error: 'Eval not found' });
+    return null;
+  }
+  return eval_;
+}
+
+async function getShareAvailability(
+  eval_: Eval,
+  signal: AbortSignal,
+): Promise<ShareAvailability | null> {
+  const { domain } = determineShareDomain(eval_);
+  const isCloudEnabled = cloudConfig.isEnabled();
+  let sharingEnabled = isSharingEnabled(eval_);
+  let sharingDisabledReason: string | undefined;
+  let isRetryable = false;
+
+  if (sharingEnabled && !isCloudEnabled && !isSelfHostedShareViewConfigured(eval_)) {
+    sharingEnabled = false;
+  }
+  if (!sharingEnabled) {
+    sharingDisabledReason = getSharingDisabledReason(eval_);
+  }
+
+  if (isCloudEnabled && sharingEnabled) {
+    try {
+      const response = await checkCloudShareAuthentication(signal);
+      signal.throwIfAborted();
+      if (!response.ok) {
+        sharingEnabled = false;
+        ({ sharingDisabledReason, isRetryable } = describeCloudSharingFailure(response.status));
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        return null;
+      }
+      logger.debug('[share check-domain] Failed to validate cloud auth', { error });
+      sharingEnabled = false;
+      sharingDisabledReason =
+        'Could not connect to Promptfoo Cloud. Check your network connection and try again.';
+      isRetryable = true;
+    }
+  }
+
+  return { domain, isCloudEnabled, sharingEnabled, sharingDisabledReason, isRetryable };
 }
 
 /**
@@ -294,55 +368,34 @@ export function createApp() {
     }
     const { id } = queryResult.data;
 
-    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
-    try {
-      eval_ = await Eval.findById(id);
-    } catch (error) {
-      sendError(res, 500, 'Failed to load eval for share availability', error);
-      return;
-    }
-    if (!eval_) {
-      logger.warn('Eval not found for share check-domain', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    const { domain } = determineShareDomain(eval_);
-    const isCloudEnabled = cloudConfig.isEnabled();
-    let sharingEnabled = isSharingEnabled(eval_);
-    let sharingDisabledReason: string | undefined;
-    let isRetryable = false;
-
-    if (!sharingEnabled) {
-      sharingDisabledReason = getSharingDisabledReason();
-    }
-
-    // If cloud is enabled, validate that the auth token is actually valid
-    if (isCloudEnabled && sharingEnabled) {
-      try {
-        const response = await checkCloudShareAuthentication();
-        if (!response.ok) {
-          sharingEnabled = false;
-          ({ sharingDisabledReason, isRetryable } = describeCloudSharingFailure(response.status));
-        }
-      } catch (error) {
-        logger.debug('[share check-domain] Failed to validate cloud auth', { error });
-        sharingEnabled = false;
-        sharingDisabledReason =
-          'Could not connect to Promptfoo Cloud. Check your network connection and try again.';
-        isRetryable = true;
+    const availabilityController = new AbortController();
+    const abortAvailability = () => {
+      if (!res.writableEnded && !availabilityController.signal.aborted) {
+        availabilityController.abort();
       }
-    }
+    };
+    req.once('aborted', abortAvailability);
+    res.once('close', abortAvailability);
 
-    res.json(
-      ServerSchemas.ShareCheckDomain.Response.parse({
-        domain,
-        isCloudEnabled,
-        sharingEnabled,
-        sharingDisabledReason,
-        isRetryable,
-      }),
-    );
+    try {
+      if (req.aborted || res.destroyed) {
+        abortAvailability();
+        return;
+      }
+
+      const eval_ = await loadEvalForShareAvailability(id, res, availabilityController.signal);
+      if (!eval_) {
+        return;
+      }
+
+      const availability = await getShareAvailability(eval_, availabilityController.signal);
+      if (availability) {
+        res.json(ServerSchemas.ShareCheckDomain.Response.parse(availability));
+      }
+    } finally {
+      req.off('aborted', abortAvailability);
+      res.off('close', abortAvailability);
+    }
   });
 
   // Share URL creation is intentionally unthrottled for local-server workflows. UI and CLI

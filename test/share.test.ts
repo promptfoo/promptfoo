@@ -14,10 +14,11 @@ import {
   getSharingDisabledReason,
   hasEvalBeenShared,
   hasModelAuditBeenShared,
+  isSelfHostedShareViewConfigured,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud';
+import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
@@ -243,6 +244,9 @@ describe('share availability helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(envars.getEnvString).mockReturnValue('');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
   });
 
   it('describes whether sharing is unconfigured or globally disabled', () => {
@@ -255,12 +259,57 @@ describe('share availability helpers', () => {
     expect(getSharingDisabledReason()).toBe('Sharing is disabled by PROMPTFOO_DISABLE_SHARING.');
   });
 
+  it('requires an explicit app URL for a self-hosted API', () => {
+    const evalRecord = {
+      config: { sharing: { apiBaseUrl: 'https://api.self-hosted.example' } },
+    } as Eval;
+
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(false);
+    expect(getSharingDisabledReason(evalRecord)).toBe(
+      'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.',
+    );
+
+    evalRecord.config.sharing = {
+      apiBaseUrl: 'https://api.self-hosted.example',
+      appBaseUrl: 'https://self-hosted.example',
+    };
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(true);
+  });
+
+  it.each([
+    'PROMPTFOO_REMOTE_APP_BASE_URL',
+    'PROMPTFOO_SHARING_APP_BASE_URL',
+  ])('accepts the %s environment viewer for a self-hosted API', (viewerVariable) => {
+    vi.mocked(envars.getEnvString).mockImplementation((key) =>
+      key === viewerVariable ? 'https://self-hosted.example' : '',
+    );
+
+    expect(
+      isSelfHostedShareViewConfigured({
+        config: { sharing: { apiBaseUrl: 'https://api.self-hosted.example' } },
+      } as Eval),
+    ).toBe(true);
+  });
+
+  it('rejects an environment API without an environment viewer', () => {
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.self-hosted.example');
+    const evalRecord = { config: {} } as Eval;
+
+    expect(isSharingEnabled(evalRecord)).toBe(true);
+    expect(isSelfHostedShareViewConfigured(evalRecord)).toBe(false);
+    expect(getSharingDisabledReason(evalRecord)).toContain(
+      'Self-hosted sharing requires an app URL',
+    );
+  });
+
   it('validates Cloud authentication without logging the response body', async () => {
     const response = Response.json({ team: 'sensitive' });
+    const controller = new AbortController();
     vi.mocked(makeRequest).mockResolvedValue(response);
 
-    await expect(checkCloudShareAuthentication()).resolves.toBe(response);
+    await expect(checkCloudShareAuthentication(controller.signal)).resolves.toBe(response);
     expect(makeRequest).toHaveBeenCalledWith('/users/me/teams', 'GET', undefined, {
+      signal: controller.signal,
       silent: true,
     });
   });
@@ -448,6 +497,32 @@ describe('createShareableUrl', () => {
 
     expect(createRemoteBlobUploadCache).not.toHaveBeenCalled();
     expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('cancels the Cloud permission preflight before starting an upload', async () => {
+    const controller = new AbortController();
+    let permissionSignal: AbortSignal | undefined;
+    vi.mocked(checkCloudPermissions).mockImplementation((_config, signal) => {
+      if (!signal) {
+        throw new Error('Expected the share signal during permission validation');
+      }
+      permissionSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      signal: controller.signal,
+      throwOnError: true,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(permissionSignal).toBe(controller.signal));
+
+    controller.abort();
+
+    await rejection;
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

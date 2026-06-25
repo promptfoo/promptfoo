@@ -130,6 +130,23 @@ describe('ShareModal', () => {
     expect(mockOnShare).not.toHaveBeenCalled();
   });
 
+  it('does not share when a self-hosted viewer URL is missing', async () => {
+    mockCallApi.mockResolvedValue(
+      availabilityResponse({
+        sharingEnabled: false,
+        sharingDisabledReason:
+          'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl.',
+      }),
+    );
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Self-hosted sharing requires an app URL',
+    );
+    expect(mockOnShare).not.toHaveBeenCalled();
+  });
+
   it('offers retry for a transient availability failure', async () => {
     mockCallApi
       .mockResolvedValueOnce(Response.json({}, { status: 503 }))
