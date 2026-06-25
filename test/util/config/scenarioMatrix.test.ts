@@ -291,6 +291,12 @@ describe('scenarioMatrix (real filesystem)', () => {
     case: provider-exec-command
   provider: exec:node ./provider.js --endpoint https://api.example/v1
 - vars:
+    case: provider-exec-basename-arg
+  provider: exec:node handler.js --endpoint https://api.example/v1
+- vars:
+    case: provider-exec-basename-command
+  provider: exec:handler.js
+- vars:
     case: provider-map
   provider:
     "golang:./target.go":
@@ -330,6 +336,14 @@ describe('scenarioMatrix (real filesystem)', () => {
         {
           vars: { case: 'provider-exec-command' },
           provider: `exec:node ${path.join(tmpDir, 'matrices/provider.js')} --endpoint https://api.example/v1`,
+        },
+        {
+          vars: { case: 'provider-exec-basename-arg' },
+          provider: `exec:node ${path.join(tmpDir, 'matrices/handler.js')} --endpoint https://api.example/v1`,
+        },
+        {
+          vars: { case: 'provider-exec-basename-command' },
+          provider: `exec:${path.join(tmpDir, 'matrices/handler.js')}`,
         },
         {
           vars: { case: 'provider-map' },
@@ -1091,6 +1105,33 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
     });
 
+    it('renders source env in inline scenario tests without file refs', async () => {
+      const tests = await readScenarioTests(
+        [
+          {
+            vars: {
+              tenant: '{{ env.TENANT }}',
+            },
+            assert: [
+              {
+                type: 'contains',
+                value: '{{ env.EXPECTED }}',
+              },
+            ],
+          },
+        ],
+        tmpDir,
+        { EXPECTED: 'expected-from-env', TENANT: 'tenant-from-env' },
+      );
+
+      expect(tests).toEqual([
+        expect.objectContaining({
+          vars: { tenant: 'tenant-from-env' },
+          assert: [expect.objectContaining({ value: 'expected-from-env' })],
+        }),
+      ]);
+    });
+
     it('loads nested relative refs against local scenario test files', async () => {
       const previousBasePath = cliState.basePath;
       cliState.basePath = tmpDir;
@@ -1165,6 +1206,24 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
 
       expect(tests?.map((test) => test.vars?.name)).toEqual(['generated-one', 'generated-two']);
+    });
+
+    it('renders source env in scenario test generator config', async () => {
+      const generatorPath = write(
+        'generate-env.cjs',
+        'module.exports = ({ prefix }) => [{ vars: { name: `${prefix}-generated` } }];\n',
+      );
+
+      const tests = await readScenarioTests(
+        {
+          path: `file://${generatorPath}`,
+          config: { prefix: '{{ env.PREFIX }}' },
+        },
+        tmpDir,
+        { PREFIX: 'source-env' },
+      );
+
+      expect(tests?.map((test) => test.vars?.name)).toEqual(['source-env-generated']);
     });
 
     it('executes programmatic class-instance generator descriptors', async () => {

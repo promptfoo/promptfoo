@@ -20,7 +20,12 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { ConfigResolutionError } from './config/errors';
-import { containsScenarioFileRefs, materializeScenarioTestCase } from './config/scenarioMatrix';
+import {
+  containsScenarioFileRefs,
+  materializeScenarioTestCase,
+  materializeScenarioTestSource,
+  renderScenarioSourceEnvTemplates,
+} from './config/scenarioMatrix';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { sanitizeUrl } from './sanitizer';
@@ -728,9 +733,10 @@ export async function readScenarioTests(
   const normalizedTests: TestCase[] = [];
   for (const test of Array.isArray(tests) ? tests : [tests]) {
     if (isScenarioTestRecord(test) && !isGeneratorLikeScenarioTest(test)) {
-      const normalizedTest = containsScenarioFileRefs(test)
-        ? materializeScenarioTestCase(basePath, test, envOverrides)
-        : test;
+      const renderedTest = renderScenarioSourceEnvTemplates(test, envOverrides);
+      const normalizedTest = containsScenarioFileRefs(renderedTest)
+        ? materializeScenarioTestCase(basePath, renderedTest, envOverrides)
+        : renderedTest;
       normalizedTests.push(await readTest(normalizedTest as TestCaseWithVarsFile, basePath, true));
       continue;
     }
@@ -772,15 +778,19 @@ async function loadScenarioTestSource(
     );
   }
 
+  const materializedTest = isGenerator
+    ? materializeScenarioTestSource(basePath, test, envOverrides)
+    : test;
   const sourceType = typeof test === 'string' ? 'file' : 'generator';
-  const sourcePath = typeof test === 'string' ? test : (test.path as string);
+  const sourcePath =
+    typeof materializedTest === 'string' ? materializedTest : (materializedTest.path as string);
   const safeSourcePath = sourcePath.startsWith('az://')
     ? sanitizeAzureBlobUriForError(sourcePath)
     : sanitizeUrl(sourcePath);
   let normalizedTests: TestCase[];
   try {
     const loaded = (await readTests(
-      test as TestSuiteConfig['tests'],
+      materializedTest as TestSuiteConfig['tests'],
       basePath,
       true,
       envOverrides,

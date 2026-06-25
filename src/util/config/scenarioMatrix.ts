@@ -208,8 +208,20 @@ function parseExecParts(command: string): string[] {
   return parts;
 }
 
+function isUrlLikeExecPart(part: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(part);
+}
+
+function isFileLookingExecPart(part: string): boolean {
+  return /\.(?:[cm]?[jt]s|py|rb|go|sh|bash|zsh|fish|cmd|bat|ps1)$/i.test(part);
+}
+
 function isLocalExecPart(part: string): boolean {
-  return path.isAbsolute(part) || /^\.{1,2}[\\/]/.test(part);
+  return (
+    !part.startsWith('-') &&
+    !isUrlLikeExecPart(part) &&
+    (path.isAbsolute(part) || /^\.{1,2}[\\/]/.test(part) || isFileLookingExecPart(part))
+  );
 }
 
 function resolveExecProviderIdFromBase(basePath: string, providerId: string): string {
@@ -312,13 +324,11 @@ function resolveScenarioTestsRefs(
       return test;
     }
 
-    const resolved: Record<string, unknown> = { ...record };
-    if (generatorPath !== undefined) {
-      resolved.path = resolveFileRefFromBase(basePath, generatorPath, envOverrides);
-      if (record.config !== undefined) {
-        resolved.config = resolveNestedFileRefs(basePath, record.config, envOverrides);
-      }
+    if (isGenerator) {
+      return materializeScenarioTestSource(basePath, test, envOverrides);
     }
+
+    const resolved: Record<string, unknown> = { ...record };
     if (typeof record.vars === 'string' || Array.isArray(record.vars)) {
       resolved.vars = Array.isArray(record.vars)
         ? record.vars.map((varsRef) => resolveScenarioVarsRef(basePath, varsRef, envOverrides))
@@ -454,6 +464,10 @@ function containsFileRefString(value: unknown, seen = new WeakSet<object>()): bo
 
 export function containsScenarioFileRefs(value: unknown): boolean {
   return containsFileRefString(value);
+}
+
+export function renderScenarioSourceEnvTemplates<T>(value: T, envOverrides?: EnvOverrides): T {
+  return renderSourceEnvTemplates(value, envOverrides);
 }
 
 function renderSourceEnvTemplates<T>(
@@ -736,6 +750,26 @@ export function materializeScenarioTestCase<T>(
       )
     : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
   return resolveScenarioTestVarsFileRefs(basePath, materialized, envOverrides) as T;
+}
+
+export function materializeScenarioTestSource<T>(
+  basePath: string,
+  testSource: T,
+  envOverrides?: EnvOverrides,
+): T {
+  if (!testSource || typeof testSource !== 'object' || Array.isArray(testSource)) {
+    return testSource;
+  }
+
+  const rendered = renderSourceEnvTemplates(testSource, envOverrides) as Record<string, unknown>;
+  const resolved: Record<string, unknown> = { ...rendered };
+  if (typeof rendered.path === 'string') {
+    resolved.path = resolveFileRefFromBase(basePath, rendered.path, envOverrides);
+  }
+  if (rendered.config !== undefined) {
+    resolved.config = resolveNestedFileRefs(basePath, rendered.config, envOverrides);
+  }
+  return resolveScenarioConfigRowProviders(basePath, resolved, envOverrides) as T;
 }
 
 function resolveScenarioTestVarsFileRefs(
