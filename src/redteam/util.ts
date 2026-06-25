@@ -3,7 +3,6 @@ import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, sanitizeObject } from '../util/sanitizer';
 import { escapeRegExp } from '../util/text';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
@@ -1229,6 +1228,24 @@ const MAX_PROVIDER_EVIDENCE_STRING_LENGTH = 4_000;
 const MAX_PROVIDER_RAW_JSON_CHARACTERS = 2_000_000;
 const MAX_PROVIDER_TOP_LEVEL_ITEMS_TO_SCAN = 1_000;
 const MAX_PROVIDER_TAIL_ITEMS_TO_SCAN = 20;
+const SENSITIVE_PROVIDER_EVIDENCE_FIELDS = new Set([
+  'apikey',
+  'auth',
+  'authorization',
+  'cookie',
+  'credential',
+  'credentials',
+  'password',
+  'privatekey',
+  'proxyauthorization',
+  'secret',
+  'session',
+  'signature',
+  'token',
+  'xapikey',
+  'accesstoken',
+  'clientsecret',
+]);
 const EMBEDDED_PROVIDER_CREDENTIAL_PATTERNS: Array<[RegExp, string]> = [
   [/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1[REDACTED]'],
   [/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]'],
@@ -1273,26 +1290,39 @@ const PROVIDER_TOOL_CALL_EVIDENCE_FIELDS = [
   'parentToolUseId',
 ];
 
-export function sanitizeRedteamGradingEvidenceText(value: string): string {
-  const structuredSanitized = sanitizeObject(value, {
-    context: 'redteam grading evidence',
-  });
+function sanitizeRedteamGradingEvidenceTextAtDepth(value: string, depth: number): string {
+  let structuredSanitized = value;
+  if (depth < 3) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        structuredSanitized = JSON.stringify(getBoundedProviderEvidenceValue(parsed, depth + 1));
+      }
+    } catch {
+      // Evidence is often plain text rather than JSON.
+    }
+  }
   return EMBEDDED_PROVIDER_CREDENTIAL_PATTERNS.reduce(
     (sanitized, [pattern, replacement]) => sanitized.replace(pattern, replacement),
-    typeof structuredSanitized === 'string' ? structuredSanitized : value,
+    structuredSanitized,
   );
 }
 
-function getBoundedProviderEvidenceString(value: string): string {
+export function sanitizeRedteamGradingEvidenceText(value: string): string {
+  return sanitizeRedteamGradingEvidenceTextAtDepth(value, 0);
+}
+
+function getBoundedProviderEvidenceString(value: string, depth = 0): string {
   if (value.length <= MAX_PROVIDER_EVIDENCE_STRING_LENGTH) {
-    return sanitizeRedteamGradingEvidenceText(value);
+    return sanitizeRedteamGradingEvidenceTextAtDepth(value, depth);
   }
   const marker = '...[truncated]...';
   const availableLength = MAX_PROVIDER_EVIDENCE_STRING_LENGTH - marker.length;
   const headLength = Math.ceil(availableLength / 2);
   const tailLength = availableLength - headLength;
-  return sanitizeRedteamGradingEvidenceText(
+  return sanitizeRedteamGradingEvidenceTextAtDepth(
     `${value.slice(0, headLength)}${marker}${value.slice(-tailLength)}`,
+    depth,
   );
 }
 
@@ -1302,7 +1332,7 @@ function getBoundedProviderEvidenceValue(
   seen = new WeakSet<object>(),
 ): unknown {
   if (typeof value === 'string') {
-    return getBoundedProviderEvidenceString(value);
+    return getBoundedProviderEvidenceString(value, depth);
   }
   if (value === null || typeof value === 'boolean') {
     return value;
@@ -1344,7 +1374,8 @@ function getBoundedProviderEvidenceValue(
       break;
     }
     const boundedKey = getBoundedProviderEvidenceString(key);
-    bounded[boundedKey] = isSecretField(key)
+    const normalizedKey = key.toLowerCase().replace(/[-_\s=]/g, '');
+    bounded[boundedKey] = SENSITIVE_PROVIDER_EVIDENCE_FIELDS.has(normalizedKey)
       ? '[REDACTED]'
       : getBoundedProviderEvidenceValue((value as Record<string, unknown>)[key], depth + 1, seen);
     propertyCount++;
