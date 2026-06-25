@@ -95,7 +95,7 @@ function getBoundedRetryAfterDelayMs(value: string): number | undefined {
   }
   const jitter = Math.floor(Math.random() * 1000);
   const delayWithJitter = retryAfterMs + jitter;
-  return delayWithJitter <= MAX_RETRY_DELAY_MS ? delayWithJitter : MAX_RETRY_DELAY_MS - jitter;
+  return Math.min(delayWithJitter, MAX_RETRY_DELAY_MS);
 }
 
 function discardResponseBody(response: Response): void {

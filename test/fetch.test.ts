@@ -1773,7 +1773,8 @@ describe('fetchWithRetries', () => {
       );
 
       expect(sleep).toHaveBeenCalledOnce();
-      expect(sleep).toHaveBeenCalledWith(59_500);
+      // The cap must not subtract jitter from the server's requested delay.
+      expect(sleep).toHaveBeenCalledWith(60_000);
       expect(result).toBe(successResponse);
     } finally {
       randomSpy.mockRestore();
