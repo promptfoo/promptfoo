@@ -129,10 +129,19 @@ function getOpenAiOutputCapKind(provider: ApiProvider): OpenAiOutputCapKind | un
   return undefined;
 }
 
-function cloneProviderConfig(provider: ApiProvider): ApiProvider {
+async function cloneProviderConfig(provider: ApiProvider): Promise<ApiProvider> {
   const config = (provider as { config?: Record<string, unknown> }).config;
   if (!config || typeof config !== 'object') {
     return provider;
+  }
+
+  // Some providers (notably Azure) populate authentication state asynchronously on the
+  // original instance. Wait before cloning so the capped copy receives the initialized state
+  // rather than a promise whose continuation will mutate a different object.
+  const initializationPromise = (provider as { initializationPromise?: Promise<unknown> | null })
+    .initializationPromise;
+  if (initializationPromise) {
+    await initializationPromise;
   }
 
   const descriptors = Object.getOwnPropertyDescriptors(provider);
@@ -146,7 +155,7 @@ function cloneProviderConfig(provider: ApiProvider): ApiProvider {
   return Object.create(Object.getPrototypeOf(provider), descriptors) as ApiProvider;
 }
 
-function withDefaultOutputCap(provider: ApiProvider): ApiProvider {
+async function withDefaultOutputCap(provider: ApiProvider): Promise<ApiProvider> {
   const providerKind = getOpenAiOutputCapKind(provider);
   if (!providerKind) {
     return provider;
@@ -155,7 +164,7 @@ function withDefaultOutputCap(provider: ApiProvider): ApiProvider {
   // A caller may reuse an instantiated provider for normal batch generation. Clone the
   // provider's own state before changing its config so attack/grading limits do not leak into
   // those uncapped generation calls.
-  const cappedProvider = cloneProviderConfig(provider);
+  const cappedProvider = await cloneProviderConfig(provider);
   const config = (cappedProvider as { config?: Record<string, unknown> }).config;
   if (!config || typeof config !== 'object') {
     return cappedProvider;
@@ -219,7 +228,7 @@ async function loadRedteamProvider({
     });
   }
   if (shouldCapOutput) {
-    ret = withDefaultOutputCap(ret);
+    ret = await withDefaultOutputCap(ret);
   }
   return ret;
 }

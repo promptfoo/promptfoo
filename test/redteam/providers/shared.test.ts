@@ -312,6 +312,35 @@ describe('shared redteam provider utilities', () => {
       expect(loaded.config).toEqual({});
     });
 
+    it('waits for Azure authentication state before cloning a capped provider', async () => {
+      let resolveAuth!: (headers: Record<string, string>) => void;
+      const authHeaders = new Promise<Record<string, string>>((resolve) => {
+        resolveAuth = resolve;
+      });
+      class DeferredAzureChatCompletionProvider extends AzureChatCompletionProvider {
+        override getAuthHeaders(): Promise<Record<string, string>> {
+          return authHeaders;
+        }
+      }
+      const configured = new DeferredAzureChatCompletionProvider('gpt-5-deployment', {
+        config: {},
+      });
+
+      const attackPromise = redteamProviderManager.getProvider({
+        provider: configured,
+        purpose: 'attack',
+      });
+      resolveAuth({ 'api-key': 'initialized-key' });
+      const attack = await attackPromise;
+
+      expect(attack).not.toBe(configured);
+      expect((attack as any).authHeaders).toEqual({ 'api-key': 'initialized-key' });
+      expect((attack as AzureChatCompletionProvider).config.max_completion_tokens).toBe(
+        DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+      );
+      expect(configured.config).toEqual({});
+    });
+
     it('does not cap a configured OpenAI provider used for batch generation', async () => {
       const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
       mockedLoadApiProviders.mockResolvedValue([loaded]);
