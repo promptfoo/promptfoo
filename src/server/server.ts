@@ -278,6 +278,10 @@ export function createApp() {
     );
   });
 
+  // Share availability is intentionally unthrottled for local-server workflows. Opening the
+  // actions menu can legitimately probe this route repeatedly, and a per-IP limiter would block
+  // the local operator without changing the trust boundary. See src/server/AGENTS.md for the
+  // codified policy; CodeQL js/missing-rate-limiting is an accepted exception here.
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
     const queryResult = ServerSchemas.ShareCheckDomain.Query.safeParse(req.query);
     if (!queryResult.success) {
