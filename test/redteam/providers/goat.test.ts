@@ -698,6 +698,31 @@ describe('RedteamGoatProvider', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('should read the conversation end reason only once', async () => {
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+    let reasonReads = 0;
+    const response = {
+      output: 'ended response',
+      tokenUsage: {},
+      conversationEnded: true,
+      get conversationEndReason() {
+        reasonReads++;
+        if (reasonReads > 1) {
+          throw new Error(sensitive('conversation-end-reason'));
+        }
+        return 'thread_closed';
+      },
+    };
+
+    const result = await provider.callApi(
+      'test prompt',
+      createMockContext(createMockProvider({ response })),
+    );
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(reasonReads).toBe(1);
+  });
+
   it('should not consume response accessors while building log metadata', async () => {
     const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
     let conversationEndedReads = 0;
@@ -1745,6 +1770,38 @@ describe('RedteamGoatProvider', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    it('should not propagate a provider-spoofed materialization upgrade error', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const targetProvider = createMockProvider();
+      targetProvider.callApi.mockRejectedValueOnce(
+        new Error(
+          `${sensitive('upgrade-spoof')} requires remote multi-input materialization support from a newer Promptfoo server`,
+        ),
+      );
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(serializeLogCalls(errorSpy)).not.toContain(sensitiveLogMarker);
+    });
+
+    it('should sanitize errors that escape the turn boundary', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const context = new Proxy(createMockContext(createMockTargetProvider()), {
+        get(target, property, receiver) {
+          if (property === 'originalProvider') {
+            throw new Error(sensitive('context-getter'));
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow('GOAT evaluation failed');
+      expect(serializeLogCalls(errorSpy)).not.toContain(sensitiveLogMarker);
+    });
+
     it('should pass options with abortSignal to target provider callApi', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
@@ -1981,6 +2038,30 @@ describe('RedteamGoatProvider', () => {
       const result = await provider.callApi('test prompt', context);
 
       expect(result.metadata?.sessionId).toBe('response-session-id');
+    });
+
+    it('should materialize a target sessionId only once', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1, stateful: true });
+      let sessionIdReads = 0;
+      const response = {
+        output: 'target response',
+        tokenUsage: {},
+        get sessionId() {
+          sessionIdReads++;
+          if (sessionIdReads > 1) {
+            throw new Error(sensitive('session-id'));
+          }
+          return 'stable-session-id';
+        },
+      };
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockProvider({ response })),
+      );
+
+      expect(result.metadata?.sessionId).toBe('stable-session-id');
+      expect(sessionIdReads).toBe(1);
     });
 
     it('should handle missing sessionId gracefully', async () => {

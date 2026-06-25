@@ -23,6 +23,7 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
+  getRemoteMaterializationUpgradeError,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -125,6 +126,8 @@ interface GoatProviderResponse extends ProviderResponse {
   traceContext?: TraceContextData;
   traceSummary?: string;
 }
+
+const GOAT_MATERIALIZATION_OPERATION = 'GOAT multi-input generation';
 
 function getStringLength(value: unknown): number | undefined {
   return typeof value === 'string' ? value.length : undefined;
@@ -275,12 +278,12 @@ function isAbortError(value: unknown): boolean {
   return isErrorInstance(value) && safeGet(value, 'name') === 'AbortError';
 }
 
-function isMaterializationUpgradeError(value: unknown): boolean {
-  try {
-    return isRemoteMaterializationUpgradeError(value);
-  } catch {
-    return false;
-  }
+function getErrorLogMetadata(value: unknown) {
+  const isError = isErrorInstance(value);
+  return {
+    errorType: isError ? 'Error' : typeof value,
+    errorMessageLength: getStringLength(isError ? safeGet(value, 'message') : value),
+  };
 }
 
 function createGoatLogger(goatRunId: string) {
@@ -363,9 +366,23 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
     const goatRunId = crypto.randomUUID();
-    return runWithRedactedLogging(goatRunId, () =>
-      this.callApiInLogScope(goatRunId, context, options),
-    );
+    return runWithRedactedLogging(goatRunId, async () => {
+      const log = createGoatLogger(goatRunId);
+      try {
+        return await this.callApiInLogScope(goatRunId, context, options);
+      } catch (error) {
+        if (isAbortError(error) && options?.abortSignal?.aborted === true) {
+          const abortError = new Error('Operation aborted');
+          abortError.name = 'AbortError';
+          throw abortError;
+        }
+        if (isRemoteMaterializationUpgradeError(error)) {
+          throw new Error(getRemoteMaterializationUpgradeError(GOAT_MATERIALIZATION_OPERATION));
+        }
+        log.error('[GOAT] Evaluation failed', getErrorLogMetadata(error));
+        throw new Error('GOAT evaluation failed');
+      }
+    });
   }
 
   private async callApiInLogScope(
@@ -419,6 +436,7 @@ export default class GoatProvider implements ApiProvider {
     }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
+    let lastTargetSessionId: ProviderResponse['sessionId'];
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
     let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -644,7 +662,7 @@ export default class GoatProvider implements ApiProvider {
 
         // Extract input vars from the attack message for multi-input mode
         if (this.config.inputs) {
-          assertRemoteMaterializationHandled(data, 'GOAT multi-input generation');
+          assertRemoteMaterializationHandled(data, GOAT_MATERIALIZATION_OPERATION);
         }
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
         let materializedInputVars:
@@ -849,15 +867,18 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        if (targetResponse.sessionId) {
+        const targetSessionId = targetResponse.sessionId;
+        lastTargetSessionId = targetSessionId;
+        if (targetSessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
-          context.vars.sessionId = targetResponse.sessionId;
+          context.vars.sessionId = targetSessionId;
         }
         if (targetResponse.conversationEnded) {
+          const conversationEndReason = targetResponse.conversationEndReason;
           log.info('[GOAT] Target ended conversation', {
             turn,
-            hasReason: Boolean(targetResponse.conversationEndReason),
-            reasonLength: getStringLength(targetResponse.conversationEndReason),
+            hasReason: Boolean(conversationEndReason),
+            reasonLength: getStringLength(conversationEndReason),
           });
           const endedOutput =
             typeof targetResponse.output === 'string'
@@ -892,7 +913,7 @@ export default class GoatProvider implements ApiProvider {
         const hasTargetImages = Boolean(targetResponse.images?.length);
         invariant(
           targetResponse.output || hasTargetImages,
-          `[GOAT] Expected target response output or images to be set, but got: ${safeJsonStringify(targetResponse)}`,
+          '[GOAT] Expected target response output or images to be set',
         );
 
         const stringifiedOutput =
@@ -1040,21 +1061,16 @@ export default class GoatProvider implements ApiProvider {
         // Re-throw abort errors to properly cancel the operation
         if (isAbortError(error) && options?.abortSignal?.aborted === true) {
           log.debug('[GOAT] Operation aborted', { errorStage });
-          const abortError = new Error('Operation aborted');
-          abortError.name = 'AbortError';
-          throw abortError;
+          throw error;
         }
-        if (isMaterializationUpgradeError(error)) {
+        if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
         log.error(
           `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,
           {
             errorStage,
-            errorType: isErrorInstance(error) ? 'Error' : typeof error,
-            errorMessageLength: getStringLength(
-              isErrorInstance(error) ? safeGet(error, 'message') : error,
-            ),
+            ...getErrorLogMetadata(error),
           },
         );
       }
@@ -1078,11 +1094,13 @@ export default class GoatProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        sessionId: getSessionId(lastTargetResponse, context),
+        sessionId: getSessionId({ sessionId: lastTargetSessionId }, context),
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: safeGetOwnDataProperty(lastTargetResponse, 'guardrails') as
+        | ProviderResponse['guardrails']
+        | undefined,
     };
   }
 }
