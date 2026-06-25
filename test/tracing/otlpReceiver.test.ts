@@ -1531,6 +1531,58 @@ describe('OTLPReceiver', () => {
       expect(span.name).toBe('tool_result');
     });
 
+    it.each([
+      ['empty IDs', '', ''],
+      ['all-zero hexadecimal IDs', '0'.repeat(32), '0'.repeat(16)],
+      [
+        'all-zero base64 IDs',
+        Buffer.alloc(16).toString('base64'),
+        Buffer.alloc(8).toString('base64'),
+      ],
+    ])('falls back to resource trace context for a Codex log with %s', async (_label, inlineTraceId, inlineSpanId) => {
+      const req = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'codex-cli' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: hexTraceId } },
+                { key: 'promptfoo.parent_span_id', value: { stringValue: hexParentSpanId } },
+              ],
+            },
+            scopeLogs: [
+              {
+                scope: { name: 'codex_otel' },
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    traceId: inlineTraceId,
+                    spanId: inlineSpanId,
+                    body: { stringValue: 'codex.api_request' },
+                    attributes: [
+                      { key: 'event.name', value: { stringValue: 'codex.api_request' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      const span = (spans as any[])[0];
+      expect(span.parentSpanId).toBe(hexParentSpanId);
+      expect(span.name).toBe('codex.api_request');
+    });
+
     it('is advertised on the service info endpoint', async () => {
       // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
       const response = await request(receiver.getApp()).get('/v1/traces').expect(200);

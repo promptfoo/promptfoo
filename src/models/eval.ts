@@ -22,6 +22,7 @@ import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -314,7 +315,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
-  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
@@ -460,7 +461,7 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       completedPrompts?: CompletedPrompt[];
       durationMs?: number;
       generationDurationMs?: number;
@@ -617,7 +618,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;

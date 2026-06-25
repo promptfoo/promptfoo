@@ -237,6 +237,23 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toBe('Test response');
     });
 
+    it('reports non-zero cost from the agent usage object (regression)', async () => {
+      // Regression for the costCalculator that passed `usage` into calculateAzureCost's ignored
+      // config slot, so Foundry Agent evals always reported cost 0.
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('priced'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, modelName: 'gpt-4.1' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gpt-4.1 is priced in AZURE_MODELS and input_tokens/output_tokens now flow through.
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
+    });
+
     it('should fall back to listing agents for legacy ids', async () => {
       mockGetAgent.mockRejectedValue(new Error('not found'));
       mockListAgents.mockReturnValue(

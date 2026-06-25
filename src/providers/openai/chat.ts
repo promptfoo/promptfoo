@@ -184,39 +184,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini), prefixed names
-    // (openai/gpt-5-mini), and the floating Instant alias.
-    return (
-      this.modelName === 'chat-latest' ||
-      this.modelName === 'openai/chat-latest' ||
-      this.modelName.startsWith('gpt-5') ||
-      this.modelName.includes('/gpt-5')
-    );
-  }
-
-  protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.isGPT5Model()
-    );
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.modelName === 'openai/chat-latest' ? 'chat-latest' : this.modelName;
-  }
-
   protected getGenAISystem(): string {
     return 'openai';
   }
@@ -514,7 +481,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        context?.bustCache ?? context?.debug,
+        this.shouldBustCache(context),
         this.config.maxRetries,
       ));
 
