@@ -1,5 +1,4 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import Clone from 'rfdc';
 
 type MutableContainer = Record<string, unknown> | unknown[];
 type SchemaSource = 'config' | 'tests';
@@ -11,11 +10,11 @@ type ValueLocation = {
 };
 
 type TraversalItem = Partial<Pick<ValueLocation, 'key' | 'parent'>> & {
+  ancestors?: ReadonlySet<object>;
   path: string;
   value: unknown;
 };
 
-const clone = Clone({ circles: true });
 const SCHEMA_PATH_SUFFIX =
   /\/(?:tools\/\d+\/function\/parameters|functions\/\d+\/parameters|response_format\/(?:json_schema\/)?schema)$/;
 
@@ -32,7 +31,72 @@ function getValue(parent: MutableContainer, key: string): unknown {
 }
 
 function setValue(parent: MutableContainer, key: string, value: unknown): void {
-  (parent as Record<string, unknown>)[key] = value;
+  Object.defineProperty(parent, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
+}
+
+function cloneConfigValue<T>(
+  value: T,
+  ancestors: object[] = [],
+  ancestorClones: unknown[] = [],
+): T {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  const ancestorIndex = ancestors.indexOf(value);
+  if (ancestorIndex !== -1) {
+    return ancestorClones[ancestorIndex] as T;
+  }
+  if (value instanceof Date || value instanceof RegExp || value instanceof ArrayBuffer) {
+    return structuredClone(value);
+  }
+  if (Buffer.isBuffer(value)) {
+    return Buffer.from(value) as T;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return structuredClone(value);
+  }
+
+  const result: unknown = Array.isArray(value)
+    ? new Array(value.length)
+    : value instanceof Map
+      ? new Map()
+      : value instanceof Set
+        ? new Set()
+        : {};
+  ancestors.push(value);
+  ancestorClones.push(result);
+
+  if (value instanceof Map && result instanceof Map) {
+    for (const [key, item] of value) {
+      result.set(
+        cloneConfigValue(key, ancestors, ancestorClones),
+        cloneConfigValue(item, ancestors, ancestorClones),
+      );
+    }
+  } else if (value instanceof Set && result instanceof Set) {
+    for (const item of value) {
+      result.add(cloneConfigValue(item, ancestors, ancestorClones));
+    }
+  } else {
+    for (const key of Object.keys(value)) {
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value: cloneConfigValue((value as Record<string, unknown>)[key], ancestors, ancestorClones),
+        writable: true,
+      });
+    }
+  }
+
+  ancestors.pop();
+  ancestorClones.pop();
+  return result as T;
 }
 
 function joinPointer(path: string, key: string): string {
@@ -80,14 +144,15 @@ function getTestPathSuffix(path: string, source: SchemaSource): string | undefin
   const match =
     source === 'tests'
       ? path.match(/^#(?:\/\d+)?(.*)$/)
-      : path.match(/^#\/(?:defaultTest|tests\/\d+|scenarios\/\d+\/tests\/\d+)(.*)$/);
+      : path.match(/^#\/(?:defaultTest|tests\/\d+|scenarios\/\d+\/(?:config|tests)\/\d+)(.*)$/);
   return match?.[1];
 }
 
 function isSchemaOwnerPath(path: string, source: SchemaSource): boolean {
   if (
     /^#\/(?:providers|targets)\/\d+(?:\/[^/]+)?\/config$/.test(path) ||
-    /^#\/prompts\/\d+(?:\/[^/]+)?\/config$/.test(path)
+    /^#\/prompts\/\d+(?:\/[^/]+)?\/config$/.test(path) ||
+    /^#\/redteam\/provider(?:\/[^/]+)?\/config$/.test(path)
   ) {
     return true;
   }
@@ -124,12 +189,15 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
   };
 
   while (stack.length > 0) {
-    const { key, parent, path, value } = stack.pop()!;
+    const { ancestors, key, parent, path, value } = stack.pop()!;
     if (!isMutableContainer(value)) {
       continue;
     }
     if (key !== undefined && parent && isStandaloneSchemaPath(path, source)) {
       addLocation({ key, parent, value });
+      continue;
+    }
+    if (ancestors?.has(value)) {
       continue;
     }
 
@@ -140,10 +208,13 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
     visitedPaths.add(path);
     visited.set(value, visitedPaths);
 
+    const childAncestors = new Set(ancestors);
+    childAncestors.add(value);
+
     if (!Array.isArray(value) && typeof value.$ref === 'string') {
       const target = resolveLocalPointer(root, value.$ref);
       if (target && target.value !== value) {
-        stack.push({ ...target, path });
+        stack.push({ ...target, ancestors: childAncestors, path });
       }
     }
 
@@ -151,6 +222,7 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
       stack.push({
         key: childKey,
         parent: value,
+        ancestors: childAncestors,
         path: joinPointer(path, childKey),
         value: child,
       });
@@ -240,8 +312,8 @@ export async function dereferenceWithStandaloneSchemas<T extends object>(
   source: SchemaSource,
 ): Promise<T> {
   // Raw YAML/JSON is cloned so failed dereferences and concurrent loads cannot mutate the caller.
-  // rfdc also detaches YAML aliases, preventing an unprotected alias from exposing a schema.
-  const workingValue = clone(value) as T;
+  // Non-cyclic aliases are detached so an unprotected alias cannot expose a masked schema.
+  const workingValue = cloneConfigValue(value);
   const schemaLocations = collectStandaloneSchemaLocations(workingValue, source);
   const masks = new Map<MutableContainer, Map<string, unknown>>();
 

@@ -85,6 +85,23 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     });
   });
 
+  it('preserves response_format schemas in the redteam generation provider', async () => {
+    const schema = statusSchema();
+    const result = (await dereferenceConfig({
+      $defs: { Status: { const: 'CONFIG_ROOT' } },
+      prompts: ['hello world'],
+      providers: ['echo'],
+      redteam: {
+        provider: {
+          id: 'openai:chat:gpt-4o',
+          config: { response_format: { schema } },
+        },
+      },
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.redteam.provider.config.response_format.schema).toEqual(schema);
+  });
+
   it('preserves schemas in nested test and assertion provider overrides', async () => {
     const result = (await dereferenceConfig({
       prompts: ['hello world'],
@@ -281,6 +298,60 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     expect(result.reusableSchema.properties.status).toEqual({ const: 'CONFIG_ROOT' });
   });
 
+  it('terminates on cyclic config values while preserving aliased provider schemas', async () => {
+    const metadata: Record<string, unknown> = {};
+    metadata.self = metadata;
+    const sharedSchema = statusSchema();
+
+    const result = (await dereferenceConfig({
+      $defs: { Status: { const: 'CONFIG_ROOT' } },
+      metadata,
+      prompts: ['hello world'],
+      providers: [
+        {
+          id: 'openai:chat:gpt-4o',
+          config: { response_format: { schema: sharedSchema } },
+        },
+      ],
+      reusableSchema: sharedSchema,
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.metadata.self).toBe(result.metadata);
+    expect(result.providers[0].config.response_format.schema).toEqual(sharedSchema);
+    expect(result.reusableSchema.properties.status).toEqual({ const: 'CONFIG_ROOT' });
+  });
+
+  it('preserves own __proto__ data properties without changing the object prototype', async () => {
+    const rawConfig = JSON.parse(`{
+      "prompts": ["hello world"],
+      "providers": [{
+        "id": "openai:chat:gpt-4o",
+        "config": {
+          "response_format": { "schema": { "$ref": "#/__proto__" } }
+        }
+      }],
+      "__proto__": {
+        "$defs": { "Status": { "const": "ready" } },
+        "polluted": "yes",
+        "properties": { "status": { "$ref": "#/$defs/Status" } }
+      }
+    }`) as UnifiedConfig;
+
+    const result = (await dereferenceConfig(rawConfig)) as UnifiedConfig & {
+      __proto__: {
+        polluted: string;
+        properties: { status: { $ref: string } };
+      };
+      polluted?: string;
+    };
+
+    expect(Object.hasOwn(result, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect((result.providers as any)?.[0].config.response_format.schema).toEqual(result.__proto__);
+    expect(result.__proto__.properties.status).toEqual({ $ref: '#/$defs/Status' });
+    expect(result.polluted).toBeUndefined();
+  });
+
   it('preserves root and composed schema refs without resolving files or URLs', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -365,7 +436,18 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       },
       scenarios: [
         {
-          config: [{ vars: {} }],
+          config: [
+            {
+              options: {
+                provider: {
+                  id: 'openai:chat:gpt-4o',
+                  config: { response_format: { schema } },
+                },
+                response_format: { schema },
+              },
+              vars: {},
+            },
+          ],
           tests: [
             {
               assert: [
@@ -386,6 +468,10 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     expect(result.targets[0]['openai:chat:gpt-4o'].config.response_format.schema).toEqual(schema);
     expect(result.defaultTest.options.provider.config.functions[0].parameters).toEqual(schema);
     expect(result.defaultTest.options.response_format.schema).toEqual(schema);
+    expect(result.scenarios[0].config[0].options.response_format.schema).toEqual(schema);
+    expect(result.scenarios[0].config[0].options.provider.config.response_format.schema).toEqual(
+      schema,
+    );
     expect(result.scenarios[0].tests[0].assert[0].provider.config.response_format.schema).toEqual(
       schema,
     );
@@ -414,12 +500,12 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       ),
     );
 
-    expect(results.map((result) => result.prompts?.[0])).toEqual(
+    expect(results.map((result) => (result as any).prompts?.[0])).toEqual(
       Array.from({ length: 8 }, (_, index) => `prompt ${index}`),
     );
     expect(
       results.map(
-        (result) => (result.providers?.[0] as any).config.response_format.schema.$ref as string,
+        (result) => (result as any).providers?.[0].config.response_format.schema.$ref as string,
       ),
     ).toEqual(Array.from({ length: 8 }, (_, index) => `https://example.com/schema-${index}.json`));
     expect(fetchSpy).not.toHaveBeenCalled();
