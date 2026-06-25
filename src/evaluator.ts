@@ -18,7 +18,12 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  getExtensionHookName,
+  renderPrompt,
+  runExtensionHook,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
@@ -166,8 +171,12 @@ export function buildConversationKey(
 ): string {
   const providerKey = provider.label || provider.id();
   const conversationId = test.metadata?.conversationId;
-  const repeatSuffix = repeatIndex > 0 ? `:repeat:${repeatIndex}` : '';
-  return `${providerKey}:${prompt.id}${conversationId ? `:${conversationId}` : ''}${repeatSuffix}`;
+  return JSON.stringify([
+    providerKey,
+    prompt.id ?? null,
+    conversationId == null ? null : String(conversationId),
+    repeatIndex,
+  ]);
 }
 
 /** Test-only: reset the per-process prompt conversation-variable cache. */
@@ -2773,12 +2782,14 @@ async function filterCompletedResumeSteps(
 
 function adjustConcurrencyForSerialFeatures({
   concurrency,
+  extensions,
   prompts,
   providers,
   silent,
   tests,
 }: {
   concurrency: number;
+  extensions: TestSuite['extensions'];
   prompts: CompletedPrompt[];
   providers: ApiProvider[];
   silent?: boolean;
@@ -2793,6 +2804,11 @@ function adjustConcurrencyForSerialFeatures({
   const usesPersistentBrowserSession = providers.some(
     (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
   );
+  const usesRunSerially = tests.some((test) => test.options?.runSerially);
+  const mayMutateTestsBeforeEach = extensions?.some((extension) => {
+    const hookName = getExtensionHookName(extension);
+    return hookName !== 'beforeAll' && hookName !== 'afterEach' && hookName !== 'afterAll';
+  });
   if (usesStoreOutputAs) {
     if (!silent) {
       logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
@@ -2801,6 +2817,15 @@ function adjustConcurrencyForSerialFeatures({
   }
   if (usesPersistentBrowserSession) {
     logger.info(`Setting concurrency to 1 because browser persistSession is enabled.`);
+    return { concurrency: 1, usesConversationVar };
+  }
+  if (usesConversationVar && (usesRunSerially || mayMutateTestsBeforeEach)) {
+    if (!silent) {
+      logger.info('Setting concurrency to 1 to preserve dynamic conversation ordering', {
+        mayMutateTestsBeforeEach: Boolean(mayMutateTestsBeforeEach),
+        usesRunSerially,
+      });
+    }
     return { concurrency: 1, usesConversationVar };
   }
   return { concurrency, usesConversationVar };
@@ -2820,11 +2845,6 @@ interface GroupedRows {
   rows: EvaluateResult[];
 }
 
-interface ConcurrentRunEvalGroup {
-  serializesConversation: boolean;
-  steps: RunEvalOptions[];
-}
-
 function shouldSerializeByConversation(evalOption: RunEvalOptions): boolean {
   return (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -2835,7 +2855,7 @@ function shouldSerializeByConversation(evalOption: RunEvalOptions): boolean {
 
 function groupConcurrentRunEvalOptions(
   concurrentRunEvalOptions: RunEvalOptions[],
-): ConcurrentRunEvalGroup[] {
+): RunEvalOptions[][] {
   const serializedConversationKeys = new Set(
     concurrentRunEvalOptions
       .filter(shouldSerializeByConversation)
@@ -2848,8 +2868,8 @@ function groupConcurrentRunEvalOptions(
         ),
       ),
   );
-  const groups = new Map<string, ConcurrentRunEvalGroup>();
-  let independentIndex = 0;
+  const groups: RunEvalOptions[][] = [];
+  const conversationGroups = new Map<string, RunEvalOptions[]>();
 
   for (const evalOption of concurrentRunEvalOptions) {
     const conversationKey = buildConversationKey(
@@ -2861,35 +2881,30 @@ function groupConcurrentRunEvalOptions(
     // Disabled turns still become part of conversation history for later turns.
     // If any step reads this key, all writers must remain in source order.
     if (!serializedConversationKeys.has(conversationKey)) {
-      const key = `independent:${independentIndex++}`;
-      groups.set(key, {
-        serializesConversation: false,
-        steps: [evalOption],
-      });
+      groups.push([evalOption]);
       continue;
     }
 
-    const existingGroup = groups.get(conversationKey);
+    const existingGroup = conversationGroups.get(conversationKey);
     if (existingGroup) {
-      existingGroup.steps.push(evalOption);
+      existingGroup.push(evalOption);
     } else {
-      groups.set(conversationKey, {
-        serializesConversation: true,
-        steps: [evalOption],
-      });
+      const group = [evalOption];
+      conversationGroups.set(conversationKey, group);
+      groups.push(group);
     }
   }
 
-  return Array.from(groups.values());
+  return groups;
 }
 
 function logConversationSerializationStatus(serializedConversationGroupCount: number) {
   if (serializedConversationGroupCount <= 0) {
     return;
   }
-  logger.info(
-    `Serializing ${serializedConversationGroupCount} conversation group${serializedConversationGroupCount === 1 ? '' : 's'} by conversation key.`,
-  );
+  logger.info('Serializing conversation groups by conversation key', {
+    serializedConversationGroupCount,
+  });
 }
 
 interface EvalProcessingContext {
@@ -3694,7 +3709,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     checkAbort: () => void;
     ciProgressReporter: CIProgressReporter | null;
     combinedAbortSignal: AbortSignal;
-    concurrentRunEvalGroups: ConcurrentRunEvalGroup[];
+    concurrentRunEvalGroups: RunEvalOptions[][];
     evalStepIndexMap: Map<RunEvalOptions, number>;
     globalTimeout?: NodeJS.Timeout;
     groupedRunEvalOptions: RunEvalOptions[];
@@ -3936,7 +3951,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts,
   }: {
     checkAbort: () => void;
-    concurrentRunEvalGroups: ConcurrentRunEvalGroup[];
+    concurrentRunEvalGroups: RunEvalOptions[][];
     evalStepIndexMap: Map<RunEvalOptions, number>;
     processingContext: EvalProcessingContext;
     processedIndices: Set<number>;
@@ -3947,7 +3962,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       concurrentRunEvalGroups,
       processingContext.concurrency,
       async (evalGroup) => {
-        for (const evalStep of evalGroup.steps) {
+        for (const evalStep of evalGroup) {
           checkAbort();
           const idx = evalStepIndexMap.get(evalStep)!;
           await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
@@ -4677,6 +4692,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
+      extensions: testSuite.extensions,
       prompts,
       providers: runEvalOptions.map((evalOption) => evalOption.provider),
       silent: this.options.silent,
@@ -4754,15 +4770,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (let i = 0; i < runEvalOptions.length; i++) {
       const evalOption = runEvalOptions[i];
       evalStepIndexMap.set(evalOption, i);
-      if (evalOption.test.options?.runSerially) {
+      if (concurrency > 1 && evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const concurrentRunEvalGroups = groupConcurrentRunEvalOptions(concurrentRunEvalOptions);
+    const concurrentRunEvalGroups =
+      concurrency === 1
+        ? concurrentRunEvalOptions.map((evalOption) => [evalOption])
+        : groupConcurrentRunEvalOptions(concurrentRunEvalOptions);
     const serializedConversationGroupCount = concurrentRunEvalGroups.filter(
-      (group) => group.serializesConversation && group.steps.length > 1,
+      (group) => group.length > 1,
     ).length;
     const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =

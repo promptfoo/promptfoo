@@ -12,6 +12,7 @@ import {
   buildConversationKey,
   evaluate,
 } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -396,7 +397,10 @@ describeEvaluator('evaluator execution control', () => {
       const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
       await evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
 
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Serializing'));
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Serializing'),
+        expect.objectContaining({ serializedConversationGroupCount: 1 }),
+      );
     } finally {
       infoSpy.mockRestore();
     }
@@ -481,6 +485,44 @@ describeEvaluator('evaluator execution control', () => {
       waitForStarts: () => startedPromise,
     };
   };
+
+  it('builds collision-free keys for delimiter-bearing conversation IDs and repeats', () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
+    };
+    const prompt = { ...toPrompt('{{ _conversation }}'), id: 'prompt' };
+    const repeatLikeId = { metadata: { conversationId: 'thread:repeat:1' } };
+    const ordinaryId = { metadata: { conversationId: 'thread' } };
+
+    expect(buildConversationKey(provider, prompt, repeatLikeId, 0)).not.toBe(
+      buildConversationKey(provider, prompt, ordinaryId, 1),
+    );
+  });
+
+  it('does not drop a conversation group when its legacy key resembles an independent key', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('independent'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        { ...toPrompt('{{ _conversation }}'), id: '0' },
+        { ...toPrompt('independent prompt'), id: 'plain' },
+      ],
+      tests: [{ metadata: { conversationId: 'thread' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const completedEval = await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(await completedEval.getResults()).toHaveLength(2);
+  });
 
   it('parallelizes across conversation keys with _conversation', async () => {
     const {
@@ -653,7 +695,80 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveByKey.get(convoKey)).toBe(2);
   });
 
-  it('serializes a disabled turn when a later turn consumes its conversation history', async () => {
+  it('serializes conversation steps when beforeEach rewrites them to a shared key', async () => {
+    let markFirstStarted!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const renderedPrompts: string[] = [];
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+        const question = prompt.includes('current=Q1') ? 'Q1' : 'Q2';
+        if (question === 'Q1') {
+          markFirstStarted();
+          await firstRelease;
+        }
+        activeCalls -= 1;
+        return {
+          output: question,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context: any) =>
+      hookName === 'beforeEach'
+        ? {
+            test: {
+              ...context.test,
+              metadata: { ...context.test.metadata, conversationId: 'shared' },
+            },
+          }
+        : context,
+    );
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'Q1' }, metadata: { conversationId: 'original-a' } },
+        { vars: { question: 'Q2' }, metadata: { conversationId: 'original-b' } },
+      ],
+      extensions: ['file://hook.js:beforeEach'],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    await firstStarted;
+    await Promise.resolve();
+    await Promise.resolve();
+    const callCountBeforeRelease = vi.mocked(provider.callApi).mock.calls.length;
+    releaseFirst();
+    await evalPromise;
+
+    expect(callCountBeforeRelease).toBe(1);
+    expect(maxActiveCalls).toBe(1);
+    expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
+      'history=Q1, current=Q2',
+    );
+  });
+
+  it.each([
+    false,
+    true,
+  ])('serializes a disabled turn before a later history consumer (runSerially=%s)', async (runSerially) => {
     let activeCalls = 0;
     let maxActiveCalls = 0;
     let markFirstStarted!: () => void;
@@ -698,7 +813,11 @@ describeEvaluator('evaluator execution control', () => {
           metadata: { conversationId: 'convo-a' },
           options: { disableConversationVar: true },
         },
-        { vars: { question: 'Q2' }, metadata: { conversationId: 'convo-a' } },
+        {
+          vars: { question: 'Q2' },
+          metadata: { conversationId: 'convo-a' },
+          ...(runSerially ? { options: { runSerially: true } } : {}),
+        },
       ],
     };
 
@@ -716,6 +835,48 @@ describeEvaluator('evaluator execution control', () => {
     expect(renderedPrompts.find((prompt) => prompt.includes('current=Q2'))).toContain(
       'history=Q1, current=Q2',
     );
+  });
+
+  it('preserves source order when storeOutputAs globally serializes conversation steps', async () => {
+    const renderedPrompts: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        const question = prompt.match(/current=(A1|B1|A2)/)?.[1];
+        return {
+          output: question === 'B1' ? 'stored-value' : `${question}-output`,
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          'history={% for completion in _conversation %}{{ completion.output }},{% endfor %} current={{ question }} saved={{ saved | default("missing") }}',
+        ),
+      ],
+      tests: [
+        { vars: { question: 'A1' }, metadata: { conversationId: 'a' } },
+        {
+          vars: { question: 'B1' },
+          metadata: { conversationId: 'b' },
+          options: { storeOutputAs: 'saved' },
+        },
+        { vars: { question: 'A2' }, metadata: { conversationId: 'a' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(renderedPrompts.map((prompt) => prompt.match(/current=(A1|B1|A2)/)?.[1])).toEqual([
+      'A1',
+      'B1',
+      'A2',
+    ]);
+    expect(renderedPrompts[2]).toContain('saved=stored-value');
   });
 
   it('parallelizes repeat iterations within the same conversation', async () => {
