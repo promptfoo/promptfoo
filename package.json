@@ -156,7 +156,7 @@
     "@opentelemetry/sdk-trace-node": {
       "@opentelemetry/core": "2.8.0"
     },
-    "serialize-javascript": ">=7.0.4",
+    "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
     "ip-address": "10.2.0",
@@ -166,7 +166,7 @@
     "webpack-dev-server": {
       "express": "^4.22.2"
     },
-    "launch-editor": "^2.14.1",
+    "launch-editor": "2.14.1",
     "engine.io": {
       ".": "6.6.8",
       "ws": "$ws"
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.177",
+    "@anthropic-ai/claude-agent-sdk": "0.3.178",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -250,11 +250,11 @@
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "block-no-verify": "^1.2.0",
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.3",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
-    "ibm-cloud-sdk-core": "^5.4.11",
+    "ibm-cloud-sdk-core": "^5.4.22",
     "knip": "^6.0.0",
     "langfuse": "^3.38.20",
     "langium": "4.2.4",
@@ -276,7 +276,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.177",
+    "@anthropic-ai/claude-agent-sdk": "0.3.178",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -308,7 +308,7 @@
     "@swc/core-win32-x64-msvc": "^1.15.41",
     "google-auth-library": "^10.7.0",
     "hono": "^4.12.25",
-    "ibm-cloud-sdk-core": "^5.4.11",
+    "ibm-cloud-sdk-core": "^5.4.22",
     "jks-js": "^1.1.5",
     "langfuse": "^3.38.20",
     "natural": "^8.1.1",
