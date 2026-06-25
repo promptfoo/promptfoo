@@ -396,8 +396,12 @@ class RedteamProviderManager {
       return this.wrapProvider(loaded);
     }
 
-    // 4) Fallback to the configured redteam provider or the default local grader.
-    const loaded = await loadRedteamProvider({ jsonOnly, purpose: 'grading' });
+    // 4) Fallback to the manager-configured redteam provider or the default local grader.
+    const loaded = await loadRedteamProvider({
+      provider: this.configuredProvider,
+      jsonOnly,
+      purpose: 'grading',
+    });
     return this.wrapProvider(loaded);
   }
 

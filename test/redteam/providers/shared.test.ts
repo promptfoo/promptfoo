@@ -538,6 +538,26 @@ describe('shared redteam provider utilities', () => {
           DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
         );
       });
+
+      it('uses a manager-configured redteam provider for grading without capping generation', async () => {
+        const configured = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
+        mockedLoadApiProviders.mockResolvedValue([configured]);
+
+        await redteamProviderManager.setProvider('openai:gpt-4.1');
+
+        const generation = await redteamProviderManager.getProvider({});
+        const grading = await redteamProviderManager.getGradingProvider();
+
+        expect(generation).toBe(configured);
+        expect(generation.config).toEqual({});
+        expect(grading).not.toBe(configured);
+        expect((grading as any).config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+        expect((grading as any).config.max_completion_tokens).toBe(
+          DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+        );
+        expect(mockedLoadApiProviders).toHaveBeenCalledTimes(3);
+        expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(3, ['openai:gpt-4.1']);
+      });
     });
 
     describe('getProvider with defaultTest fallback', () => {
