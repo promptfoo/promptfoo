@@ -258,6 +258,29 @@ describe('BLEU score calculation', () => {
     );
   });
 
+  it('should reject non-finite and non-numeric weights before scoring', () => {
+    const references = ['some reference'];
+    const invalidWeights: unknown[][] = [
+      [Number.NaN, 0, 0, 1],
+      [Number.POSITIVE_INFINITY, 0, 0, 0],
+      [Number.NEGATIVE_INFINITY, 1, 0, 0],
+      ['1', 0, 0, 0],
+      [true, 0, 0, 0],
+      [null, 0, 0, 1],
+      [undefined, 0, 0, 1],
+    ];
+    const sparseWeights = new Array<number>(4);
+    sparseWeights[0] = 1;
+
+    for (const weights of [...invalidWeights, sparseWeights]) {
+      for (const candidate of ['', 'a b c d']) {
+        expect(() => calculateBleuScore(candidate, references, weights as number[])).toThrow(
+          'Weights must be finite numbers',
+        );
+      }
+    }
+  });
+
   it('should throw error for invalid weights', () => {
     const references = ['The cat sat on the mat.'];
     const invalidWeights = [0.5, 0.5, 0.5, 0.5];
