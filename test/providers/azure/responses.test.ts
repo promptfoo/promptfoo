@@ -383,6 +383,60 @@ describe('AzureResponsesProvider', () => {
       expect(body.top_p).toBe(0.9);
     });
 
+    it('should preserve sampling when passthrough sets the final reasoning effort to none', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.1', {
+        config: {
+          temperature: 0.7,
+          top_p: 0.9,
+          passthrough: {
+            reasoning: { effort: 'none' },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
+    it.each([
+      'gpt-5.1',
+      'gpt-5.2',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'gpt-5.4-nano',
+    ])('should preserve sampling for %s when its default reasoning effort is none', async (deploymentName) => {
+      const provider = new AzureResponsesProvider(deploymentName, {
+        config: {
+          omitDefaults: true,
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
+    it('should omit sampling for models whose default reasoning effort is active', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.5', {
+        config: {
+          omitDefaults: true,
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
+    });
+
     it('should merge reasoning_effort with reasoning summary config', async () => {
       const provider = new AzureResponsesProvider('o4-mini', {
         config: {
@@ -424,6 +478,8 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('o4-mini', {
         config: {
           reasoning_effort: 'high',
+          temperature: 0.7,
+          top_p: 0.9,
           passthrough: {
             reasoning: {
               summary: 'auto',
@@ -437,6 +493,8 @@ describe('AzureResponsesProvider', () => {
       expect(body.reasoning).toEqual({
         summary: 'auto',
       });
+      expect(body.temperature).toBeUndefined();
+      expect(body.top_p).toBeUndefined();
     });
 
     it('should let first-class reasoning override matching passthrough fields', async () => {

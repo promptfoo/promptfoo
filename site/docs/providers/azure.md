@@ -782,9 +782,9 @@ These properties can be set under the provider `config` key:
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                   |
 | reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`.         |
 | reasoning             | First-class Responses API object with `effort` and optional `summary`; supported only by `azure:responses`.                                     |
-| temperature           | Controls randomness (0-2). Omitted for active reasoning requests; compatible models may support it with reasoning effort `none`.                |
+| temperature           | Controls randomness (0-2). For `azure:responses`, omitted for active reasoning and preserved when the effective effort is `none`.               |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
-| top_p                 | Controls nucleus sampling (0-1). Omitted for active reasoning requests; compatible models may support it with reasoning effort `none`.          |
+| top_p                 | Controls nucleus sampling (0-1). For `azure:responses`, omitted for active reasoning and preserved when the effective effort is `none`.         |
 | frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
 | presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
 | omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
@@ -802,13 +802,13 @@ For `azure:chat` and `azure:completion`, Azure OpenAI reasoning models like `o1`
 requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
-2. They don't support `temperature` (promptfoo omits it for recognized reasoning models)
-3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high') on chat and completion endpoints
+2. They don't support `temperature` (it's ignored)
+3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
 
 For `azure:responses` reasoning deployments, use `max_output_tokens` and a `reasoning`
 object with `effort` and, where the model supports it, `summary`. Promptfoo omits
-`temperature` and `top_p` for active reasoning but preserves them when the explicit
-reasoning effort is `none`.
+`temperature` and `top_p` for active reasoning but preserves them when the final
+configured or model-default reasoning effort is `none`.
 
 Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for chat or completion aliases that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. Azure Responses deployments enter the reasoning request path when `reasoning` or `reasoning_effort` is configured. The explicit configuration below works with chat and completion endpoints:
 

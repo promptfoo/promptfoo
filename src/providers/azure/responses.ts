@@ -24,6 +24,49 @@ import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
+// These base Azure Responses deployments document `none` as their default effort.
+// Pro and Codex variants intentionally do not match this list.
+const DEFAULT_NONE_REASONING_MODELS = [
+  /(?:^|-)gpt-5\.1(?:-\d{4}-\d{2}-\d{2})?$/,
+  /(?:^|-)gpt-5\.2(?:-\d{4}-\d{2}-\d{2})?$/,
+  /(?:^|-)gpt-5\.4(?:-(?:mini|nano))?(?:-\d{4}-\d{2}-\d{2})?$/,
+];
+
+function defaultsToNoReasoning(deploymentName: string): boolean {
+  const normalizedName = deploymentName.toLowerCase();
+  return DEFAULT_NONE_REASONING_MODELS.some((pattern) => pattern.test(normalizedName));
+}
+
+function resolveEffectiveReasoningEffort(
+  deploymentName: string,
+  reasoning: { effort?: unknown } | undefined,
+  legacyEffort: ReasoningEffort | undefined,
+  passthrough?: object,
+): unknown {
+  const defaultEffort = defaultsToNoReasoning(deploymentName) ? 'none' : undefined;
+  if (Object.prototype.hasOwnProperty.call(reasoning ?? {}, 'effort')) {
+    return reasoning?.effort ?? defaultEffort;
+  }
+
+  const passthroughConfig = passthrough as { reasoning?: unknown } | undefined;
+  if (!Object.prototype.hasOwnProperty.call(passthroughConfig ?? {}, 'reasoning')) {
+    return legacyEffort ?? defaultEffort;
+  }
+
+  const passthroughReasoning = passthroughConfig?.reasoning;
+  if (
+    passthroughReasoning === null ||
+    typeof passthroughReasoning !== 'object' ||
+    Array.isArray(passthroughReasoning)
+  ) {
+    return defaultEffort;
+  }
+  const passthroughEffort = Object.prototype.hasOwnProperty.call(passthroughReasoning, 'effort')
+    ? (passthroughReasoning as { effort?: unknown }).effort
+    : undefined;
+  return passthroughEffort ?? defaultEffort;
+}
+
 export class AzureResponsesProvider extends AzureGenericProvider {
   declare config: AzureResponsesOptions;
 
@@ -127,11 +170,16 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const renderedReasoningEffort = renderVarsInObject(config.reasoning_effort, context?.vars) as
       | ReasoningEffort
       | undefined;
-    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const effectiveReasoningEffort = resolveEffectiveReasoningEffort(
+      this.deploymentName,
+      renderedReasoning,
+      renderedReasoningEffort,
+      config.passthrough,
+    );
     const hasReasoningConfig =
       renderedReasoning !== undefined || renderedReasoningEffort !== undefined;
     const isReasoningModel = this.isReasoningModel() || hasReasoningConfig;
-    // Compatible GPT-5 models accept sampling controls only when reasoning is explicitly disabled.
+    // Compatible GPT-5 models accept sampling controls only when reasoning is disabled.
     const omitSamplingParameters = isReasoningModel && effectiveReasoningEffort !== 'none';
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -152,7 +200,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const temperature = omitSamplingParameters
       ? undefined
       : (config.temperature ?? temperatureDefault);
-    const reasoningEffort = effectiveReasoningEffort;
+    const reasoningEffort = renderedReasoningEffort;
 
     const instructions = config.instructions;
 
