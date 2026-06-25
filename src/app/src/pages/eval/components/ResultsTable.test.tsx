@@ -2745,7 +2745,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
   it.each([
     false,
     true,
-  ])('preserves noncanonical JSON tokens when markdown rendering is %s', (renderMarkdown) => {
+  ])('prettifies JSON without changing noncanonical tokens when markdown rendering is %s', (renderMarkdown) => {
     const lossyJson =
       '{"id":9007199254740993,"overflow":1e400,"negativeZero":-0,"scaled":1.2300,"dup":1,"dup":2,"10":"ten","2":"two"}';
     mockTableState(
@@ -2762,9 +2762,43 @@ describe('ResultsTable Variable JSON Formatting', () => {
 
     const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    expect(container.textContent?.split(lossyJson)).toHaveLength(3);
-    expect(container.textContent).not.toContain('9007199254740992');
-    expect(container.querySelectorAll('[data-testid="prettified-json-variable"]')).toHaveLength(0);
+    const renderedValues = Array.from(
+      container.querySelectorAll(
+        renderMarkdown ? 'code' : '[data-testid="prettified-json-variable"]',
+      ),
+    )
+      .map((cell) => cell.textContent ?? '')
+      .filter((text) => text.includes('9007199254740993'));
+
+    expect(renderedValues).toHaveLength(2);
+    for (const text of renderedValues) {
+      expect(text).toContain('"overflow": 1e400');
+      expect(text).toContain('"negativeZero": -0');
+      expect(text).toContain('"scaled": 1.2300');
+      expect(text.match(/"dup"/g)).toHaveLength(2);
+      expect(text.indexOf('"10"')).toBeLessThan(text.indexOf('"2"'));
+      expect(text).not.toContain('9007199254740992');
+    }
+  });
+
+  it('preserves escape tokens and punctuation inside JSON strings', () => {
+    const escapedJson = String.raw`{"text":"quote: \" slash: \\ braces: {[,]} colon: :","unicode":"\u0061","solidus":"\/"}`;
+    mockTableState(createMockTable({ vars: [escapedJson] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('[data-testid="prettified-json-variable"]')?.textContent).toBe(
+      String.raw`{
+  "text": "quote: \" slash: \\ braces: {[,]} colon: :",
+  "unicode": "\u0061",
+  "solidus": "\/"
+}`,
+    );
   });
 
   it('preserves malformed JSON-looking strings without marking them as prettified', () => {
@@ -2789,10 +2823,47 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
   });
 
+  it('accepts only JSON whitespace at the boundaries of JSON-looking strings', () => {
+    const legalWhitespace = ' \t\r\n{"legal":[1,2]}\n\t ';
+    const invalidWhitespaceValues = [
+      '\ufeff{"bom":true}\ufeff',
+      '\u00a0{"nbsp":true}\u00a0',
+      '\u000b{"verticalTab":true}\u000c',
+      '\u2028{"lineSeparator":true}\u2028',
+    ];
+    mockTableState(createMockTable({ vars: [legalWhitespace, ...invalidWhitespaceValues] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const prettifiedValues = Array.from(
+      container.querySelectorAll('[data-testid="prettified-json-variable"]'),
+    ).map((cell) => cell.textContent);
+    expect(prettifiedValues).toEqual(['{\n  "legal": [\n    1,\n    2\n  ]\n}']);
+    for (const invalidValue of invalidWhitespaceValues) {
+      expect(container.textContent).toContain(invalidValue);
+    }
+  });
+
   it('formats arrays and native structured values while leaving primitives unchanged', () => {
     mockTableState(
       createMockTable({
-        vars: [{ object: true }, [1, null], true, 42, null, '"quoted"', 'true', 'null'],
+        vars: [
+          { object: true },
+          [1, null],
+          true,
+          42,
+          Number.NaN,
+          Number.POSITIVE_INFINITY,
+          null,
+          '"quoted"',
+          'true',
+          'null',
+        ],
       }),
     );
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
@@ -2810,13 +2881,60 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(formattedCells).toContain('[\n  1,\n  null\n]');
     expect(container).toHaveTextContent('true');
     expect(container).toHaveTextContent('42');
+    expect(container).toHaveTextContent('NaN');
+    expect(container).toHaveTextContent('Infinity');
     expect(container).toHaveTextContent('null');
     expect(container).toHaveTextContent('"quoted"');
   });
 
+  it('serializes objects before attempting ordinary string coercion', () => {
+    const nullPrototypeObject = Object.assign(Object.create(null), { safe: true });
+    const toString = vi.fn(() => {
+      throw new Error('must not be called');
+    });
+    const objectWithHostileToString = { safe: 'also', toString };
+    mockTableState(createMockTable({ vars: [nullPrototypeObject, objectWithHostileToString] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const formattedValues = Array.from(
+      container.querySelectorAll('[data-testid="prettified-json-variable"]'),
+    ).map((cell) => cell.textContent);
+    expect(formattedValues).toContain('{\n  "safe": true\n}');
+    expect(formattedValues).toContain('{\n  "safe": "also"\n}');
+    expect(toString).not.toHaveBeenCalled();
+  });
+
+  it('falls back safely when an object cannot be serialized or coerced', () => {
+    const unrenderable = {
+      toJSON: () => {
+        throw new Error('cannot serialize');
+      },
+      toString: () => {
+        throw new Error('cannot coerce');
+      },
+    };
+    mockTableState(createMockTable({ vars: [unrenderable] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container).toHaveTextContent('[Unserializable value]');
+    expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+  });
+
   it('does not parse ordinary strings or oversized JSON strings', () => {
     const plainText = 'plain-text-json-guard-sentinel';
-    const oversizedJson = `{"payload":"${'x'.repeat(100_000)}"}`;
+    const oversizedJson = `{"payload":"${'x'.repeat(512)}"}`;
     mockTableState(createMockTable({ vars: [plainText, oversizedJson] }));
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
@@ -2833,6 +2951,24 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(parseSpy.mock.calls.some(([value]) => value === oversizedJson)).toBe(false);
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
     parseSpy.mockRestore();
+  });
+
+  it('leaves JSON raw when indentation would exceed the formatting budget', () => {
+    const expansiveJson = `[${Array.from({ length: 200 }, () => '0').join(',')}]`;
+    expect(expansiveJson.length).toBeLessThan(512);
+    mockTableState(createMockTable({ vars: [expansiveJson] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(
+      <ResultsTable {...defaultProps} maxTextLength={1_000} />,
+    );
+
+    expect(container.textContent).toContain(expansiveJson);
+    expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
   });
 
   it('memoizes JSON parsing across unrelated table renders', () => {

@@ -75,7 +75,11 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
-const MAX_JSON_STRING_PRETTIFY_LENGTH = 100_000;
+// ResultsTable can synchronously parse 1,000 JSON-string cells, so keep that opt-in work and its
+// retained output close to the normal truncated-cell display range.
+const MAX_JSON_CELL_PRETTIFY_LENGTH = 512;
+const MAX_JSON_PRETTIFY_DEPTH = 64;
+const JSON_PRETTIFY_INDENT = 2;
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -170,7 +174,11 @@ function getMetadataColumnDisplayText(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
-    return String(value);
+    try {
+      return String(value);
+    } catch {
+      return '[Unserializable value]';
+    }
   }
 }
 
@@ -410,62 +418,130 @@ function isJsonWhitespace(char: string): boolean {
   return char === ' ' || char === '\n' || char === '\r' || char === '\t';
 }
 
-function stripJsonWhitespace(value: string): string {
-  let compact = '';
-  let inString = false;
-  let escaped = false;
+function trimJsonWhitespace(value: string): string {
+  let start = 0;
+  let end = value.length;
 
-  for (const char of value) {
-    if (!inString && isJsonWhitespace(char)) {
-      continue;
+  while (start < end && isJsonWhitespace(value[start])) {
+    start++;
+  }
+  while (end > start && isJsonWhitespace(value[end - 1])) {
+    end--;
+  }
+
+  return value.slice(start, end);
+}
+
+function prettifyJsonPreservingTokens(value: string): string | undefined {
+  const tokens = value.match(/"(?:\\[\s\S]|[^"\\])*"|[{}\[\],:]|[^\s{}\[\],:]+/g);
+  if (!tokens) {
+    return undefined;
+  }
+
+  let formatted = '';
+  let depth = 0;
+  let previousToken: string | undefined;
+  const append = (text: string): boolean => {
+    if (formatted.length + text.length > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+      return false;
     }
+    formatted += text;
+    return true;
+  };
 
-    compact += char;
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
+  const appendNewline = (): boolean => {
+    const indentLength = depth * JSON_PRETTIFY_INDENT;
+    return append(`\n${' '.repeat(indentLength)}`);
+  };
+
+  const appendValuePrefix = (): boolean => {
+    const needsNewline = previousToken === '{' || previousToken === '[' || previousToken === ',';
+    return !needsNewline || appendNewline();
+  };
+
+  const appendOpeningToken = (token: string): boolean => {
+    if (depth >= MAX_JSON_PRETTIFY_DEPTH || !appendValuePrefix() || !append(token)) {
+      return false;
+    }
+    depth++;
+    return true;
+  };
+
+  const appendClosingToken = (token: string): boolean => {
+    depth--;
+    const closesEmptyContainer =
+      (token === '}' && previousToken === '{') || (token === ']' && previousToken === '[');
+    return (closesEmptyContainer || appendNewline()) && append(token);
+  };
+
+  for (const token of tokens) {
+    if (token === '{' || token === '[') {
+      if (!appendOpeningToken(token)) {
+        return undefined;
       }
-      continue;
+    } else if (token === '}' || token === ']') {
+      if (!appendClosingToken(token)) {
+        return undefined;
+      }
+    } else if (token === ',') {
+      if (!append(token)) {
+        return undefined;
+      }
+    } else if (token === ':') {
+      if (!append(': ')) {
+        return undefined;
+      }
+    } else if (!appendValuePrefix() || !append(token)) {
+      return undefined;
     }
+    previousToken = token;
+  }
 
-    if (char === '"') {
-      inString = true;
+  return formatted;
+}
+
+function stringifyVariableValue(value: unknown): {
+  value: string;
+  serializedAsJson: boolean;
+} {
+  if (typeof value !== 'object' || value === null) {
+    try {
+      return { value: String(value), serializedAsJson: false };
+    } catch {
+      return { value: '[Unserializable value]', serializedAsJson: false };
     }
   }
 
-  return compact;
+  try {
+    const serialized = JSON.stringify(value, null, JSON_PRETTIFY_INDENT);
+    if (serialized !== undefined) {
+      return { value: serialized, serializedAsJson: true };
+    }
+  } catch {
+    // Fall back to the ordinary string representation below.
+  }
+
+  try {
+    return { value: String(value), serializedAsJson: false };
+  } catch {
+    return { value: '[Unserializable value]', serializedAsJson: false };
+  }
 }
 
 function formatVariableCellValue({
   value,
-  renderMarkdown,
   prettifyJson,
 }: {
   value: unknown;
-  renderMarkdown: boolean;
   prettifyJson: boolean;
-}): { value: string; isJsonPrettified: boolean } {
+}): { value: string; isJsonPrettified: boolean; isJsonValue: boolean } {
   const isObjectValue = typeof value === 'object' && value !== null;
-  let formattedValue = typeof value === 'string' ? value : String(value);
-  if (typeof value !== 'string') {
-    try {
-      formattedValue = JSON.stringify(value, null, 2) ?? String(value);
-    } catch {
-      formattedValue = String(value);
-    }
-  }
-  let isJsonPrettified = prettifyJson && isObjectValue;
+  const serialized = stringifyVariableValue(value);
+  let formattedValue = serialized.value;
+  let isJsonPrettified = prettifyJson && isObjectValue && serialized.serializedAsJson;
 
-  if (
-    prettifyJson &&
-    typeof value === 'string' &&
-    value.length <= MAX_JSON_STRING_PRETTIFY_LENGTH
-  ) {
-    const trimmed = value.trim();
+  if (prettifyJson && typeof value === 'string' && value.length <= MAX_JSON_CELL_PRETTIFY_LENGTH) {
+    const trimmed = trimJsonWhitespace(value);
     const looksLikeJson =
       (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
       (trimmed.startsWith('[') && trimmed.endsWith(']'));
@@ -473,28 +549,22 @@ function formatVariableCellValue({
     if (looksLikeJson) {
       try {
         const parsed = JSON.parse(trimmed);
-        const compactParsed = JSON.stringify(parsed);
-        if (
-          typeof parsed === 'object' &&
-          parsed !== null &&
-          compactParsed === stripJsonWhitespace(trimmed)
-        ) {
-          // Only reserialize when doing so changes whitespace and nothing else. Unsafe numbers,
-          // duplicate keys, key reordering, and noncanonical tokens remain byte-faithful.
-          formattedValue = JSON.stringify(parsed, null, 2);
-          isJsonPrettified = true;
+        if (typeof parsed === 'object' && parsed !== null) {
+          const prettified = prettifyJsonPreservingTokens(trimmed);
+          if (prettified !== undefined) {
+            formattedValue = prettified;
+            isJsonPrettified = true;
+          }
         }
       } catch {
-        // Not valid JSON, leave as-is.
+        // Parsing or formatting failed; leave the original value unchanged.
       }
     }
   }
 
-  if (renderMarkdown && (isObjectValue || isJsonPrettified)) {
-    formattedValue = `\`\`\`json\n${formattedValue}\n\`\`\``;
-  }
+  const isJsonValue = isJsonPrettified || (isObjectValue && serialized.serializedAsJson);
 
-  return { value: formattedValue, isJsonPrettified };
+  return { value: formattedValue, isJsonPrettified, isJsonValue };
 }
 
 const VariableCellContent = React.memo(function VariableCellContent({
@@ -510,13 +580,15 @@ const VariableCellContent = React.memo(function VariableCellContent({
   prettifyJson: boolean;
   maxTextLength: number;
 }) {
-  const { value: formattedValue, isJsonPrettified } = React.useMemo(
-    () => formatVariableCellValue({ value, renderMarkdown, prettifyJson }),
-    [prettifyJson, renderMarkdown, value],
-  );
+  const {
+    value: formattedValue,
+    isJsonPrettified,
+    isJsonValue,
+  } = React.useMemo(() => formatVariableCellValue({ value, prettifyJson }), [prettifyJson, value]);
 
-  if (renderMarkdown && (renderPlainMarkdown || isJsonPrettified)) {
-    return <VariableMarkdownCell value={formattedValue} maxTextLength={maxTextLength} />;
+  if (renderMarkdown && (renderPlainMarkdown || isJsonValue)) {
+    const markdownValue = isJsonValue ? `\`\`\`json\n${formattedValue}\n\`\`\`` : formattedValue;
+    return <VariableMarkdownCell value={markdownValue} maxTextLength={maxTextLength} />;
   }
 
   if (isJsonPrettified) {
