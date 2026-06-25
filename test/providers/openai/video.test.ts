@@ -319,6 +319,14 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.thumbnail).toContain('storageRef:');
       expect(result.video?.spritesheet).toContain('storageRef:');
       expect(result.cost).toBeGreaterThan(0);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        expect.stringMatching(/\/videos$/),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+        }),
+      );
     });
 
     it('should handle invalid video size', async () => {

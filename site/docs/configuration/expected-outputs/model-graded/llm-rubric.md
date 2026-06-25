@@ -39,6 +39,8 @@ You can override this by setting the `provider` option (see below).
 
 Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
+When a judge needs to inspect files or use coding-agent tools as part of grading, use [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric). Although an agent provider can also be supplied to `llm-rubric`, `agent-rubric` makes the capability intentional, validates that the grader is an agent runtime, and uses an agent-oriented safety prompt.
+
 It asks the model to output a JSON object that looks like this:
 
 ```json
