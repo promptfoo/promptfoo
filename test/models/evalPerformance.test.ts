@@ -8,8 +8,8 @@ import {
   getTotalResultRowCount,
 } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
-import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { deleteAllEvals, deleteEval, deleteEvals } from '../../src/util/database';
+import { createEvaluateResult } from '../factories/eval';
 
 describe('evalPerformance', () => {
   beforeAll(async () => {
@@ -18,6 +18,7 @@ describe('evalPerformance', () => {
 
   beforeEach(async () => {
     const db = await getDb();
+    await db.run('DROP TRIGGER IF EXISTS fail_eval_result_insert');
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -26,49 +27,16 @@ describe('evalPerformance', () => {
     clearCountCache();
   });
 
-  /**
-   * Helper to create an eval and add results for provider x test combinations.
-   * Returns the eval and the expected counts.
-   */
-  function createEvaluateResult(providerIdx: number, testIdx: number): EvaluateResult {
-    return {
-      description: `test-${providerIdx}-${testIdx}`,
-      promptIdx: 0,
-      testIdx,
-      testCase: { vars: { input: `test${testIdx + 1}` } },
-      promptId: 'test-prompt',
-      provider: { id: `provider-${providerIdx + 1}`, label: `Provider ${providerIdx + 1}` },
-      prompt: { raw: 'Test prompt', label: 'Test prompt' },
-      vars: { input: `test${testIdx + 1}` },
-      response: {
-        output: `response-${providerIdx}-${testIdx}`,
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-      },
-      error: null,
-      failureReason: ResultFailureReason.NONE,
-      success: true,
-      score: 1,
-      latencyMs: 100,
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Pass',
-        namedScores: {},
-        tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
-        componentResults: [],
-      },
-      namedScores: {},
-      cost: 0.001,
-      metadata: {},
-    };
-  }
-
   async function createTransientResult(evalId: string, testIdx: number) {
-    return EvalResult.createFromEvaluateResult(evalId, createEvaluateResult(0, testIdx), {
+    return EvalResult.createFromEvaluateResult(evalId, createEvaluateResult({ testIdx }), {
       persist: false,
     });
   }
 
+  /**
+   * Helper to create an eval and add results for provider x test combinations.
+   * Returns the eval and the expected counts.
+   */
   async function createEvalWithResults(numProviders: number, numTests: number) {
     const providers = Array.from({ length: numProviders }, (_, i) => ({ id: `provider-${i + 1}` }));
     const tests = Array.from({ length: numTests }, (_, i) => ({ vars: { input: `test${i + 1}` } }));
@@ -85,7 +53,15 @@ describe('evalPerformance', () => {
     // Add results for each provider × test combination
     for (let providerIdx = 0; providerIdx < numProviders; providerIdx++) {
       for (let testIdx = 0; testIdx < numTests; testIdx++) {
-        await eval_.addResult(createEvaluateResult(providerIdx, testIdx));
+        await eval_.addResult(
+          createEvaluateResult({
+            testIdx,
+            provider: {
+              id: `provider-${providerIdx + 1}`,
+              label: `Provider ${providerIdx + 1}`,
+            },
+          }),
+        );
       }
     }
 
@@ -213,20 +189,77 @@ describe('evalPerformance', () => {
       expect(await getTotalResultRowCount(evalId)).toBe(1);
     });
 
-    it('should refresh cached counts after setResults inserts results', async () => {
+    it('should refresh cached counts after a reloaded eval inserts results', async () => {
       const eval_ = await Eval.create(
         { providers: [{ id: 'provider-1' }], prompts: ['Test prompt'], tests: [] },
         [{ raw: 'Test prompt', label: 'Test prompt' }],
       );
+      const reloadedEval = await Eval.findById(eval_.id);
       const result = await createTransientResult(eval_.id, 0);
+
+      expect(reloadedEval).toBeDefined();
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
+
+      await reloadedEval!.setResults([result]);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(1);
+    });
+
+    it('should preserve cached counts after a failed save and refresh them on retry', async () => {
+      const eval_ = await Eval.create(
+        { providers: [{ id: 'provider-1' }], prompts: ['Test prompt'], tests: [] },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+      const firstResult = await createTransientResult(eval_.id, 0);
+      await firstResult.save();
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(1);
+
+      const retryableResult = await createTransientResult(eval_.id, 1);
+      const db = await getDb();
+      await db.run(`
+        CREATE TRIGGER fail_eval_result_insert
+        BEFORE INSERT ON eval_results
+        BEGIN
+          SELECT RAISE(ABORT, 'forced result insert failure');
+        END
+      `);
+      try {
+        await expect(retryableResult.save()).rejects.toThrow();
+      } finally {
+        await db.run('DROP TRIGGER IF EXISTS fail_eval_result_insert');
+      }
+
+      expect(retryableResult.persisted).toBe(false);
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(1);
+
+      await retryableResult.save();
+
+      expect(retryableResult.persisted).toBe(true);
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(2);
+    });
+
+    it('should refresh cached counts after concurrent result saves', async () => {
+      const eval_ = await Eval.create(
+        { providers: [{ id: 'provider-1' }], prompts: ['Test prompt'], tests: [] },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+      const results = await Promise.all(
+        Array.from({ length: 4 }, (_, testIdx) => createTransientResult(eval_.id, testIdx)),
+      );
 
       expect(await getCachedResultsCount(eval_.id)).toBe(0);
       expect(await getTotalResultRowCount(eval_.id)).toBe(0);
 
-      await eval_.setResults([result]);
+      await Promise.all(results.map((result) => result.save()));
 
-      expect(await getCachedResultsCount(eval_.id)).toBe(1);
-      expect(await getTotalResultRowCount(eval_.id)).toBe(1);
+      expect(await getCachedResultsCount(eval_.id)).toBe(4);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(4);
     });
 
     it('should refresh cached counts after an unpersisted EvalResult is saved', async () => {
@@ -260,16 +293,20 @@ describe('evalPerformance', () => {
     });
 
     it('should refresh cached counts for every eval passed to deleteEvals', async () => {
-      const { eval_: evalA } = await createEvalWithResults(1, 2);
-      const { eval_: evalB } = await createEvalWithResults(1, 3);
+      const { eval_: evalA } = await createEvalWithResults(2, 2);
+      const { eval_: evalB } = await createEvalWithResults(2, 3);
 
       expect(await getCachedResultsCount(evalA.id)).toBe(2);
+      expect(await getTotalResultRowCount(evalA.id)).toBe(4);
       expect(await getCachedResultsCount(evalB.id)).toBe(3);
+      expect(await getTotalResultRowCount(evalB.id)).toBe(6);
 
       await deleteEvals([evalA.id, evalB.id]);
 
       expect(await getCachedResultsCount(evalA.id)).toBe(0);
+      expect(await getTotalResultRowCount(evalA.id)).toBe(0);
       expect(await getCachedResultsCount(evalB.id)).toBe(0);
+      expect(await getTotalResultRowCount(evalB.id)).toBe(0);
     });
 
     it('should refresh cached counts after deleteAllEvals', async () => {
@@ -312,40 +349,6 @@ describe('evalPerformance', () => {
   });
 
   describe('cache invalidation on result write (issue #9348)', () => {
-    const makeResult = (testIdx: number) =>
-      ({
-        description: `test-${testIdx}`,
-        promptIdx: 0,
-        testIdx,
-        testCase: { vars: { input: `test${testIdx}` } },
-        promptId: 'test-prompt',
-        provider: { id: 'provider-1', label: 'Provider 1' },
-        prompt: { raw: 'Test prompt', label: 'Test prompt' },
-        vars: { input: `test${testIdx}` },
-        response: {
-          output: `response-${testIdx}`,
-          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 },
-        },
-        error: null,
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 10,
-        gradingResult: {
-          pass: true,
-          score: 1,
-          reason: 'Pass',
-          namedScores: {},
-          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
-          componentResults: [],
-        },
-        namedScores: {},
-        cost: 0,
-        metadata: {},
-      }) as Parameters<
-        typeof import('../../src/models/evalResult')['default']['createFromEvaluateResult']
-      >[1];
-
     it('getCachedResultsCount refreshes after createFromEvaluateResult (issue #9348)', async () => {
       const eval_ = await Eval.create(
         { providers: [{ id: 'provider-1' }], prompts: ['Test prompt'], tests: [] },
@@ -357,7 +360,7 @@ describe('evalPerformance', () => {
       expect(before).toBe(0);
 
       // Insert a result — this should bust the cache automatically
-      await eval_.addResult(makeResult(0));
+      await eval_.addResult(createEvaluateResult({ testIdx: 0 }));
 
       // Must see fresh count without any manual clearCountCache() call
       const after = await getCachedResultsCount(eval_.id);
@@ -373,29 +376,32 @@ describe('evalPerformance', () => {
       const before = await getTotalResultRowCount(eval_.id);
       expect(before).toBe(0);
 
-      await eval_.addResult(makeResult(0));
+      await eval_.addResult(createEvaluateResult({ testIdx: 0 }));
 
       const after = await getTotalResultRowCount(eval_.id);
       expect(after).toBe(1);
     });
 
-    it('getCachedResultsCount refreshes after createManyFromEvaluateResult (issue #9348)', async () => {
+    it('cached counts refresh after createManyFromEvaluateResult (issue #9348)', async () => {
       const eval_ = await Eval.create(
         { providers: [{ id: 'provider-1' }], prompts: ['Test prompt'], tests: [] },
         [{ raw: 'Test prompt', label: 'Test prompt' }],
       );
 
-      const before = await getCachedResultsCount(eval_.id);
-      expect(before).toBe(0);
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
 
-      const EvalResult = (await import('../../src/models/evalResult')).default;
       await EvalResult.createManyFromEvaluateResult(
-        [makeResult(0), makeResult(1)] as any,
+        [
+          createEvaluateResult({ testIdx: 0, provider: { id: 'provider-1' } }),
+          createEvaluateResult({ testIdx: 0, provider: { id: 'provider-2' } }),
+          createEvaluateResult({ testIdx: 1, provider: { id: 'provider-1' } }),
+        ],
         eval_.id,
       );
 
-      const after = await getCachedResultsCount(eval_.id);
-      expect(after).toBe(2);
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(3);
     });
   });
 });
