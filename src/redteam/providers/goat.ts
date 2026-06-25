@@ -23,7 +23,7 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
-  getRemoteMaterializationUpgradeError,
+  createRemoteMaterializationUpgradeError,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -377,7 +377,7 @@ export default class GoatProvider implements ApiProvider {
           throw abortError;
         }
         if (isRemoteMaterializationUpgradeError(error)) {
-          throw new Error(getRemoteMaterializationUpgradeError(GOAT_MATERIALIZATION_OPERATION));
+          throw createRemoteMaterializationUpgradeError(GOAT_MATERIALIZATION_OPERATION);
         }
         log.error('[GOAT] Evaluation failed', getErrorLogMetadata(error));
         throw new Error('GOAT evaluation failed');
@@ -1098,9 +1098,7 @@ export default class GoatProvider implements ApiProvider {
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: safeGetOwnDataProperty(lastTargetResponse, 'guardrails') as
-        | ProviderResponse['guardrails']
-        | undefined,
+      guardrails: lastTargetResponse?.guardrails,
     };
   }
 }

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import logger from '../../../src/logger';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { isRemoteMaterializationUpgradeError } from '../../../src/redteam/remoteMaterialization';
 import { createMockProvider } from '../../factories/provider';
 
 import type {
@@ -518,6 +519,29 @@ describe('RedteamGoatProvider', () => {
 
     expect(getRenderedTargetPromptText(targetProvider)).toBe(
       'Doc=data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v; Notes=keep these notes',
+    );
+  });
+
+  it('should preserve the trusted materialization upgrade classification', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      inputs: { email: 'The user email' },
+    });
+    mockFetch.mockResolvedValueOnce(
+      createRemoteMessageResponse(JSON.stringify({ prompt: 'attack', email: 'a@example.com' })),
+    );
+
+    let error: unknown;
+    try {
+      await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isRemoteMaterializationUpgradeError(error)).toBe(true);
+    expect((error as Error).message).toContain(
+      'GOAT multi-input generation requires remote multi-input materialization support',
     );
   });
 
@@ -2062,6 +2086,27 @@ describe('RedteamGoatProvider', () => {
 
       expect(result.metadata?.sessionId).toBe('stable-session-id');
       expect(sessionIdReads).toBe(1);
+    });
+
+    it('should preserve a guardrails accessor with one final read', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      let guardrailsReads = 0;
+      const response = {
+        output: 'target response',
+        tokenUsage: {},
+        get guardrails() {
+          guardrailsReads++;
+          return { flagged: true } as any;
+        },
+      };
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockProvider({ response })),
+      );
+
+      expect(result.guardrails).toEqual({ flagged: true });
+      expect(guardrailsReads).toBe(1);
     });
 
     it('should handle missing sessionId gracefully', async () => {

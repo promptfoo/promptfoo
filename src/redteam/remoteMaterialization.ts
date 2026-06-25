@@ -117,6 +117,12 @@ export function getRemoteMaterializationUpgradeError(operation: string): string 
 
 const remoteMaterializationUpgradeErrors = new WeakSet<object>();
 
+export function createRemoteMaterializationUpgradeError(operation: string): Error {
+  const error = new Error(getRemoteMaterializationUpgradeError(operation));
+  remoteMaterializationUpgradeErrors.add(error);
+  return error;
+}
+
 export function isRemoteMaterializationUpgradeError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && remoteMaterializationUpgradeErrors.has(error);
 }
@@ -128,7 +134,5 @@ export function assertRemoteMaterializationHandled(
   if (response?.materializationHandled === true) {
     return;
   }
-  const error = new Error(getRemoteMaterializationUpgradeError(operation));
-  remoteMaterializationUpgradeErrors.add(error);
-  throw error;
+  throw createRemoteMaterializationUpgradeError(operation);
 }
