@@ -234,15 +234,22 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo<TargetPlugin[]>(() => {
-    const plugins = (redTeamConfig.plugins ?? []).map((configuredPlugin) =>
-      typeof configuredPlugin === 'string'
-        ? { id: configuredPlugin as Plugin, config: {}, isStatic: true }
-        : {
-            id: configuredPlugin.id as Plugin,
-            config: configuredPlugin.config ?? {},
-            isStatic: true,
-          },
-    );
+    const plugins = (redTeamConfig.plugins ?? []).flatMap<TargetPlugin>((configuredPlugin) => {
+      if (typeof configuredPlugin === 'string') {
+        return configuredPlugin
+          ? [{ id: configuredPlugin as Plugin, config: {}, isStatic: true }]
+          : [];
+      }
+      return configuredPlugin?.id
+        ? [
+            {
+              id: configuredPlugin.id as Plugin,
+              config: configuredPlugin.config ?? {},
+              isStatic: true,
+            },
+          ]
+        : [];
+    });
 
     return plugins.length > 0 ? plugins : [{ id: DEFAULT_PLUGIN, config: {}, isStatic: true }];
   }, [redTeamConfig.plugins]);
@@ -307,7 +314,10 @@ export const TestCaseGenerationProvider: React.FC<{
         ]);
       } catch (error) {
         // Ignore abort errors (these happen when a new generation is triggered)
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (
+          abortController.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
           return;
         }
 
@@ -387,7 +397,10 @@ export const TestCaseGenerationProvider: React.FC<{
         onSuccessRef.current?.(testCase);
       } catch (error) {
         // Ignore abort errors (these happen when a new generation is triggered)
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (
+          abortController.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
           return;
         }
 
@@ -477,7 +490,10 @@ export const TestCaseGenerationProvider: React.FC<{
           },
         ];
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (
+          abortController.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
           return null;
         }
         throw error;
@@ -579,31 +595,13 @@ export const TestCaseGenerationProvider: React.FC<{
 
   /**
    * Regenerates and optionally evaluates the plugin/strategy combination.
-   * Accepts an optional newPluginIndex to change the plugin before regenerating.
+   * Accepts an optional newPlugin to change the plugin before regenerating.
    * For single-turn strategies, uses cached batch when available.
    */
   const handleRegenerate = useCallback(
-    (newPluginIndex?: string) => {
-      // If plugin changed, clear batch and start fresh
-      if (newPluginIndex !== undefined) {
-        const selectedPluginIndex = Number(newPluginIndex);
-        if (
-          !Number.isInteger(selectedPluginIndex) ||
-          selectedPluginIndex < 0 ||
-          selectedPluginIndex >= availablePlugins.length
-        ) {
-          return;
-        }
-
-        const selectedPlugin = availablePlugins[selectedPluginIndex];
-        if (!selectedPlugin) {
-          return;
-        }
-
-        // Clear batch since we're switching plugins
-        setTestCaseBatch([]);
-        setBatchIndex(0);
-        handleStart({ ...selectedPlugin, isStatic: false }, strategy!);
+    (newPlugin?: TargetPlugin) => {
+      if (newPlugin) {
+        handleStart({ ...newPlugin, isStatic: false }, strategy!);
         return;
       }
 
@@ -635,16 +633,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Batch exhausted, generate new batch
       handleStart(plugin!, strategy!);
     },
-    [
-      handleStart,
-      plugin,
-      strategy,
-      availablePlugins,
-      batchIndex,
-      testCaseBatch,
-      isPrefetching,
-      prefetchNextBatch,
-    ],
+    [handleStart, plugin, strategy, batchIndex, testCaseBatch, isPrefetching, prefetchNextBatch],
   );
 
   const handleContinue = useCallback((additionalTurns: number) => {
@@ -680,6 +669,9 @@ export const TestCaseGenerationProvider: React.FC<{
             }
           })
           .catch((error) => {
+            if (abortController.signal.aborted) {
+              return;
+            }
             console.error('Failed to generate test case batch:', error);
 
             const errorMessage =

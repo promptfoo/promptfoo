@@ -33,6 +33,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import deepEqual from 'fast-deep-equal';
 import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import {
   getPluginDocumentationUrl,
@@ -55,7 +56,7 @@ interface TestCaseDialogProps {
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: (newPluginIndex?: string) => void;
+  onRegenerate: (newPlugin?: TargetPlugin) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
@@ -63,53 +64,6 @@ interface TestCaseDialogProps {
   // Whether to allow changing the plugin (only on strategies page)
   allowPluginChange?: boolean;
 }
-
-const arePluginConfigsEqual = (
-  left: unknown,
-  right: unknown,
-  seen = new WeakMap<object, WeakSet<object>>(),
-): boolean => {
-  if (Object.is(left, right)) {
-    return true;
-  }
-
-  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
-    return false;
-  }
-
-  const previouslySeenRight = seen.get(left);
-  if (previouslySeenRight?.has(right)) {
-    return true;
-  }
-
-  if (previouslySeenRight) {
-    previouslySeenRight.add(right);
-  } else {
-    seen.set(left, new WeakSet([right]));
-  }
-
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((value, index) => arePluginConfigsEqual(value, right[index], seen))
-    );
-  }
-
-  const leftObject = left as Record<string, unknown>;
-  const rightObject = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftObject).sort();
-  const rightKeys = Object.keys(rightObject).sort();
-
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) =>
-        key === rightKeys[index] && arePluginConfigsEqual(leftObject[key], rightObject[key], seen),
-    )
-  );
-};
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
@@ -196,41 +150,55 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
 
   const selectedPluginValue = useMemo(() => {
-    const exactIndex = availablePlugins.findIndex((option) => option === plugin);
+    const exactIndex = availablePlugins.findIndex(
+      (option) =>
+        option === plugin || (option.id === plugin?.id && option.config === plugin.config),
+    );
     if (exactIndex >= 0) {
       return String(exactIndex);
     }
 
     const index = availablePlugins.findIndex(
-      (option) =>
-        option.id === plugin?.id && arePluginConfigsEqual(option.config, plugin?.config ?? {}),
+      (option) => option.id === plugin?.id && deepEqual(option.config, plugin?.config ?? {}),
     );
-    return index >= 0 ? String(index) : undefined;
+    return index >= 0 ? String(index) : '';
   }, [availablePlugins, plugin]);
 
-  const getAvailablePluginLabel = (option: TargetPlugin, index: number) => {
-    const pluginsWithSameId = availablePlugins.filter((plugin) => plugin.id === option.id);
-    const instanceNumber = availablePlugins
-      .slice(0, index + 1)
-      .filter((plugin) => plugin.id === option.id).length;
-    const duplicateSuffix = pluginsWithSameId.length > 1 ? ` (${instanceNumber})` : '';
-
-    if (option.id === 'policy') {
-      const policy = option.config?.policy as { name?: string } | string | undefined;
-
-      if (policy && typeof policy === 'object' && typeof policy.name === 'string' && policy.name) {
-        return `${policy.name}${duplicateSuffix}`;
+  const availablePluginLabels = useMemo(() => {
+    let policyIndex = 0;
+    const baseLabels = availablePlugins.map((option) => {
+      if (option.id === 'policy') {
+        policyIndex += 1;
+        const policy = option.config?.policy as { name?: string } | string | undefined;
+        const policyName =
+          policy && typeof policy === 'object' && typeof policy.name === 'string'
+            ? policy.name.trim()
+            : '';
+        return policyName || `Custom Policy ${policyIndex}`;
       }
 
-      return `Custom Policy ${instanceNumber}`;
+      return (
+        displayNameOverrides[option.id as Plugin] ||
+        categoryAliases[option.id as Plugin] ||
+        option.id
+      );
+    });
+
+    const labelCounts = new Map<string, number>();
+    for (const label of baseLabels) {
+      labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
     }
 
-    const baseLabel =
-      displayNameOverrides[option.id as Plugin] ||
-      categoryAliases[option.id as Plugin] ||
-      option.id;
-    return `${baseLabel}${duplicateSuffix}`;
-  };
+    const labelOccurrences = new Map<string, number>();
+    return baseLabels.map((label) => {
+      if ((labelCounts.get(label) ?? 0) < 2) {
+        return label;
+      }
+      const occurrence = (labelOccurrences.get(label) ?? 0) + 1;
+      labelOccurrences.set(label, occurrence);
+      return `${label} (${occurrence})`;
+    });
+  }, [availablePlugins]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -256,18 +224,23 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             <Select
               value={selectedPluginValue}
               onValueChange={(newValue) => {
-                if (newValue && newValue !== selectedPluginValue) {
-                  onRegenerate(newValue);
+                const selectedPlugin = availablePlugins[Number(newValue)];
+                if (selectedPlugin && newValue !== selectedPluginValue) {
+                  onRegenerate(selectedPlugin);
                 }
               }}
             >
-              <SelectTrigger className="w-full sm:w-[280px]" data-testid="plugin-dropdown">
+              <SelectTrigger
+                aria-label="Preview plugin"
+                className="w-full sm:w-[280px]"
+                data-testid="plugin-dropdown"
+              >
                 <SelectValue placeholder="Select plugin" />
               </SelectTrigger>
               <SelectContent className="z-[10001]">
                 {availablePlugins.map((option, index) => (
                   <SelectItem key={`${option.id}-${index}`} value={String(index)}>
-                    {getAvailablePluginLabel(option, index)}
+                    {availablePluginLabels[index]}
                   </SelectItem>
                 ))}
               </SelectContent>
