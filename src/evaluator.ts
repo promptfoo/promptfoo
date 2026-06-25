@@ -1607,6 +1607,10 @@ async function runEvalInternal({
 
     return [ret];
   } catch (err) {
+    if (abortSignal?.aborted && isAbortError(err)) {
+      throw err;
+    }
+
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1616,8 +1620,8 @@ async function runEvalInternal({
     });
 
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
-    const isAbortError = err instanceof Error && err.name === 'AbortError';
-    if (!isAbortError) {
+    const hasAbortErrorName = err instanceof Error && err.name === 'AbortError';
+    if (!hasAbortErrorName) {
       logger.error('Provider call failed during eval', logContext);
     }
 

@@ -858,6 +858,44 @@ describeEvaluator('evaluator execution control', () => {
     expect(events).toEqual(['start:A1', 'start:B1', 'done:A1', 'done:B1']);
   });
 
+  it('leaves an externally aborted in-flight row pending for resume', async () => {
+    const abortController = new AbortController();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn((_prompt, _context, callOptions) => {
+        return new Promise<ProviderResponse>((_resolve, reject) => {
+          const rejectAbort = () => {
+            reject(new DOMException('This operation was aborted', 'AbortError'));
+          };
+          const signal = callOptions?.abortSignal;
+          if (signal?.aborted) {
+            rejectAbort();
+            return;
+          }
+          signal?.addEventListener('abort', rejectAbort, { once: true });
+          markStarted();
+        });
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evaluation = evaluate(testSuite, evalRecord, { abortSignal: abortController.signal });
+    await started;
+    abortController.abort();
+    await evaluation;
+
+    expect(await evalRecord.getResults()).toHaveLength(0);
+  });
+
   it('does not add a late timed-out response to conversation history', async () => {
     vi.useFakeTimers();
     let releaseFirst!: () => void;
