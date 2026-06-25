@@ -166,6 +166,7 @@
     "webpack-dev-server": {
       "express": "^4.22.2"
     },
+    "launch-editor": "2.14.1",
     "engine.io": {
       ".": "6.6.8",
       "ws": "$ws"
