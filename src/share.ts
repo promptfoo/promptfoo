@@ -32,6 +32,8 @@ export interface ShareOptions {
   silent?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
+  /** Propagate upload failures to callers that can return a structured error */
+  throwOnError?: boolean;
 }
 
 /** Error types that indicate chunk size issues */
@@ -51,6 +53,10 @@ interface AdaptiveChunkConfig {
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    return false;
+  }
+
   const sharingConfigOnEval =
     typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
   const sharingEnvUrl = getShareApiBaseUrl();
@@ -384,11 +390,6 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
-interface SendChunkedResultsOutput {
-  evalId: string | null;
-  error?: Error;
-}
-
 async function prepareChunkForShare(
   chunk: EvalResult[],
   localEvalId: string,
@@ -416,13 +417,28 @@ async function prepareChunkForShare(
   return chunkToSend;
 }
 
+async function warnAboutFailedBlobUploads(
+  remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+): Promise<void> {
+  if (!remoteBlobUploadCache || remoteBlobUploadCache.size === 0) {
+    return;
+  }
+  const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
+  const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
+  if (failedUploads > 0) {
+    logger.warn(
+      `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+    );
+  }
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
   options: ShareOptions = {},
-): Promise<SendChunkedResultsOutput> {
+): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false } = options;
+  const { silent = false, throwOnError = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
@@ -438,7 +454,7 @@ async function sendChunkedResults(
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
-    return { evalId: null };
+    return null;
   }
   if (inlineBlobs && inlineCache) {
     sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache, evalRecord.id);
@@ -554,22 +570,10 @@ async function sendChunkedResults(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
 
-    if (remoteBlobUploadCache && remoteBlobUploadCache.size > 0) {
-      const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
-      const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
-      if (failedUploads > 0) {
-        logger.warn(
-          `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
-        );
-      }
-    }
+    await warnAboutFailedBlobUploads(remoteBlobUploadCache);
 
-    return { evalId };
+    return evalId;
   } catch (e) {
-    if (progressBar) {
-      progressBar.stop();
-    }
-
     const error = e instanceof Error ? e : new Error(String(e));
     logger.error('[share] Upload failed', { evalId, error, url });
 
@@ -577,7 +581,10 @@ async function sendChunkedResults(
       logger.info('[share] Rolling back after failed upload', { evalId, url });
       await rollbackEval(url, evalId, headers);
     }
-    return { evalId: null, error };
+    if (throwOnError) {
+      throw error;
+    }
+    return null;
   } finally {
     if (progressBar) {
       progressBar.stop();
@@ -683,14 +690,14 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param options Share options (silent mode, showAuth).
+ * @param options Share options (silent mode, showAuth, and optional error propagation).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false } = options;
+  const { silent = false, showAuth = false, throwOnError = false } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -709,8 +716,10 @@ export async function createShareableUrl(
     }
   }
 
-  // 1. Handle email collection
-  await handleEmailCollection(evalRecord);
+  // Interactive metadata collection is only appropriate for foreground CLI shares.
+  if (!silent) {
+    await handleEmailCollection(evalRecord);
+  }
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);
@@ -721,17 +730,14 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const result = await sendChunkedResults(evalRecord, url, { silent });
+  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError });
 
-  if (!result.evalId) {
-    if (result.error) {
-      throw result.error;
-    }
+  if (!evalId) {
     return null;
   }
-  logger.debug(`New eval ID on remote instance: ${result.evalId}`);
+  logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  return getShareableUrl(evalRecord, result.evalId, showAuth);
+  return getShareableUrl(evalRecord, evalId, showAuth);
 }
 
 /**

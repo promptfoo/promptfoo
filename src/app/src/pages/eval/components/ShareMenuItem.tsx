@@ -4,8 +4,8 @@ import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import { callApi } from '@app/utils/api';
 import { Share } from 'lucide-react';
+import { checkShareAvailability, isAbortError, ShareAvailabilityError } from './shareApi';
 
 interface ShareMenuItemProps {
   evalId: string;
@@ -13,71 +13,123 @@ interface ShareMenuItemProps {
   loading?: boolean;
 }
 
+type ShareAvailabilityState =
+  | { evalId: string; status: 'checking' }
+  | { evalId: string; status: 'enabled' }
+  | { evalId: string; status: 'disabled'; reason: string; retryable: boolean };
+
+function initialState(evalId: string): ShareAvailabilityState {
+  return {
+    evalId,
+    status: !IS_RUNNING_LOCALLY || !evalId ? 'enabled' : 'checking',
+  };
+}
+
 /**
  * Menu item that triggers the share dialog.
- * Checks if sharing is enabled and shows a disabled state with tooltip if not.
+ * Keeps unavailable states focusable so keyboard users can discover the reason and retry.
  */
 export default function ShareMenuItem({ evalId, onClick, loading = false }: ShareMenuItemProps) {
-  const [sharingEnabled, setSharingEnabled] = React.useState<boolean | null>(null);
-  const [sharingDisabledReason, setSharingDisabledReason] = React.useState<string | null>(null);
+  const [availability, setAvailability] = React.useState<ShareAvailabilityState>(() =>
+    initialState(evalId),
+  );
+  const [retryAttempt, setRetryAttempt] = React.useState(0);
 
-  // Check if sharing is enabled for this eval
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryAttempt intentionally retriggers the request
   React.useEffect(() => {
     if (!IS_RUNNING_LOCALLY || !evalId) {
-      setSharingEnabled(true); // Non-local instances always allow sharing
-      setSharingDisabledReason(null);
+      setAvailability({ evalId, status: 'enabled' });
       return;
     }
 
-    const checkSharingEnabled = async () => {
-      try {
-        const response = await callApi(
-          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setSharingEnabled(data.sharingEnabled ?? false);
-          setSharingDisabledReason(
-            data.authError ||
-              (data.sharingEnabled
-                ? null
-                : 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.'),
-          );
-        } else {
-          setSharingEnabled(false);
-          setSharingDisabledReason('Failed to check sharing status.');
+    let active = true;
+    const controller = new AbortController();
+    setAvailability({ evalId, status: 'checking' });
+
+    checkShareAvailability(evalId, controller.signal)
+      .then((result) => {
+        if (!active) {
+          return;
         }
-      } catch {
-        setSharingEnabled(false);
-        setSharingDisabledReason('Failed to check sharing status.');
-      }
+        setAvailability(
+          result.sharingEnabled
+            ? { evalId, status: 'enabled' }
+            : {
+                evalId,
+                status: 'disabled',
+                reason: result.sharingDisabledReason ?? 'Sharing is unavailable.',
+                retryable: result.isRetryable,
+              },
+        );
+      })
+      .catch((error: unknown) => {
+        if (!active || isAbortError(error)) {
+          return;
+        }
+        setAvailability({
+          evalId,
+          status: 'disabled',
+          reason: error instanceof Error ? error.message : 'Failed to check sharing availability.',
+          retryable: error instanceof ShareAvailabilityError ? error.retryable : true,
+        });
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
     };
+  }, [evalId, retryAttempt]);
 
-    checkSharingEnabled();
-  }, [evalId]);
-
-  if (sharingEnabled === false) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="w-full">
-            <DropdownMenuItem disabled className="pointer-events-none w-full">
-              <Share className="size-4 mr-2" />
-              Share
-            </DropdownMenuItem>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="max-w-xs">
-          <p>{sharingDisabledReason}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
+  const currentAvailability = availability.evalId === evalId ? availability : initialState(evalId);
+  const checking = currentAvailability.status === 'checking';
+  const disabled = currentAvailability.status === 'disabled';
+  const retryable = disabled && currentAvailability.retryable;
+  const unavailable = checking || disabled || loading;
+  const reason = loading
+    ? 'A share link is already being generated.'
+    : checking
+      ? 'Checking whether sharing is available.'
+      : disabled
+        ? currentAvailability.reason
+        : 'Share this evaluation.';
+  const label = loading
+    ? 'Sharing...'
+    : checking
+      ? 'Checking sharing...'
+      : retryable
+        ? 'Retry sharing check'
+        : 'Share';
 
   return (
-    <DropdownMenuItem onSelect={onClick} disabled={sharingEnabled === null || loading}>
-      {loading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
-      Share
-    </DropdownMenuItem>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <DropdownMenuItem
+          aria-busy={checking || loading}
+          aria-disabled={unavailable}
+          className={unavailable ? 'aria-disabled:opacity-50' : undefined}
+          onSelect={(event) => {
+            if (!unavailable) {
+              onClick();
+              return;
+            }
+            event.preventDefault();
+            if (retryable) {
+              setAvailability({ evalId, status: 'checking' });
+              setRetryAttempt((attempt) => attempt + 1);
+            }
+          }}
+        >
+          {checking || loading ? (
+            <Spinner className="size-4 mr-2" />
+          ) : (
+            <Share className="size-4 mr-2" />
+          )}
+          {label}
+        </DropdownMenuItem>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs">
+        <p>{reason}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

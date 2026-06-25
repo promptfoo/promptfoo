@@ -21,18 +21,31 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  * @param path - The API endpoint path (with or without leading slash)
  * @param method - HTTP method (GET, POST, PUT, DELETE, etc.)
  * @param body - Optional request body that will be JSON stringified
+ * @param options - Request options, including suppression of response-body logging
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
-export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
+export function makeRequest(
+  path: string,
+  method: string,
+  body?: any,
+  options: { silent?: boolean } = {},
+): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (options.silent) {
+    headers['x-promptfoo-silent'] = 'true';
+  }
   try {
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers,
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);

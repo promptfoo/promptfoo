@@ -64,6 +64,23 @@ describe('cloud utils', () => {
       });
     });
 
+    it('suppresses fetch logging for privacy-sensitive probes', async () => {
+      await makeRequest('/users/me/teams', 'GET', undefined, { silent: true });
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/teams',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: {
+            Authorization: 'Bearer test-api-key',
+            'Content-Type': 'application/json',
+            'x-promptfoo-silent': 'true',
+          },
+        },
+      );
+    });
+
     it('should make GET request without body', async () => {
       const path = 'test/path';
       const method = 'GET';

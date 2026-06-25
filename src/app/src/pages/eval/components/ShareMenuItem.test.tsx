@@ -1,25 +1,17 @@
-import type { MouseEvent, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, SyntheticEvent } from 'react';
 
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareMenuItem from './ShareMenuItem';
 
-interface DropdownMenuItemMockProps {
+interface DropdownMenuItemMockProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
-  disabled?: boolean;
-  onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
-  className?: string;
+  onSelect?: (event: SyntheticEvent<HTMLButtonElement>) => void;
 }
 
-interface ChildrenMockProps {
-  children: ReactNode;
-}
-
-const mockConstants = vi.hoisted(() => ({
-  IS_RUNNING_LOCALLY: true,
-}));
+const mockConstants = vi.hoisted(() => ({ IS_RUNNING_LOCALLY: true }));
 
 vi.mock('@app/constants', () => ({
   get IS_RUNNING_LOCALLY() {
@@ -27,34 +19,49 @@ vi.mock('@app/constants', () => ({
   },
 }));
 
-// Mock the API utility
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-}));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
-// Mock the dropdown menu components to avoid context dependency
 vi.mock('@app/components/ui/dropdown-menu', () => ({
-  DropdownMenuItem: ({ children, disabled, onSelect, className }: DropdownMenuItemMockProps) => (
-    <button
-      type="button"
-      role="menuitem"
-      disabled={disabled}
-      onClick={(e) => onSelect?.(e)}
-      className={className}
-    >
+  DropdownMenuItem: ({ children, onSelect, ...props }: DropdownMenuItemMockProps) => (
+    <button type="button" role="menuitem" {...props} onClick={(event) => onSelect?.(event)}>
       {children}
     </button>
   ),
 }));
 
-// Mock the tooltip components
 vi.mock('@app/components/ui/tooltip', () => ({
-  Tooltip: ({ children }: ChildrenMockProps) => <>{children}</>,
-  TooltipTrigger: ({ children }: ChildrenMockProps) => <>{children}</>,
-  TooltipContent: ({ children }: ChildrenMockProps) => (
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: ReactNode }) => (
     <div data-testid="tooltip-content">{children}</div>
   ),
 }));
+
+function availabilityResponse(
+  overrides: Partial<{
+    domain: string;
+    isCloudEnabled: boolean;
+    sharingEnabled: boolean;
+    sharingDisabledReason: string;
+    isRetryable: boolean;
+  }> = {},
+) {
+  return Response.json({
+    domain: 'http://localhost:3000',
+    isCloudEnabled: true,
+    sharingEnabled: true,
+    isRetryable: false,
+    ...overrides,
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe('ShareMenuItem', () => {
   const mockCallApi = vi.mocked(callApi);
@@ -65,235 +72,151 @@ describe('ShareMenuItem', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.resetAllMocks();
+  it('keeps the checking state focusable and exposes status', () => {
+    mockCallApi.mockImplementation(() => new Promise(() => {}));
+
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
+
+    const item = screen.getByRole('menuitem', { name: 'Checking sharing...' });
+    expect(item).not.toBeDisabled();
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('aria-busy', 'true');
+    item.focus();
+    expect(item).toHaveFocus();
   });
 
-  describe('when IS_RUNNING_LOCALLY is true', () => {
-    it('shows disabled menu item while checking sharing status', async () => {
-      // Never resolves to keep in loading state
-      mockCallApi.mockImplementation(() => new Promise(() => {}));
+  it('enables sharing after a successful availability check', async () => {
+    mockCallApi.mockResolvedValue(availabilityResponse());
 
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
 
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      expect(menuItem).toBeDisabled();
-    });
+    const item = await screen.findByRole('menuitem', { name: 'Share' });
+    expect(item).not.toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(item);
+    expect(mockOnClick).toHaveBeenCalledOnce();
+  });
 
-    it('shows enabled menu item when sharing is enabled', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
+  it('shows a definitive auth failure without removing the item from keyboard focus', async () => {
+    mockCallApi.mockResolvedValue(
+      availabilityResponse({
+        sharingEnabled: false,
+        sharingDisabledReason: 'Authentication failed (HTTP 401). Run `promptfoo auth login`.',
+      }),
+    );
 
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
 
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
-    });
+    const item = await screen.findByRole('menuitem', { name: 'Share' });
+    expect(item).not.toBeDisabled();
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText(/HTTP 401/)).toBeInTheDocument();
+    await userEvent.click(item);
+    expect(mockOnClick).not.toHaveBeenCalled();
+  });
 
-    it('shows disabled menu item with tooltip when sharing is not enabled', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
+  it('retries transient failures in place', async () => {
+    mockCallApi
+      .mockResolvedValueOnce(Response.json({}, { status: 500 }))
+      .mockResolvedValueOnce(availabilityResponse());
+
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
+
+    const retry = await screen.findByRole('menuitem', { name: 'Retry sharing check' });
+    expect(screen.getByText(/HTTP 500/)).toBeInTheDocument();
+    await userEvent.click(retry);
+
+    const share = await screen.findByRole('menuitem', { name: 'Share' });
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockOnClick).not.toHaveBeenCalled();
+    await userEvent.click(share);
+    expect(mockOnClick).toHaveBeenCalledOnce();
+  });
+
+  it('does not expose network error details', async () => {
+    mockCallApi.mockRejectedValue(new Error('connect ECONNREFUSED private-host.internal:443'));
+
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
+
+    expect(
+      await screen.findByText(/Could not connect to the Promptfoo server/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private-host/)).not.toBeInTheDocument();
+  });
+
+  it('ignores a stale availability response after switching evals', async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    mockCallApi.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+
+    const { rerender } = render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
+    const firstSignal = mockCallApi.mock.calls[0][1]?.signal;
+
+    rerender(<ShareMenuItem evalId="eval-2" onClick={mockOnClick} />);
+    expect(screen.getByRole('menuitem', { name: 'Checking sharing...' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(firstSignal?.aborted).toBe(true);
+
+    await act(async () => {
+      second.resolve(
+        availabilityResponse({
           sharingEnabled: false,
+          sharingDisabledReason: 'Eval 2 is not authorized (HTTP 403).',
         }),
       );
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-
-      // The tooltip content should contain the default disabled reason
-      expect(screen.getByText(/Sharing is not configured/i)).toBeInTheDocument();
     });
+    expect(await screen.findByText(/Eval 2 is not authorized/)).toBeInTheDocument();
 
-    it('shows auth error message when authentication fails', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: false,
-          authError: 'Authentication failed. Please run `promptfoo auth login` to re-authenticate.',
-        }),
+    await act(async () => {
+      first.resolve(availabilityResponse());
+    });
+    expect(screen.getByText(/Eval 2 is not authorized/)).toBeInTheDocument();
+  });
+
+  it('aborts the availability request on unmount', () => {
+    mockCallApi.mockImplementation(() => new Promise(() => {}));
+
+    const { unmount } = render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
+    const signal = mockCallApi.mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+
+    unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('encodes eval ids and sends an abort signal', async () => {
+    mockCallApi.mockResolvedValue(availabilityResponse());
+
+    render(<ShareMenuItem evalId="eval/id with space" onClick={mockOnClick} />);
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/results/share/check-domain?id=eval%2Fid%20with%20space',
+        { signal: expect.any(AbortSignal) },
       );
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-
-      expect(screen.getByText(/Authentication failed/i)).toBeInTheDocument();
-    });
-
-    it('shows error message when API call fails', async () => {
-      mockCallApi.mockResolvedValue(Response.json({ error: 'Server error' }, { status: 500 }));
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-
-      expect(screen.getByText(/Failed to check sharing status/i)).toBeInTheDocument();
-    });
-
-    it('shows error message when API call throws', async () => {
-      mockCallApi.mockRejectedValue(new Error('Network error'));
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-
-      expect(screen.getByText(/Failed to check sharing status/i)).toBeInTheDocument();
-    });
-
-    it('calls onClick when clicking enabled share button', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
-
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      await userEvent.click(menuItem);
-
-      expect(mockOnClick).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows loading state while sharing is in progress', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} loading />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-    });
-
-    it('does not call onClick when menu item is disabled', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
-          sharingEnabled: false,
-        }),
-      );
-
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).toBeDisabled();
-      });
-
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      await userEvent.click(menuItem);
-
-      expect(mockOnClick).not.toHaveBeenCalled();
-    });
-
-    it('rechecks sharing status when evalId changes', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
-
-      const { rerender } = render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=eval-1');
-      });
-
-      rerender(<ShareMenuItem evalId="eval-2" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=eval-2');
-      });
-    });
-
-    it('encodes eval id when checking sharing status', async () => {
-      mockCallApi.mockResolvedValue(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: true,
-          sharingEnabled: true,
-        }),
-      );
-
-      render(<ShareMenuItem evalId="eval/id with space" onClick={mockOnClick} />);
-
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith(
-          '/results/share/check-domain?id=eval%2Fid%20with%20space',
-        );
-      });
     });
   });
 
-  describe('when IS_RUNNING_LOCALLY is false', () => {
-    beforeEach(() => {
-      mockConstants.IS_RUNNING_LOCALLY = false;
-    });
+  it('blocks duplicate shares while one is in flight', async () => {
+    mockCallApi.mockResolvedValue(availabilityResponse());
 
-    it('enables sharing without API check for non-local instances', async () => {
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} loading />);
 
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
+    const item = await screen.findByRole('menuitem', { name: 'Sharing...' });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('aria-busy', 'true');
+    await userEvent.click(item);
+    expect(mockOnClick).not.toHaveBeenCalled();
+  });
 
-      // Should not call API for non-local instances
-      expect(mockCallApi).not.toHaveBeenCalled();
-    });
+  it('skips the availability request outside the local app', async () => {
+    mockConstants.IS_RUNNING_LOCALLY = false;
 
-    it('calls onClick when clicking share button on non-local instances', async () => {
-      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
+    render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
 
-      await waitFor(() => {
-        const menuItem = screen.getByRole('menuitem', { name: /share/i });
-        expect(menuItem).not.toBeDisabled();
-      });
-
-      const menuItem = screen.getByRole('menuitem', { name: /share/i });
-      await userEvent.click(menuItem);
-
-      expect(mockOnClick).toHaveBeenCalledTimes(1);
-    });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }));
+    expect(mockCallApi).not.toHaveBeenCalled();
+    expect(mockOnClick).toHaveBeenCalledOnce();
   });
 });

@@ -20,6 +20,11 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   },
 }));
 
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
+  getEnvBool: vi.fn(),
+}));
+
 vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
@@ -74,10 +79,17 @@ vi.mock('../../../src/util/database', () => ({
   readResult: vi.fn(),
 }));
 
-vi.mock('../../../src/util/fetch/index', () => ({
-  fetchWithProxy: vi.fn(),
-}));
+vi.mock('../../../src/util/cloud', () => {
+  class ConfigPermissionError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'ConfigPermissionError';
+    }
+  }
+  return { ConfigPermissionError, makeRequest: vi.fn() };
+});
 
+import { getEnvBool } from '../../../src/envars';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import Eval, { getEvalSummaries } from '../../../src/models/eval';
 import { getRemoteHealthUrl } from '../../../src/redteam/remoteGeneration';
@@ -85,6 +97,7 @@ import { createShareableUrl, determineShareDomain, isSharingEnabled } from '../.
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
+import { ConfigPermissionError, makeRequest } from '../../../src/util/cloud';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -92,7 +105,6 @@ import {
   getTestCases,
   readResult,
 } from '../../../src/util/database';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedEval = vi.mocked(Eval);
@@ -109,7 +121,8 @@ const mockedGetPromptsForTestCasesHash = vi.mocked(getPromptsForTestCasesHash);
 const mockedGetStandaloneEvals = vi.mocked(getStandaloneEvals);
 const mockedGetTestCases = vi.mocked(getTestCases);
 const mockedReadResult = vi.mocked(readResult);
-const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+const mockedGetEnvBool = vi.mocked(getEnvBool);
+const mockedMakeRequest = vi.mocked(makeRequest);
 
 describe('inline server API DTO validation', () => {
   let api: ReturnType<typeof request.agent>;
@@ -135,6 +148,7 @@ describe('inline server API DTO validation', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockedGetEnvBool.mockReturnValue(false);
     // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
     // by one test cannot leak into another.
     promptCacheService.invalidate();
@@ -297,10 +311,8 @@ describe('inline server API DTO validation', () => {
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
-    mockedCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.dev');
-    mockedCloudConfig.getApiKey.mockReturnValue('key');
     mockedIsSharingEnabled.mockReturnValue(true);
-    mockedFetchWithProxy.mockResolvedValue(Response.json({}));
+    mockedMakeRequest.mockResolvedValue(Response.json({}));
 
     const response = await api.get('/api/results/share/check-domain?id=eval-1');
 
@@ -309,7 +321,107 @@ describe('inline server API DTO validation', () => {
       domain: 'https://app.promptfoo.dev',
       isCloudEnabled: true,
       sharingEnabled: true,
+      isRetryable: false,
     });
+    expect(mockedMakeRequest).toHaveBeenCalledWith('/users/me/teams', 'GET', undefined, {
+      silent: true,
+    });
+  });
+
+  it('reports unconfigured sharing without probing Cloud', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(false);
+    mockedIsSharingEnabled.mockReturnValue(false);
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      domain: 'https://promptfoo.app',
+      isCloudEnabled: false,
+      sharingEnabled: false,
+      sharingDisabledReason:
+        'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
+      isRetryable: false,
+    });
+    expect(mockedMakeRequest).not.toHaveBeenCalled();
+  });
+
+  it('honors PROMPTFOO_DISABLE_SHARING without probing Cloud', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    mockedIsSharingEnabled.mockReturnValue(false);
+    mockedGetEnvBool.mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.body).toMatchObject({
+      sharingEnabled: false,
+      sharingDisabledReason: 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.',
+      isRetryable: false,
+    });
+    expect(mockedMakeRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [401, false, 'Authentication failed (HTTP 401)'],
+    [403, false, 'cannot share evaluations (HTTP 403)'],
+    [429, true, 'temporarily unavailable (HTTP 429)'],
+    [503, true, 'temporarily unavailable (HTTP 503)'],
+  ])('classifies Cloud auth status %i without exposing response details', async (status, isRetryable, expectedReason) => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    mockedIsSharingEnabled.mockReturnValue(true);
+    mockedMakeRequest.mockResolvedValue(
+      new Response('sensitive upstream response', {
+        status,
+        statusText: 'INTERNAL SECRET STATUS',
+      }),
+    );
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      sharingEnabled: false,
+      isRetryable,
+    });
+    expect(response.body.sharingDisabledReason).toContain(expectedReason);
+    expect(response.body.sharingDisabledReason).not.toContain('INTERNAL');
+    expect(response.body.sharingDisabledReason).not.toContain('sensitive');
+  });
+
+  it('marks Cloud network failures as retryable', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    mockedIsSharingEnabled.mockReturnValue(true);
+    mockedMakeRequest.mockRejectedValue(new Error('socket contained private hostname'));
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.body).toEqual({
+      domain: 'https://promptfoo.app',
+      isCloudEnabled: true,
+      sharingEnabled: false,
+      sharingDisabledReason:
+        'Could not connect to Promptfoo Cloud. Check your network connection and try again.',
+      isRetryable: true,
+    });
+    expect(JSON.stringify(response.body)).not.toContain('private hostname');
+  });
+
+  it('returns a structured 500 when the share availability lookup fails', async () => {
+    mockedEval.findById.mockRejectedValue(new Error('sqlite secret path'));
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load eval for share availability' });
+    expect(JSON.stringify(response.body)).not.toContain('sqlite');
   });
 
   it('validates share request bodies and parses share responses', async () => {
@@ -323,9 +435,52 @@ describe('inline server API DTO validation', () => {
     expect(invalid.body.error).toContain('id');
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ url: 'https://share.example/eval-1' });
+    expect(mockedCreateShareableUrl).toHaveBeenCalledWith(expect.anything(), {
+      showAuth: true,
+      silent: true,
+      throwOnError: true,
+    });
     // The share route intentionally avoids `readResult` because it converts
     // load failures into `undefined`, which would collapse real DB errors into 404s.
     expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it.each([null, ''])('returns 422 when share creation produces no URL (%s)', async (url) => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockResolvedValue(url);
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({
+      error: 'Sharing is disabled or this evaluation has no results to share',
+    });
+  });
+
+  it('returns a safe 403 for Cloud permission failures', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockRejectedValue(
+      new ConfigPermissionError('Permission denied: provider secret-provider'),
+    );
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      error: 'Cloud permissions do not allow sharing this evaluation',
+    });
+    expect(JSON.stringify(response.body)).not.toContain('secret-provider');
+  });
+
+  it('returns a safe 500 for upload failures', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockRejectedValue(new Error('upstream body contained a token'));
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to generate share URL' });
+    expect(JSON.stringify(response.body)).not.toContain('token');
   });
 
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {

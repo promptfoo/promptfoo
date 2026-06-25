@@ -164,6 +164,7 @@ describe('isSharingEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
     // Reset the mock to default value for each test
     vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
   });
@@ -178,6 +179,13 @@ describe('isSharingEnabled', () => {
     };
 
     expect(isSharingEnabled(mockEval as Eval)).toBe(true);
+  });
+
+  it('returns false when sharing is explicitly disabled', () => {
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    expect(isSharingEnabled({ config: {} } as Eval)).toBe(false);
   });
 
   it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
@@ -631,6 +639,30 @@ describe('createShareableUrl', () => {
     expect(mockEval.save).toHaveBeenCalled();
   });
 
+  it('never prompts for email during a silent background share', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(getUserEmail).mockReturnValue('stored@example.com');
+
+    const mockEval = buildMockEval();
+    mockEval.author = null as any;
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    await createShareableUrl(mockEval as Eval, { silent: true });
+
+    expect(getUserEmail).not.toHaveBeenCalled();
+    expect(mockEval.author).toBeNull();
+    expect(mockEval.save).not.toHaveBeenCalled();
+  });
+
   describe('chunked sending', () => {
     let mockEval: Partial<Eval>;
 
@@ -989,10 +1021,10 @@ describe('createShareableUrl', () => {
         .fn()
         .mockRejectedValue(new Error('Failed to fetch traces'));
 
-      // Should throw when an error occurs
-      await expect(createShareableUrl(mockEvalTracesError as Eval)).rejects.toThrow(
-        'Failed to fetch traces',
-      );
+      await expect(createShareableUrl(mockEvalTracesError as Eval)).resolves.toBeNull();
+      await expect(
+        createShareableUrl(mockEvalTracesError as Eval, { throwOnError: true }),
+      ).rejects.toThrow('Failed to fetch traces');
     });
   });
 
@@ -1193,8 +1225,8 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    // Should throw error (rollback is attempted)
-    await expect(createShareableUrl(mockEval as Eval)).rejects.toThrow(
+    // Callers that opt into structured HTTP errors receive the upload failure.
+    await expect(createShareableUrl(mockEval as Eval, { throwOnError: true })).rejects.toThrow(
       'Failed to send even a single result',
     );
   });
@@ -1238,8 +1270,8 @@ describe('adaptive chunk retry', () => {
         ok: true, // rollback succeeds
       });
 
-    // Should throw without retrying (unknown error type)
-    await expect(createShareableUrl(mockEval as Eval)).rejects.toThrow(
+    // Opt-in error propagation does not retry unknown server failures.
+    await expect(createShareableUrl(mockEval as Eval, { throwOnError: true })).rejects.toThrow(
       '500 Internal Server Error: Server error',
     );
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)

@@ -19,6 +19,7 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
+import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -36,13 +37,13 @@ import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
+import { ConfigPermissionError, makeRequest as makeCloudRequest } from '../util/cloud';
 import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
   readResult,
 } from '../util/database';
-import { fetchWithProxy } from '../util/fetch/index';
 import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
@@ -67,6 +68,35 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
+
+function describeCloudSharingFailure(status: number): {
+  sharingDisabledReason: string;
+  isRetryable: boolean;
+} {
+  if (status === 401) {
+    return {
+      sharingDisabledReason:
+        'Authentication failed (HTTP 401). Run `promptfoo auth login` to re-authenticate.',
+      isRetryable: false,
+    };
+  }
+  if (status === 403) {
+    return {
+      sharingDisabledReason: 'Your Promptfoo Cloud account cannot share evaluations (HTTP 403).',
+      isRetryable: false,
+    };
+  }
+  if (status === 408 || status === 429 || status >= 500) {
+    return {
+      sharingDisabledReason: `Promptfoo Cloud is temporarily unavailable (HTTP ${status}). Try again.`,
+      isRetryable: true,
+    };
+  }
+  return {
+    sharingDisabledReason: `Promptfoo Cloud could not validate sharing (HTTP ${status}).`,
+    isRetryable: false,
+  };
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -257,7 +287,13 @@ export function createApp() {
     }
     const { id } = queryResult.data;
 
-    const eval_ = await Eval.findById(id);
+    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+    try {
+      eval_ = await Eval.findById(id);
+    } catch (error) {
+      sendError(res, 500, 'Failed to load eval for share availability', error);
+      return;
+    }
     if (!eval_) {
       logger.warn('Eval not found for share check-domain', { id });
       res.status(404).json({ error: 'Eval not found' });
@@ -267,28 +303,31 @@ export function createApp() {
     const { domain } = determineShareDomain(eval_);
     const isCloudEnabled = cloudConfig.isEnabled();
     let sharingEnabled = isSharingEnabled(eval_);
-    let authError: string | undefined;
+    let sharingDisabledReason: string | undefined;
+    let isRetryable = false;
+
+    if (!sharingEnabled) {
+      sharingDisabledReason = getEnvBool('PROMPTFOO_DISABLE_SHARING')
+        ? 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.'
+        : 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
+    }
 
     // If cloud is enabled, validate that the auth token is actually valid
     if (isCloudEnabled && sharingEnabled) {
       try {
-        const apiHost = cloudConfig.getApiHost();
-        const apiKey = cloudConfig.getApiKey();
-        const response = await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        const response = await makeCloudRequest('/users/me/teams', 'GET', undefined, {
+          silent: true,
         });
         if (!response.ok) {
           sharingEnabled = false;
-          authError =
-            response.status === 401
-              ? 'Authentication failed. Please run `promptfoo auth login` to re-authenticate.'
-              : `Cloud API error: ${response.statusText}`;
+          ({ sharingDisabledReason, isRetryable } = describeCloudSharingFailure(response.status));
         }
       } catch (error) {
         logger.debug('[share check-domain] Failed to validate cloud auth', { error });
         sharingEnabled = false;
-        authError = 'Could not connect to cloud service. Please check your network connection.';
+        sharingDisabledReason =
+          'Could not connect to Promptfoo Cloud. Check your network connection and try again.';
+        isRetryable = true;
       }
     }
 
@@ -297,7 +336,8 @@ export function createApp() {
         domain,
         isCloudEnabled,
         sharingEnabled,
-        authError,
+        sharingDisabledReason,
+        isRetryable,
       }),
     );
   });
@@ -336,10 +376,24 @@ export function createApp() {
     }
 
     try {
-      const url = await createShareableUrl(eval_, { showAuth: true });
-      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
+      const url = await createShareableUrl(eval_, {
+        showAuth: true,
+        silent: true,
+        throwOnError: true,
+      });
+      if (!url) {
+        res.status(422).json({
+          error: 'Sharing is disabled or this evaluation has no results to share',
+        });
+        return;
+      }
+      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url) });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
+      if (error instanceof ConfigPermissionError) {
+        sendError(res, 403, 'Cloud permissions do not allow sharing this evaluation', error);
+        return;
+      }
       sendError(res, 500, 'Failed to generate share URL', error);
     }
   });

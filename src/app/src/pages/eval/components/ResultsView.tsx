@@ -23,7 +23,7 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import { BarChart, Copy, Edit, Eye, Play, Settings, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
@@ -47,6 +47,7 @@ import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
+import type { ShareResponse } from '@promptfoo/types/api/server';
 import type { VisibilityState } from '@tanstack/table-core';
 
 import type { ActiveView } from './EvalHeader';
@@ -380,22 +381,30 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
+  const previousShareEvalIdRef = React.useRef(currentEvalId);
   const currentDatasetId = recentEvals.find(
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
+  React.useEffect(() => {
+    if (previousShareEvalIdRef.current !== currentEvalId) {
+      previousShareEvalIdRef.current = currentEvalId;
+      setShareModalOpen(false);
+    }
+  }, [currentEvalId]);
+
   const handleShareButtonClick = () => {
-    setShareLoading(IS_RUNNING_LOCALLY);
     setShareModalOpen(true);
   };
 
   const handleShare = React.useCallback(async (id: string): Promise<string> => {
-    try {
-      if (!IS_RUNNING_LOCALLY) {
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.origin}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-      }
+    if (!IS_RUNNING_LOCALLY) {
+      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+      return `${window.location.origin}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
+    }
 
+    setShareLoading(true);
+    try {
       const response = await callApi('/results/share', {
         method: 'POST',
         body: JSON.stringify({ id }),
@@ -403,12 +412,24 @@ export default function ResultsView({
           'Content-Type': 'application/json',
         },
       });
+      const data: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to generate share URL');
+        const message =
+          data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+            ? data.error
+            : `Failed to generate share URL (HTTP ${response.status})`;
+        throw new Error(message);
       }
-      const { url } = await response.json();
-      return url;
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        !('url' in data) ||
+        typeof data.url !== 'string' ||
+        data.url.trim().length === 0
+      ) {
+        throw new Error('The server did not return a valid share URL.');
+      }
+      return (data as ShareResponse).url;
     } finally {
       setShareLoading(false);
     }
@@ -982,10 +1003,10 @@ export default function ResultsView({
       </div>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
+        key={currentEvalId}
         open={shareModalOpen}
         onClose={() => {
           setShareModalOpen(false);
-          setShareLoading(false);
         }}
         evalId={currentEvalId}
         onShare={handleShare}

@@ -9,12 +9,27 @@ import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
+interface ShareModalMockProps {
+  open: boolean;
+  onClose: () => void;
+  evalId: string;
+  onShare: (id: string) => Promise<string>;
+}
+
+interface ShareMenuMockProps {
+  onClick: () => void;
+  loading?: boolean;
+}
+
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
-  mockShowToast: vi.fn(),
-  mockNavigate: vi.fn(),
-  mockUpdateConfig: vi.fn(),
-}));
+const { mockShowToast, mockNavigate, mockUpdateConfig, mockShareModalRender, mockShareMenuRender } =
+  vi.hoisted(() => ({
+    mockShowToast: vi.fn(),
+    mockNavigate: vi.fn(),
+    mockUpdateConfig: vi.fn(),
+    mockShareModalRender: vi.fn(),
+    mockShareMenuRender: vi.fn(),
+  }));
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -57,7 +72,10 @@ vi.mock('./store', () => {
 });
 
 vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
+  default: (props: ShareModalMockProps) => {
+    mockShareModalRender(props);
+    return props.open ? <div data-testid="share-modal">Share Modal</div> : null;
+  },
 }));
 
 vi.mock('./ResultsTable', () => ({
@@ -118,7 +136,14 @@ vi.mock('./DownloadMenu', () => ({
 }));
 
 vi.mock('./ShareMenuItem', () => ({
-  default: ({ onClick }: { onClick: () => void }) => <button onClick={onClick}>Share</button>,
+  default: (props: ShareMenuMockProps) => {
+    mockShareMenuRender(props);
+    return (
+      <button onClick={props.onClick} data-loading={props.loading ? 'true' : 'false'}>
+        Share
+      </button>
+    );
+  },
 }));
 
 vi.mock('./CompareEvalMenuItem', () => ({
@@ -240,6 +265,24 @@ function createCopyEvalResponse(): Response {
     statusText: 'OK',
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function latestShareModalProps(): ShareModalMockProps {
+  const calls = mockShareModalRender.mock.calls;
+  return calls[calls.length - 1][0] as ShareModalMockProps;
+}
+
+function latestShareMenuProps(): ShareMenuMockProps {
+  const calls = mockShareMenuRender.mock.calls;
+  return calls[calls.length - 1][0] as ShareMenuMockProps;
 }
 
 beforeEach(() => {
@@ -369,6 +412,100 @@ describe('ResultsView Share Button', () => {
     await waitFor(() => {
       expect(screen.getByTestId('share-modal')).toBeInTheDocument();
     });
+    expect(latestShareMenuProps().loading).toBe(false);
+  });
+
+  it('closes the share modal when the active eval changes', async () => {
+    const props = {
+      recentEvals: mockRecentEvals,
+      onRecentEvalSelected: mockOnRecentEvalSelected,
+      defaultEvalId: 'test-eval-id',
+    };
+    const view = renderWithRouter(<ResultsView {...props} />);
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Share'));
+    expect(await screen.findByTestId('share-modal')).toBeInTheDocument();
+
+    const currentStore = vi.mocked(useTableStore).mock.results[0].value;
+    vi.mocked(useTableStore).mockReturnValue({ ...currentStore, evalId: 'next-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument());
+  });
+
+  it('keeps the duplicate-share guard active until the request settles, even after close', async () => {
+    const shareResponse = deferred<Response>();
+    vi.mocked(callApi).mockReturnValue(shareResponse.promise);
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Share'));
+    expect(latestShareMenuProps().loading).toBe(false);
+
+    let sharePromise!: Promise<string>;
+    act(() => {
+      sharePromise = latestShareModalProps().onShare('test-eval-id');
+    });
+    await waitFor(() => expect(latestShareMenuProps().loading).toBe(true));
+
+    act(() => latestShareModalProps().onClose());
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+    expect(latestShareMenuProps().loading).toBe(true);
+
+    await act(async () => {
+      shareResponse.resolve(Response.json({ url: 'https://promptfoo.app/eval/shared' }));
+      await expect(sharePromise).resolves.toBe('https://promptfoo.app/eval/shared');
+    });
+    await waitFor(() => expect(latestShareMenuProps().loading).toBe(false));
+  });
+
+  it('rejects malformed successful share responses', async () => {
+    vi.mocked(callApi).mockResolvedValue(Response.json({}));
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await expect(latestShareModalProps().onShare('test-eval-id')).rejects.toThrow(
+      'The server did not return a valid share URL.',
+    );
+  });
+
+  it('surfaces the server safe error for failed shares', async () => {
+    vi.mocked(callApi).mockResolvedValue(
+      Response.json(
+        { error: 'Cloud permissions do not allow sharing this evaluation' },
+        { status: 403 },
+      ),
+    );
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await expect(latestShareModalProps().onShare('test-eval-id')).rejects.toThrow(
+      'Cloud permissions do not allow sharing this evaluation',
+    );
   });
 
   it('shows share button alongside other menu items', async () => {

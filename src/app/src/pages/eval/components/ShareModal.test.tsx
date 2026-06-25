@@ -1,322 +1,201 @@
-import { mockClipboard, mockDocumentExecCommand, mockWindowOpen } from '@app/tests/browserMocks';
+import { mockDocumentExecCommand } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareModal from './ShareModal';
 
-// Mock the API utility
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-}));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+
+function availabilityResponse(
+  overrides: Partial<{
+    domain: string;
+    isCloudEnabled: boolean;
+    sharingEnabled: boolean;
+    sharingDisabledReason: string;
+    isRetryable: boolean;
+  }> = {},
+) {
+  return Response.json({
+    domain: 'http://localhost:3000',
+    isCloudEnabled: true,
+    sharingEnabled: true,
+    isRetryable: false,
+    ...overrides,
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe('ShareModal', () => {
   const mockOnClose = vi.fn();
   const mockOnShare = vi.fn();
   const mockCallApi = vi.mocked(callApi);
-
   const defaultProps = {
     open: true,
     onClose: mockOnClose,
-    evalId: 'test-eval-id',
+    evalId: 'eval-1',
     onShare: mockOnShare,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClipboard();
     mockDocumentExecCommand();
-    // Mock successful domain check by default
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'localhost:3000',
-        isCloudEnabled: false,
-      }),
-    );
+    mockCallApi.mockImplementation(() => Promise.resolve(availabilityResponse()));
   });
 
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('does not render when closed', () => {
+  it('does not start a request while closed', () => {
     render(<ShareModal {...defaultProps} open={false} />);
-    expect(screen.queryByText('Share Evaluation')).not.toBeInTheDocument();
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockCallApi).not.toHaveBeenCalled();
+    expect(mockOnShare).not.toHaveBeenCalled();
   });
 
-  it('shows loading state initially', async () => {
-    mockOnShare.mockImplementation(() => new Promise(() => {})); // Never resolves
+  it('announces progress while the share request is pending', async () => {
+    mockOnShare.mockImplementation(() => new Promise(() => {}));
+
     render(<ShareModal {...defaultProps} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Generating share link...')).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Generating share link...');
+    expect(mockOnShare).toHaveBeenCalledWith('eval-1');
   });
 
-  it('displays signup prompt when cloud is not enabled', async () => {
+  it('renders a validated share URL and copies it', async () => {
+    const url = 'https://promptfoo.app/eval/shared';
+    mockOnShare.mockResolvedValue(url);
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByDisplayValue(url)).toBeInTheDocument();
+    expect(
+      screen.getByText('This URL is accessible to users with access to your organization.'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Copy share URL' }));
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+  });
+
+  it('does not share when a fresh auth check is unauthorized', async () => {
     mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
+      availabilityResponse({
+        sharingEnabled: false,
+        sharingDisabledReason:
+          'Authentication failed (HTTP 401). Run `promptfoo auth login` to re-authenticate.',
       }),
     );
 
     render(<ShareModal {...defaultProps} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Share Evaluation')).toBeInTheDocument();
-      expect(
-        screen.getByText(/You need to be logged in to your Promptfoo cloud account/),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Take me there')).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 401');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(mockOnShare).not.toHaveBeenCalled();
   });
 
-  it('displays share URL when successfully generated', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
+  it('offers retry for a transient availability failure', async () => {
+    mockCallApi
+      .mockResolvedValueOnce(Response.json({}, { status: 503 }))
+      .mockResolvedValueOnce(availabilityResponse());
+    mockOnShare.mockResolvedValue('https://promptfoo.app/eval/retried');
 
     render(<ShareModal {...defaultProps} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-      expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 503');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(
+      await screen.findByDisplayValue('https://promptfoo.app/eval/retried'),
+    ).toBeInTheDocument();
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 
-  it('encodes eval id when checking share domain', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
+  it('treats a malformed availability response as retryable and never shares', async () => {
+    mockCallApi.mockResolvedValue(Response.json({ sharingEnabled: true }));
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('invalid response');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(mockOnShare).not.toHaveBeenCalled();
+  });
+
+  it('allows a failed share request to be retried', async () => {
+    mockOnShare
+      .mockRejectedValueOnce(new Error('Failed to generate share URL'))
+      .mockResolvedValueOnce('https://promptfoo.app/eval/recovered');
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to generate share URL');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(
+      await screen.findByDisplayValue('https://promptfoo.app/eval/recovered'),
+    ).toBeInTheDocument();
+    expect(mockOnShare).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['whitespace-only', '   '],
+  ])('rejects a %s share URL', async (_label, url) => {
+    mockOnShare.mockResolvedValue(url);
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The server did not return a valid share URL.',
+    );
+  });
+
+  it('ignores an out-of-order share completion after switching evals', async () => {
+    const first = deferred<string>();
+    const second = deferred<string>();
+    mockOnShare.mockImplementation((id: string) =>
+      id === 'eval-1' ? first.promise : second.promise,
+    );
+
+    const { rerender } = render(<ShareModal {...defaultProps} evalId="eval-1" />);
+    await waitFor(() => expect(mockOnShare).toHaveBeenCalledWith('eval-1'));
+
+    rerender(<ShareModal {...defaultProps} evalId="eval-2" />);
+    await waitFor(() => expect(mockOnShare).toHaveBeenCalledWith('eval-2'));
+
+    await act(async () => second.resolve('https://promptfoo.app/eval/two'));
+    expect(await screen.findByDisplayValue('https://promptfoo.app/eval/two')).toBeInTheDocument();
+
+    await act(async () => first.resolve('https://promptfoo.app/eval/one'));
+    expect(screen.getByDisplayValue('https://promptfoo.app/eval/two')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('https://promptfoo.app/eval/one')).not.toBeInTheDocument();
+  });
+
+  it('aborts the preflight when the modal closes', () => {
+    mockCallApi.mockImplementation(() => new Promise(() => {}));
+
+    const { rerender } = render(<ShareModal {...defaultProps} />);
+    const signal = mockCallApi.mock.calls[0][1]?.signal;
+    expect(signal?.aborted).toBe(false);
+
+    rerender(<ShareModal {...defaultProps} open={false} />);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('encodes the eval id and closes through the visible button', async () => {
+    mockOnShare.mockResolvedValue('https://promptfoo.app/eval/shared');
 
     render(<ShareModal {...defaultProps} evalId="eval/id with space" />);
 
     await waitFor(() => {
       expect(mockCallApi).toHaveBeenCalledWith(
         '/results/share/check-domain?id=eval%2Fid%20with%20space',
+        { signal: expect.any(AbortSignal) },
       );
     });
-  });
-
-  it('handles copy to clipboard functionality', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
-    });
-
-    const copyButton = screen.getByLabelText('Copy share URL');
-    expect(copyButton).toBeInTheDocument();
-    await userEvent.click(copyButton);
-
-    expect(document.execCommand).toHaveBeenCalledWith('copy');
-  });
-
-  it('displays error when domain check fails', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json(
-        {
-          error: 'Domain check failed',
-        },
-        { status: 500 },
-      ),
-    );
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Error')).toBeInTheDocument();
-      expect(screen.getByText('Domain check failed')).toBeInTheDocument();
-    });
-  });
-
-  it('displays error when share URL generation fails', async () => {
-    mockOnShare.mockRejectedValue(new Error('Failed to generate share URL'));
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Error')).toBeInTheDocument();
-      expect(screen.getByText('Failed to generate share URL')).toBeInTheDocument();
-    });
-  });
-
-  it('does not rerun the domain check after share URL generation fails', async () => {
-    mockOnShare.mockRejectedValueOnce(new Error('Failed to generate share URL'));
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Failed to generate share URL')).toBeInTheDocument();
-    });
-
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-id');
-  });
-
-  it('calls onClose when close button is clicked', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-    });
-
-    // There are two buttons with name "Close" - the visible text button and the X icon button with sr-only text
-    // We want the visible text button which is the first one in the DOM
-    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
-    await userEvent.click(closeButtons[0]);
-
-    expect(mockOnClose).toHaveBeenCalled();
-  });
-
-  it('opens external link when "Take me there" is clicked', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'promptfoo.app',
-        isCloudEnabled: false,
-      }),
-    );
-
-    const mockOpen = mockWindowOpen();
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Take me there')).toBeInTheDocument();
-    });
-
-    const takeButton = screen.getByText('Take me there');
-    await userEvent.click(takeButton);
-
-    expect(mockOpen).toHaveBeenCalledWith('https://www.promptfoo.app', '_blank');
-  });
-
-  it('shows organization access message for shared URLs', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(
-        screen.getByText('This URL is accessible to users with access to your organization.'),
-      ).toBeInTheDocument();
-    });
-  });
-
-  it('always displays organization access message when share URL is present', async () => {
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-    });
-
-    expect(
-      screen.getByText('This URL is accessible to users with access to your organization.'),
-    ).toBeInTheDocument();
-  });
-
-  it('skips signup prompt when isCloudEnabled is true', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        domain: 'any-domain.com',
-        isCloudEnabled: true,
-      }),
-    );
-    const testUrl = 'https://promptfoo.app/eval/test-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-      expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
-      expect(
-        screen.queryByText(/You need to be logged in to your Promptfoo cloud account/),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  it('handles missing domain in API response gracefully', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
-        isCloudEnabled: false,
-      }),
-    );
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Error')).toBeInTheDocument();
-      expect(screen.getByText('Failed to check share domain')).toBeInTheDocument();
-    });
-  });
-
-  it('generates share URL for non-public domain without signup prompt', async () => {
-    const testUrl = 'https://example.com/shared/test-eval-id';
-    mockOnShare.mockResolvedValue(testUrl);
-
-    render(<ShareModal {...defaultProps} />);
-
-    expect(screen.getByText('Generating share link...')).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-      expect(screen.getByDisplayValue(testUrl)).toBeInTheDocument();
-    });
-
-    expect(
-      screen.queryByText(/You need to be logged in to your Promptfoo cloud account/),
-    ).toBeNull();
-  });
-
-  it('refetches domain check and generates new share URL when evalId changes', async () => {
-    const testUrl1 = 'https://promptfoo.app/eval/test-id-1';
-    const testUrl2 = 'https://promptfoo.app/eval/test-id-2';
-
-    // Must return a fresh Response for each call since Response body can only be consumed once
-    mockCallApi.mockImplementation(() =>
-      Promise.resolve(
-        Response.json({
-          domain: 'localhost:3000',
-          isCloudEnabled: false,
-        }),
-      ),
-    );
-
-    mockOnShare.mockImplementation(async (id: string) => {
-      if (id === 'test-eval-id-1') {
-        return testUrl1;
-      } else if (id === 'test-eval-id-2') {
-        return testUrl2;
-      }
-      throw new Error(`Unexpected evalId: ${id}`);
-    });
-
-    const { rerender } = render(<ShareModal {...defaultProps} evalId="test-eval-id-1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-      expect(screen.getByDisplayValue(testUrl1)).toBeInTheDocument();
-    });
-
-    rerender(<ShareModal {...defaultProps} evalId="test-eval-id-2" />);
-
-    await waitFor(() => {
-      expect(mockOnShare).toHaveBeenCalledWith('test-eval-id-2');
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Your eval is ready to share')).toBeInTheDocument();
-      expect(screen.getByDisplayValue(testUrl2)).toBeInTheDocument();
-    });
+    await screen.findByDisplayValue('https://promptfoo.app/eval/shared');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Close' })[0]);
+    expect(mockOnClose).toHaveBeenCalledOnce();
   });
 });

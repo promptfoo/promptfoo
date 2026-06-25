@@ -11,9 +11,9 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
-import { callApi } from '@app/utils/api';
 import { Check, Copy } from 'lucide-react';
 import logger from '../../../../../logger';
+import { checkShareAvailability, isAbortError, ShareAvailabilityError } from './shareApi';
 
 interface ShareModalProps {
   open: boolean;
@@ -22,68 +22,79 @@ interface ShareModalProps {
   onShare: (id: string) => Promise<string>;
 }
 
+type ShareState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'ready'; url: string }
+  | { status: 'error'; message: string; retryable: boolean };
+
 const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestIdRef = useRef(0);
   const [copied, setCopied] = useState(false);
-  const [showNeedsSignup, setShowNeedsSignup] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [shareState, setShareState] = useState<ShareState>({ status: 'idle' });
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
-  // Reset state when evalId changes to prevent stale data
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryAttempt intentionally retriggers the request
   useEffect(() => {
+    if (!open || !evalId) {
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+    const controller = new AbortController();
+    const isCurrent = () => requestIdRef.current === requestId;
     setCopied(false);
-    setShowNeedsSignup(false);
-    setShareUrl('');
-    setError(null);
-  }, [evalId]);
+    setShareState({ status: 'loading' });
 
-  useEffect(() => {
-    const handleShare = async () => {
-      if (!open || !evalId || shareUrl || error) {
-        return;
-      }
-
+    const share = async () => {
       try {
-        const response = await callApi(
-          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
-        );
-        const data = (await response.json()) as {
-          domain: string;
-          isCloudEnabled: boolean;
-          error?: string;
-        };
-
-        if (response.ok) {
-          const isPublicDomain = data.domain.includes('promptfoo.app');
-          if (isPublicDomain && !data.isCloudEnabled) {
-            setShowNeedsSignup(true);
-            return;
-          }
-
-          // Sharing is allowed, so generate the share URL.
-          setIsLoading(true);
-          try {
-            const url = await onShare(evalId);
-            setShareUrl(url);
-          } catch (error) {
-            logger.error('Failed to generate share URL', { error, evalId });
-            setError(error instanceof Error ? error.message : 'Failed to generate share URL');
-          } finally {
-            setIsLoading(false);
-          }
-        } else {
-          setError(data.error || 'Failed to check share domain');
+        const availability = await checkShareAvailability(evalId, controller.signal);
+        if (!isCurrent()) {
+          return;
         }
+        if (!availability.sharingEnabled) {
+          setShareState({
+            status: 'error',
+            message: availability.sharingDisabledReason ?? 'Sharing is unavailable.',
+            retryable: availability.isRetryable,
+          });
+          return;
+        }
+
+        const url = await onShare(evalId);
+        if (!isCurrent()) {
+          return;
+        }
+        if (typeof url !== 'string' || url.trim().length === 0) {
+          setShareState({
+            status: 'error',
+            message: 'The server did not return a valid share URL.',
+            retryable: true,
+          });
+          return;
+        }
+        setShareState({ status: 'ready', url: url.trim() });
       } catch (error) {
-        logger.error('Failed to check share domain', { error, evalId });
-        setError('Failed to check share domain');
+        if (!isCurrent() || isAbortError(error)) {
+          return;
+        }
+        logger.error('Failed to share evaluation', { error, evalId });
+        setShareState({
+          status: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate share URL',
+          retryable: error instanceof ShareAvailabilityError ? error.retryable : true,
+        });
       }
     };
 
-    handleShare();
-  }, [open, evalId, shareUrl, error, onShare]);
+    share();
+    return () => {
+      if (requestIdRef.current === requestId) {
+        requestIdRef.current += 1;
+      }
+      controller.abort();
+    };
+  }, [open, evalId, onShare, retryAttempt]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -94,75 +105,46 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   };
 
   const handleClose = () => {
-    onClose();
+    requestIdRef.current += 1;
     setCopied(false);
-    setShareUrl('');
-    setShowNeedsSignup(false);
-    setIsLoading(false);
-    setError(null);
+    setShareState({ status: 'idle' });
+    onClose();
   };
 
-  const handleConfirm = async () => {
-    window.open('https://www.promptfoo.app', '_blank');
+  const handleRetry = () => {
+    requestIdRef.current += 1;
+    setCopied(false);
+    setShareState({ status: 'loading' });
+    setRetryAttempt((attempt) => attempt + 1);
   };
-
-  if (error) {
-    return (
-      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Error</DialogTitle>
-          </DialogHeader>
-          <DialogDescription className="text-destructive">{error}</DialogDescription>
-          <DialogFooter>
-            <Button onClick={handleClose} variant="outline">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-[660px]">
-        {showNeedsSignup ? (
+        {shareState.status === 'error' ? (
           <>
             <DialogHeader>
-              <DialogTitle>Share Evaluation</DialogTitle>
+              <DialogTitle>Sharing unavailable</DialogTitle>
+              <DialogDescription role="alert" className="text-destructive">
+                {shareState.message}
+              </DialogDescription>
             </DialogHeader>
-            <DialogDescription className="py-4">
-              You need to be logged in to your Promptfoo cloud account to share your evaluation.
-              <br />
-              <br />
-              Sign up for free or login to your existing account at{' '}
-              <a
-                href="https://promptfoo.app"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                https://www.promptfoo.app
-              </a>
-            </DialogDescription>
             <DialogFooter>
               <Button onClick={handleClose} variant="outline">
                 Close
               </Button>
-              <Button onClick={handleConfirm} disabled={isLoading}>
-                Take me there
-              </Button>
+              {shareState.retryable && <Button onClick={handleRetry}>Retry</Button>}
             </DialogFooter>
           </>
-        ) : shareUrl ? (
+        ) : shareState.status === 'ready' ? (
           <>
             <DialogHeader>
               <DialogTitle>Your eval is ready to share</DialogTitle>
+              <DialogDescription>Copy the link to share this evaluation.</DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-3">
               <div className="flex items-center gap-2">
-                <Input ref={inputRef} value={shareUrl} readOnly className="flex-1" />
+                <Input ref={inputRef} value={shareState.url} readOnly className="flex-1" />
                 <button
                   type="button"
                   onClick={handleCopyClick}
@@ -186,8 +168,9 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
           <>
             <DialogHeader>
               <DialogTitle>Share Evaluation</DialogTitle>
+              <DialogDescription>Checking access and generating a share link.</DialogDescription>
             </DialogHeader>
-            <div className="flex items-center gap-3 py-4">
+            <div className="flex items-center gap-3 py-4" role="status" aria-live="polite">
               <Spinner size="sm" />
               <p className="text-muted-foreground">Generating share link...</p>
             </div>
