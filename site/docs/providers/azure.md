@@ -387,14 +387,9 @@ providers:
   - id: azure:responses:o3-mini-deployment
     label: azure-reasoning
     config:
-<<<<<<< HEAD
       reasoning:
         effort: medium
         summary: auto
-=======
-      isReasoningModel: true
-      reasoning_effort: medium
->>>>>>> origin/main
       max_output_tokens: 4000
 
 prompts:
