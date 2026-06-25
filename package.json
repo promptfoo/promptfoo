@@ -320,7 +320,7 @@
     "sharp": "^0.35.1"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.104.1",
+    "@anthropic-ai/sdk": "0.104.2",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
