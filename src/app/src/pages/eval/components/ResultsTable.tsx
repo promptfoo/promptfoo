@@ -80,6 +80,7 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
 const MAX_JSON_CELL_PRETTIFY_LENGTH = 512;
 const MAX_JSON_PRETTIFY_DEPTH = 64;
 const MAX_JSON_SERIALIZATION_NODES = 512;
+const MAX_JSON_BOUNDARY_SCAN = 64;
 const JSON_PRETTIFY_INDENT = 2;
 const JSON_SERIALIZATION_LIMIT_EXCEEDED = Symbol('json-serialization-limit-exceeded');
 const JSON_DISPLAY_LIMIT_MESSAGE =
@@ -152,6 +153,11 @@ const METADATA_COLUMN_MAX_SIZE_PX = 360;
 const METADATA_COLUMN_HORIZONTAL_PADDING_PX = 48;
 const METADATA_COLUMN_CHARACTER_WIDTH_PX = 8;
 const METADATA_COLUMN_WIDTH_PERCENTILE = 0.8;
+const METADATA_COLUMN_MAX_SCAN_LENGTH = 512;
+const METADATA_COLUMN_MAX_MEASURED_LINE_LENGTH = Math.ceil(
+  (METADATA_COLUMN_MAX_SIZE_PX - METADATA_COLUMN_HORIZONTAL_PADDING_PX) /
+    METADATA_COLUMN_CHARACTER_WIDTH_PX,
+);
 const PROMPT_COLUMN_SIZE_PX = 480;
 const MEDIA_MIME_PATTERNS = {
   audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
@@ -187,9 +193,25 @@ function getMetadataColumnDisplayText(value: unknown): string {
 }
 
 function getLongestMetadataLineLength(value: unknown): number {
-  return getMetadataColumnDisplayText(value)
-    .split(/\r?\n/)
-    .reduce((maxLength, line) => Math.max(maxLength, line.length), 0);
+  const text = getMetadataColumnDisplayText(value);
+  const scanLength = Math.min(text.length, METADATA_COLUMN_MAX_SCAN_LENGTH);
+  let currentLineLength = 0;
+  let longestLineLength = 0;
+
+  for (let index = 0; index < scanLength; index++) {
+    const char = text.charCodeAt(index);
+    if (char === 10 || char === 13) {
+      longestLineLength = Math.max(longestLineLength, currentLineLength);
+      currentLineLength = 0;
+      if (char === 13 && text.charCodeAt(index + 1) === 10) {
+        index++;
+      }
+    } else if (++currentLineLength >= METADATA_COLUMN_MAX_MEASURED_LINE_LENGTH) {
+      return METADATA_COLUMN_MAX_MEASURED_LINE_LENGTH;
+    }
+  }
+
+  return Math.max(longestLineLength, currentLineLength);
 }
 
 function estimateMetadataColumnSize(header: string, values: unknown[]): number {
@@ -439,11 +461,18 @@ function trimJsonWhitespace(value: string): string {
 function looksLikeJsonContainer(value: string): boolean {
   let start = 0;
   let end = value.length;
+  let scanned = 0;
 
   while (start < end && value[start].trim() === '') {
+    if (++scanned >= MAX_JSON_BOUNDARY_SCAN) {
+      return true;
+    }
     start++;
   }
   while (end > start && value[end - 1].trim() === '') {
+    if (++scanned >= MAX_JSON_BOUNDARY_SCAN) {
+      return true;
+    }
     end--;
   }
 

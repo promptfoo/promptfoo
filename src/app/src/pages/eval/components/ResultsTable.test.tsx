@@ -3070,6 +3070,32 @@ describe('ResultsTable Variable JSON Formatting', () => {
     parseSpy.mockRestore();
   });
 
+  it('conservatively renders oversized whitespace without an unbounded boundary scan', () => {
+    const oversizedWhitespace = '\n'.repeat(10_000);
+    mockTableState(createMockTable({ vars: [oversizedWhitespace] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    }));
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    const splitSpy = vi.spyOn(String.prototype, 'split');
+
+    const { container } = renderWithProviders(
+      <ResultsTable {...defaultProps} maxTextLength={25} />,
+    );
+
+    expect(parseSpy.mock.calls.some(([value]) => value === oversizedWhitespace)).toBe(false);
+    expect(
+      splitSpy.mock.calls.some(
+        ([separator]) => separator instanceof RegExp && separator.source === '\\r?\\n',
+      ),
+    ).toBe(false);
+    expect(container.querySelector('[data-testid="literal-json-variable"]')).toBeInTheDocument();
+    parseSpy.mockRestore();
+    splitSpy.mockRestore();
+  });
+
   it.each([
     false,
     true,
