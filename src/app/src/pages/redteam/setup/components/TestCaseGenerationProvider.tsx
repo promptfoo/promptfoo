@@ -563,14 +563,6 @@ export const TestCaseGenerationProvider: React.FC<{
       onSuccess?: OnGenerationSuccess,
       onError?: OnGenerationError,
     ) => {
-      if (
-        !dialogTriggerRef.current &&
-        document.activeElement instanceof HTMLElement &&
-        document.activeElement !== document.body
-      ) {
-        dialogTriggerRef.current = document.activeElement;
-      }
-
       // Abort any ongoing operations & reset state
       testGenerationAbortController.current?.abort();
       testExecutionAbortController.current?.abort();
@@ -593,6 +585,15 @@ export const TestCaseGenerationProvider: React.FC<{
         );
         return;
       }
+
+      if (
+        !dialogTriggerRef.current &&
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body
+      ) {
+        dialogTriggerRef.current = document.activeElement;
+      }
+
       // Read the turn count from the strategy config
       let maxTurns = isMultiTurn ? DEFAULT_MULTI_TURN_MAX_TURNS : 1;
       if (isMultiTurn && typeof strategy.config.maxTurns === 'number') {

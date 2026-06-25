@@ -157,6 +157,33 @@ const TestConsumer = ({
   );
 };
 
+const FocusTriggerConsumer = () => {
+  const { generateTestCase } = useTestCaseGeneration();
+
+  return (
+    <>
+      <button
+        data-testid="blocked-generation-btn"
+        onClick={() =>
+          generateTestCase(
+            { id: 'harmful:hate', config: {}, isStatic: false },
+            { id: 'goat', config: {}, isStatic: false },
+          )
+        }
+      />
+      <button
+        data-testid="successful-generation-btn"
+        onClick={() =>
+          generateTestCase(
+            { id: 'harmful:hate', config: {}, isStatic: false },
+            { id: 'basic', config: {}, isStatic: false },
+          )
+        }
+      />
+    </>
+  );
+};
+
 // ===================================================================
 // Tests
 // ===================================================================
@@ -283,6 +310,32 @@ describe('TestCaseGenerationProvider', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
         expect(trigger).toHaveFocus();
+      });
+    });
+
+    it('should not restore focus to a trigger whose preview was blocked', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <FocusTriggerConsumer />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      const blockedTrigger = screen.getByTestId('blocked-generation-btn');
+      const successfulTrigger = screen.getByTestId('successful-generation-btn');
+      await user.click(blockedTrigger);
+      expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+
+      await user.click(successfulTrigger);
+      const dialog = await screen.findByTestId('test-case-dialog');
+      const closeButtons = within(dialog).getAllByRole('button', { name: 'Close' });
+      await user.click(closeButtons[closeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(successfulTrigger).toHaveFocus();
       });
     });
 
