@@ -72,6 +72,7 @@ const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
  * Represents metadata for the GOAT conversation process.
  */
 interface GoatMetadata extends BaseRedteamMetadata {
+  goatRunId: string;
   redteamFinalPrompt?: string;
   stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
   successfulAttacks?: Array<{
@@ -129,150 +130,147 @@ function getStringLength(value: unknown): number | undefined {
   return typeof value === 'string' ? value.length : undefined;
 }
 
-function getObjectKeyCount(value: unknown): number | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.keys(value).length
-    : undefined;
-}
-
-const SAFE_MESSAGE_ROLES = new Set([
-  'assistant',
-  'developer',
-  'function',
-  'system',
-  'tool',
-  'user',
-]);
-
-function getSafeMessageRole(role: unknown): string {
-  return typeof role === 'string' && SAFE_MESSAGE_ROLES.has(role) ? role : 'other';
-}
-
-function getMessageSummary(messages: Message[]) {
-  const roleCounts: Record<string, number> = {};
-  for (const message of messages) {
-    const role = getSafeMessageRole(message.role);
-    roleCounts[role] = (roleCounts[role] ?? 0) + 1;
-  }
-
-  return {
-    messageCount: messages.length,
-    roleCounts,
-    contentLengths: messages.map((message) => getStringLength(message.content)),
-  };
-}
-
-function getLayerSummary(layers: LayerConfig[]) {
-  return {
-    perTurnLayerCount: layers.length,
-    perTurnLayerObjectCount: layers.filter((layer) => typeof layer !== 'string').length,
-  };
-}
-
-function getRemoteGenerationUrlLogMetadata(remoteGenerationUrl: string) {
+function safeGet(value: unknown, key: PropertyKey): unknown {
   try {
-    const url = new URL(remoteGenerationUrl);
-    return {
-      remoteGenerationProtocol: url.protocol.replace(':', ''),
-      remoteGenerationHost: url.host,
-      remoteGenerationPathLength: url.pathname.length,
-      hasRemoteGenerationQuery: Boolean(url.search),
-    };
+    return value !== null && (typeof value === 'object' || typeof value === 'function')
+      ? Reflect.get(value, key)
+      : undefined;
   } catch {
-    return {
-      remoteGenerationUrlConfigured: Boolean(remoteGenerationUrl),
-      remoteGenerationUrlParseError: true,
-    };
+    return undefined;
   }
 }
 
-function getContextLogMetadata(context?: CallApiContextParams) {
-  const assertions = (context?.test as { assert?: unknown[] } | undefined)?.assert;
-
-  return {
-    hasContext: Boolean(context),
-    hasOriginalProvider: Boolean(context?.originalProvider),
-    varsKeyCount: getObjectKeyCount(context?.vars) ?? 0,
-    hasPromptLabel: Boolean(context?.prompt?.label),
-    promptLabelLength: getStringLength(context?.prompt?.label),
-    promptLength: getStringLength(context?.prompt?.raw),
-    hasTest: Boolean(context?.test),
-    assertCount: Array.isArray(assertions) ? assertions.length : undefined,
-    metadataKeyCount: getObjectKeyCount(context?.test?.metadata) ?? 0,
-  };
+function getObjectKeyCount(value: unknown): number | undefined {
+  try {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.keys(value).length
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-function getRemoteRequestLogMetadata(
-  request: {
-    attackAttempt?: unknown;
-    email?: unknown;
-    excludeTargetOutputFromAgenticAttackGeneration?: unknown;
-    failureReason?: unknown;
-    goal?: unknown;
-    inputs?: unknown;
-    messages?: Message[];
-    modifiers?: unknown;
-    prompt?: unknown;
-    purpose?: unknown;
-    targetOutput?: unknown;
-    task?: unknown;
-    traceSummary?: unknown;
-  },
-  turn: number,
-) {
-  return {
-    ...getRemoteGenerationUrlLogMetadata(getRemoteGenerationUrl()),
-    turn,
-    task: request.task,
-    goalLength: getStringLength(request.goal),
-    targetOutputLength: getStringLength(request.targetOutput),
-    attackAttemptLength: getStringLength(request.attackAttempt),
-    promptLength: getStringLength(request.prompt),
-    failureReasonLength: getStringLength(request.failureReason),
-    hasEmail: Boolean(request.email),
-    hasPurpose: Boolean(request.purpose),
-    hasModifiers: Boolean(request.modifiers),
-    hasTraceSummary: Boolean(request.traceSummary),
-    inputKeyCount: getObjectKeyCount(request.inputs) ?? 0,
-    excludeTargetOutputFromAgenticAttackGeneration:
-      request.excludeTargetOutputFromAgenticAttackGeneration,
-    ...(request.messages ? getMessageSummary(request.messages) : {}),
-  };
+function getFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function getRemoteResponseLogMetadata(data: any) {
+function getBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function getRemoteGenerationHost(): string | undefined {
+  try {
+    return new URL(getRemoteGenerationUrl()).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function getRemoteResponseLogMetadata(data: unknown, response?: Response) {
+  const message = safeGet(data, 'message');
   return {
+    httpOk: getBoolean(safeGet(response, 'ok')),
+    httpStatus: getFiniteNumber(safeGet(response, 'status')),
     responseKeyCount: getObjectKeyCount(data) ?? 0,
-    hasMessage: Boolean(data?.message),
-    messageType: typeof data?.message,
-    messageRole: getSafeMessageRole(data?.message?.role),
-    messageContentLength: getStringLength(data?.message?.content),
+    hasError: Boolean(safeGet(data, 'error')),
+    hasMessage: Boolean(message),
+    messageType: typeof message,
+    messageContentLength: getStringLength(safeGet(message, 'content')),
   };
+}
+
+const TOKEN_USAGE_KEYS = ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const;
+const COMPLETION_DETAIL_KEYS = [
+  'reasoning',
+  'acceptedPrediction',
+  'rejectedPrediction',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+] as const;
+
+function getFiniteNumberFields(value: unknown, keys: readonly string[]) {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    const number = getFiniteNumber(safeGet(value, key));
+    if (number !== undefined) {
+      result[key] = number;
+    }
+  }
+  return result;
+}
+
+function getTokenUsageLogMetadata(value: unknown, includeAssertions = true) {
+  const result = getFiniteNumberFields(value, TOKEN_USAGE_KEYS);
+  const completionDetails = getFiniteNumberFields(
+    safeGet(value, 'completionDetails'),
+    COMPLETION_DETAIL_KEYS,
+  );
+  if (Object.keys(completionDetails).length > 0) {
+    result.completionDetails = completionDetails;
+  }
+  const assertions = includeAssertions
+    ? getTokenUsageLogMetadata(safeGet(value, 'assertions'), false)
+    : undefined;
+  if (assertions) {
+    result.assertions = assertions;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function getProviderResponseLogMetadata(response?: ProviderResponse) {
-  const output = response?.output;
+  const output = safeGet(response, 'output');
+  const error = safeGet(response, 'error');
 
   return {
-    cached: response?.cached,
-    hasError: Boolean(response?.error),
-    errorLength: getStringLength(response?.error),
+    cached: getBoolean(safeGet(response, 'cached')),
+    hasError: Boolean(error),
+    errorLength: getStringLength(error),
     hasOutput: output !== undefined && output !== null,
     outputType: Array.isArray(output) ? 'array' : typeof output,
     outputLength: getStringLength(output),
-    tokenUsage: response?.tokenUsage
-      ? {
-          total: response.tokenUsage.total,
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          numRequests: response.tokenUsage.numRequests,
-        }
-      : undefined,
-    conversationEnded: Boolean(response?.conversationEnded),
-    hasAudio: Boolean(response?.audio?.data),
-    hasTraceContext: Boolean((response as GoatProviderResponse | undefined)?.traceContext),
-    hasSessionId: Boolean(response?.sessionId),
-    metadataKeyCount: getObjectKeyCount(response?.metadata) ?? 0,
+    tokenUsage: getTokenUsageLogMetadata(safeGet(response, 'tokenUsage')),
+    conversationEnded: getBoolean(safeGet(response, 'conversationEnded')),
+    hasAudio: Boolean(safeGet(safeGet(response, 'audio'), 'data')),
+    hasTraceContext: Boolean(safeGet(response, 'traceContext')),
+    hasSessionId: Boolean(safeGet(response, 'sessionId')),
+  };
+}
+
+function getRemoteGenerationLogHeaders() {
+  return { ...getRemoteGenerationHeaders(), 'x-promptfoo-silent': 'true' };
+}
+
+function isErrorInstance(value: unknown): value is Error {
+  try {
+    return value instanceof Error;
+  } catch {
+    return false;
+  }
+}
+
+function isAbortError(value: unknown): boolean {
+  return isErrorInstance(value) && safeGet(value, 'name') === 'AbortError';
+}
+
+function isMaterializationUpgradeError(value: unknown): boolean {
+  try {
+    return isRemoteMaterializationUpgradeError(value);
+  } catch {
+    return false;
+  }
+}
+
+function createGoatLogger(goatRunId: string) {
+  const withRunId = (context: Record<string, unknown> = {}) => ({ ...context, goatRunId });
+  return {
+    debug: (message: string, context?: Record<string, unknown>) =>
+      logger.debug(message, withRunId(context)),
+    error: (message: string, context?: Record<string, unknown>) =>
+      logger.error(message, withRunId(context)),
+    info: (message: string, context?: Record<string, unknown>) =>
+      logger.info(message, withRunId(context)),
+    warn: (message: string, context?: Record<string, unknown>) =>
+      logger.warn(message, withRunId(context)),
   };
 }
 
@@ -280,12 +278,6 @@ export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
   private readonly nunjucks: any;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-    traceSummary?: string;
-  }> = [];
 
   id() {
     return 'promptfoo:redteam:goat';
@@ -332,11 +324,13 @@ export default class GoatProvider implements ApiProvider {
     logger.debug('[GOAT] Constructor options', {
       hasInjectVar: Boolean(options.injectVar),
       injectVarLength: getStringLength(options.injectVar),
-      maxTurns: options.maxTurns,
-      maxCharsPerMessage: options.maxCharsPerMessage,
-      stateful: options.stateful,
-      continueAfterSuccess: options.continueAfterSuccess,
-      ...getLayerSummary(this.perTurnLayers),
+      maxTurns: getFiniteNumber(options.maxTurns),
+      maxCharsPerMessage: getFiniteNumber(options.maxCharsPerMessage),
+      stateful: getBoolean(options.stateful),
+      continueAfterSuccess: getBoolean(options.continueAfterSuccess),
+      perTurnLayerCount: this.perTurnLayers.length,
+      perTurnLayerObjectCount: this.perTurnLayers.filter((layer) => typeof layer !== 'string')
+        .length,
       inputKeyCount: getObjectKeyCount(options.inputs) ?? 0,
     });
   }
@@ -346,8 +340,9 @@ export default class GoatProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
-    // Reset successful attacks array for each new call
-    this.successfulAttacks = [];
+    const goatRunId = crypto.randomUUID();
+    const log = createGoatLogger(goatRunId);
+    const successfulAttacks: NonNullable<GoatMetadata['successfulAttacks']> = [];
 
     const tracingOptions = resolveTracingOptions({
       strategyId: 'goat',
@@ -359,7 +354,10 @@ export default class GoatProvider implements ApiProvider {
     const traceSnapshots: TraceContextData[] = [];
 
     let response: Response | undefined = undefined;
-    logger.debug('[GOAT] callApi context', getContextLogMetadata(context));
+    log.debug('[GOAT] callApi context', {
+      hasContext: Boolean(context),
+      varsKeyCount: getObjectKeyCount(safeGet(context, 'vars')) ?? 0,
+    });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
@@ -422,6 +420,7 @@ export default class GoatProvider implements ApiProvider {
     let stopReason: GoatMetadata['stopReason'] = 'Max turns reached';
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
+      let errorStage = 'unblocking';
       try {
         // Handle unblocking logic BEFORE attack (skip on first turn)
         if (turn > 0 && previousTargetOutput) {
@@ -434,7 +433,7 @@ export default class GoatProvider implements ApiProvider {
           });
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
-            logger.debug('[GOAT] Sending unblocking response', {
+            log.debug('[GOAT] Sending unblocking response', {
               turn,
               promptLength: unblockingResult.unblockingPrompt.length,
             });
@@ -462,7 +461,7 @@ export default class GoatProvider implements ApiProvider {
                 },
               );
               if (transformResult.error) {
-                logger.warn('[GOAT] Transform failed for unblocking prompt', {
+                log.warn('[GOAT] Transform failed for unblocking prompt', {
                   errorLength: getStringLength(transformResult.error),
                 });
                 continue; // Skip unblocking attempt
@@ -478,9 +477,14 @@ export default class GoatProvider implements ApiProvider {
               options,
             );
 
-            if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
-              logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-              await sleep(targetProvider.delay);
+            const unblockingDelayMs = getFiniteNumber(safeGet(targetProvider, 'delay'));
+            if (
+              getBoolean(safeGet(unblockingResponse, 'cached')) !== true &&
+              unblockingDelayMs !== undefined &&
+              unblockingDelayMs > 0
+            ) {
+              log.debug('[GOAT] Delaying target request', { delayMs: unblockingDelayMs });
+              await sleep(unblockingDelayMs);
             }
 
             accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
@@ -495,7 +499,7 @@ export default class GoatProvider implements ApiProvider {
             }
 
             if (unblockingResponse.error) {
-              logger.error('[GOAT] Target returned an error', {
+              log.error('[GOAT] Target returned an error', {
                 turn,
                 errorLength: getStringLength(unblockingResponse.error),
               });
@@ -507,6 +511,7 @@ export default class GoatProvider implements ApiProvider {
         let body: string;
         let failureReason: string | undefined;
         if (this.config.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
+          errorStage = 'failure-extraction';
           const failureRequest = {
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             targetOutput: previousTargetOutput,
@@ -517,15 +522,17 @@ export default class GoatProvider implements ApiProvider {
             traceSummary: previousTraceSummary,
           };
           body = JSON.stringify(failureRequest);
-          logger.debug(
-            '[GOAT] Sending failure extraction request',
-            getRemoteRequestLogMetadata(failureRequest, turn),
-          );
+          log.debug('[GOAT] Sending failure extraction request', {
+            turn,
+            task: 'extract-goat-failure',
+            bodyLength: body.length,
+            remoteGenerationHost: getRemoteGenerationHost(),
+          });
           response = await fetchWithProxy(
             getRemoteGenerationUrl(),
             {
               body,
-              headers: getRemoteGenerationHeaders(),
+              headers: getRemoteGenerationLogHeaders(),
               method: 'POST',
             },
             options?.abortSignal,
@@ -533,19 +540,16 @@ export default class GoatProvider implements ApiProvider {
           const data = (await response.json()) as ExtractAttackFailureResponse;
 
           if (!data.message) {
-            logger.info(
+            log.info(
               '[GOAT] Invalid message from GOAT, skipping turn',
-              getRemoteResponseLogMetadata(data),
+              getRemoteResponseLogMetadata(data, response),
             );
             continue;
           }
           failureReason = data.message;
-          logger.debug('[GOAT] Previous attack attempt failure reason', {
-            turn,
-            failureReasonLength: getStringLength(failureReason),
-          });
         }
 
+        errorStage = 'attack-generation';
         const goatRequest = {
           goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
           i: turn,
@@ -568,28 +572,32 @@ export default class GoatProvider implements ApiProvider {
         };
         body = JSON.stringify(goatRequest);
 
-        logger.debug(
-          '[GOAT] Sending generation request',
-          getRemoteRequestLogMetadata(goatRequest, turn),
-        );
+        log.debug('[GOAT] Sending generation request', {
+          turn,
+          task: 'goat',
+          bodyLength: body.length,
+          messageCount: goatRequest.messages.length,
+          remoteGenerationHost: getRemoteGenerationHost(),
+        });
         response = await fetchWithProxy(
           getRemoteGenerationUrl(),
           {
             body,
-            headers: getRemoteGenerationHeaders(),
+            headers: getRemoteGenerationLogHeaders(),
             method: 'POST',
           },
           options?.abortSignal,
         );
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
-          logger.info(
+          log.info(
             '[GOAT] Invalid message from GOAT, skipping turn',
-            getRemoteResponseLogMetadata(data),
+            getRemoteResponseLogMetadata(data, response),
           );
           continue;
         }
         const attackerMessage = data.message;
+        errorStage = 'target-prompt';
 
         previousAttackerMessage = attackerMessage?.content;
 
@@ -652,17 +660,13 @@ export default class GoatProvider implements ApiProvider {
           content: renderedAttackerPrompt,
         });
 
-        logger.debug('[GOAT] GOAT turn history', {
-          turn,
-          ...getMessageSummary(messages),
-        });
-
         // Get the latest message content for transforms
         const latestMessageContent = messages[messages.length - 1].content;
         let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
-        logger.debug('[GOAT] GOAT turn target prompt', {
+        log.debug('[GOAT] GOAT turn target prompt', {
           turn,
-          stateful: this.config.stateful,
+          messageCount: messages.length,
+          stateful: getBoolean(this.config.stateful),
           targetPromptLength: targetPrompt.length,
           renderedPromptLength: renderedAttackerPrompt.length,
         });
@@ -673,10 +677,6 @@ export default class GoatProvider implements ApiProvider {
         // ═══════════════════════════════════════════════════════════════════════
         let lastTransformResult: TransformResult | undefined;
         if (this.perTurnLayers.length > 0) {
-          logger.debug('[GOAT] Applying per-turn transforms', {
-            turn,
-            ...getLayerSummary(this.perTurnLayers),
-          });
           // Transform the actual message content, not the full targetPrompt (which may be JSON)
           // This ensures we convert just the text to audio, not the JSON structure
           lastTransformResult = await applyRuntimeTransforms(
@@ -695,7 +695,7 @@ export default class GoatProvider implements ApiProvider {
 
           // Skip turn if transform failed
           if (lastTransformResult.error) {
-            logger.warn('[GOAT] Transform failed, skipping turn', {
+            log.warn('[GOAT] Transform failed, skipping turn', {
               turn,
               errorLength: getStringLength(lastTransformResult.error),
             });
@@ -723,7 +723,7 @@ export default class GoatProvider implements ApiProvider {
               },
             };
             targetPrompt = JSON.stringify(hybridPayload);
-            logger.debug('[GOAT] Using hybrid format (history + audio/image current turn)', {
+            log.debug('[GOAT] Using hybrid format (history + audio/image current turn)', {
               turn,
               historyLength: historyWithoutCurrentTurn.length,
               hasAudio: !!lastTransformResult.audio,
@@ -734,8 +734,9 @@ export default class GoatProvider implements ApiProvider {
             targetPrompt = lastTransformResult.prompt;
           }
 
-          logger.debug('[GOAT] Per-turn transforms applied', {
+          log.debug('[GOAT] Per-turn transforms applied', {
             turn,
+            perTurnLayerCount: this.perTurnLayers.length,
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
@@ -760,19 +761,25 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
+        errorStage = 'target-provider';
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           targetContext,
           options,
         )) as GoatProviderResponse;
 
-        if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
-          logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-          await sleep(targetProvider.delay);
+        const targetDelayMs = getFiniteNumber(safeGet(targetProvider, 'delay'));
+        if (
+          getBoolean(safeGet(targetResponse, 'cached')) !== true &&
+          targetDelayMs !== undefined &&
+          targetDelayMs > 0
+        ) {
+          log.debug('[GOAT] Delaying target request', { delayMs: targetDelayMs });
+          await sleep(targetDelayMs);
         }
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-        logger.debug('[GOAT] GOAT turn target response', {
+        log.debug('[GOAT] GOAT turn target response', {
           turn,
           ...getProviderResponseLogMetadata(targetResponse),
         });
@@ -780,6 +787,7 @@ export default class GoatProvider implements ApiProvider {
         let traceContext: TraceContextData | null = null;
         let computedTraceSummary: string | undefined;
         if (shouldFetchTrace) {
+          errorStage = 'trace';
           const traceparent = context?.traceparent ?? undefined;
           const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
@@ -811,7 +819,7 @@ export default class GoatProvider implements ApiProvider {
           context.vars.sessionId = targetResponse.sessionId;
         }
         if (targetResponse.conversationEnded) {
-          logger.info('[GOAT] Target ended conversation', {
+          log.info('[GOAT] Target ended conversation', {
             turn,
             hasReason: Boolean(targetResponse.conversationEndReason),
             reasonLength: getStringLength(targetResponse.conversationEndReason),
@@ -861,7 +869,7 @@ export default class GoatProvider implements ApiProvider {
         const finalResponse = targetResponse;
 
         if (!stringifiedOutput && !hasTargetImages) {
-          logger.debug('[GOAT] Target response output is not a string or JSON', {
+          log.debug('[GOAT] Target response output is not a string or JSON', {
             turn,
             ...getProviderResponseLogMetadata(targetResponse),
           });
@@ -903,6 +911,7 @@ export default class GoatProvider implements ApiProvider {
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && assertToUse && grader && finalOutput) {
+          errorStage = 'grading';
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
@@ -916,9 +925,9 @@ export default class GoatProvider implements ApiProvider {
             if (webPageUuid) {
               const evalId =
                 context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-              logger.debug('[GOAT] Fetching exfil tracking from server API', {
-                webPageUuid,
-                evalId,
+              log.debug('[GOAT] Fetching exfil tracking from server API', {
+                hasWebPageUuid: true,
+                hasEvalId: Boolean(evalId),
               });
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
@@ -937,7 +946,7 @@ export default class GoatProvider implements ApiProvider {
               }
             }
           } else {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            log.debug('[GOAT] Using exfil data from provider response metadata');
             gradingContext = {
               ...(gradingContext ?? {}),
               ...(tracingOptions.includeInGrading
@@ -977,7 +986,7 @@ export default class GoatProvider implements ApiProvider {
 
         if (graderPassed === false) {
           // Record successful attack
-          this.successfulAttacks.push({
+          successfulAttacks.push({
             turn,
             prompt: attackerMessage.content,
             response: finalOutput,
@@ -994,19 +1003,21 @@ export default class GoatProvider implements ApiProvider {
         }
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
-          logger.debug('[GOAT] Operation aborted');
+        if (isAbortError(error)) {
+          log.debug('[GOAT] Operation aborted', { errorStage });
           throw error;
         }
-        if (isRemoteMaterializationUpgradeError(error)) {
+        if (isMaterializationUpgradeError(error)) {
           throw error;
         }
-        logger.error(
+        log.error(
           `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,
           {
-            errorType: error instanceof Error ? error.constructor.name : typeof error,
-            errorMessageLength:
-              error instanceof Error ? error.message.length : getStringLength(String(error)),
+            errorStage,
+            errorType: isErrorInstance(error) ? 'Error' : typeof error,
+            errorMessageLength: getStringLength(
+              isErrorInstance(error) ? safeGet(error, 'message') : error,
+            ),
           },
         );
       }
@@ -1017,13 +1028,14 @@ export default class GoatProvider implements ApiProvider {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
       metadata: {
+        goatRunId,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         stopReason,
         redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
+        successfulAttacks,
+        totalSuccessfulAttacks: successfulAttacks.length,
         storedGraderResult,
         traceSnapshots:
           traceSnapshots.length > 0

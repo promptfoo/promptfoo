@@ -44,6 +44,10 @@ vi.mock('../../../src/util/server', async (importOriginal) => {
 describe('RedteamGoatProvider', () => {
   let mockFetch: Mock;
   let tempDir: string;
+  const sensitiveLogMarker = 'GOAT_SENSITIVE_LOG_CANARY';
+  const sensitive = (label: string) => `${sensitiveLogMarker}:${label}\n秘密🔐`;
+  const serializeLogCalls = (...spies: Mock[]) =>
+    JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
@@ -69,6 +73,12 @@ describe('RedteamGoatProvider', () => {
     vars,
     prompt: { raw: 'test prompt', label: 'test' },
     test: testConfig,
+  });
+
+  const createRemoteMessageResponse = (content: string, fields: Record<string, unknown> = {}) => ({
+    json: async () => ({ ...fields, message: { role: 'assistant', content } }),
+    ok: true,
+    status: 200,
   });
 
   const createTempFile = (name: string, content: string): string => {
@@ -125,6 +135,7 @@ describe('RedteamGoatProvider', () => {
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -162,38 +173,23 @@ describe('RedteamGoatProvider', () => {
 
   it('should not log GOAT constructor input config values', () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
+    const circularConfig: Record<string, unknown> = { note: sensitive('layer-config') };
+    circularConfig.self = circularConfig;
 
-    try {
-      new RedteamGoatProvider({
-        injectVar: 'secret-inject-var-sentinel',
-        maxTurns: 1,
-        inputs: {
-          'secret-input-key-sentinel': 'secret input description sentinel',
-        },
-        _perTurnLayers: [
-          {
-            id: 'secret-layer-id-sentinel',
-            config: {
-              voice: 'secret-layer-config-sentinel',
-            },
-          },
-        ],
-      });
+    new RedteamGoatProvider({
+      injectVar: sensitive('inject-var'),
+      maxTurns: sensitive('max-turns'),
+      stateful: sensitive('stateful'),
+      continueAfterSuccess: { note: sensitive('continue-after-success') },
+      inputs: { [sensitive('input-key')]: sensitive('input-description') },
+      _perTurnLayers: [{ id: sensitive('layer-id'), config: circularConfig }],
+    } as any);
 
-      const goatLogs = JSON.stringify(
-        debugSpy.mock.calls.filter(([message]) => String(message).includes('[GOAT]')),
-      );
-      expect(goatLogs).toContain('inputKeyCount');
-      expect(goatLogs).toContain('injectVarLength');
-      expect(goatLogs).toContain('perTurnLayerCount');
-      expect(goatLogs).not.toContain('secret-inject-var-sentinel');
-      expect(goatLogs).not.toContain('secret-input-key-sentinel');
-      expect(goatLogs).not.toContain('secret input description sentinel');
-      expect(goatLogs).not.toContain('secret-layer-id-sentinel');
-      expect(goatLogs).not.toContain('secret-layer-config-sentinel');
-    } finally {
-      debugSpy.mockRestore();
-    }
+    const logs = serializeLogCalls(debugSpy);
+    expect(logs).toContain('inputKeyCount');
+    expect(logs).toContain('injectVarLength');
+    expect(logs).toContain('perTurnLayerCount');
+    expect(logs).not.toContain(sensitiveLogMarker);
   });
 
   it('should enforce maxCharsPerMessage from provider config', async () => {
@@ -567,92 +563,67 @@ describe('RedteamGoatProvider', () => {
       injectVar: 'goal',
       maxTurns: 2,
       excludeTargetOutputFromAgenticAttackGeneration: true,
-      inputs: {
-        'secret-input-key-sentinel': 'secret input description sentinel',
-      },
     });
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
-    const targetProvider = createMockTargetProvider(
-      'secret-target-output-sentinel',
-      {},
-      {
-        metadata: {
-          'secret-target-metadata-key-sentinel': 'secret-target-metadata-sentinel',
-        },
+    const hostileMetadata: Record<string, unknown> = {
+      constructor: sensitive('metadata-constructor'),
+    };
+    hostileMetadata.self = hostileMetadata;
+    const tokenUsage: Record<string, unknown> = {
+      total: sensitive('token-total'),
+      completion: { nested: sensitive('token-completion') },
+      cached: 7,
+      completionDetails: { reasoning: 11 },
+      assertions: { total: 13 },
+    };
+    Object.defineProperty(tokenUsage, 'prompt', {
+      enumerable: true,
+      get: () => ({ nested: sensitive('token-prompt-getter') }),
+    });
+    const targetResponse = {
+      cached: sensitive('cached-alias'),
+      output: sensitive('target-output'),
+      tokenUsage,
+      metadata: hostileMetadata,
+    };
+    const targetProvider = createMockProvider();
+    targetProvider.callApi.mockResolvedValue(targetResponse as any);
+    const context = createMockContext(targetProvider, { goal: sensitive('goal') }, {
+      metadata: {
+        goal: sensitive('metadata-goal'),
       },
-    );
-    const context = createMockContext(
-      targetProvider,
-      {
-        goal: 'secret-goal-sentinel',
-        'secret-vars-key-sentinel': 'secret-vars-value-sentinel',
-      },
-      {
-        metadata: {
-          goal: 'secret-metadata-goal-sentinel',
-          modifiers: 'secret-modifier-sentinel',
-          'secret-test-metadata-key-sentinel': 'secret-test-metadata-value-sentinel',
-        },
-      } as AtomicTestCase,
-    );
-    context.prompt = { raw: 'secret-raw-prompt-sentinel', label: 'secret-prompt-label-sentinel' };
+    } as AtomicTestCase);
+    context.prompt = { raw: sensitive('raw-prompt'), label: sensitive('prompt-label') };
     mockFetch
-      .mockResolvedValueOnce({
-        json: async () => ({
-          materializationHandled: true,
-          'secret-remote-response-key-sentinel': true,
-          message: {
-            role: 'secret-remote-role-sentinel',
-            content: 'secret-attacker-message-one-sentinel',
-          },
+      .mockResolvedValueOnce(
+        createRemoteMessageResponse(sensitive('attacker-one'), {
+          [sensitive('remote-key')]: true,
         }),
-        ok: true,
-      })
+      )
       .mockResolvedValueOnce({
-        json: async () => ({ message: 'secret-failure-reason-sentinel' }),
+        json: async () => ({ message: sensitive('failure-reason') }),
         ok: true,
+        status: 200,
       })
-      .mockResolvedValueOnce({
-        json: async () => ({
-          materializationHandled: true,
-          'secret-remote-response-key-sentinel': true,
-          message: {
-            role: 'secret-remote-role-sentinel',
-            content: 'secret-attacker-message-two-sentinel',
-          },
+      .mockResolvedValueOnce(
+        createRemoteMessageResponse(sensitive('attacker-two'), {
+          [sensitive('remote-key-two')]: true,
         }),
-        ok: true,
-      });
-
-    try {
-      await provider.callApi('test prompt', context);
-
-      const goatLogs = JSON.stringify(
-        debugSpy.mock.calls.filter(([message]) => String(message).includes('[GOAT]')),
       );
-      expect(goatLogs).toContain('messageCount');
-      expect(goatLogs).toContain('outputLength');
-      expect(goatLogs).not.toContain('secret-goal-sentinel');
-      expect(goatLogs).not.toContain('secret-vars-key-sentinel');
-      expect(goatLogs).not.toContain('secret-vars-value-sentinel');
-      expect(goatLogs).not.toContain('secret-metadata-goal-sentinel');
-      expect(goatLogs).not.toContain('secret-modifier-sentinel');
-      expect(goatLogs).not.toContain('secret-test-metadata-key-sentinel');
-      expect(goatLogs).not.toContain('secret-test-metadata-value-sentinel');
-      expect(goatLogs).not.toContain('secret-raw-prompt-sentinel');
-      expect(goatLogs).not.toContain('secret-prompt-label-sentinel');
-      expect(goatLogs).not.toContain('secret-input-key-sentinel');
-      expect(goatLogs).not.toContain('secret input description sentinel');
-      expect(goatLogs).not.toContain('secret-remote-response-key-sentinel');
-      expect(goatLogs).not.toContain('secret-remote-role-sentinel');
-      expect(goatLogs).not.toContain('secret-attacker-message-one-sentinel');
-      expect(goatLogs).not.toContain('secret-attacker-message-two-sentinel');
-      expect(goatLogs).not.toContain('secret-failure-reason-sentinel');
-      expect(goatLogs).not.toContain('secret-target-output-sentinel');
-      expect(goatLogs).not.toContain('secret-target-metadata-key-sentinel');
-      expect(goatLogs).not.toContain('secret-target-metadata-sentinel');
-    } finally {
-      debugSpy.mockRestore();
+
+    await provider.callApi('test prompt', context);
+
+    const logs = serializeLogCalls(debugSpy);
+    expect(logs).toContain('messageCount');
+    expect(logs).toContain('outputLength');
+    expect(logs).toContain('"cached":7');
+    expect(logs).toContain('"reasoning":11');
+    expect(logs).toContain('"total":13');
+    expect(logs).not.toContain(sensitiveLogMarker);
+    for (const [, init] of mockFetch.mock.calls) {
+      expect((init as RequestInit).headers).toEqual(
+        expect.objectContaining({ 'x-promptfoo-silent': 'true' }),
+      );
     }
   });
 
@@ -666,27 +637,25 @@ describe('RedteamGoatProvider', () => {
     const context = createMockContext(targetProvider);
     mockFetch.mockResolvedValueOnce({
       json: async () => ({
-        'secret-invalid-response-key-sentinel': true,
+        error: { detail: sensitive('remote-error') },
+        [sensitive('invalid-key')]: true,
         message: {
-          role: 'secret-invalid-response-role-sentinel',
+          role: sensitive('invalid-role'),
         },
       }),
-      ok: true,
+      ok: false,
+      status: 429,
     });
 
-    try {
-      await provider.callApi('test prompt', context);
+    await provider.callApi('test prompt', context);
 
-      const goatLogs = JSON.stringify(
-        infoSpy.mock.calls.filter(([message]) => String(message).includes('[GOAT]')),
-      );
-      expect(goatLogs).toContain('responseKeyCount');
-      expect(goatLogs).toContain('"messageRole":"other"');
-      expect(goatLogs).not.toContain('secret-invalid-response-key-sentinel');
-      expect(goatLogs).not.toContain('secret-invalid-response-role-sentinel');
-    } finally {
-      infoSpy.mockRestore();
-    }
+    const logs = serializeLogCalls(infoSpy);
+    expect(logs).toContain('responseKeyCount');
+    expect(logs).toContain('"messageType":"object"');
+    expect(logs).toContain('"httpOk":false');
+    expect(logs).toContain('"httpStatus":429');
+    expect(logs).toContain('"hasError":true');
+    expect(logs).not.toContain(sensitiveLogMarker);
   });
 
   it('should stop when target ends conversation', async () => {
@@ -981,6 +950,46 @@ describe('RedteamGoatProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max turns reached');
       expect(result.metadata?.successfulAttacks).toHaveLength(0);
       expect(result.metadata?.totalSuccessfulAttacks).toBe(0);
+    });
+
+    it('should isolate concurrent conversations and correlate their logs', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      let releaseFetches!: () => void;
+      const bothFetchesStarted = new Promise<void>((resolve) => {
+        releaseFetches = resolve;
+      });
+      const targetProvider = createMockTargetProvider('concurrent response');
+      let generationCount = 0;
+      mockFetch.mockImplementation(async () => {
+        const callNumber = ++generationCount;
+        if (generationCount === 2) {
+          releaseFetches();
+        }
+        await bothFetchesStarted;
+        return createRemoteMessageResponse(`concurrent attack ${callNumber}`);
+      });
+      mockGrader.getResult.mockResolvedValue({ grade: { pass: false } });
+      const createTestConfig = () =>
+        ({
+          assert: [{ type: 'contains', value: 'harmful' }],
+          metadata: { pluginId: 'contains' },
+          vars: {},
+        }) as AtomicTestCase;
+
+      const results = await Promise.all([
+        provider.callApi('test prompt', createMockContext(targetProvider, {}, createTestConfig())),
+        provider.callApi('test prompt', createMockContext(targetProvider)),
+      ]);
+
+      expect(mockGrader.getResult).toHaveBeenCalledTimes(1);
+      expect(results.map((result) => result.metadata?.successfulAttacks?.length)).toEqual([1, 0]);
+      const resultRunIds = new Set(results.map((result) => result.metadata?.goatRunId));
+      expect(resultRunIds.size).toBe(2);
+      const goatCalls = debugSpy.mock.calls.filter(([message]) =>
+        String(message).startsWith('[GOAT]'),
+      );
+      expect(new Set(goatCalls.map(([, context]) => context?.goatRunId))).toEqual(resultRunIds);
     });
 
     it('should initialize continueAfterSuccess to false by default', () => {
@@ -1682,38 +1691,42 @@ describe('RedteamGoatProvider', () => {
     it('should swallow non-AbortError exceptions and continue the loop', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
-        maxTurns: 2,
+        maxTurns: 3,
       });
 
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
-      const regularError = new Error('Network error secret-goat-network-error-sentinel');
-      regularError.name = 'secret-goat-error-name-sentinel';
-      // First turn fails with non-AbortError, second turn succeeds
-      mockFetch.mockRejectedValueOnce(regularError).mockImplementationOnce(async () => ({
-        json: async () => ({
-          message: { role: 'assistant', content: 'test response' },
-        }),
-        ok: true,
-      }));
+      const regularError = new Error(sensitive('network-error'));
+      regularError.name = sensitive('error-name');
+      Object.defineProperty(regularError, 'constructor', {
+        get: () => {
+          throw new Error(sensitive('constructor-getter'));
+        },
+      });
+      const hostileThrownValue = Object.assign(Object.create(null), {
+        detail: sensitive('null-prototype-error'),
+      });
+      // Two hostile failures are swallowed; the third turn succeeds.
+      mockFetch
+        .mockRejectedValueOnce(regularError)
+        .mockRejectedValueOnce(hostileThrownValue)
+        .mockImplementationOnce(async () => ({
+          json: async () => ({
+            message: { role: 'assistant', content: 'test response' },
+          }),
+          ok: true,
+          status: 200,
+        }));
 
       const targetProvider = createMockTargetProvider();
       const context = createMockContext(targetProvider);
 
-      try {
-        // Should NOT throw - should continue to next turn
-        const result = await provider.callApi('test prompt', context);
+      const result = await provider.callApi('test prompt', context);
 
-        // Should complete without throwing
-        expect(result.metadata?.stopReason).toBe('Max turns reached');
-        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
-          'secret-goat-network-error-sentinel',
-        );
-        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
-          'secret-goat-error-name-sentinel',
-        );
-      } finally {
-        errorSpy.mockRestore();
-      }
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(errorSpy).toHaveBeenCalledTimes(2);
+      const logs = serializeLogCalls(errorSpy);
+      expect(logs).toContain('"errorStage":"attack-generation"');
+      expect(logs).not.toContain(sensitiveLogMarker);
     });
   });
 
