@@ -1522,6 +1522,7 @@ async function runEvalInternal({
     });
     const { response } = providerCall;
     latencyMs = providerCall.latencyMs;
+    abortSignal?.throwIfAborted();
 
     updateConversationHistory({
       conversationKey: state.conversationKey,
@@ -2780,31 +2781,58 @@ async function filterCompletedResumeSteps(
   }
 }
 
+function providerUsesManagedState(
+  provider: ApiProvider,
+  prompt: Prompt,
+  test: AtomicTestCase,
+): boolean {
+  return [provider.config, prompt.config, test.options].some(
+    (config) =>
+      config?.persistSession === true ||
+      config?.persist_sessions === true ||
+      config?.maintainContext === true ||
+      config?.persist_threads === true ||
+      config?.continue === true ||
+      Boolean(config?.resume) ||
+      Boolean(config?.session_id) ||
+      Boolean(config?.thread_id),
+  );
+}
+
 function adjustConcurrencyForSerialFeatures({
   concurrency,
   extensions,
-  prompts,
-  providers,
+  runEvalOptions,
   silent,
-  tests,
 }: {
   concurrency: number;
   extensions: TestSuite['extensions'];
-  prompts: CompletedPrompt[];
-  providers: ApiProvider[];
+  runEvalOptions: RunEvalOptions[];
   silent?: boolean;
-  tests: AtomicTestCase[];
 }) {
-  const usesConversationVar = prompts.some(promptUsesConversationVariable);
+  const usesConversationVar = runEvalOptions.some(({ prompt }) =>
+    promptUsesConversationVariable(prompt),
+  );
   if (concurrency <= 1) {
     return { concurrency, usesConversationVar };
   }
 
-  const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
-  const usesPersistentBrowserSession = providers.some(
-    (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+  const usesStoreOutputAs = runEvalOptions.some(({ test }) => test.options?.storeOutputAs);
+  const usesPersistentSession = runEvalOptions.some(
+    ({ provider, test }) =>
+      (isApiProvider(test.provider) ? test.provider : provider).config?.persistSession === true,
   );
-  const usesRunSerially = tests.some((test) => test.options?.runSerially);
+  const usesProviderManagedState =
+    usesPersistentSession ||
+    (usesConversationVar &&
+      runEvalOptions.some(({ prompt, provider, test }) =>
+        providerUsesManagedState(
+          isApiProvider(test.provider) ? test.provider : provider,
+          prompt,
+          test,
+        ),
+      ));
+  const usesRunSerially = runEvalOptions.some(({ test }) => test.options?.runSerially);
   const mayMutateTestsBeforeEach = extensions?.some((extension) => {
     const hookName = getExtensionHookName(extension);
     return hookName !== 'beforeAll' && hookName !== 'afterEach' && hookName !== 'afterAll';
@@ -2815,8 +2843,10 @@ function adjustConcurrencyForSerialFeatures({
     }
     return { concurrency: 1, usesConversationVar };
   }
-  if (usesPersistentBrowserSession) {
-    logger.info(`Setting concurrency to 1 because browser persistSession is enabled.`);
+  if (usesProviderManagedState) {
+    if (!silent) {
+      logger.info('Setting concurrency to 1 because provider-managed state is enabled.');
+    }
     return { concurrency: 1, usesConversationVar };
   }
   if (usesConversationVar && (usesRunSerially || mayMutateTestsBeforeEach)) {
@@ -3958,23 +3988,37 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
+    let firstError: { cause: unknown } | undefined;
     await async.forEachOfLimit(
       concurrentRunEvalGroups,
       processingContext.concurrency,
       async (evalGroup) => {
-        for (const evalStep of evalGroup) {
-          checkAbort();
-          const idx = evalStepIndexMap.get(evalStep)!;
-          await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-          processedIndices.add(idx);
-          const now = Date.now();
-          if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-            lastPromptsFlush = now;
-            await this.store.appendPrompts(prompts);
+        if (firstError) {
+          return;
+        }
+        try {
+          for (const evalStep of evalGroup) {
+            if (firstError) {
+              return;
+            }
+            checkAbort();
+            const idx = evalStepIndexMap.get(evalStep)!;
+            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            processedIndices.add(idx);
+            const now = Date.now();
+            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+              lastPromptsFlush = now;
+              await this.store.appendPrompts(prompts);
+            }
           }
+        } catch (cause) {
+          firstError ??= { cause };
         }
       },
     );
+    if (firstError) {
+      throw firstError.cause;
+    }
   }
 
   private async saveInterruptedEval({
@@ -4693,10 +4737,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
       extensions: testSuite.extensions,
-      prompts,
-      providers: runEvalOptions.map((evalOption) => evalOption.provider),
+      runEvalOptions,
       silent: this.options.silent,
-      tests,
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
