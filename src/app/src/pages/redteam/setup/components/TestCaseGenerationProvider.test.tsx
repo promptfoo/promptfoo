@@ -264,6 +264,28 @@ describe('TestCaseGenerationProvider', () => {
       expect(targetResponseComponent).not.toBeInTheDocument();
     });
 
+    it('should restore focus to the generation trigger after closing the preview', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      const trigger = screen.getByTestId('test-case-generation-btn');
+      await user.click(trigger);
+      const dialog = await screen.findByTestId('test-case-dialog');
+      const closeButtons = within(dialog).getAllByRole('button', { name: 'Close' });
+      await user.click(closeButtons[closeButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+      });
+    });
+
     it('should apply the configured review language to generated example tests', async () => {
       const user = userEvent.setup();
       render(
@@ -447,14 +469,9 @@ describe('TestCaseGenerationProvider', () => {
 
         const body = JSON.parse(options?.body as string);
         const policyName = body.plugin.config.policy.name as string;
-        return new Promise<Response>((resolve, reject) => {
+        return new Promise<Response>((resolve) => {
           const signal = options?.signal as AbortSignal;
           pendingRequests.set(policyName, { resolve, signal });
-          signal.addEventListener(
-            'abort',
-            () => reject(new DOMException('The operation was aborted.', 'AbortError')),
-            { once: true },
-          );
         });
       });
 
@@ -499,6 +516,17 @@ describe('TestCaseGenerationProvider', () => {
       expect(await screen.findByText('Preview for Policy B')).toBeInTheDocument();
       expect(dropdown).toHaveTextContent('Policy B');
       expect(screen.queryByText('Preview for Policy A')).not.toBeInTheDocument();
+
+      pendingRequests.get('Policy A')?.resolve(
+        createJsonResponse({
+          testCases: [{ prompt: 'Preview for Policy A', context: 'Policy A', metadata: {} }],
+        }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Preview for Policy B')).toBeInTheDocument();
+        expect(screen.queryByText('Preview for Policy A')).not.toBeInTheDocument();
+      });
     });
 
     it('should keep the second deeply-identical plugin selected', async () => {
@@ -548,7 +576,12 @@ describe('TestCaseGenerationProvider', () => {
           <TestCaseGenerationProvider
             redTeamConfig={{
               ...MOCK_CONFIG,
-              plugins: ['' as Plugin, { config: {} } as never],
+              plugins: [
+                '' as Plugin,
+                { config: {} } as never,
+                { id: 'policy', config: { policy: '' } },
+                { id: 'policy', config: { policy: {} } } as never,
+              ],
             }}
             allowPluginChange
           >
@@ -566,6 +599,35 @@ describe('TestCaseGenerationProvider', () => {
       await user.click(dropdown);
       expect(screen.getAllByRole('option')).toHaveLength(1);
       expect(screen.getByRole('option', { name: 'Hate Speech' })).toBeInTheDocument();
+    });
+
+    it.each([
+      { strategy: 'basic' as const, label: 'single-turn' },
+      { strategy: 'goat' as const, label: 'multi-turn' },
+    ])('should stop loading when a $label preview returns no test cases', async ({ strategy }) => {
+      const user = userEvent.setup();
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          return Promise.resolve(createJsonResponse({ testCases: [], count: 0 }));
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="cca" testStrategy={strategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+      });
+      expect(callApiMock.mock.calls.some(([path]) => path === '/providers/test')).toBe(false);
     });
 
     it('should generate images (strategy: image)', async () => {
@@ -728,6 +790,95 @@ describe('TestCaseGenerationProvider', () => {
       await waitFor(() => {
         expect(targetResponseComponent).toHaveTextContent('Simulated target output');
       });
+    });
+
+    it('should discard a late target response when switching policies', async () => {
+      const user = userEvent.setup();
+      const target = {
+        id: 'http',
+        config: { url: 'http://localhost:7979', method: 'POST' },
+      };
+      const policyA = {
+        policy: { id: 'aaaaaa111111', name: 'Policy A', text: 'Follow policy A.' },
+      };
+      const policyB = {
+        policy: { id: 'bbbbbb222222', name: 'Policy B', text: 'Follow policy B.' },
+      };
+      const pendingExecutions = new Map<
+        string,
+        { resolve: (response: Response) => void; signal: AbortSignal }
+      >();
+
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          const body = JSON.parse(options?.body as string);
+          const policyName = body.plugin.config.policy.name as string;
+          return Promise.resolve(
+            createJsonResponse({
+              testCases: [{ prompt: `Preview for ${policyName}`, context: policyName }],
+              count: 1,
+            }),
+          );
+        }
+        if (path === '/providers/test') {
+          const body = JSON.parse(options?.body as string);
+          const policyName = String(body.prompt).replace('Preview for ', '');
+          return new Promise<Response>((resolve) => {
+            pendingExecutions.set(policyName, {
+              resolve,
+              signal: options?.signal as AbortSignal,
+            });
+          });
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target,
+              plugins: [
+                { id: 'policy', config: policyA },
+                { id: 'policy', config: policyB },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="policy"
+              pluginConfig={policyA}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(pendingExecutions.has('Policy A')).toBe(true));
+
+      const dropdown = screen.getByTestId('plugin-dropdown');
+      await user.click(dropdown);
+      await user.click(screen.getByRole('option', { name: 'Policy B' }));
+      await waitFor(() => expect(pendingExecutions.has('Policy B')).toBe(true));
+      expect(pendingExecutions.get('Policy A')?.signal.aborted).toBe(true);
+
+      pendingExecutions
+        .get('Policy A')
+        ?.resolve(
+          createJsonResponse({ providerResponse: { output: 'Target for Policy A', error: null } }),
+        );
+      pendingExecutions
+        .get('Policy B')
+        ?.resolve(
+          createJsonResponse({ providerResponse: { output: 'Target for Policy B', error: null } }),
+        );
+
+      expect(await screen.findByText('Target for Policy B')).toBeInTheDocument();
+      expect(screen.queryByText('Target for Policy A')).not.toBeInTheDocument();
+      expect(dropdown).toHaveTextContent('Policy B');
     });
 
     it('should execute multi-turn test cases', async () => {

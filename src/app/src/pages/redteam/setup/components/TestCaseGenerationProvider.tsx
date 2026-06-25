@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
+import { normalizeTestGenerationPlugins } from './testCaseGenerationUtils';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
 import type {
@@ -31,10 +32,10 @@ import type {
 // Re-export types for backward compatibility
 export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
 
-const DEFAULT_PLUGIN: Plugin = 'harmful:hate';
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 const ERROR_MSG_DURATION = 7500; // 7.5s duration
+const NO_TEST_CASES_ERROR = 'No test cases were generated for this plugin.';
 
 // Batch generation constants
 const BATCH_SIZE = 5; // Number of test cases to generate per batch
@@ -233,26 +234,10 @@ export const TestCaseGenerationProvider: React.FC<{
   const [isPrefetching, setIsPrefetching] = useState(false);
 
   // Compute available plugins from config
-  const availablePlugins = useMemo<TargetPlugin[]>(() => {
-    const plugins = (redTeamConfig.plugins ?? []).flatMap<TargetPlugin>((configuredPlugin) => {
-      if (typeof configuredPlugin === 'string') {
-        return configuredPlugin
-          ? [{ id: configuredPlugin as Plugin, config: {}, isStatic: true }]
-          : [];
-      }
-      return configuredPlugin?.id
-        ? [
-            {
-              id: configuredPlugin.id as Plugin,
-              config: configuredPlugin.config ?? {},
-              isStatic: true,
-            },
-          ]
-        : [];
-    });
-
-    return plugins.length > 0 ? plugins : [{ id: DEFAULT_PLUGIN, config: {}, isStatic: true }];
-  }, [redTeamConfig.plugins]);
+  const availablePlugins = useMemo(
+    () => normalizeTestGenerationPlugins(redTeamConfig.plugins),
+    [redTeamConfig.plugins],
+  );
 
   // ===================================================================
   // Refs
@@ -264,6 +249,7 @@ export const TestCaseGenerationProvider: React.FC<{
   const testGenerationAbortController = useRef<AbortController | null>(null);
   const testExecutionAbortController = useRef<AbortController | null>(null);
   const prefetchAbortController = useRef<AbortController | null>(null);
+  const dialogTriggerRef = useRef<HTMLElement | null>(null);
 
   // ===================================================================
   // Callbacks
@@ -300,16 +286,25 @@ export const TestCaseGenerationProvider: React.FC<{
 
         const data = await response.json();
 
+        if (abortController.signal.aborted) {
+          return;
+        }
+
         if (data.error) {
           throw new Error(data?.details ?? data.error);
+        }
+
+        const testCase = Array.isArray(data.testCases) ? data.testCases[0] : data;
+        if (!testCase || typeof testCase.prompt !== 'string' || testCase.prompt.length === 0) {
+          throw new Error(NO_TEST_CASES_ERROR);
         }
 
         setGeneratedTestCases((prev) => [
           ...prev,
           {
-            prompt: data.prompt,
-            context: data.context,
-            metadata: data.metadata,
+            prompt: testCase.prompt,
+            context: testCase.context,
+            metadata: testCase.metadata,
           },
         ]);
       } catch (error) {
@@ -379,12 +374,21 @@ export const TestCaseGenerationProvider: React.FC<{
           abortController,
         );
 
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json();
-          throw new Error(errorData.error || 'Failed to run test');
+        if (abortController.signal.aborted) {
+          return;
         }
 
-        const { providerResponse } = await testResponse.json();
+        const data = await testResponse.json();
+
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        if (!testResponse.ok) {
+          throw new Error(data.error || 'Failed to run test');
+        }
+
+        const { providerResponse } = data;
 
         setTargetResponses((prev) => [
           ...prev,
@@ -414,7 +418,9 @@ export const TestCaseGenerationProvider: React.FC<{
         ]);
         onErrorRef.current?.(error as Error);
       } finally {
-        setIsRunningTest(false);
+        if (testExecutionAbortController.current === abortController) {
+          setIsRunningTest(false);
+        }
       }
     },
     [generatedTestCases, redTeamConfig],
@@ -472,16 +478,26 @@ export const TestCaseGenerationProvider: React.FC<{
 
         const data = await response.json();
 
+        if (abortController.signal.aborted) {
+          return null;
+        }
+
         if (data.error) {
           throw new Error(data?.details ?? data.error);
         }
 
         // Handle batch response
         if (data.testCases && Array.isArray(data.testCases)) {
+          if (data.testCases.length === 0) {
+            throw new Error(NO_TEST_CASES_ERROR);
+          }
           return data.testCases as GeneratedTestCase[];
         }
 
         // Backward compatible: single test case response
+        if (typeof data.prompt !== 'string' || data.prompt.length === 0) {
+          throw new Error(NO_TEST_CASES_ERROR);
+        }
         return [
           {
             prompt: data.prompt,
@@ -547,6 +563,14 @@ export const TestCaseGenerationProvider: React.FC<{
       onSuccess?: OnGenerationSuccess,
       onError?: OnGenerationError,
     ) => {
+      if (
+        !dialogTriggerRef.current &&
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body
+      ) {
+        dialogTriggerRef.current = document.activeElement;
+      }
+
       // Abort any ongoing operations & reset state
       testGenerationAbortController.current?.abort();
       testExecutionAbortController.current?.abort();
@@ -592,6 +616,14 @@ export const TestCaseGenerationProvider: React.FC<{
     setIsDialogOpen(false);
     resetState();
   }, [resetState]);
+
+  const handleCloseAutoFocus = useCallback(() => {
+    const trigger = dialogTriggerRef.current;
+    dialogTriggerRef.current = null;
+    if (trigger?.isConnected) {
+      trigger.focus();
+    }
+  }, []);
 
   /**
    * Regenerates and optionally evaluates the plugin/strategy combination.
@@ -787,6 +819,7 @@ export const TestCaseGenerationProvider: React.FC<{
       <TestCaseDialog
         open={isDialogOpen}
         onClose={handleCloseDialog}
+        onCloseAutoFocus={handleCloseAutoFocus}
         onRegenerate={handleRegenerate}
         onContinue={handleContinue}
         plugin={plugin}

@@ -403,6 +403,44 @@ describe('TestCaseDialog', () => {
       expect(screen.getByRole('option', { name: 'PII Protection Suite (2)' })).toBeInTheDocument();
     });
 
+    it('should keep generated labels unique when a policy name contains a duplicate suffix', async () => {
+      const user = userEvent.setup();
+      const availablePlugins = [
+        {
+          id: 'policy' as const,
+          config: {
+            policy: {
+              id: 'abcdef123456',
+              text: 'Follow the policy.',
+              name: 'PII Protection Suite (1)',
+            },
+          },
+          isStatic: true,
+        },
+        { id: 'pii' as const, config: { name: 'email' }, isStatic: true },
+        { id: 'pii' as const, config: { name: 'phone' }, isStatic: true },
+      ];
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={availablePlugins[0]}
+          availablePlugins={availablePlugins}
+          allowPluginChange={true}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox', { name: 'Preview plugin' }));
+      const optionLabels = screen.getAllByRole('option').map((option) => option.textContent);
+
+      expect(optionLabels).toEqual([
+        'PII Protection Suite (1)',
+        'PII Protection Suite (2)',
+        'PII Protection Suite (3)',
+      ]);
+      expect(new Set(optionLabels).size).toBe(optionLabels.length);
+    });
+
     it('should keep the plugin selector controlled while the preview closes', () => {
       const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
@@ -426,6 +464,20 @@ describe('TestCaseDialog', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 
       expect(screen.queryByTestId('plugin-dropdown')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('loading announcements', () => {
+    it.each([
+      { props: { isGenerating: true }, announcement: 'Generating preview' },
+      {
+        props: { isGenerating: false, isRunningTest: true },
+        announcement: 'Running preview against target',
+      },
+    ])('announces $announcement', ({ props, announcement }) => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} {...props} />);
+
+      expect(screen.getByRole('status')).toHaveTextContent(announcement);
     });
   });
 

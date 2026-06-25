@@ -50,6 +50,7 @@ import type {
 interface TestCaseDialogProps {
   open: boolean;
   onClose: () => void;
+  onCloseAutoFocus?: () => void;
   plugin: TargetPlugin | null;
   strategy: TargetStrategy | null;
   isGenerating: boolean;
@@ -68,6 +69,7 @@ interface TestCaseDialogProps {
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
+  onCloseAutoFocus,
   plugin,
   strategy,
   isGenerating,
@@ -189,14 +191,24 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
     }
 
-    const labelOccurrences = new Map<string, number>();
+    const reservedLabels = new Set(baseLabels);
+    const usedLabels = new Set<string>();
+    const nextSuffixes = new Map<string, number>();
     return baseLabels.map((label) => {
       if ((labelCounts.get(label) ?? 0) < 2) {
+        usedLabels.add(label);
         return label;
       }
-      const occurrence = (labelOccurrences.get(label) ?? 0) + 1;
-      labelOccurrences.set(label, occurrence);
-      return `${label} (${occurrence})`;
+
+      let suffix = nextSuffixes.get(label) ?? 1;
+      let candidate = `${label} (${suffix})`;
+      while (reservedLabels.has(candidate) || usedLabels.has(candidate)) {
+        suffix += 1;
+        candidate = `${label} (${suffix})`;
+      }
+      nextSuffixes.set(label, suffix + 1);
+      usedLabels.add(candidate);
+      return candidate;
     });
   }, [availablePlugins]);
 
@@ -205,6 +217,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       <DialogContent
         className="z-[10000] flex max-h-[85vh] flex-col sm:max-w-3xl"
         data-testid="test-case-dialog"
+        onCloseAutoFocus={(event) => {
+          if (onCloseAutoFocus) {
+            event.preventDefault();
+            onCloseAutoFocus();
+          }
+        }}
       >
         <DialogHeader className="flex flex-col items-start gap-4 pr-8 sm:flex-row sm:justify-between">
           <div>
@@ -249,6 +267,13 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         </DialogHeader>
 
         <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
+          <div aria-live="polite" className="sr-only" role="status">
+            {isGenerating
+              ? 'Generating preview'
+              : isRunningTest
+                ? 'Running preview against target'
+                : ''}
+          </div>
           <div className="max-h-[50vh] overflow-y-auto">
             <ChatMessages
               messages={turnMessages}
