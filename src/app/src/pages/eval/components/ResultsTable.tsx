@@ -461,28 +461,40 @@ function trimJsonWhitespace(value: string): string {
 function looksLikeJsonContainer(value: string): boolean {
   let start = 0;
   let end = value.length;
-  let scanned = 0;
+  const scanLimit =
+    value.length <= MAX_JSON_CELL_PRETTIFY_LENGTH ? value.length : MAX_JSON_BOUNDARY_SCAN;
+  let leadingScanned = 0;
 
-  while (start < end && value[start].trim() === '') {
-    if (++scanned >= MAX_JSON_BOUNDARY_SCAN) {
-      return true;
-    }
+  while (start < end && leadingScanned < scanLimit && value[start].trim() === '') {
     start++;
+    leadingScanned++;
   }
 
-  const opening = value[start];
-  if (opening !== '{' && opening !== '[') {
+  if (start >= end) {
     return false;
   }
 
-  while (end > start && value[end - 1].trim() === '') {
-    if (++scanned >= MAX_JSON_BOUNDARY_SCAN) {
-      return true;
-    }
-    end--;
+  const opening = value[start].trim() === '' ? undefined : value[start];
+  if (opening !== undefined && opening !== '{' && opening !== '[') {
+    return false;
   }
 
-  return (opening === '{' && value[end - 1] === '}') || (opening === '[' && value[end - 1] === ']');
+  let trailingScanned = 0;
+  while (end > start && trailingScanned < scanLimit && value[end - 1].trim() === '') {
+    end--;
+    trailingScanned++;
+  }
+
+  const closing = value[end - 1]?.trim() === '' ? undefined : value[end - 1];
+  if (closing !== undefined && closing !== '}' && closing !== ']') {
+    return false;
+  }
+
+  if (opening === undefined || closing === undefined) {
+    return true;
+  }
+
+  return (opening === '{' && closing === '}') || (opening === '[' && closing === ']');
 }
 
 function prettifyJsonPreservingTokens(value: string): string | undefined {

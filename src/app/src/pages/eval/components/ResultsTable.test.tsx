@@ -3096,8 +3096,10 @@ describe('ResultsTable Variable JSON Formatting', () => {
     splitSpy.mockRestore();
   });
 
-  it('does not classify ordinary Markdown with trailing whitespace as JSON', () => {
-    const markdown = `**ordinary-markdown**${' '.repeat(64)}`;
+  it.each([
+    ['leading', `${'\n'.repeat(64)}**ordinary-markdown**`],
+    ['trailing', `**ordinary-markdown**${' '.repeat(64)}`],
+  ])('does not classify ordinary Markdown with %s whitespace as JSON', (_position, markdown) => {
     mockTableState(createMockTable({ vars: [markdown] }));
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
