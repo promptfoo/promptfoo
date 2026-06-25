@@ -75,6 +75,7 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
+const MAX_JSON_STRING_PRETTIFY_LENGTH = 100_000;
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -405,21 +406,65 @@ function renderMediaVariableCell({
   );
 }
 
+function isJsonWhitespace(char: string): boolean {
+  return char === ' ' || char === '\n' || char === '\r' || char === '\t';
+}
+
+function stripJsonWhitespace(value: string): string {
+  let compact = '';
+  let inString = false;
+  let escaped = false;
+
+  for (const char of value) {
+    if (!inString && isJsonWhitespace(char)) {
+      continue;
+    }
+
+    compact += char;
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    }
+  }
+
+  return compact;
+}
+
 function formatVariableCellValue({
   value,
   renderMarkdown,
   prettifyJson,
 }: {
-  value: string | object;
+  value: unknown;
   renderMarkdown: boolean;
   prettifyJson: boolean;
 }): { value: string; isJsonPrettified: boolean } {
-  const isObjectValue = typeof value === 'object';
-  let formattedValue =
-    typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? String(value));
-  let isJsonPrettified = prettifyJson && isObjectValue && value !== null;
+  const isObjectValue = typeof value === 'object' && value !== null;
+  let formattedValue = typeof value === 'string' ? value : String(value);
+  if (typeof value !== 'string') {
+    try {
+      formattedValue = JSON.stringify(value, null, 2) ?? String(value);
+    } catch {
+      formattedValue = String(value);
+    }
+  }
+  let isJsonPrettified = prettifyJson && isObjectValue;
 
-  if (prettifyJson && typeof value === 'string') {
+  if (
+    prettifyJson &&
+    typeof value === 'string' &&
+    value.length <= MAX_JSON_STRING_PRETTIFY_LENGTH
+  ) {
     const trimmed = value.trim();
     const looksLikeJson =
       (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
@@ -428,7 +473,14 @@ function formatVariableCellValue({
     if (looksLikeJson) {
       try {
         const parsed = JSON.parse(trimmed);
-        if (typeof parsed === 'object' && parsed !== null) {
+        const compactParsed = JSON.stringify(parsed);
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          compactParsed === stripJsonWhitespace(trimmed)
+        ) {
+          // Only reserialize when doing so changes whitespace and nothing else. Unsafe numbers,
+          // duplicate keys, key reordering, and noncanonical tokens remain byte-faithful.
           formattedValue = JSON.stringify(parsed, null, 2);
           isJsonPrettified = true;
         }
@@ -444,6 +496,43 @@ function formatVariableCellValue({
 
   return { value: formattedValue, isJsonPrettified };
 }
+
+const VariableCellContent = React.memo(function VariableCellContent({
+  value,
+  renderMarkdown,
+  renderPlainMarkdown = false,
+  prettifyJson,
+  maxTextLength,
+}: {
+  value: unknown;
+  renderMarkdown: boolean;
+  renderPlainMarkdown?: boolean;
+  prettifyJson: boolean;
+  maxTextLength: number;
+}) {
+  const { value: formattedValue, isJsonPrettified } = React.useMemo(
+    () => formatVariableCellValue({ value, renderMarkdown, prettifyJson }),
+    [prettifyJson, renderMarkdown, value],
+  );
+
+  if (renderMarkdown && (renderPlainMarkdown || isJsonPrettified)) {
+    return <VariableMarkdownCell value={formattedValue} maxTextLength={maxTextLength} />;
+  }
+
+  if (isJsonPrettified) {
+    return (
+      <div
+        role="code"
+        data-testid="prettified-json-variable"
+        className="whitespace-pre-wrap font-mono"
+      >
+        <TruncatedText text={formattedValue} maxLength={maxTextLength} />
+      </div>
+    );
+  }
+
+  return <TruncatedText text={formattedValue} maxLength={maxTextLength} />;
+});
 
 function renderDecodedVariableCell({
   value,
@@ -566,27 +655,18 @@ function renderVariableCell({
     return mediaCell;
   }
 
-  const { value: formattedValue, isJsonPrettified } = formatVariableCellValue({
-    value,
-    renderMarkdown,
-    prettifyJson,
-  });
-
-  const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={formattedValue} maxTextLength={maxTextLength} />
-  ) : isJsonPrettified ? (
-    <div
-      data-testid="prettified-json-variable"
-      style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
-    >
-      <TruncatedText text={formattedValue} maxLength={maxTextLength} />
-    </div>
-  ) : (
-    <TruncatedText text={formattedValue} maxLength={maxTextLength} />
+  const cellContent = (
+    <VariableCellContent
+      value={value}
+      renderMarkdown={renderMarkdown}
+      renderPlainMarkdown
+      prettifyJson={prettifyJson}
+      maxTextLength={maxTextLength}
+    />
   );
 
   return renderDecodedVariableCell({
-    value: formattedValue,
+    value,
     varName,
     row,
     injectVarName,
@@ -2112,31 +2192,14 @@ function ResultsTable({
                 />
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
-                const value = info.getValue();
-                const { value: formattedValue, isJsonPrettified } = formatVariableCellValue({
-                  value,
-                  renderMarkdown,
-                  prettifyJson,
-                });
                 return (
                   <div className="cell">
-                    {isJsonPrettified ? (
-                      renderMarkdown ? (
-                        <VariableMarkdownCell
-                          value={formattedValue}
-                          maxTextLength={maxTextLength}
-                        />
-                      ) : (
-                        <div
-                          data-testid="prettified-json-variable"
-                          style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
-                        >
-                          <TruncatedText text={formattedValue} maxLength={maxTextLength} />
-                        </div>
-                      )
-                    ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
-                    )}
+                    <VariableCellContent
+                      value={info.getValue()}
+                      renderMarkdown={renderMarkdown}
+                      prettifyJson={prettifyJson}
+                      maxTextLength={maxTextLength}
+                    />
                   </div>
                 );
               },
