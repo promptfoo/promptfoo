@@ -295,6 +295,27 @@ describe('optimize command', () => {
     );
   });
 
+  it('applies configured filters to the implicit default row', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        defaultTest: { metadata: { tier: 'gold' }, vars: { fallback: true } },
+      },
+      basePath: '',
+      commandLineOptions: { filterMetadata: 'tier=silver' },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ tests: [], scenarios: [] }),
+      expect.any(Object),
+    );
+  });
+
   it('leaves scenario ranges for the evaluator to apply after expansion', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: { evaluateOptions: { filterRange: '1:2' } },

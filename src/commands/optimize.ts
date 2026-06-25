@@ -70,15 +70,25 @@ async function applyOptimizationTestFilters(
   }
 
   const explicitTestCount = testSuite.tests?.length ?? 0;
-  // A defaultTest-only suite has one implicit row. Sampling cannot reduce it,
-  // and the optimizer already delegates range handling to the evaluator.
-  if (explicitTestCount === 0 && testSuite.scenarios === undefined) {
-    return { config, testSuite };
+  const shouldApplyFiltersToImplicitDefaultTest =
+    testSuite.scenarios === undefined && explicitTestCount === 0;
+  let filterableTestSuite = testSuite;
+  if (shouldApplyFiltersToImplicitDefaultTest) {
+    const defaultMetadata =
+      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
+    filterableTestSuite = {
+      ...testSuite,
+      tests: [defaultMetadata ? { metadata: defaultMetadata } : {}],
+    };
   }
 
-  const tests = await filterTests(testSuite, filterOptions);
+  // resolveConfigs has already applied scenario-local filters; this mirrors doEval's second
+  // pass over top-level tests while leaving scenario ranges for post-expansion evaluation.
+  const tests = await filterTests(filterableTestSuite, filterOptions);
   const shouldSuppressImplicitDefaultTest =
-    !hasScenarios && tests.length === 0 && explicitTestCount > 0;
+    !hasScenarios &&
+    tests.length === 0 &&
+    (explicitTestCount > 0 || shouldApplyFiltersToImplicitDefaultTest);
 
   return {
     config:
@@ -86,7 +96,7 @@ async function applyOptimizationTestFilters(
         ? config
         : { ...config, evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } },
     testSuite: {
-      ...testSuite,
+      ...filterableTestSuite,
       tests,
       ...(shouldSuppressImplicitDefaultTest ? { scenarios: [] } : {}),
     },
