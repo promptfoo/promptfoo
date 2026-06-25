@@ -96,12 +96,14 @@ describe('remote blob upload', () => {
     expect(cloudConfig.getApiKey).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates cancellation instead of downgrading it to an unavailable blob', async () => {
+  it.each([
+    'AbortError',
+    'AbortException',
+  ])('propagates %s cancellation instead of downgrading it to an unavailable blob', async (errorName) => {
     const controller = new AbortController();
-    controller.abort();
-    vi.mocked(fetchWithProxy).mockImplementation((_url, options) =>
-      Promise.reject(options?.signal?.reason),
-    );
+    const cancellation = new Error('cancelled');
+    cancellation.name = errorName;
+    vi.mocked(fetchWithProxy).mockRejectedValue(cancellation);
 
     await expect(
       uploadBlobRemote(
@@ -110,7 +112,7 @@ describe('remote blob upload', () => {
         { evalId: 'eval-123', location: 'share', kind: 'image' },
         controller.signal,
       ),
-    ).rejects.toMatchObject({ name: 'AbortError' });
+    ).rejects.toBe(cancellation);
     expect(fetchWithProxy).toHaveBeenCalledWith(
       'https://api.example.com/api/blobs',
       expect.objectContaining({ signal: controller.signal }),

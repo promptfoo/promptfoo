@@ -1,5 +1,13 @@
 import { callApi } from '@app/utils/api';
-import type { ShareCheckDomainResponse } from '@promptfoo/types/api/server';
+
+// App code cannot depend on server-only contracts; the guard below validates this DTO at runtime.
+interface ShareCheckDomainResponse {
+  domain: string;
+  isCloudEnabled: boolean;
+  sharingEnabled: boolean;
+  sharingDisabledReason?: string;
+  isRetryable: boolean;
+}
 
 const DEFAULT_DISABLED_REASON =
   'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';

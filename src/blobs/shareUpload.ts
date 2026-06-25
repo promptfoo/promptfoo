@@ -1,5 +1,4 @@
 import logger from '../logger';
-import { isAbortError } from '../util/fetch/errors';
 import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
 import { uploadBlobRemote } from './remoteUpload';
@@ -68,7 +67,10 @@ async function uploadAuthorizedBlob(
 
     return true;
   } catch (error) {
-    if (isAbortError(error)) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'AbortException')
+    ) {
       throw error;
     }
     // Fail closed but keep the share alive: an authorization or upload error skips

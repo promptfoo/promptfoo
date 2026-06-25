@@ -7,9 +7,11 @@ import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import {
+  checkCloudShareAuthentication,
   createShareableModelAuditUrl,
   createShareableUrl,
   determineShareDomain,
+  getSharingDisabledReason,
   hasEvalBeenShared,
   hasModelAuditBeenShared,
   isSharingEnabled,
@@ -95,6 +97,7 @@ vi.mock('../src/globalConfig/accounts', () => ({
 }));
 
 vi.mock('../src/util/cloud', () => ({
+  ConfigPermissionError: class ConfigPermissionError extends Error {},
   makeRequest: vi.fn(),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getOrgContext: vi.fn().mockResolvedValue(null),
@@ -233,6 +236,33 @@ describe('isSharingEnabled', () => {
     };
 
     expect(isSharingEnabled(mockEval as Eval)).toBe(false);
+  });
+});
+
+describe('share availability helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+  });
+
+  it('describes whether sharing is unconfigured or globally disabled', () => {
+    expect(getSharingDisabledReason()).toBe(
+      'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
+    );
+
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    expect(getSharingDisabledReason()).toBe('Sharing is disabled by PROMPTFOO_DISABLE_SHARING.');
+  });
+
+  it('validates Cloud authentication without logging the response body', async () => {
+    const response = Response.json({ team: 'sensitive' });
+    vi.mocked(makeRequest).mockResolvedValue(response);
+
+    await expect(checkCloudShareAuthentication()).resolves.toBe(response);
+    expect(makeRequest).toHaveBeenCalledWith('/users/me/teams', 'GET', undefined, {
+      silent: true,
+    });
   });
 });
 

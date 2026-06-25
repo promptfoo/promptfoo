@@ -2,7 +2,6 @@ import { getEnvBool } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { isAbortError } from '../util/fetch/errors';
 
 import type { BlobStoreResult } from './types';
 
@@ -94,7 +93,10 @@ export async function uploadBlobRemote(
     }
     return data;
   } catch (error) {
-    if (isAbortError(error)) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'AbortException')
+    ) {
       throw error;
     }
     logger.debug('[RemoteBlob] Error uploading blob', {

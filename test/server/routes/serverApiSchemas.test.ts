@@ -20,11 +20,6 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   },
 }));
 
-vi.mock('../../../src/envars', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/envars')>()),
-  getEnvBool: vi.fn(),
-}));
-
 vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
@@ -46,12 +41,25 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteHealthUrl: vi.fn(),
 }));
 
-vi.mock('../../../src/share', () => ({
-  createShareableUrl: vi.fn(),
-  determineShareDomain: vi.fn(),
-  isSharingEnabled: vi.fn(),
-  stripAuthFromUrl: vi.fn((url: string) => url),
-}));
+vi.mock('../../../src/share', () => {
+  class ConfigPermissionError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'ConfigPermissionError';
+    }
+  }
+  return {
+    checkCloudShareAuthentication: vi.fn(),
+    ConfigPermissionError,
+    createShareableUrl: vi.fn(),
+    determineShareDomain: vi.fn(),
+    getSharingDisabledReason: vi.fn(),
+    isAbortError: (error: unknown) =>
+      error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException'),
+    isSharingEnabled: vi.fn(),
+    stripAuthFromUrl: vi.fn((url: string) => url),
+  };
+});
 
 vi.mock('../../../src/telemetry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/telemetry')>();
@@ -79,25 +87,20 @@ vi.mock('../../../src/util/database', () => ({
   readResult: vi.fn(),
 }));
 
-vi.mock('../../../src/util/cloud', () => {
-  class ConfigPermissionError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = 'ConfigPermissionError';
-    }
-  }
-  return { ConfigPermissionError, makeRequest: vi.fn() };
-});
-
-import { getEnvBool } from '../../../src/envars';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import Eval, { getEvalSummaries } from '../../../src/models/eval';
 import { getRemoteHealthUrl } from '../../../src/redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain, isSharingEnabled } from '../../../src/share';
+import {
+  ConfigPermissionError,
+  checkCloudShareAuthentication,
+  createShareableUrl,
+  determineShareDomain,
+  getSharingDisabledReason,
+  isSharingEnabled,
+} from '../../../src/share';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
-import { ConfigPermissionError, makeRequest } from '../../../src/util/cloud';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -110,8 +113,10 @@ const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedEval = vi.mocked(Eval);
 const mockedGetEvalSummaries = vi.mocked(getEvalSummaries);
 const mockedGetRemoteHealthUrl = vi.mocked(getRemoteHealthUrl);
+const mockedCheckCloudShareAuthentication = vi.mocked(checkCloudShareAuthentication);
 const mockedCreateShareableUrl = vi.mocked(createShareableUrl);
 const mockedDetermineShareDomain = vi.mocked(determineShareDomain);
+const mockedGetSharingDisabledReason = vi.mocked(getSharingDisabledReason);
 const mockedIsSharingEnabled = vi.mocked(isSharingEnabled);
 const mockedTelemetry = vi.mocked(telemetry);
 const mockedSynthesizeFromTestSuite = vi.mocked(synthesizeFromTestSuite);
@@ -121,8 +126,6 @@ const mockedGetPromptsForTestCasesHash = vi.mocked(getPromptsForTestCasesHash);
 const mockedGetStandaloneEvals = vi.mocked(getStandaloneEvals);
 const mockedGetTestCases = vi.mocked(getTestCases);
 const mockedReadResult = vi.mocked(readResult);
-const mockedGetEnvBool = vi.mocked(getEnvBool);
-const mockedMakeRequest = vi.mocked(makeRequest);
 
 describe('inline server API DTO validation', () => {
   let api: ReturnType<typeof request.agent>;
@@ -148,7 +151,9 @@ describe('inline server API DTO validation', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    mockedGetEnvBool.mockReturnValue(false);
+    mockedGetSharingDisabledReason.mockReturnValue(
+      'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
+    );
     // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
     // by one test cannot leak into another.
     promptCacheService.invalidate();
@@ -312,7 +317,7 @@ describe('inline server API DTO validation', () => {
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
     mockedIsSharingEnabled.mockReturnValue(true);
-    mockedMakeRequest.mockResolvedValue(Response.json({}));
+    mockedCheckCloudShareAuthentication.mockResolvedValue(Response.json({}));
 
     const response = await api.get('/api/results/share/check-domain?id=eval-1');
 
@@ -323,9 +328,7 @@ describe('inline server API DTO validation', () => {
       sharingEnabled: true,
       isRetryable: false,
     });
-    expect(mockedMakeRequest).toHaveBeenCalledWith('/users/me/teams', 'GET', undefined, {
-      silent: true,
-    });
+    expect(mockedCheckCloudShareAuthentication).toHaveBeenCalledOnce();
   });
 
   it('reports unconfigured sharing without probing Cloud', async () => {
@@ -345,7 +348,7 @@ describe('inline server API DTO validation', () => {
         'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.',
       isRetryable: false,
     });
-    expect(mockedMakeRequest).not.toHaveBeenCalled();
+    expect(mockedCheckCloudShareAuthentication).not.toHaveBeenCalled();
   });
 
   it('honors PROMPTFOO_DISABLE_SHARING without probing Cloud', async () => {
@@ -353,7 +356,9 @@ describe('inline server API DTO validation', () => {
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
     mockedIsSharingEnabled.mockReturnValue(false);
-    mockedGetEnvBool.mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+    mockedGetSharingDisabledReason.mockReturnValue(
+      'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.',
+    );
 
     const response = await api.get('/api/results/share/check-domain?id=eval-1');
 
@@ -362,7 +367,7 @@ describe('inline server API DTO validation', () => {
       sharingDisabledReason: 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.',
       isRetryable: false,
     });
-    expect(mockedMakeRequest).not.toHaveBeenCalled();
+    expect(mockedCheckCloudShareAuthentication).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -375,7 +380,7 @@ describe('inline server API DTO validation', () => {
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
     mockedIsSharingEnabled.mockReturnValue(true);
-    mockedMakeRequest.mockResolvedValue(
+    mockedCheckCloudShareAuthentication.mockResolvedValue(
       new Response('sensitive upstream response', {
         status,
         statusText: 'INTERNAL SECRET STATUS',
@@ -399,7 +404,9 @@ describe('inline server API DTO validation', () => {
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://promptfoo.app' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
     mockedIsSharingEnabled.mockReturnValue(true);
-    mockedMakeRequest.mockRejectedValue(new Error('socket contained private hostname'));
+    mockedCheckCloudShareAuthentication.mockRejectedValue(
+      new Error('socket contained private hostname'),
+    );
 
     const response = await api.get('/api/results/share/check-domain?id=eval-1');
 

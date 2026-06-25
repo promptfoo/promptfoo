@@ -19,7 +19,6 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
-import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -28,8 +27,12 @@ import Eval, { getEvalSummaries } from '../models/eval';
 import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import {
+  ConfigPermissionError,
+  checkCloudShareAuthentication,
   createShareableUrl,
   determineShareDomain,
+  getSharingDisabledReason,
+  isAbortError,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../share';
@@ -37,14 +40,12 @@ import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { ConfigPermissionError, makeRequest as makeCloudRequest } from '../util/cloud';
 import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
   readResult,
 } from '../util/database';
-import { isAbortError } from '../util/fetch/errors';
 import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
@@ -309,17 +310,13 @@ export function createApp() {
     let isRetryable = false;
 
     if (!sharingEnabled) {
-      sharingDisabledReason = getEnvBool('PROMPTFOO_DISABLE_SHARING')
-        ? 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.'
-        : 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
+      sharingDisabledReason = getSharingDisabledReason();
     }
 
     // If cloud is enabled, validate that the auth token is actually valid
     if (isCloudEnabled && sharingEnabled) {
       try {
-        const response = await makeCloudRequest('/users/me/teams', 'GET', undefined, {
-          silent: true,
-        });
+        const response = await checkCloudShareAuthentication();
         if (!response.ok) {
           sharingEnabled = false;
           ({ sharingDisabledReason, isRetryable } = describeCloudSharingFailure(response.status));

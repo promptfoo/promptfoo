@@ -11,6 +11,7 @@ import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import {
+  ConfigPermissionError,
   checkCloudPermissions,
   getOrgContext,
   makeRequest as makeCloudRequest,
@@ -23,6 +24,8 @@ import { redactAzureBlobSasTokens } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
+
+export { ConfigPermissionError, isAbortError };
 
 interface ShareDomainResult {
   domain: string;
@@ -79,6 +82,16 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   }
 
   return false;
+}
+
+export function getSharingDisabledReason(): string {
+  return getEnvBool('PROMPTFOO_DISABLE_SHARING')
+    ? 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.'
+    : 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
+}
+
+export function checkCloudShareAuthentication(): Promise<Response> {
+  return makeCloudRequest('/users/me/teams', 'GET', undefined, { silent: true });
 }
 
 export function isModelAuditSharingEnabled(): boolean {

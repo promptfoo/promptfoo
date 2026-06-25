@@ -235,9 +235,14 @@ describe('share-time blob upload', () => {
     );
   });
 
-  it('propagates cancellation from an in-flight remote blob upload', async () => {
+  it.each([
+    'AbortError',
+    'AbortException',
+  ])('propagates %s cancellation from an in-flight remote blob upload', async (errorName) => {
     const hash = '8'.repeat(64);
     const controller = new AbortController();
+    const cancellation = new Error('cancelled');
+    cancellation.name = errorName;
     vi.mocked(uploadBlobRemote).mockImplementation(
       (_buffer, _mimeType, _context, signal) =>
         new Promise((_resolve, reject) => {
@@ -251,10 +256,10 @@ describe('share-time blob upload', () => {
       { localEvalId: 'local-eval-abort', remoteEvalId: 'remote-eval-abort' },
       controller.signal,
     );
-    const rejection = expect(upload).rejects.toMatchObject({ name: 'AbortError' });
+    const rejection = expect(upload).rejects.toBe(cancellation);
     await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledOnce());
 
-    controller.abort();
+    controller.abort(cancellation);
 
     await rejection;
     expect(uploadBlobRemote).toHaveBeenCalledWith(
