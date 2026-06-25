@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { OllamaCompletionProvider } from '../../../src/providers/ollama';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import {
@@ -360,6 +361,19 @@ describe('shared redteam provider utilities', () => {
         purpose: 'attack',
       });
 
+      expect(loaded.config).toEqual({});
+    });
+
+    it('does not mistake a native completion provider for OpenAI completions', async () => {
+      const loaded = new OllamaCompletionProvider('llama3.2', { config: {} });
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+
+      const result = await redteamProviderManager.getProvider({
+        provider: 'ollama:completion:llama3.2',
+        purpose: 'attack',
+      });
+
+      expect(result).toBe(loaded);
       expect(loaded.config).toEqual({});
     });
 

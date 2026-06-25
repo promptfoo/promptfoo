@@ -92,16 +92,38 @@ export function resetRedteamProviderLoader(): void {
  * provider-specific: native providers use different request schemas, while the Responses API
  * uses `max_output_tokens` and chat/completions use different aliases.
  */
-function isOpenAiOutputCapProvider(provider: ApiProvider): boolean {
-  const providerId = provider.id();
+type OpenAiOutputCapKind = 'chat' | 'completion' | 'responses';
+
+function hasProviderPrototype(provider: ApiProvider, constructorName: string): boolean {
+  let prototype = Object.getPrototypeOf(provider);
+  while (prototype) {
+    if (prototype.constructor?.name === constructorName) {
+      return true;
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return false;
+}
+
+function getOpenAiOutputCapKind(provider: ApiProvider): OpenAiOutputCapKind | undefined {
   const constructorName = provider.constructor?.name ?? '';
-  return (
-    provider instanceof OpenAiChatCompletionProvider ||
-    providerId.includes(':responses:') ||
-    constructorName.includes('ResponsesProvider') ||
-    providerId.includes(':completion:') ||
-    constructorName === 'OpenAiCompletionProvider'
-  );
+  if (
+    hasProviderPrototype(provider, 'OpenAiResponsesProvider') ||
+    constructorName === 'AzureResponsesProvider' ||
+    constructorName === 'XAIResponsesProvider'
+  ) {
+    return 'responses';
+  }
+  if (provider instanceof OpenAiChatCompletionProvider) {
+    return 'chat';
+  }
+  if (
+    hasProviderPrototype(provider, 'OpenAiCompletionProvider') ||
+    constructorName === 'AzureCompletionProvider'
+  ) {
+    return 'completion';
+  }
+  return undefined;
 }
 
 function cloneProviderConfig(provider: ApiProvider): ApiProvider {
@@ -122,7 +144,8 @@ function cloneProviderConfig(provider: ApiProvider): ApiProvider {
 }
 
 function withDefaultOutputCap(provider: ApiProvider): ApiProvider {
-  if (!isOpenAiOutputCapProvider(provider)) {
+  const providerKind = getOpenAiOutputCapKind(provider);
+  if (!providerKind) {
     return provider;
   }
 
@@ -136,22 +159,19 @@ function withDefaultOutputCap(provider: ApiProvider): ApiProvider {
   }
 
   const defaultCap = getRedteamProviderMaxTokens();
-  const providerId = cappedProvider.id();
-  const constructorName = cappedProvider.constructor?.name ?? '';
-
-  if (providerId.includes(':responses:') || constructorName.includes('ResponsesProvider')) {
+  if (providerKind === 'responses') {
     config.max_output_tokens ??= defaultCap;
     return cappedProvider;
   }
 
-  if (cappedProvider instanceof OpenAiChatCompletionProvider) {
+  if (providerKind === 'chat') {
     const configuredCap = config.max_completion_tokens ?? config.max_tokens ?? defaultCap;
     config.max_tokens ??= configuredCap;
     config.max_completion_tokens ??= configuredCap;
     return cappedProvider;
   }
 
-  if (providerId.includes(':completion:') || constructorName === 'OpenAiCompletionProvider') {
+  if (providerKind === 'completion') {
     config.max_tokens ??= defaultCap;
   }
   return cappedProvider;
