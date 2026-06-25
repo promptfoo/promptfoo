@@ -79,7 +79,11 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
 // retained output close to the normal truncated-cell display range.
 const MAX_JSON_CELL_PRETTIFY_LENGTH = 512;
 const MAX_JSON_PRETTIFY_DEPTH = 64;
+const MAX_JSON_SERIALIZATION_NODES = 512;
 const JSON_PRETTIFY_INDENT = 2;
+const JSON_SERIALIZATION_LIMIT_EXCEEDED = Symbol('json-serialization-limit-exceeded');
+const JSON_DISPLAY_LIMIT_MESSAGE =
+  '[JSON value exceeds safe display limit; export results to inspect]';
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -500,25 +504,83 @@ function prettifyJsonPreservingTokens(value: string): string | undefined {
   return formatted;
 }
 
+function stringifyStructuredValue(value: object): {
+  value: string;
+  serializedAsJson: boolean;
+} {
+  const activeObjects = new WeakSet<object>();
+  const ancestors: object[] = [];
+  let estimatedLength = 0;
+  let nodeCount = 0;
+
+  const account = (length: number) => {
+    estimatedLength += length;
+    if (estimatedLength > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+      throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
+    }
+  };
+
+  const replacer = function (this: unknown, key: string, currentValue: unknown): unknown {
+    if (++nodeCount > MAX_JSON_SERIALIZATION_NODES) {
+      throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
+    }
+    while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+      activeObjects.delete(ancestors.pop()!);
+    }
+
+    if (key) {
+      if (key.length > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+        throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
+      }
+      account(Array.isArray(this) ? 1 : JSON.stringify(key).length + 2);
+    }
+
+    if (currentValue !== null && typeof currentValue === 'object') {
+      if (activeObjects.has(currentValue)) {
+        throw new TypeError('Circular JSON value');
+      }
+      if (ancestors.length >= MAX_JSON_PRETTIFY_DEPTH) {
+        throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
+      }
+      activeObjects.add(currentValue);
+      ancestors.push(currentValue);
+      account(2);
+      return currentValue;
+    }
+
+    if (typeof currentValue === 'bigint') {
+      throw new TypeError('BigInt is not JSON serializable');
+    }
+    if (typeof currentValue === 'string' && currentValue.length > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+      throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
+    }
+
+    const serializedPrimitive = JSON.stringify(currentValue);
+    account(serializedPrimitive?.length ?? (Array.isArray(this) ? 4 : 0));
+    return currentValue;
+  };
+
+  try {
+    const serialized = JSON.stringify(value, replacer);
+    if (serialized !== undefined) {
+      return { value: serialized, serializedAsJson: true };
+    }
+  } catch (error) {
+    if (error === JSON_SERIALIZATION_LIMIT_EXCEEDED) {
+      return { value: JSON_DISPLAY_LIMIT_MESSAGE, serializedAsJson: false };
+    }
+    return { value: '[Unserializable value]', serializedAsJson: false };
+  }
+
+  return { value: '[Unserializable value]', serializedAsJson: false };
+}
+
 function stringifyVariableValue(value: unknown): {
   value: string;
   serializedAsJson: boolean;
 } {
-  if (typeof value !== 'object' || value === null) {
-    try {
-      return { value: String(value), serializedAsJson: false };
-    } catch {
-      return { value: '[Unserializable value]', serializedAsJson: false };
-    }
-  }
-
-  try {
-    const serialized = JSON.stringify(value, null, JSON_PRETTIFY_INDENT);
-    if (serialized !== undefined) {
-      return { value: serialized, serializedAsJson: true };
-    }
-  } catch {
-    // Fall back to the ordinary string representation below.
+  if (value !== null && typeof value === 'object') {
+    return stringifyStructuredValue(value);
   }
 
   try {
@@ -531,14 +593,25 @@ function stringifyVariableValue(value: unknown): {
 function formatVariableCellValue({
   value,
   prettifyJson,
+  prettifyStructuredValues,
 }: {
   value: unknown;
   prettifyJson: boolean;
+  prettifyStructuredValues: boolean;
 }): { value: string; isJsonPrettified: boolean; isJsonValue: boolean } {
   const isObjectValue = typeof value === 'object' && value !== null;
   const serialized = stringifyVariableValue(value);
   let formattedValue = serialized.value;
-  let isJsonPrettified = prettifyJson && isObjectValue && serialized.serializedAsJson;
+  let isJsonPrettified = false;
+  let isJsonStringValue = false;
+
+  if (isObjectValue && serialized.serializedAsJson && (prettifyJson || prettifyStructuredValues)) {
+    const prettified = prettifyJsonPreservingTokens(serialized.value);
+    if (prettified !== undefined) {
+      formattedValue = prettified;
+      isJsonPrettified = prettifyJson;
+    }
+  }
 
   if (prettifyJson && typeof value === 'string' && value.length <= MAX_JSON_CELL_PRETTIFY_LENGTH) {
     const trimmed = trimJsonWhitespace(value);
@@ -550,6 +623,7 @@ function formatVariableCellValue({
       try {
         const parsed = JSON.parse(trimmed);
         if (typeof parsed === 'object' && parsed !== null) {
+          isJsonStringValue = true;
           const prettified = prettifyJsonPreservingTokens(trimmed);
           if (prettified !== undefined) {
             formattedValue = prettified;
@@ -562,7 +636,8 @@ function formatVariableCellValue({
     }
   }
 
-  const isJsonValue = isJsonPrettified || (isObjectValue && serialized.serializedAsJson);
+  const isJsonValue =
+    isJsonStringValue || isJsonPrettified || (isObjectValue && serialized.serializedAsJson);
 
   return { value: formattedValue, isJsonPrettified, isJsonValue };
 }
@@ -572,19 +647,24 @@ const VariableCellContent = React.memo(function VariableCellContent({
   renderMarkdown,
   renderPlainMarkdown = false,
   prettifyJson,
+  prettifyStructuredValues = false,
   maxTextLength,
 }: {
   value: unknown;
   renderMarkdown: boolean;
   renderPlainMarkdown?: boolean;
   prettifyJson: boolean;
+  prettifyStructuredValues?: boolean;
   maxTextLength: number;
 }) {
   const {
     value: formattedValue,
     isJsonPrettified,
     isJsonValue,
-  } = React.useMemo(() => formatVariableCellValue({ value, prettifyJson }), [prettifyJson, value]);
+  } = React.useMemo(
+    () => formatVariableCellValue({ value, prettifyJson, prettifyStructuredValues }),
+    [prettifyJson, prettifyStructuredValues, value],
+  );
 
   if (renderMarkdown && (renderPlainMarkdown || isJsonValue)) {
     const markdownValue = isJsonValue ? `\`\`\`json\n${formattedValue}\n\`\`\`` : formattedValue;
@@ -733,6 +813,7 @@ function renderVariableCell({
       renderMarkdown={renderMarkdown}
       renderPlainMarkdown
       prettifyJson={prettifyJson}
+      prettifyStructuredValues
       maxTextLength={maxTextLength}
     />
   );

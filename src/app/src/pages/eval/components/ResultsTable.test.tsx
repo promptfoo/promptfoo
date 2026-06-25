@@ -2605,6 +2605,9 @@ describe('ResultsTable Malformed Markdown Handling', () => {
 });
 
 describe('ResultsTable Variable JSON Formatting', () => {
+  const JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST =
+    '[JSON value exceeds safe display limit; export results to inspect]';
+
   const createMockOutput = (metadata: Record<string, unknown>): EvaluateTableOutput => ({
     cost: 0,
     failureReason: ResultFailureReason.NONE,
@@ -2651,7 +2654,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
     transformedDisplayVars = {},
   }: {
     vars: unknown[];
-    transformedDisplayVars?: Record<string, string>;
+    transformedDisplayVars?: Record<string, unknown>;
   }): EvaluateTable => ({
     body: [
       {
@@ -2921,6 +2924,46 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(toString).not.toHaveBeenCalled();
   });
 
+  it.each([
+    false,
+    true,
+  ])('bounds structured transformed values when prettification is %s', (prettifyJson) => {
+    let deeplyNestedValue: Record<string, unknown> = { leaf: true };
+    for (let index = 0; index < 100; index++) {
+      deeplyNestedValue = { child: deeplyNestedValue };
+    }
+    mockTableState(
+      createMockTable({
+        vars: [],
+        transformedDisplayVars: {
+          __transformed_small: { decoded: true },
+          __transformed_deep: deeplyNestedValue,
+        },
+      }),
+    );
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson,
+    }));
+
+    const { container } = renderWithProviders(
+      <ResultsTable {...defaultProps} maxTextLength={1_000} />,
+    );
+
+    expect(container).toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
+    if (prettifyJson) {
+      expect(
+        Array.from(container.querySelectorAll('[data-testid="prettified-json-variable"]')).map(
+          (cell) => cell.textContent,
+        ),
+      ).toContain('{\n  "decoded": true\n}');
+    } else {
+      expect(container).toHaveTextContent('{"decoded":true}');
+      expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+    }
+  });
+
   it('falls back safely when an object cannot be serialized or coerced', () => {
     const unrenderable = {
       toJSON: () => {
@@ -2964,13 +3007,19 @@ describe('ResultsTable Variable JSON Formatting', () => {
     parseSpy.mockRestore();
   });
 
-  it('leaves JSON raw when indentation would exceed the formatting budget', () => {
-    const expansiveJson = `[${Array.from({ length: 200 }, () => '0').join(',')}]`;
+  it.each([
+    false,
+    true,
+  ])('keeps over-budget valid JSON literal when markdown rendering is %s', (renderMarkdown) => {
+    const expansiveJson = JSON.stringify({
+      label: '**keep-stars**',
+      values: Array.from({ length: 100 }, () => 0),
+    });
     expect(expansiveJson.length).toBeLessThan(512);
     mockTableState(createMockTable({ vars: [expansiveJson] }));
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
-      renderMarkdown: false,
+      renderMarkdown,
       prettifyJson: true,
     }));
 
@@ -2980,6 +3029,14 @@ describe('ResultsTable Variable JSON Formatting', () => {
 
     expect(container.textContent).toContain(expansiveJson);
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+    expect(
+      Array.from(container.querySelectorAll('strong')).some((element) =>
+        element.textContent?.includes('keep-stars'),
+      ),
+    ).toBe(false);
+    if (renderMarkdown) {
+      expect(container.querySelector('code')?.textContent?.trimEnd()).toBe(expansiveJson);
+    }
   });
 
   it('memoizes JSON parsing across unrelated table renders', () => {
