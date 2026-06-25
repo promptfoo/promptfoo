@@ -255,6 +255,7 @@ describe('OpenRouter', () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
       try {
+        const privateDiagnostic = `PRIVATE_DIAGNOSTIC_${'x'.repeat(10_000)}`;
         const provider = new OpenRouterProvider('gpt-4o', {
           config: { inputCost: 0.001, outputCost: 0.002 },
         });
@@ -264,7 +265,7 @@ describe('OpenRouter', () => {
               {
                 message: { content: 'partial output must not be graded' },
                 finish_reason: 'error',
-                error: { code: 502, message: 'Upstream provider failed' },
+                error: { code: 502, message: privateDiagnostic },
               },
             ],
             usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
@@ -291,7 +292,8 @@ describe('OpenRouter', () => {
           .mockResolvedValueOnce(recoveredResponse);
 
         const failed = await provider.callApi('Test prompt');
-        expect(failed.error).toContain('API error: Upstream provider failed, Code: 502');
+        expect(failed.error).toBe('API error: OpenRouter provider returned a generation error');
+        expect(failed.error).not.toContain('PRIVATE_DIAGNOSTIC');
         expect(failed.error).not.toContain('partial output must not be graded');
         expect(failed).toMatchObject({
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },

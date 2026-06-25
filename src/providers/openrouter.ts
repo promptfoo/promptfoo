@@ -189,11 +189,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    const firstChoice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
-    const choice =
-      firstChoice && typeof firstChoice === 'object' && !Array.isArray(firstChoice)
-        ? firstChoice
-        : undefined;
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
     const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
     const cost = calculateOpenAICost(
@@ -206,12 +202,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (choice?.error) {
       await deleteFromCache?.();
       return {
-        error: formatOpenAiError({
-          error: {
-            message: choice.error.message || 'OpenRouter provider returned a generation error',
-            ...(choice.error.code != null && { code: String(choice.error.code) }),
-          },
-        }),
+        error: 'API error: OpenRouter provider returned a generation error',
         tokenUsage,
         cached,
         cost,

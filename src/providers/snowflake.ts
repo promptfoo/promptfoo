@@ -164,11 +164,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    const firstChoice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
-    const choice =
-      firstChoice && typeof firstChoice === 'object' && !Array.isArray(firstChoice)
-        ? firstChoice
-        : undefined;
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
     const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
     const cost = calculateOpenAICost(
