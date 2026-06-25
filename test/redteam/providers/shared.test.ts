@@ -273,6 +273,15 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
+    it('falls back cleanly when defaultTest is null', async () => {
+      setCliStateConfig({ defaultTest: null } as any);
+
+      const result = await redteamProviderManager.getProvider({ purpose: 'attack' });
+
+      expect(result.id()).toBe(`openai:${ATTACKER_MODEL}`);
+      expect(mockOpenAiInstances).toHaveLength(1);
+    });
+
     it('applies a bounded default output cap to a configured OpenAI chat attack provider', async () => {
       const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
       mockedLoadApiProviders.mockResolvedValue([loaded]);

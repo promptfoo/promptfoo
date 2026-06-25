@@ -234,7 +234,7 @@ async function loadRedteamProvider({
 }
 
 function getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
-  if (typeof cliState.config?.defaultTest !== 'object') {
+  if (!cliState.config?.defaultTest || typeof cliState.config.defaultTest !== 'object') {
     return undefined;
   }
 
