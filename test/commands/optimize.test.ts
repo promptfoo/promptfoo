@@ -316,6 +316,25 @@ describe('optimize command', () => {
     );
   });
 
+  it('does not synthesize a runnable row for an empty default test', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        defaultTest: {},
+      },
+      basePath: '',
+      commandLineOptions: { filterRange: '0:1' },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    const optimizationSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
+    expect(optimizationSuite.tests).toBeUndefined();
+    expect(optimizationSuite.scenarios).toBeUndefined();
+  });
+
   it('leaves scenario ranges for the evaluator to apply after expansion', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: { evaluateOptions: { filterRange: '1:2' } },

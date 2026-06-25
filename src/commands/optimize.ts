@@ -47,6 +47,18 @@ function applyCommandLineEvaluateOptions(
     : config;
 }
 
+function hasRunnableOptimizationDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
+  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
+  if (defaultTest.assertScoringFunction && !hasAssertions) {
+    return false;
+  }
+  return hasAssertions || hasVars;
+}
+
 async function applyOptimizationTestFilters(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -71,7 +83,16 @@ async function applyOptimizationTestFilters(
 
   const explicitTestCount = testSuite.tests?.length ?? 0;
   const shouldApplyFiltersToImplicitDefaultTest =
-    testSuite.scenarios === undefined && explicitTestCount === 0;
+    testSuite.scenarios === undefined &&
+    explicitTestCount === 0 &&
+    hasRunnableOptimizationDefaultTest(testSuite.defaultTest);
+  if (
+    testSuite.scenarios === undefined &&
+    explicitTestCount === 0 &&
+    !shouldApplyFiltersToImplicitDefaultTest
+  ) {
+    return { config, testSuite };
+  }
   let filterableTestSuite = testSuite;
   if (shouldApplyFiltersToImplicitDefaultTest) {
     const defaultMetadata =
@@ -82,8 +103,9 @@ async function applyOptimizationTestFilters(
     };
   }
 
-  // resolveConfigs has already applied scenario-local filters; this mirrors doEval's second
-  // pass over top-level tests while leaving scenario ranges for post-expansion evaluation.
+  // resolveConfigs consumes config.commandLineOptions and has already applied the same
+  // scenario-local filters as eval. This mirrors doEval's second pass over top-level tests while
+  // leaving scenario ranges for post-expansion evaluation.
   const tests = await filterTests(filterableTestSuite, filterOptions);
   const shouldSuppressImplicitDefaultTest =
     !hasScenarios &&
