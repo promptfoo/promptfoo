@@ -245,12 +245,13 @@ describe('HydraProvider', () => {
     });
 
     it('should create agent provider with correct config', () => {
-      new HydraProvider({ injectVar: 'input' });
+      new HydraProvider({ injectVar: 'input', targetId: 'cloud-target-123' });
 
       expect(PromptfooChatCompletionProvider).toHaveBeenCalledWith({
         task: 'hydra-decision',
         jsonOnly: true,
         preferSmallModel: false,
+        targetId: 'cloud-target-123',
       });
     });
   });
@@ -1267,7 +1268,7 @@ describe('HydraProvider', () => {
       });
     });
 
-    it('passes target provider raw response into the grader', async () => {
+    it('passes target response evidence and image outputs into the grader', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -1275,7 +1276,8 @@ describe('HydraProvider', () => {
 
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'Target response',
-        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
       });
 
       const provider = new HydraProvider({
@@ -1296,9 +1298,16 @@ describe('HydraProvider', () => {
       await provider.callApi('', context);
 
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
-        providerResponse?: { raw?: unknown };
+        imageOutputs?: Array<{ data?: string; mimeType?: string }>;
+        providerResponse?: { output?: unknown; raw?: unknown };
       };
-      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+      expect(gradingContext.imageOutputs).toEqual([
+        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+      ]);
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: ['raw evidence'] }),
+      });
     });
   });
 

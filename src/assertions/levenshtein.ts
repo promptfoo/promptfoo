@@ -7,6 +7,7 @@ export function handleLevenshtein({
   assertion,
   renderedValue,
   outputString,
+  inverse,
 }: AssertionParams): GradingResult {
   invariant(
     typeof renderedValue === 'string',
@@ -14,13 +15,15 @@ export function handleLevenshtein({
   );
   const levDistance = distance(outputString, renderedValue);
   const threshold = assertion.threshold ?? 5;
-  const pass = levDistance <= threshold;
+  const pass = levDistance <= threshold !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Levenshtein distance ${levDistance} is greater than threshold ${threshold}`,
+      : `Levenshtein distance ${levDistance} is ${
+          inverse ? 'less than or equal to' : 'greater than'
+        } threshold ${threshold}`,
     assertion,
   };
 }

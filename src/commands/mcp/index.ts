@@ -24,16 +24,23 @@ export function mcpCommand(program: Command): void {
         transport: cmdObj.transport,
       });
 
-      if (cmdObj.transport === 'stdio') {
-        await startStdioMcpServer();
-      } else {
-        const port = Number.parseInt(cmdObj.port, 10);
-        if (Number.isNaN(port)) {
-          logger.error(`Invalid port number: ${cmdObj.port}`);
-          process.exitCode = 1;
-          return;
+      try {
+        if (cmdObj.transport === 'stdio') {
+          await startStdioMcpServer();
+        } else {
+          const port = Number.parseInt(cmdObj.port, 10);
+          if (Number.isNaN(port)) {
+            logger.error(`Invalid port number: ${cmdObj.port}`);
+            process.exitCode = 1;
+            return;
+          }
+          await startHttpMcpServer(port);
         }
-        await startHttpMcpServer(port);
+      } catch (error) {
+        logger.error(
+          `Failed to start MCP server: ${error instanceof Error ? error.message : error}`,
+        );
+        process.exitCode = 1;
       }
     });
 }

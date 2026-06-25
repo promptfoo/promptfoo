@@ -457,6 +457,34 @@ describe('AzureResponsesProvider', () => {
       expect(mockFetchWithCache).toHaveBeenCalled();
     });
 
+    it('reports non-zero cost from the Responses usage object (regression)', async () => {
+      // Regression for the costCalculator that passed `usage` into calculateAzureCost's ignored
+      // config slot (never forwarding token counts), so every Azure Responses eval reported cost 0.
+      const mockResponse = {
+        output: [
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+        ],
+        usage: { input_tokens: 1000, output_tokens: 500 },
+      };
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      // gpt-4.1 is priced in AZURE_MODELS, and tokens now flow through, so cost must be > 0.
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
+    });
+
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { response_format: 'file://missing.json' as any },

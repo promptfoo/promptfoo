@@ -29,6 +29,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
     (strategyName) =>
       `${strategyName} requires remote generation, which has been explicitly disabled.`,
   ),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -94,6 +95,22 @@ describe('BestOfNProvider - Runtime Behavior', () => {
       expect.any(Object),
       abortController.signal,
     );
+  });
+
+  it('should include target context in remote generation requests', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    const request = mockFetchWithProxy.mock.calls[0]?.[1] as { body?: string } | undefined;
+    expect(request?.body).toBeDefined();
+    expect(JSON.parse(request?.body ?? '{}')).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'jailbreak:best-of-n',
+    });
   });
 
   it('should pass options to target provider callApi', async () => {

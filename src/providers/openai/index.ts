@@ -10,6 +10,24 @@ import type {
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
+export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
+export const OPENAI_ORGANIZATION_HEADER = 'OpenAI-Organization';
+export const DEFAULT_OPENAI_ORIGINATOR = 'promptfoo';
+
+/**
+ * Whether `customHeaders` contains a case-insensitive override for `headerName`.
+ * A differently-cased duplicate would otherwise survive an object spread and be
+ * sent as two header values, so callers use this to suppress the default they
+ * would otherwise inject (or the SDK option that produces the same header).
+ */
+export function hasHeaderOverride(
+  customHeaders: Record<string, string> | undefined,
+  headerName: string,
+): boolean {
+  const target = headerName.toLowerCase();
+  return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
+}
+
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -43,6 +61,32 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.env?.OPENAI_ORGANIZATION ||
       getEnvString('OPENAI_ORGANIZATION')
     );
+  }
+
+  getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
+    let sendsToOpenAiApi = false;
+    try {
+      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      // Leave malformed custom URLs to the request path to validate.
+    }
+
+    // Custom headers win over both injected defaults. The override checks are
+    // case-insensitive because a differently-cased duplicate key would survive
+    // the spread and be sent as two header values (e.g. "test-org, custom").
+    const hasOriginatorOverride = hasHeaderOverride(customHeaders, OPENAI_ORIGINATOR_HEADER);
+    const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
+
+    const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
+    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+
+    return {
+      ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
+      ...(organization ? { [OPENAI_ORGANIZATION_HEADER]: organization } : {}),
+      ...customHeaders,
+    };
   }
 
   getApiUrlDefault(): string {
@@ -79,6 +123,44 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   requiresApiKey(): boolean {
     return this.config.apiKeyRequired ?? true;
+  }
+
+  /**
+   * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
+   * prefix while retaining the real request model in {@link modelName}.
+   */
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
+  protected isGPT5Model(): boolean {
+    const model = this.getCapabilityModelName();
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
+  }
+
+  protected isReasoningModel(): boolean {
+    const model = this.getCapabilityModelName();
+    return (
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
+      this.isGPT5Model()
+    );
+  }
+
+  protected supportsTemperature(): boolean {
+    return !this.isReasoningModel();
+  }
+
+  protected getBillingModelName(_config: OpenAiSharedOptions): string {
+    return this.getCapabilityModelName();
+  }
+
+  protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
+    return context?.bustCache ?? context?.debug;
   }
 
   protected getMissingApiKeyErrorMessage(): string {

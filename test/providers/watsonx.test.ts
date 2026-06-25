@@ -370,9 +370,11 @@ describe('WatsonXProvider', () => {
         error: undefined,
         output: 'Test response from WatsonX',
         tokenUsage: {
-          total: 10,
+          // generated_token_count=10 (completion), input_token_count=5 (prompt),
+          // total = prompt + completion = 15.
+          total: 15,
           prompt: 5,
-          completion: 5,
+          completion: 10,
         },
         cost: undefined,
         cached: undefined,
@@ -382,13 +384,73 @@ describe('WatsonXProvider', () => {
       const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
       expect(cacheKey).not.toContain(config.apiKey);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(cache.set).toHaveBeenCalledWith(cacheKey, JSON.stringify(response));
+    });
+
+    it.each([
+      {
+        name: 'missing token counts',
+        usage: {},
+        expected: { total: 0, prompt: 0, completion: 0 },
+      },
+      {
+        name: 'missing completion token count',
+        usage: { input_token_count: 5 },
+        expected: { total: 5, prompt: 5, completion: 0 },
+      },
+      {
+        name: 'missing prompt token count',
+        usage: { generated_token_count: 7 },
+        expected: { total: 7, prompt: 0, completion: 7 },
+      },
+      {
+        name: 'zero completion tokens',
+        usage: { input_token_count: 5, generated_token_count: 0 },
+        expected: { total: 5, prompt: 5, completion: 0 },
+      },
+      {
+        name: 'zero prompt tokens',
+        usage: { input_token_count: 0, generated_token_count: 7 },
+        expected: { total: 7, prompt: 0, completion: 7 },
+      },
+    ])('should handle $name with caching disabled', async ({ usage, expected }) => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [{ generated_text: 'Boundary response', ...usage }],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache = {
+        get: vi.fn(),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return false;
+      });
+
+      const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
+
+      expect(response.tokenUsage).toEqual(expected);
+      expect(response.cost).toBeUndefined();
+      expect(cache.get).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
     });
 
     it('should include configured auth mode in cache keys without exposing secrets', async () => {
@@ -760,7 +822,7 @@ describe('WatsonXProvider', () => {
       const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
       expect(cacheKey).toMatch(
         new RegExp(
-          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+          `^watsonx:v2:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
         ),
       );
       expect(cacheKey).not.toContain(prompt);
@@ -802,6 +864,39 @@ describe('WatsonXProvider', () => {
         tokenUsage: createEmptyTokenUsage(),
       });
       expect(logger.error).toHaveBeenCalledWith('Watsonx: API call error: Error: API error');
+    });
+
+    it('should surface a clean error when the API returns no results', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const response = await new WatsonXProvider(modelName, { config }).callApi(prompt);
+
+      expect(response.error).toContain('No results returned from text generation API.');
+      expect(response.cost).toBeUndefined();
+      expect(cache.set).not.toHaveBeenCalled();
     });
   });
 
@@ -882,11 +977,89 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
       // For class_c1 tier ($0.106 per 1M tokens)
-      // Input: 50 tokens * $0.106/1M = 0.0000053
-      // Output: (generated_token_count - input_token_count) = (100 - 50) = 50 tokens
-      // Output cost: 50 tokens * $0.106/1M = 0.0000053
-      // Total expected: 0.0000106
-      expect(response.cost).toBeCloseTo(0.0000106, 10);
+      // Input: input_token_count = 50 tokens * $0.106/1M = 0.0000053
+      // Output: generated_token_count = 100 tokens * $0.106/1M = 0.0000106
+      // Total expected: 0.0000159
+      expect(response.cost).toBeCloseTo(0.0000159, 10);
+    });
+
+    it.each([
+      {
+        name: 'zero completion tokens',
+        inputTokens: 50,
+        generatedTokens: 0,
+        expectedCost: 0.0000053,
+      },
+      {
+        name: 'zero input tokens',
+        inputTokens: 0,
+        generatedTokens: 100,
+        expectedCost: 0.0000106,
+      },
+      {
+        name: 'missing token counts',
+        inputTokens: undefined,
+        generatedTokens: undefined,
+        expectedCost: undefined,
+      },
+      {
+        name: 'missing completion token count',
+        inputTokens: 50,
+        generatedTokens: undefined,
+        expectedCost: undefined,
+      },
+      {
+        name: 'missing input token count',
+        inputTokens: undefined,
+        generatedTokens: 100,
+        expectedCost: undefined,
+      },
+    ])('should calculate cost with $name', async ({
+      inputTokens,
+      generatedTokens,
+      expectedCost,
+    }) => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: MODEL_ID,
+            model_version: '3.2.0',
+            created_at: '2024-03-25T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Boundary response',
+                generated_token_count: generatedTokens,
+                input_token_count: inputTokens,
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const response = await new WatsonXProvider(MODEL_ID, {
+        config: configWithModelId,
+      }).callApi(prompt);
+
+      if (expectedCost === undefined) {
+        expect(response.cost).toBeUndefined();
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        expect(response.cost).toBeCloseTo(expectedCost, 10);
+      }
     });
 
     it('should calculate cost correctly for class_9 tier', async () => {
@@ -961,12 +1134,11 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
       // For class_9 tier ($0.371 per 1M tokens):
-      // input_token_count = 50
-      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
+      // input_token_count = 50 (prompt), generated_token_count = 100 (completion)
       // Input: 50 tokens * $0.371/1M = 0.00001855
-      // Output: 50 tokens * $0.371/1M = 0.00001855
-      // Total expected: 0.0000371
-      expect(response.cost).toBeCloseTo(0.0000371, 10);
+      // Output: 100 tokens * $0.371/1M = 0.0000371
+      // Total expected: 0.00005565
+      expect(response.cost).toBeCloseTo(0.00005565, 10);
     });
 
     it('should calculate cost correctly for Granite 4 models with mixed pricing tiers', async () => {
@@ -1040,10 +1212,10 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // Input: 50 tokens * $0.0636/1M = 0.00000318
-      // Output: 50 tokens * $0.265/1M = 0.00001325
-      // Total expected: 0.00001643
-      expect(response.cost).toBeCloseTo(0.00001643, 10);
+      // Input: input_token_count = 50 tokens * $0.0636/1M = 0.00000318
+      // Output: generated_token_count = 100 tokens * $0.265/1M = 0.0000265
+      // Total expected: 0.00002968
+      expect(response.cost).toBeCloseTo(0.00002968, 10);
     });
 
     it('should calculate cost correctly for special Mistral pricing tiers', async () => {
@@ -1117,12 +1289,11 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // input_token_count = 50
-      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
+      // input_token_count = 50 (prompt), generated_token_count = 100 (completion)
       // Input: 50 tokens * $3.37/1M = 0.0001685
-      // Output: 50 tokens * $10.07/1M = 0.0005035
-      // Total expected: 0.000672
-      expect(response.cost).toBeCloseTo(0.000672, 10);
+      // Output: 100 tokens * $10.07/1M = 0.001007
+      // Total expected: 0.0011755
+      expect(response.cost).toBeCloseTo(0.0011755, 10);
     });
   });
 

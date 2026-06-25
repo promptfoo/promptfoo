@@ -28,6 +28,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -622,11 +623,13 @@ export async function tryUnblocking({
   lastResponse,
   goal,
   purpose,
+  targetId,
 }: {
   messages: Message[];
   lastResponse: string;
   goal: string | undefined;
   purpose?: string;
+  targetId?: string;
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
@@ -664,6 +667,7 @@ export async function tryUnblocking({
       task: 'blocking-question-analysis',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(targetId),
     });
 
     const unblockingRequest = {

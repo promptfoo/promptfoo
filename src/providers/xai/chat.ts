@@ -72,13 +72,25 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
+export interface XAICostConfig {
+  /** Custom per-token cost override for both input and output tokens. */
+  cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
+  /** Custom per-token cost for prompt tokens served from xAI's prompt cache. */
+  cacheReadCost?: number;
+}
+
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
   agent_tools?: XAIAgentTool[];
-} & OpenAiCompletionOptions;
+} & OpenAiCompletionOptions &
+  XAICostConfig;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: {
@@ -478,12 +490,21 @@ export const GROK_4_MODELS = [
  */
 export function calculateXAICost(
   modelName: string,
-  config: any,
+  config: XAICostConfig,
   promptTokens?: number,
   completionTokens?: number,
   reasoningTokens?: number,
+  cachedTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  // xAI follows the OpenAI token convention: completion/output tokens already
+  // INCLUDE reasoning tokens (reasoning is a sub-breakdown, not a separate
+  // addend). Bill completion tokens at the output rate exactly like
+  // calculateOpenAICost; adding reasoningTokens on top double-counts them.
+  // Fall back to reasoning tokens only when the API reports zero completion
+  // tokens (a reasoning-only turn) so it is not billed as free.
+  const completion = completionTokens ?? 0;
+  const billableOutputTokens = completion > 0 ? completion : (reasoningTokens ?? 0);
+  if (promptTokens == null || billableOutputTokens <= 0) {
     return undefined;
   }
 
@@ -496,15 +517,21 @@ export function calculateXAICost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const inputCostOverride = config.inputCost ?? config.cost;
+  const inputCost = inputCostOverride ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const cacheReadCost =
+    config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read ?? inputCost;
 
-  // xAI bills reasoning tokens at the same per-token rate as completion tokens.
-  // The OpenAI base provider reports them separately in completion_tokens_details
-  // (and getTokenUsage hoists them out of `completion`), so include them here.
-  const billableOutputTokens = completionTokens + (reasoningTokens ?? 0);
+  const billableCachedTokens = Number.isFinite(cachedTokens)
+    ? Math.min(Math.max(cachedTokens!, 0), promptTokens)
+    : 0;
+  const uncachedPromptTokens = promptTokens - billableCachedTokens;
 
-  const inputCostTotal = inputCost * promptTokens;
+  // Cached prompt tokens (prompt_tokens_details.cached_tokens) use the reduced
+  // cache-read rate. When no cache rate is known, cacheReadCost falls back to the
+  // full input rate so this formula preserves the undiscounted behavior.
+  const inputCostTotal = inputCost * uncachedPromptTokens + cacheReadCost * billableCachedTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
 
   logger.debug(
@@ -646,49 +673,20 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         return response;
       }
 
-      // Extract reasoning-token telemetry from the raw response body, regardless
-      // of whether the base provider hands it back as a JSON string or an object.
-      let rawData: any;
-      if (typeof response.raw === 'string') {
-        try {
-          rawData = JSON.parse(response.raw);
-        } catch (err) {
-          logger.error(`Failed to parse raw response JSON: ${err}`);
-        }
-      } else if (typeof response.raw === 'object' && response.raw !== null) {
-        rawData = response.raw;
-      }
-
-      const reasoningTokens = rawData?.usage?.completion_tokens_details?.reasoning_tokens;
-      if (this.isReasoningModel() && reasoningTokens && response.tokenUsage) {
-        const details = rawData.usage.completion_tokens_details;
-        const acceptedPredictions = details.accepted_prediction_tokens || 0;
-        const rejectedPredictions = details.rejected_prediction_tokens || 0;
-
-        response.tokenUsage.completionDetails = {
-          reasoning: reasoningTokens,
-          acceptedPrediction: acceptedPredictions,
-          rejectedPrediction: rejectedPredictions,
-        };
-
-        logger.debug(
-          `XAI reasoning token details for ${this.modelName}: ` +
-            `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-        );
-      }
-
       if (response.tokenUsage && !response.cached) {
-        // The OpenAI base provider does not surface the raw API body, so
-        // `usage.cost_in_usd_ticks` (which xAI does return for chat completions)
-        // is not reachable here. Fall back to local pricing math, which now
-        // includes reasoning tokens at the output rate.
+        // The OpenAI base provider normalizes xAI's OpenAI-compatible usage
+        // details but does not surface `usage.cost_in_usd_ticks`. Fall back to
+        // local pricing math. Completion tokens already include reasoning tokens,
+        // so they are not added on top.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
+        const cachedTokens = response.tokenUsage.completionDetails?.cacheReadInputTokens ?? 0;
         response.cost = calculateXAICost(
           this.modelName,
           this.config || {},
           response.tokenUsage.prompt,
           response.tokenUsage.completion,
           reasoningTokens,
+          cachedTokens,
         );
       }
 
