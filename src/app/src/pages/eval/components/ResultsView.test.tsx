@@ -453,7 +453,7 @@ describe('ResultsView Share Button', () => {
     expect(callApi).not.toHaveBeenCalled();
   });
 
-  it('closes the share modal when the active eval changes', async () => {
+  it('keeps the share modal closed after an active-eval round trip', async () => {
     const props = {
       recentEvals: mockRecentEvals,
       onRecentEvalSelected: mockOnRecentEvalSelected,
@@ -474,6 +474,16 @@ describe('ResultsView Share Button', () => {
     );
 
     expect(latestShareModalProps()).toMatchObject({ evalId: 'next-eval-id', open: false });
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+
+    vi.mocked(useTableStore).mockReturnValue({ ...currentStore, evalId: 'test-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
+
+    expect(latestShareModalProps()).toMatchObject({ evalId: 'test-eval-id', open: false });
     expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
   });
 

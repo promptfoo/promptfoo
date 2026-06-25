@@ -386,6 +386,12 @@ export default function ResultsView({
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
+  React.useEffect(() => {
+    if (shareModalEvalId !== null && shareModalEvalId !== currentEvalId) {
+      setShareModalEvalId(null);
+    }
+  }, [currentEvalId, shareModalEvalId]);
+
   const handleShareButtonClick = () => {
     setShareModalEvalId(currentEvalId);
   };
