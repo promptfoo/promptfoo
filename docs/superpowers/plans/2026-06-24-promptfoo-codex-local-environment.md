@@ -6,7 +6,7 @@
 
 **Architecture:** Store one version-1 Codex environment definition at `.codex/environments/environment.toml`. Use a portable default `npm ci` setup, override macOS setup to activate the `.nvmrc` version first, and keep build/test/typecheck/dev as explicit actions rather than setup work.
 
-**Tech Stack:** Codex local-environment TOML, NVM, Node.js 24.18.0, npm 11, Python 3 `tomllib` for schema validation.
+**Tech Stack:** Codex local-environment TOML, NVM, Node.js 24.18.0, npm 11, and the lockfile-installed `smol-toml` parser for schema validation.
 
 ---
 
@@ -78,33 +78,40 @@ command = "npm run tsc"
 Run:
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-import tomllib
+source ~/.nvm/nvm.sh
+nvm use
+node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { parse } from 'smol-toml';
 
-path = Path('.codex/environments/environment.toml')
-with path.open('rb') as file:
-    environment = tomllib.load(file)
+const path = '.codex/environments/environment.toml';
+const environment = parse(readFileSync(path, 'utf8'));
 
-assert environment['version'] == 1
-assert environment['name'] == 'promptfoo'
-assert environment['setup']['script'] == 'npm ci'
-assert environment['setup']['darwin']['script'].strip().endswith('npm ci')
+assert.equal(environment.version, 1);
+assert.equal(environment.name, 'promptfoo');
+assert.equal(environment.setup.script, 'npm ci');
+assert.ok(environment.setup.darwin.script.trim().endsWith('npm ci'));
 
-expected_actions = [
-    ('Dev', 'run', 'npm run dev'),
-    ('Test', 'test', 'npm test'),
-    ('Build', 'run', 'npm run build'),
-    ('Typecheck', 'test', 'npm run tsc'),
-]
-actual_actions = [
-    (action['name'], action['icon'], action['command'])
-    for action in environment['actions']
-]
-assert actual_actions == expected_actions
-assert all(action['icon'] in {'tool', 'run', 'debug', 'test'} for action in environment['actions'])
-print(f'Validated {path}')
-PY
+const expectedActions = [
+  ['Dev', 'run', 'npm run dev'],
+  ['Test', 'test', 'npm test'],
+  ['Build', 'run', 'npm run build'],
+  ['Typecheck', 'test', 'npm run tsc'],
+];
+const actualActions = environment.actions.map(({ name, icon, command }) => [
+  name,
+  icon,
+  command,
+]);
+assert.deepEqual(actualActions, expectedActions);
+assert.ok(
+  environment.actions.every(({ icon }) =>
+    new Set(['tool', 'run', 'debug', 'test']).has(icon),
+  ),
+);
+console.log(`Validated ${path}`);
+JS
 ```
 
 Expected: PASS and print `Validated .codex/environments/environment.toml`.
@@ -114,16 +121,21 @@ Expected: PASS and print `Validated .codex/environments/environment.toml`.
 Run:
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-import subprocess
-import tomllib
+source ~/.nvm/nvm.sh
+nvm use
+node --input-type=module <<'JS'
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { parse } from 'smol-toml';
 
-with Path('.codex/environments/environment.toml').open('rb') as file:
-    setup_script = tomllib.load(file)['setup']['darwin']['script']
-
-subprocess.run(['/bin/zsh', '-lc', setup_script], check=True)
-PY
+const environment = parse(
+  readFileSync('.codex/environments/environment.toml', 'utf8'),
+);
+const result = spawnSync('/bin/zsh', ['-lc', environment.setup.darwin.script], {
+  stdio: 'inherit',
+});
+process.exit(result.status ?? 1);
+JS
 ```
 
 Expected: PASS after NVM selects Node.js 24.18.0 and `npm ci` installs the lockfile-pinned dependencies.
