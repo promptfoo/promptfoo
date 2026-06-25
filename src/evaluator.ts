@@ -141,6 +141,7 @@ const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
 const scenarioTargetOverrideTests = new WeakSet<AtomicTestCase>();
+const scenarioTestSourceEnvs = new WeakMap<AtomicTestCase, EnvOverrides | undefined>();
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
@@ -2212,6 +2213,22 @@ function resolveRuntimeGradingProviderReferences(
   }
 }
 
+function getRuntimeGradingProviderEnv(testCase: AtomicTestCase, testSuite: TestSuite) {
+  return scenarioTestSourceEnvs.get(testCase) ?? testSuite.env;
+}
+
+export function __resolveRuntimeGradingProviderReferencesForTests(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+  testSuite: TestSuite,
+): void {
+  resolveRuntimeGradingProviderReferences(
+    testCase,
+    providerMap,
+    getRuntimeGradingProviderEnv(testCase, testSuite),
+  );
+}
+
 function loadProviderModule() {
   return import('./providers');
 }
@@ -2300,9 +2317,10 @@ function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
   telemetry.record('feature_used', { feature: 'scenarios' });
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
+    const sourceEnv = getScenarioSourceContext(scenario)?.envOverrides;
     for (const data of scenario.config) {
       for (const test of scenario.tests || [{}]) {
-        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex));
+        tests.push(mergeScenarioTest(testSuite, data, test, scenarioIndex, sourceEnv));
       }
       scenarioIndex++;
     }
@@ -2327,6 +2345,7 @@ function mergeScenarioTest(
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
   test: NonNullable<TestSuite['scenarios']>[number]['tests'][number],
   scenarioIndex: number,
+  sourceEnv?: EnvOverrides,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
   // Expansion happens in config loading (resolveConfigs / createRuntimeTestSuite);
@@ -2363,6 +2382,9 @@ function mergeScenarioTest(
 
   if ((scenarioData.provider || test.provider) && isApiProvider(mergedTest.provider)) {
     scenarioTargetOverrideTests.add(mergedTest);
+  }
+  if (sourceEnv !== undefined) {
+    scenarioTestSourceEnvs.set(mergedTest, sourceEnv);
   }
 
   return mergedTest;
@@ -2453,7 +2475,11 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
+    resolveRuntimeGradingProviderReferences(
+      testCase,
+      configuredProviderMap,
+      getRuntimeGradingProviderEnv(testCase, testSuite),
+    );
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -4748,13 +4774,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     testSuite = await resolveScenarioTargetProviderReferences(testSuite);
     let tests = buildTestsFromSuite(testSuite);
+    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
 
     prompts.push(...buildCompletedPrompts(testSuite, this.store, tests));
     const promptIndexMap = buildPromptIndexMap(prompts);
 
     await this.store.appendPrompts(prompts);
-
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

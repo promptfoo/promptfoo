@@ -147,8 +147,37 @@ function isBareLocalProviderPath(providerPath: string): boolean {
   );
 }
 
+function isPrefixedLocalProviderPath(providerPath: string): boolean {
+  for (const prefix of ['exec:', 'python:', 'golang:']) {
+    if (providerPath.startsWith(prefix)) {
+      const scriptPath = providerPath.slice(prefix.length);
+      return scriptPath.includes('/') || scriptPath.includes('\\');
+    }
+  }
+  return false;
+}
+
 function resolveProviderPathFromBase(basePath: string, providerPath: string): string {
   return path.isAbsolute(providerPath) ? providerPath : path.resolve(basePath, providerPath);
+}
+
+function resolveProviderIdFromBase(
+  basePath: string,
+  providerId: string,
+  envOverrides?: EnvOverrides,
+): string {
+  if (providerId.startsWith(FILE_REF_PREFIX)) {
+    return resolveFileRefFromBase(basePath, providerId, envOverrides);
+  }
+  if (isBareLocalProviderPath(providerId)) {
+    return resolveProviderPathFromBase(basePath, providerId);
+  }
+  if (isPrefixedLocalProviderPath(providerId)) {
+    const prefix = providerId.slice(0, providerId.indexOf(':') + 1);
+    const scriptPath = providerId.slice(prefix.length);
+    return `${prefix}${resolveProviderPathFromBase(basePath, scriptPath)}`;
+  }
+  return providerId;
 }
 
 /**
@@ -377,9 +406,7 @@ function resolveScenarioProviderRef(
 ): unknown {
   if (typeof provider === 'string') {
     const renderedProvider = renderSourceEnvTemplates(provider, envOverrides);
-    return isBareLocalProviderPath(renderedProvider)
-      ? resolveProviderPathFromBase(basePath, renderedProvider)
-      : resolveFileRefFromBase(basePath, renderedProvider, envOverrides);
+    return resolveProviderIdFromBase(basePath, renderedProvider, envOverrides);
   }
   if (!isPlainRecord(provider)) {
     return provider;
@@ -395,15 +422,14 @@ function resolveScenarioProviderRef(
   if (typeof providerId === 'string') {
     const renderedRecord = renderSourceEnvTemplates(record, envOverrides);
     const resolvedRecord = resolveNestedFileRefs(basePath, renderedRecord, envOverrides);
-    if (
-      isPlainRecord(resolvedRecord) &&
-      typeof resolvedRecord.id === 'string' &&
-      isBareLocalProviderPath(resolvedRecord.id)
-    ) {
-      return {
-        ...resolvedRecord,
-        id: resolveProviderPathFromBase(basePath, resolvedRecord.id),
-      };
+    if (isPlainRecord(resolvedRecord) && typeof resolvedRecord.id === 'string') {
+      const resolvedId = resolveProviderIdFromBase(basePath, resolvedRecord.id, envOverrides);
+      if (resolvedId !== resolvedRecord.id) {
+        return {
+          ...resolvedRecord,
+          id: resolvedId,
+        };
+      }
     }
     return resolvedRecord;
   }
@@ -418,9 +444,7 @@ function resolveScenarioProviderRef(
   let changed = false;
   for (const [key, value] of Object.entries(record)) {
     const renderedKey = renderSourceEnvTemplates(key, envOverrides);
-    const resolvedKey = isBareLocalProviderPath(renderedKey)
-      ? resolveProviderPathFromBase(basePath, renderedKey)
-      : resolveFileRefFromBase(basePath, renderedKey, envOverrides);
+    const resolvedKey = resolveProviderIdFromBase(basePath, renderedKey, envOverrides);
     const resolvedValue = resolveScenarioProviderRef(basePath, value, envOverrides, seen);
     if (resolvedKey !== key || resolvedValue !== value) {
       changed = true;
@@ -588,6 +612,20 @@ export function resolveScenarioTestCaseProviderRefs<T>(
   envOverrides?: EnvOverrides,
 ): T {
   return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
+}
+
+export function materializeScenarioTestCase<T>(
+  basePath: string,
+  testCase: T,
+  envOverrides?: EnvOverrides,
+): T {
+  const resolvedFileRefs = resolveNestedFileRefs(basePath, testCase, envOverrides);
+  const loadedFileRefs = maybeLoadConfigFromExternalFile(
+    resolvedFileRefs,
+    'scenario-test',
+    envOverrides,
+  );
+  return resolveScenarioConfigRowProviders(basePath, loadedFileRefs, envOverrides) as T;
 }
 
 function materializeScenarioConfigRow(

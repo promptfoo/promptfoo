@@ -20,7 +20,7 @@ import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { ConfigResolutionError } from './config/errors';
-import { resolveScenarioTestCaseProviderRefs } from './config/scenarioMatrix';
+import { materializeScenarioTestCase } from './config/scenarioMatrix';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -80,9 +80,7 @@ export async function readTestFiles(
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
 
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+    const paths = globSync(resolvedPath, GLOB_OPTIONS);
 
     for (const p of paths) {
       const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
@@ -575,11 +573,10 @@ function loadTestCaseConfig(
   allowPartialTests: boolean,
   envOverrides?: EnvOverrides,
 ): TestCase[] {
-  return maybeLoadConfigFromExternalFile(
-    config,
-    allowPartialTests ? 'scenario-test' : undefined,
-    envOverrides,
-  ) as TestCase[];
+  if (allowPartialTests) {
+    return config as TestCase[];
+  }
+  return maybeLoadConfigFromExternalFile(config, undefined, envOverrides) as TestCase[];
 }
 
 async function appendLoadedTestCases(
@@ -599,7 +596,7 @@ async function appendLoadedTestCases(
     }
     const testBasePath = path.dirname(testFile);
     const normalizedTest = allowPartialTests
-      ? resolveScenarioTestCaseProviderRefs(testBasePath, testCase, envOverrides)
+      ? materializeScenarioTestCase(testBasePath, testCase, envOverrides)
       : testCase;
     const hasProvider =
       allowPartialTests && Object.prototype.hasOwnProperty.call(normalizedTest, 'provider');
@@ -824,7 +821,7 @@ async function normalizeLoadedScenarioTests(
       continue;
     }
 
-    const resolvedTest = resolveScenarioTestCaseProviderRefs(
+    const resolvedTest = materializeScenarioTestCase(
       sourceBasePath,
       loadedTest,
       envOverrides,

@@ -97,7 +97,10 @@ export function resolveConfiguredProviderReference<T>(
   env?: EnvOverrides,
 ): T | ApiProvider {
   if (typeof provider === 'string') {
-    return getConfiguredProvider(provider, providerMap) ?? provider;
+    return (
+      getConfiguredProvider(provider, providerMap) ??
+      (env ? ({ id: provider, env } as T) : provider)
+    );
   }
   if (!isProviderTypeMap(provider)) {
     return provider;

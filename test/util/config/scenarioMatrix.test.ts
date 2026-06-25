@@ -271,6 +271,51 @@ describe('scenarioMatrix (real filesystem)', () => {
       ]);
     });
 
+    it('canonicalizes prefixed matrix provider paths against the matrix file', async () => {
+      const matrixPath = write(
+        'matrices/script-providers.yaml',
+        `- vars:
+    case: provider-string
+  provider: python:./target.py
+- vars:
+    case: provider-object
+  provider:
+    id: exec:./target.sh
+- vars:
+    case: provider-map
+  provider:
+    "golang:./target.go":
+      label: local-go-provider
+`,
+      );
+
+      const expanded = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+      );
+
+      expect(expanded).toEqual([
+        {
+          vars: { case: 'provider-string' },
+          provider: `python:${path.join(tmpDir, 'matrices/target.py')}`,
+        },
+        {
+          vars: { case: 'provider-object' },
+          provider: {
+            id: `exec:${path.join(tmpDir, 'matrices/target.sh')}`,
+          },
+        },
+        {
+          vars: { case: 'provider-map' },
+          provider: {
+            [`golang:${path.join(tmpDir, 'matrices/target.go')}`]: {
+              label: 'local-go-provider',
+            },
+          },
+        },
+      ]);
+    });
+
     it('canonicalizes bare matrix provider map keys against the matrix file', async () => {
       const matrixPath = write(
         'matrices/provider-map.yaml',
@@ -946,6 +991,31 @@ describe('scenarioMatrix (real filesystem)', () => {
       });
     });
 
+    it('loads nested relative refs against local scenario test files', async () => {
+      const previousBasePath = cliState.basePath;
+      cliState.basePath = tmpDir;
+      try {
+        write('tests/expected.txt', 'EXPECTED_FROM_TEST_FILE_DIR');
+        const testsPath = write(
+          'tests/relative-refs.yaml',
+          `- vars:
+    case: relative-ref
+  assert:
+    - type: contains
+      value: file://expected.txt
+`,
+        );
+
+        const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+        expect(tests?.[0].assert?.[0]).toMatchObject({
+          value: 'EXPECTED_FROM_TEST_FILE_DIR',
+        });
+      } finally {
+        cliState.basePath = previousBasePath;
+      }
+    });
+
     it('still loads nested data fields named provider in scenario test assertions', async () => {
       const expectedPath = write('tests/expected.txt', 'EXPECTED_DATA');
       const testsPath = write(
@@ -1029,6 +1099,23 @@ describe('scenarioMatrix (real filesystem)', () => {
         const tests = await readScenarioTests(scenarios?.[0].tests, tmpDir);
 
         expect(tests).toEqual([expect.objectContaining({ vars: { source: 'globbed' } })]);
+      },
+    );
+
+    it.runIf(process.platform !== 'win32')(
+      'loads vars globs declared below scenario directories with glob metacharacters',
+      async () => {
+        const scenarioPath = write(
+          'configs [prod]/scenario.yaml',
+          '- config:\n    - {}\n  tests:\n    - vars: file://vars/*.yaml\n',
+        );
+        write('configs [prod]/vars/a.yaml', 'a: one\n');
+        write('configs [prod]/vars/b.yaml', 'b: two\n');
+
+        const scenarios = await loadScenarioConfigs([`file://${scenarioPath}`], tmpDir);
+        const tests = await readScenarioTests(scenarios?.[0].tests, tmpDir);
+
+        expect(tests).toEqual([expect.objectContaining({ vars: { a: 'one', b: 'two' } })]);
       },
     );
 

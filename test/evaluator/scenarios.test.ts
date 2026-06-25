@@ -3,7 +3,11 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import { __buildTestsFromSuiteForTests, evaluate } from '../../src/evaluator';
+import {
+  __buildTestsFromSuiteForTests,
+  __resolveRuntimeGradingProviderReferencesForTests,
+  evaluate,
+} from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import {
   type ApiProvider,
@@ -11,6 +15,7 @@ import {
   type EvaluateSummaryV3,
   type TestSuite,
 } from '../../src/types/index';
+import { loadScenarioConfigs } from '../../src/util/config/scenarioMatrix';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -110,6 +115,33 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       /Unexpanded scenario config \$values reference/,
     );
     expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('uses scenario source env when resolving scenario grading providers', async () => {
+    const scenarios = await loadScenarioConfigs(
+      [
+        {
+          config: [{ options: { provider: 'echo' } }],
+          tests: [{}],
+        },
+      ],
+      '',
+      { GRADER_TOKEN: 'source-env' },
+    );
+    const testSuite = {
+      providers: [],
+      prompts: [],
+      env: { GRADER_TOKEN: 'suite-env' },
+      scenarios,
+    } as TestSuite;
+    const [testCase] = __buildTestsFromSuiteForTests(testSuite);
+
+    __resolveRuntimeGradingProviderReferencesForTests(testCase, Object.create(null), testSuite);
+
+    expect(testCase.options?.provider).toEqual({
+      id: 'echo',
+      env: { GRADER_TOKEN: 'source-env' },
+    });
   });
 
   it('does not serialize valid cyclic scenario provider state in invariant messages', async () => {
@@ -324,6 +356,38 @@ describeEvaluator('evaluator scenarios and conversations', () => {
       (prompt: CompletedPrompt) => prompt.provider === 'scenario-override',
     );
     expect(scenarioPrompts).toEqual([expect.objectContaining({ raw: 'one' })]);
+  });
+
+  it('applies filter ranges before appending scenario override prompt columns', async () => {
+    const suiteProvider: ApiProvider = {
+      id: () => 'suite-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'suite-provider' }),
+    };
+    const scenarioProvider: ApiProvider = {
+      id: () => 'scenario-override',
+      callApi: vi.fn().mockResolvedValue({ output: 'scenario-override' }),
+    };
+    const testSuite: TestSuite = {
+      providers: [suiteProvider],
+      prompts: [toPrompt('only')],
+      scenarios: [
+        {
+          config: [{ provider: scenarioProvider }, {}],
+          tests: [{}],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { filterRange: '1:2', maxConcurrency: 1 });
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].provider.id).toBe('suite-provider');
+    expect(scenarioProvider.callApi).not.toHaveBeenCalled();
+    expect(
+      summary.prompts.filter((prompt: CompletedPrompt) => prompt.provider === 'scenario-override'),
+    ).toEqual([]);
   });
 
   it('attributes scenario override results to the override provider while preserving the suite slot context', async () => {

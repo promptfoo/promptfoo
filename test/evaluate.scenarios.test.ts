@@ -551,6 +551,36 @@ describe('programmatic scenario config expansion', () => {
     });
   });
 
+  it('redacts matrix provider options in serialized scenario rows', async () => {
+    const tmpDir = makeTmpDir();
+    const secret = 'MATRIX_PROVIDER_SECRET_SENTINEL';
+    const matrixPath = path.join(tmpDir, 'matrix.yaml');
+    fs.writeFileSync(
+      matrixPath,
+      `- provider:
+    id: echo
+    config:
+      custom: keep
+      apiKey: ${secret}
+`,
+    );
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [{ config: [{ $values: `file://${matrixPath}` }], tests: [{}] }],
+      writeLatestResults: false,
+    });
+
+    const scenario = record.config.scenarios?.[0];
+    const row = typeof scenario === 'object' ? scenario.config[0] : undefined;
+    expect(JSON.stringify(record.config)).not.toContain(secret);
+    expect(row && !('$values' in row) ? row.provider : undefined).toEqual({
+      id: 'echo',
+      config: { custom: 'keep', apiKey: REDACTED },
+    });
+  });
+
   it('persists file-backed scenario test provider refs instead of runtime provider ids', async () => {
     const tmpDir = makeTmpDir();
     const scenarioDir = path.join(tmpDir, 'scenarios');
