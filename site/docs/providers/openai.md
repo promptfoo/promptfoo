@@ -497,9 +497,7 @@ OpenAI exposes the current ChatGPT Instant model as `chat-latest`. This floating
 
 OpenAI's pricing docs list `chat-latest` at $5 input, $0.50 cached input, and $30 output per 1M tokens.
 
-Promptfoo uses OpenAI's published standard and Batch API price for the alias, and does not infer Flex, Priority, or GPT-5.5-specific long-context rates unless OpenAI publishes them.
-
-If you set reasoning effort explicitly for `chat-latest`, use `medium`. The API rejects other reasoning-effort values for this floating alias on both Chat Completions and Responses.
+Promptfoo uses OpenAI's published Standard price for the alias. Batch, Flex, Priority, and GPT-5.5-specific long-context costs remain unpriced unless OpenAI publishes and enables them for `chat-latest`.
 
 #### Available Models
 
@@ -509,7 +507,7 @@ If you set reasoning effort explicitly for `chat-latest`, use `medium`. The API 
 
 #### Usage Example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:chat-latest
     config:
