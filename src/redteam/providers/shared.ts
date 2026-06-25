@@ -114,7 +114,10 @@ function getOpenAiOutputCapKind(provider: ApiProvider): OpenAiOutputCapKind | un
   ) {
     return 'responses';
   }
-  if (provider instanceof OpenAiChatCompletionProvider) {
+  if (
+    provider instanceof OpenAiChatCompletionProvider ||
+    hasProviderPrototype(provider, 'AzureChatCompletionProvider')
+  ) {
     return 'chat';
   }
   if (

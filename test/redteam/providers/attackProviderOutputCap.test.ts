@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS } from '../../../src/redteam/providers/constants';
@@ -45,6 +46,24 @@ describe('redteam attack provider output caps', () => {
       const { body } = await (loaded as OpenAiResponsesProvider).getOpenAiBody('hello');
 
       expect(body.max_output_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(body).not.toHaveProperty('max_tokens');
+    } finally {
+      restoreLoader();
+    }
+  });
+
+  it('caps the actual Azure reasoning-chat request body for attack calls', async () => {
+    const provider = new AzureChatCompletionProvider('gpt-5-deployment', { config: {} });
+    const restoreLoader = setRedteamProviderLoader(async () => [provider]);
+
+    try {
+      const loaded = await redteamProviderManager.getProvider({
+        provider: 'azure:chat:gpt-5-deployment',
+        purpose: 'attack',
+      });
+      const { body } = await (loaded as AzureChatCompletionProvider).getOpenAiBody('hello');
+
+      expect(body.max_completion_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
       expect(body).not.toHaveProperty('max_tokens');
     } finally {
       restoreLoader();

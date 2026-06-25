@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { OllamaCompletionProvider } from '../../../src/providers/ollama';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
@@ -289,6 +290,26 @@ describe('shared redteam provider utilities', () => {
       expect(result).not.toBe(loaded);
       expect(loaded.config.max_tokens).toBeUndefined();
       expect(loaded.config.max_completion_tokens).toBeUndefined();
+    });
+
+    it('applies the chat output cap to configured Azure chat attack providers', async () => {
+      const loaded = new AzureChatCompletionProvider('gpt-5-deployment', { config: {} });
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+      redteamProviderManager.clearProvider();
+
+      const result = await redteamProviderManager.getProvider({
+        provider: 'azure:chat:gpt-5-deployment',
+        purpose: 'attack',
+      });
+
+      expect((result as AzureChatCompletionProvider).config.max_tokens).toBe(
+        DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+      );
+      expect((result as AzureChatCompletionProvider).config.max_completion_tokens).toBe(
+        DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+      );
+      expect(result).not.toBe(loaded);
+      expect(loaded.config).toEqual({});
     });
 
     it('does not cap a configured OpenAI provider used for batch generation', async () => {
