@@ -8,6 +8,7 @@ import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
 import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
+import { type TestCase } from '../../../src/types/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
@@ -59,7 +60,9 @@ describe('Scenario loading with glob patterns', () => {
     vi.mocked(loadApiProviders).mockResolvedValue([
       createMockProvider({ id: 'openai:gpt-3.5-turbo' }),
     ]);
-    vi.mocked(readTests).mockResolvedValue([]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
     vi.mocked(readFilters).mockResolvedValue({});
     vi.mocked(validateAssertions).mockImplementation(() => {});
   });

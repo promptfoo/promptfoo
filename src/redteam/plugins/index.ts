@@ -19,11 +19,16 @@ import {
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import {
+  type RedteamGenerationContext,
+  remoteGenerationContextPayload,
+} from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   type RemoteMaterializationResponse,
@@ -89,6 +94,7 @@ type PluginClass<T extends PluginConfig> = new (
   purpose: string,
   injectVar: string,
   config: T,
+  targetId?: string,
 ) => RedteamPluginBase;
 
 const MAX_CHARS_RETRY_MODIFIER_KEY = '__maxCharsPerMessageRetry';
@@ -338,6 +344,7 @@ async function fetchRemoteTestCases(
   injectVar: string,
   n: number,
   config: PluginConfig,
+  redteamGenerationContext?: RedteamGenerationContext | string,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -372,6 +379,7 @@ async function fetchRemoteTestCases(
     n,
     purpose,
     task: key,
+    ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
   });
@@ -385,9 +393,7 @@ async function fetchRemoteTestCases(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         body,
       },
       getRequestTimeoutMs(),
@@ -416,15 +422,27 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
+    action: async ({
+      provider,
+      purpose,
+      injectVar,
+      n,
+      delayMs,
+      config,
+      targetId,
+      redteamGenerationContext,
+    }: PluginActionParams) => {
       const configWithDefaults = applyDefaultGraderExamples(key, config as T);
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
-        return new PluginClass(provider, purpose, injectVar, configWithDefaults as T).generateTests(
-          n,
-          delayMs,
-        );
+        return new PluginClass(
+          provider,
+          purpose,
+          injectVar,
+          configWithDefaults as T,
+          targetId,
+        ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
       const testCases = await fetchRemoteTestCases(
@@ -433,6 +451,7 @@ function createPluginFactory<T extends PluginConfig>(
         injectVar,
         n,
         configWithDefaults ?? {},
+        redteamGenerationContext ?? targetId,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
@@ -558,6 +577,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.injectVar,
         params.n,
         params.config ?? {},
+        params.targetId,
       );
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
@@ -599,6 +619,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.injectVar,
       params.n,
       params.config ?? {},
+      params.targetId,
     );
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
@@ -622,7 +643,14 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
+    action: async ({
+      purpose,
+      injectVar,
+      n,
+      config,
+      targetId,
+      redteamGenerationContext,
+    }: PluginActionParams) => {
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
@@ -636,6 +664,7 @@ function createRemotePlugin<T extends PluginConfig>(
         injectVar,
         n,
         configWithDefaults ?? {},
+        redteamGenerationContext ?? targetId,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({

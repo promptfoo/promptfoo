@@ -130,7 +130,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
 
       const headers = {
         Authorization: `Bearer ${this.getApiKey()}`,
-        ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+        ...this.getOpenAiRequestHeaders(),
       };
 
       let data: any, status: number, statusText: string;

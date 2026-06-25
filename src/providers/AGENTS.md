@@ -118,6 +118,8 @@ Every provider needs tests in `test/providers/`:
 
 ## Adding a Provider
 
+The eligibility bar in `site/docs/contributing.md` ("Provider eligibility") applies only to dedicated provider prefixes. Before adding one, confirm authorized model access, accountable ownership, durability, clear data handling, and provider-specific value beyond what `openai` + `apiBaseUrl` can express. A service that needs only a base URL and API-key environment variable should use the generic `openai` path and contribute docs or an example instead.
+
 **All seven items are required** before a provider is complete:
 
 1. Implement `ApiProvider` interface

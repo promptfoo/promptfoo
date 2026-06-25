@@ -76,7 +76,7 @@ Python providers use persistent worker processes. Your script is loaded once whe
 When Promptfoo evaluates a test case with a Python provider:
 
 1. **Promptfoo** prepares the prompt based on your configuration
-2. **Python Script** is called with three parameters:
+2. **Promptfoo** invokes `call_api` in your Python script with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
@@ -108,11 +108,11 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     """Main function for text generation tasks."""
     pass
 
-def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
+def call_embedding_api(prompt: str, options: dict) -> dict:
     """For embedding generation tasks."""
     pass
 
-def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
+def call_classification_api(prompt: str, options: dict) -> dict:
     """For classification tasks."""
     pass
 ```
@@ -124,14 +124,17 @@ async def call_api(prompt: str, options: dict, context: dict) -> dict:
     """Async main function for text generation tasks."""
     pass
 
-async def call_embedding_api(prompt: str, options: dict, context: dict) -> dict:
+async def call_embedding_api(prompt: str, options: dict) -> dict:
     """Async function for embedding generation tasks."""
     pass
 
-async def call_classification_api(prompt: str, options: dict, context: dict) -> dict:
+async def call_classification_api(prompt: str, options: dict) -> dict:
     """Async function for classification tasks."""
     pass
 ```
+
+`context` is passed to `call_api` only. Embedding and classification handlers receive `prompt` and
+`options`.
 
 ### Understanding Parameters
 
@@ -176,7 +179,7 @@ Contains your provider configuration and metadata:
 
 #### The `context` Parameter
 
-Provides information about the current test case:
+For `call_api`, this provides information about the current test case:
 
 ```python
 {

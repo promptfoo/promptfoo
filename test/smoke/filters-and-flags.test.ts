@@ -210,6 +210,30 @@ describe('Count-Based Filter Tests', () => {
     // Should have exactly 3 test results (random selection)
     expect(parsed.results.results.length).toBe(3);
   });
+
+  it('--filter-sample-seed repeats the selected sample', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const firstOutputPath = path.join(OUTPUT_DIR, 'sample-seeded-first-output.json');
+    const secondOutputPath = path.join(OUTPUT_DIR, 'sample-seeded-second-output.json');
+    const sampleArgs = ['--no-cache', '--filter-sample', '3', '--filter-sample-seed', '42'];
+
+    const first = runCli(['eval', '-c', configPath, '-o', firstOutputPath, ...sampleArgs], {
+      cwd: CONFIGS_DIR,
+    });
+    const second = runCli(['eval', '-c', configPath, '-o', secondOutputPath, ...sampleArgs], {
+      cwd: CONFIGS_DIR,
+    });
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+
+    const firstResults = JSON.parse(fs.readFileSync(firstOutputPath, 'utf-8')).results.results;
+    const secondResults = JSON.parse(fs.readFileSync(secondOutputPath, 'utf-8')).results.results;
+    const outputs = (results: Array<{ response: { output: string } }>) =>
+      results.map((result) => result.response.output);
+
+    expect(outputs(firstResults)).toEqual(outputs(secondResults));
+  });
 });
 
 describe('Pattern Filter Tests', () => {
@@ -940,6 +964,44 @@ describe('Output Flag Tests', () => {
 
     // The eval should still complete and write to the output file
     expect(fs.existsSync(outputPath)).toBe(true);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    expect(parsed.results.results).toHaveLength(1);
+    expect(parsed.results.results[0].response.output).toContain('Hello World');
+  });
+
+  it('1.11.4 - --tag merges and overrides config tags', () => {
+    const configPath = path.join(CONFIGS_DIR, 'tag-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'tag-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--tag',
+        'build=cli-build',
+        '--tag',
+        'run-id=ci-123',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.config.tags).toEqual({
+      build: 'cli-build',
+      team: 'evals',
+      source: 'smoke-default',
+      'run-id': 'ci-123',
+    });
   });
 });
 
