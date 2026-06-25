@@ -19,6 +19,8 @@ export const RUNOPTIONS_TEXT = {
     helper:
       'Optional character cap for each generated user message and final prompt sent to the target. Leave blank for no limit.',
     error: 'Max chars per message must be greater than 0',
+    minError: (minCharsPerMessage: number) =>
+      `Max chars per message must be at least ${minCharsPerMessage} to match min chars per message`,
   },
   minCharsPerMessage: {
     helper:
@@ -105,7 +107,10 @@ export const NumberOfTestCasesInput = ({
           return;
         }
         const parsed = Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 1 ? defaultNumberOfTests : parsed;
+        const safe =
+          Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1
+            ? defaultNumberOfTests
+            : parsed;
         updateConfig('numTests', safe);
         setValue(String(safe));
       }}
@@ -147,12 +152,14 @@ export const MaxCharsPerMessageInput = ({
 }: MaxCharsPerMessageInputProps) => {
   const parsedValue = Number(value);
   const error =
-    isBelowMin(value, 1) ||
-    (minCharsPerMessage !== undefined &&
-      !Number.isNaN(parsedValue) &&
-      parsedValue < minCharsPerMessage)
-      ? RUNOPTIONS_TEXT.maxCharsPerMessage.error
-      : undefined;
+    value.trim() !== '' &&
+    minCharsPerMessage !== undefined &&
+    !Number.isNaN(parsedValue) &&
+    parsedValue < minCharsPerMessage
+      ? RUNOPTIONS_TEXT.maxCharsPerMessage.minError(minCharsPerMessage)
+      : isBelowMin(value, 1)
+        ? RUNOPTIONS_TEXT.maxCharsPerMessage.error
+        : undefined;
 
   return (
     <NumberInput
@@ -286,7 +293,7 @@ export const DelayBetweenAPICallsInput = ({
           return;
         }
         const parsed = value === '' ? 0 : Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
+        const safe = Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 0 ? 0 : parsed;
         updateRunOption('delay', safe);
         setValue(String(safe));
         // Enforce mutual exclusivity
@@ -357,7 +364,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
           return;
         }
         const parsed = value === '' ? 1 : Number(value);
-        const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+        const safe = Number.isNaN(parsed) || !Number.isInteger(parsed) || parsed < 1 ? 1 : parsed;
         updateRunOption('maxConcurrency', safe);
         setValue(String(safe));
         // Enforce mutual exclusivity

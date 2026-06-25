@@ -219,6 +219,33 @@ describe('RunOptionsContent', () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', 120);
     });
 
+    it('should explain configured minCharsPerMessage when maxCharsPerMessage is below it', () => {
+      renderWithTooltipProvider(
+        <RunOptionsContent {...defaultProps} maxCharsPerMessage={25} minCharsPerMessage={50} />,
+      );
+
+      expect(screen.getByLabelText('Max chars per message')).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByText(RUNOPTIONS_TEXT.maxCharsPerMessage.minError(50))).toBeInTheDocument();
+    });
+
+    it('should reset fractional number of test cases to the configured default on blur', async () => {
+      const user = userEvent.setup();
+      const setValue = vi.fn();
+      renderWithTooltipProvider(
+        <NumberOfTestCasesInput value="1.5" setValue={setValue} updateConfig={mockUpdateConfig} />,
+      );
+      const numTestsInput = screen.getByLabelText('Number of test cases');
+
+      await user.click(numTestsInput);
+      await user.tab();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
+      expect(setValue).toHaveBeenCalledWith(String(REDTEAM_DEFAULTS.NUM_TESTS));
+    });
+
     it('should not persist fractional minCharsPerMessage', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
@@ -358,6 +385,18 @@ describe('DelayBetweenAPICallsInput', () => {
     expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
   });
 
+  it('normalizes fractional values to 0 on blur and enforces maxConcurrency=1', async () => {
+    const user = userEvent.setup();
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="1.5" />);
+    const input = screen.getByLabelText('Delay between API calls');
+    await user.click(input);
+    await user.tab();
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setValue).toHaveBeenCalledWith('0');
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
+  });
+
   it('clamps negative values to 0 on blur and enforces maxConcurrency=1', async () => {
     const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="-5" />);
@@ -487,6 +526,20 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 5);
     expect(setValue).toHaveBeenCalledWith('5');
+    expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
+    expect(setDelayValue).toHaveBeenCalledWith('0');
+  });
+
+  it('normalizes fractional values to 1 on blur and enforces delay=0', async () => {
+    const user = userEvent.setup();
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="1.5" />);
+    const input = screen.getByLabelText('Max concurrent requests');
+
+    await user.click(input);
+    await user.tab();
+
+    expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
+    expect(setValue).toHaveBeenCalledWith('1');
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setDelayValue).toHaveBeenCalledWith('0');
   });
