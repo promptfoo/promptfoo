@@ -47,7 +47,7 @@ describe('ShareModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDocumentExecCommand();
+    mockDocumentExecCommand().mockReturnValue(true);
     mockCallApi.mockImplementation(() => Promise.resolve(availabilityResponse()));
   });
 
@@ -95,6 +95,23 @@ describe('ShareModal', () => {
     expect(document.execCommand).toHaveBeenCalledWith('copy');
     expect(status).toHaveTextContent('Share URL copied.');
     expect(screen.getByRole('button', { name: 'Share URL copied' })).toBeInTheDocument();
+  });
+
+  it('reports a failed copy without announcing success', async () => {
+    vi.mocked(document.execCommand).mockReturnValue(false);
+    mockOnShare.mockResolvedValue('https://promptfoo.app/eval/shared');
+
+    render(<ShareModal {...defaultProps} />);
+
+    await screen.findByDisplayValue('https://promptfoo.app/eval/shared');
+    const status = screen.getByRole('status');
+    await userEvent.click(screen.getByRole('button', { name: 'Copy share URL' }));
+
+    expect(status).toHaveTextContent(
+      'Could not copy automatically. Select the URL and copy it manually.',
+    );
+    expect(screen.getByRole('button', { name: 'Retry copying share URL' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share URL copied' })).not.toBeInTheDocument();
   });
 
   it('does not share when a fresh auth check is unauthorized', async () => {

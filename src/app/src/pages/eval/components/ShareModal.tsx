@@ -33,6 +33,7 @@ type ShareState =
   | { status: 'idle' | 'loading' }
   | { status: 'ready'; url: string }
   | { status: 'error'; message: string; retryable: boolean };
+type CopyStatus = 'idle' | 'copied' | 'failed';
 
 async function generateShareState(
   evalId: string,
@@ -72,7 +73,7 @@ const ShareModal = ({
 }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
   const [shareState, setShareState] = useState<ShareState>({ status: 'idle' });
   const [retryAttempt, setRetryAttempt] = useState(0);
 
@@ -85,7 +86,7 @@ const ShareModal = ({
     const requestId = ++requestIdRef.current;
     const controller = new AbortController();
     const isCurrent = () => requestIdRef.current === requestId;
-    setCopied(false);
+    setCopyStatus('idle');
     setShareState({ status: 'loading' });
 
     const share = async () => {
@@ -128,21 +129,24 @@ const ShareModal = ({
   const handleCopyClick = () => {
     if (inputRef.current) {
       inputRef.current.select();
-      document.execCommand('copy');
-      setCopied(true);
+      try {
+        setCopyStatus(document.execCommand('copy') ? 'copied' : 'failed');
+      } catch {
+        setCopyStatus('failed');
+      }
     }
   };
 
   const handleClose = () => {
     requestIdRef.current += 1;
-    setCopied(false);
+    setCopyStatus('idle');
     setShareState({ status: 'idle' });
     onClose();
   };
 
   const handleRetry = () => {
     requestIdRef.current += 1;
-    setCopied(false);
+    setCopyStatus('idle');
     setShareState({ status: 'loading' });
     setRetryAttempt((attempt) => attempt + 1);
   };
@@ -152,9 +156,11 @@ const ShareModal = ({
       <DialogContent className="max-w-[660px]">
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {shareState.status === 'ready'
-            ? copied
+            ? copyStatus === 'copied'
               ? 'Share URL copied.'
-              : 'Share link ready.'
+              : copyStatus === 'failed'
+                ? 'Could not copy automatically. Select the URL and copy it manually.'
+                : 'Share link ready.'
             : shareState.status === 'loading'
               ? 'Generating share link...'
               : ''}
@@ -187,11 +193,26 @@ const ShareModal = ({
                   type="button"
                   onClick={handleCopyClick}
                   className="p-2 rounded hover:bg-muted transition-colors"
-                  aria-label={copied ? 'Share URL copied' : 'Copy share URL'}
+                  aria-label={
+                    copyStatus === 'copied'
+                      ? 'Share URL copied'
+                      : copyStatus === 'failed'
+                        ? 'Retry copying share URL'
+                        : 'Copy share URL'
+                  }
                 >
-                  {copied ? <Check className="size-5" /> : <Copy className="size-5" />}
+                  {copyStatus === 'copied' ? (
+                    <Check className="size-5" />
+                  ) : (
+                    <Copy className="size-5" />
+                  )}
                 </button>
               </div>
+              {copyStatus === 'failed' && (
+                <p className="text-xs text-destructive">
+                  Could not copy automatically. Select the URL and copy it manually.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 This URL is accessible to users with access to your organization.
               </p>
