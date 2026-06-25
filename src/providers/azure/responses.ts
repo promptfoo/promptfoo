@@ -152,7 +152,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const temperature = omitSamplingParameters
       ? undefined
       : (config.temperature ?? temperatureDefault);
-    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
+    const reasoningEffort = effectiveReasoningEffort;
 
     const instructions = config.instructions;
 
@@ -225,7 +225,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     };
 
     // First-class reasoning overrides matching passthrough keys; legacy reasoning_effort does not.
-    if (renderedReasoning && isReasoningModel) {
+    if (renderedReasoning) {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
