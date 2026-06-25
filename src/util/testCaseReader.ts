@@ -365,7 +365,7 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
       const row = JSON.parse(line);
       return {
         ...row,
-        description: `Row #${idx + 1}`,
+        description: row.description || `Row #${idx + 1}`,
       };
     });
 }

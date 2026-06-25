@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Codex app-server: verify traced protocol turn markers'
+
+prompts:
+  - 'Return a concise JSON summary of this workspace. Include the main purpose.'
+
+providers:
+  - id: openai:codex-app-server:gpt-5.5
+    config:
+      sandbox_mode: read-only
+      approval_policy: never
+      skip_git_repo_check: true
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+      acceptFormats: ['json']
+
+tests:
+  - vars: {}
+    metadata:
+      tracingEnabled: true
+    assert:
+      - type: is-json
+      - type: trace-span-count
+        value:
+          pattern: 'gen_ai.turn *'
+          min: 1

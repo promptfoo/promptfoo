@@ -21,13 +21,13 @@ describe('Google Vertex default providers', () => {
     expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
   });
 
-  it('should keep the default Gemini 3.1 provider on the global endpoint', () => {
+  it('should keep the default Gemini 3.1 provider global while honoring API host overrides', () => {
     const providers = getGoogleVertexProviders({
       VERTEX_REGION: 'us-central1',
-      VERTEX_API_HOST: 'us-central1-aiplatform.googleapis.com',
+      VERTEX_API_HOST: 'vertex-proxy.example.test',
     });
     expect(providers.gradingProvider.getRegion()).toBe('global');
-    expect(providers.gradingProvider.getApiHost()).toBe('aiplatform.googleapis.com');
+    expect(providers.gradingProvider.getApiHost()).toBe('vertex-proxy.example.test');
   });
 
   it('should share a single chat provider instance across grading roles', () => {
