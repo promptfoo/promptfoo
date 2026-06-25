@@ -17,18 +17,15 @@ export function hasRuntimeSupportEnded(removalDate: string, now: number = Date.n
   return removalTimestamp !== null && now >= removalTimestamp;
 }
 
-interface RuntimeNoticeCadence {
-  removalDate: string;
-  reminderIntervalDays: 1 | 7;
-}
-
 export function getRuntimeNoticeReminderIntervalDays(
-  notice: RuntimeNoticeCadence,
+  removalDate: string,
   now: number = Date.now(),
 ): 1 | 7 {
-  const removalTimestamp = parseUtcMidnight(notice.removalDate);
+  const removalTimestamp = parseUtcMidnight(removalDate);
+  // Conservative weekly default if the date is somehow unparseable. This can't happen for a
+  // validated /version response, but keeps the cadence well-defined.
   if (removalTimestamp === null) {
-    return notice.reminderIntervalDays;
+    return 7;
   }
   return removalTimestamp - now <= FINAL_RUNTIME_NOTICE_PHASE_MS ? 1 : 7;
 }

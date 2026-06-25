@@ -59,7 +59,6 @@ describe('VersionSchemas.Response', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
       }).runtimeNotice,
     ).toMatchObject({ currentMajor: 20, removalDate: '2026-07-30' });
@@ -79,7 +78,6 @@ describe('VersionSchemas.Response', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
       }).success,
     ).toBe(false);
@@ -99,7 +97,6 @@ describe('VersionSchemas.Response', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://malicious.example.com/upgrade',
-          reminderIntervalDays: 7,
         },
       }).success,
     ).toBe(false);

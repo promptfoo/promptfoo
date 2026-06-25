@@ -16,5 +16,4 @@ export interface RuntimeCompatibilityNotice {
   minimumVersion: typeof NODE_MINIMUM_UPGRADE_VERSION;
   recommendedVersion: typeof NODE_RECOMMENDED_VERSION;
   documentationUrl: typeof NODE_RUNTIME_UPGRADE_GUIDE_URL;
-  reminderIntervalDays: 1 | 7;
 }

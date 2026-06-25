@@ -17,7 +17,6 @@ export interface RuntimeCompatibilityNotice {
   minimumVersion: string;
   recommendedVersion: string;
   documentationUrl: string;
-  reminderIntervalDays: 1 | 7;
 }
 
 export interface RuntimeCompatibilityPolicy {
@@ -91,7 +90,8 @@ function isRuntimeNoticeSnoozed(notice: RuntimeCompatibilityNotice): boolean {
   const lastDismissedTimestamp = Date.parse(lastDismissedAt);
   return (
     !Number.isNaN(lastDismissedTimestamp) &&
-    Date.now() - lastDismissedTimestamp < getRuntimeNoticeReminderIntervalDays(notice) * DAY_MS
+    Date.now() - lastDismissedTimestamp <
+      getRuntimeNoticeReminderIntervalDays(notice.removalDate) * DAY_MS
   );
 }
 
@@ -117,7 +117,8 @@ function getRuntimePolicyRefreshDelay(
     const lastDismissedTimestamp = lastDismissedAt ? Date.parse(lastDismissedAt) : Number.NaN;
     if (!Number.isNaN(lastDismissedTimestamp)) {
       const snoozeExpiry =
-        lastDismissedTimestamp + getRuntimeNoticeReminderIntervalDays(notice, now) * DAY_MS;
+        lastDismissedTimestamp +
+        getRuntimeNoticeReminderIntervalDays(notice.removalDate, now) * DAY_MS;
       if (snoozeExpiry > now) {
         pendingBoundaries.push(snoozeExpiry);
       }

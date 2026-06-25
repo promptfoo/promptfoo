@@ -26,7 +26,6 @@ describe('runtime compatibility policy', () => {
         removalDate: '2026-07-30',
         minimumVersion: '22.22.0',
         recommendedVersion: '24 LTS',
-        reminderIntervalDays: 7,
       }),
     );
   });
@@ -69,13 +68,6 @@ describe('runtime compatibility policy', () => {
       7 * DAY_MS,
     );
     expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-20T00:00:00.000Z'))).toBe(DAY_MS);
-    expect(
-      getRuntimeCompatibilityNotice('v20.20.2', {
-        isBun: false,
-        isDeno: false,
-        now: new Date('2026-07-20T00:00:00.000Z'),
-      })?.reminderIntervalDays,
-    ).toBe(1);
   });
 
   it('switches to the daily cadence exactly 14 days before the cutoff', () => {

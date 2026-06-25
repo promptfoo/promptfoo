@@ -87,7 +87,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
@@ -134,7 +133,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
       },
       loading: false,
@@ -167,7 +165,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 1,
         },
       },
       loading: false,
@@ -201,7 +198,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 1,
         },
         updateCommands: {
           primary: 'docker pull promptfoo/promptfoo:latest',
@@ -236,7 +232,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
@@ -275,7 +270,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 1,
         },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
@@ -388,7 +382,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 1,
         },
         updateCommands: {
           primary: 'docker pull promptfoo/promptfoo:latest',
@@ -426,7 +419,6 @@ describe('UpdateBanner', () => {
           minimumVersion: '22.22.0',
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-          reminderIntervalDays: 7,
         },
       },
       loading: false,
@@ -472,7 +464,6 @@ describe('UpdateBanner', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 7 as const,
     };
     const visibleState: ReturnType<typeof useVersionCheck> = {
       versionInfo: {

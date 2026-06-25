@@ -21,7 +21,6 @@ export const RuntimeCompatibilityNoticeSchema = z.object({
   // Locked to the announced constant so the response can't drift from the published upgrade guide,
   // matching the policy-drift guard on the other notice fields.
   documentationUrl: z.literal(NODE_RUNTIME_UPGRADE_GUIDE_URL),
-  reminderIntervalDays: z.union([z.literal(1), z.literal(7)]),
 });
 
 export const RuntimeCompatibilityPolicySchema = z.object({

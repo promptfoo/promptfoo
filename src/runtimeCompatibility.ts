@@ -47,8 +47,6 @@ export function getRuntimeCompatibilityNotice(
     minimumVersion: NODE_MINIMUM_UPGRADE_VERSION,
     recommendedVersion: NODE_RECOMMENDED_VERSION,
     documentationUrl: NODE_RUNTIME_UPGRADE_GUIDE_URL,
-    reminderIntervalDays:
-      getRuntimeNoticeReminderIntervalMs(options.now ?? new Date()) === DAY_MS ? 1 : 7,
   };
 }
 

@@ -81,7 +81,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 1 as const,
     };
     let resolveVersion!: (response: Response) => void;
     getCallApiMock().mockImplementationOnce(
@@ -186,7 +185,6 @@ describe('useVersionCheck', () => {
         minimumVersion: '22.22.0',
         recommendedVersion: '24 LTS',
         documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        reminderIntervalDays: 7 as const,
       },
     };
 
@@ -227,7 +225,6 @@ describe('useVersionCheck', () => {
         minimumVersion: '22.22.0',
         recommendedVersion: '24 LTS',
         documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        reminderIntervalDays: 7 as const,
       },
     };
 
@@ -271,7 +268,6 @@ describe('useVersionCheck', () => {
         minimumVersion: '22.22.0',
         recommendedVersion: '24 LTS',
         documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        reminderIntervalDays: 1,
       },
     });
 
@@ -296,7 +292,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 7 as const,
     };
     localStorage.setItem(
       'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
@@ -337,7 +332,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 7 as const,
     };
     mockCallApiResponse({
       currentVersion: '1.0.0',
@@ -373,7 +367,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 1 as const,
     };
     mockCallApiResponseOnce({
       currentVersion: '1.0.0',
@@ -415,7 +408,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 1 as const,
     };
     mockCallApiResponseOnce({
       currentVersion: '1.0.0',
@@ -542,7 +534,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 1 as const,
     };
     localStorage.setItem(
       'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
@@ -591,7 +582,6 @@ describe('useVersionCheck', () => {
       minimumVersion: '22.22.0',
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      reminderIntervalDays: 7 as const,
     };
     localStorage.setItem(
       'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
@@ -616,7 +606,7 @@ describe('useVersionCheck', () => {
       latestVersion: '1.1.0',
       updateAvailable: true,
       updateBlockedByRuntime: false,
-      runtimeNotice: { ...runtimeNotice, reminderIntervalDays: 1 },
+      runtimeNotice,
     });
 
     const { result } = renderHook(() => useVersionCheck());

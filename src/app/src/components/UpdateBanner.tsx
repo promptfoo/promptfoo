@@ -293,7 +293,10 @@ export default function UpdateBanner() {
         {activeRuntimeNotice ? (
           <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
             {getReminderLabel(
-              getRuntimeNoticeReminderIntervalDays(activeRuntimeNotice, runtimePolicyUpdatedAt),
+              getRuntimeNoticeReminderIntervalDays(
+                activeRuntimeNotice.removalDate,
+                runtimePolicyUpdatedAt,
+              ),
             )}
           </Button>
         ) : (
