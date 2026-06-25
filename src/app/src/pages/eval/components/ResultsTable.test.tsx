@@ -3,13 +3,17 @@ import { act, StrictMode } from 'react';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import {
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  ResultFailureReason,
+} from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -2601,31 +2605,43 @@ describe('ResultsTable Malformed Markdown Handling', () => {
 });
 
 describe('ResultsTable Variable JSON Formatting', () => {
+  const createMockOutput = (metadata: Record<string, unknown>): EvaluateTableOutput => ({
+    cost: 0,
+    failureReason: ResultFailureReason.NONE,
+    id: 'test-output',
+    latencyMs: 0,
+    metadata,
+    namedScores: {},
+    pass: true,
+    prompt: 'test prompt',
+    score: 1,
+    testCase: {},
+    text: 'test output',
+  });
+
+  const mockPrompt = {
+    label: 'test prompt',
+    provider: 'test-provider',
+    raw: 'test prompt',
+  };
+
   const mockTable: EvaluateTable = {
     body: [
       {
         outputs: [
-          {
-            pass: true,
-            score: 1,
-            text: 'test output',
-            metadata: {
-              transformDisplayVars: {
-                __transformed_payload: '{"decoded":true}',
-              },
+          createMockOutput({
+            transformDisplayVars: {
+              __transformed_payload: '{"decoded":true}',
             },
-          },
+          }),
         ],
         test: {},
+        testIdx: 0,
         vars: ['{"foo":"bar","nested":{"count":2}}'],
       },
     ],
     head: {
-      prompts: [
-        {
-          provider: 'test-provider',
-        },
-      ],
+      prompts: [mockPrompt],
       vars: ['payload'],
     },
   };
@@ -2639,20 +2655,15 @@ describe('ResultsTable Variable JSON Formatting', () => {
   }): EvaluateTable => ({
     body: [
       {
-        outputs: [
-          {
-            pass: true,
-            score: 1,
-            text: 'test output',
-            metadata: { transformDisplayVars: transformedDisplayVars },
-          },
-        ],
+        outputs: [createMockOutput({ transformDisplayVars: transformedDisplayVars })],
         test: {},
-        vars,
+        testIdx: 0,
+        // Real eval payloads may contain structured values despite the narrower table wire type.
+        vars: vars as EvaluateTable['body'][number]['vars'],
       },
     ],
     head: {
-      prompts: [{ provider: 'test-provider' }],
+      prompts: [mockPrompt],
       vars: vars.map((_, index) => `payload_${index}`),
     },
   });
