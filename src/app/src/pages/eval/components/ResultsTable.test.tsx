@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
-type TestEvaluateTable = NonNullable<ReturnType<typeof useTableStore>['table']>;
+type TestEvaluateTable = NonNullable<ReturnType<typeof useTableStore.getState>['table']>;
 type TestEvaluateTableOutput = TestEvaluateTable['body'][number]['outputs'][number];
 
 vi.mock('./store', () => ({
