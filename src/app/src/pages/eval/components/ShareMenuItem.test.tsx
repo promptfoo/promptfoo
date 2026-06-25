@@ -122,6 +122,7 @@ describe('ShareMenuItem', () => {
     render(<ShareMenuItem evalId="eval-1" onClick={mockOnClick} />);
 
     const retry = await screen.findByRole('menuitem', { name: 'Retry sharing check' });
+    expect(retry).toHaveAttribute('aria-disabled', 'false');
     expect(screen.getByText(/HTTP 500/)).toBeInTheDocument();
     await userEvent.click(retry);
 

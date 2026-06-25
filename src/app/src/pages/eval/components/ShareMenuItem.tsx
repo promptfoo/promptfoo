@@ -84,7 +84,7 @@ export default function ShareMenuItem({ evalId, onClick, loading = false }: Shar
   const checking = currentAvailability.status === 'checking';
   const disabled = currentAvailability.status === 'disabled';
   const retryable = disabled && currentAvailability.retryable;
-  const unavailable = checking || disabled || loading;
+  const inactive = checking || (disabled && !retryable) || loading;
   const reason = loading
     ? 'A share link is already being generated.'
     : checking
@@ -105,18 +105,20 @@ export default function ShareMenuItem({ evalId, onClick, loading = false }: Shar
       <TooltipTrigger asChild>
         <DropdownMenuItem
           aria-busy={checking || loading}
-          aria-disabled={unavailable}
-          className={unavailable ? 'aria-disabled:opacity-50' : undefined}
+          aria-disabled={inactive}
+          className={inactive ? 'aria-disabled:opacity-50' : undefined}
           onSelect={(event) => {
-            if (!unavailable) {
-              onClick();
-              return;
-            }
-            event.preventDefault();
             if (retryable) {
+              event.preventDefault();
               setAvailability({ evalId, status: 'checking' });
               setRetryAttempt((attempt) => attempt + 1);
+              return;
             }
+            if (inactive) {
+              event.preventDefault();
+              return;
+            }
+            onClick();
           }}
         >
           {checking || loading ? (

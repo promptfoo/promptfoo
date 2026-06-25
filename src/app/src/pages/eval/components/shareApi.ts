@@ -14,6 +14,20 @@ export class ShareAvailabilityError extends Error {
   }
 }
 
+export class ShareRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'ShareRequestError';
+  }
+}
+
+export function isRetryableShareStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -53,10 +67,9 @@ export async function checkShareAvailability(
   }
 
   if (!response.ok) {
-    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
     throw new ShareAvailabilityError(
       `Failed to check sharing availability (HTTP ${response.status}).`,
-      retryable,
+      isRetryableShareStatus(response.status),
     );
   }
 

@@ -4,6 +4,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareModal from './ShareModal';
+import { ShareRequestError } from './shareApi';
 
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
@@ -64,7 +65,18 @@ describe('ShareModal', () => {
     render(<ShareModal {...defaultProps} />);
 
     expect(await screen.findByRole('status')).toHaveTextContent('Generating share link...');
-    expect(mockOnShare).toHaveBeenCalledWith('eval-1');
+    expect(mockOnShare).toHaveBeenCalledWith('eval-1', expect.any(AbortSignal));
+  });
+
+  it('skips upload availability checks when sharing an already-hosted eval', async () => {
+    mockOnShare.mockResolvedValue('https://self-hosted.example/eval/eval-1');
+
+    render(<ShareModal {...defaultProps} requiresAvailabilityCheck={false} />);
+
+    expect(
+      await screen.findByDisplayValue('https://self-hosted.example/eval/eval-1'),
+    ).toBeInTheDocument();
+    expect(mockCallApi).not.toHaveBeenCalled();
   });
 
   it('renders a validated share URL and copies it', async () => {
@@ -138,6 +150,17 @@ describe('ShareModal', () => {
     expect(mockOnShare).toHaveBeenCalledTimes(2);
   });
 
+  it('does not offer retry for a definitive share request failure', async () => {
+    mockOnShare.mockRejectedValue(
+      new ShareRequestError('Cloud permissions do not allow sharing this evaluation', false),
+    );
+
+    render(<ShareModal {...defaultProps} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cloud permissions');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
   it.each([
     ['empty', ''],
     ['whitespace-only', '   '],
@@ -159,10 +182,14 @@ describe('ShareModal', () => {
     );
 
     const { rerender } = render(<ShareModal {...defaultProps} evalId="eval-1" />);
-    await waitFor(() => expect(mockOnShare).toHaveBeenCalledWith('eval-1'));
+    await waitFor(() =>
+      expect(mockOnShare).toHaveBeenCalledWith('eval-1', expect.any(AbortSignal)),
+    );
 
     rerender(<ShareModal {...defaultProps} evalId="eval-2" />);
-    await waitFor(() => expect(mockOnShare).toHaveBeenCalledWith('eval-2'));
+    await waitFor(() =>
+      expect(mockOnShare).toHaveBeenCalledWith('eval-2', expect.any(AbortSignal)),
+    );
 
     await act(async () => second.resolve('https://promptfoo.app/eval/two'));
     expect(await screen.findByDisplayValue('https://promptfoo.app/eval/two')).toBeInTheDocument();
@@ -181,6 +208,23 @@ describe('ShareModal', () => {
 
     rerender(<ShareModal {...defaultProps} open={false} />);
     expect(signal?.aborted).toBe(true);
+  });
+
+  it('aborts an in-flight share request when the modal closes', async () => {
+    let shareSignal: AbortSignal | undefined;
+    mockOnShare.mockImplementation((_id: string, signal: AbortSignal) => {
+      shareSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      });
+    });
+
+    const { rerender } = render(<ShareModal {...defaultProps} />);
+    await waitFor(() => expect(shareSignal).toBeDefined());
+    expect(shareSignal?.aborted).toBe(false);
+
+    rerender(<ShareModal {...defaultProps} open={false} />);
+    expect(shareSignal?.aborted).toBe(true);
   });
 
   it('encodes the eval id and closes through the visible button', async () => {

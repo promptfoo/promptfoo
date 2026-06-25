@@ -13,13 +13,19 @@ import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
 import { Check, Copy } from 'lucide-react';
 import logger from '../../../../../logger';
-import { checkShareAvailability, isAbortError, ShareAvailabilityError } from './shareApi';
+import {
+  checkShareAvailability,
+  isAbortError,
+  ShareAvailabilityError,
+  ShareRequestError,
+} from './shareApi';
 
 interface ShareModalProps {
   open: boolean;
   onClose: () => void;
   evalId: string;
-  onShare: (id: string) => Promise<string>;
+  onShare: (id: string, signal: AbortSignal) => Promise<string>;
+  requiresAvailabilityCheck?: boolean;
 }
 
 type ShareState =
@@ -27,7 +33,42 @@ type ShareState =
   | { status: 'ready'; url: string }
   | { status: 'error'; message: string; retryable: boolean };
 
-const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
+async function generateShareState(
+  evalId: string,
+  onShare: ShareModalProps['onShare'],
+  requiresAvailabilityCheck: boolean,
+  signal: AbortSignal,
+): Promise<ShareState> {
+  if (requiresAvailabilityCheck) {
+    const availability = await checkShareAvailability(evalId, signal);
+    if (!availability.sharingEnabled) {
+      return {
+        status: 'error',
+        message: availability.sharingDisabledReason ?? 'Sharing is unavailable.',
+        retryable: availability.isRetryable,
+      };
+    }
+  }
+
+  signal.throwIfAborted();
+  const url = await onShare(evalId, signal);
+  if (typeof url !== 'string' || url.trim().length === 0) {
+    return {
+      status: 'error',
+      message: 'The server did not return a valid share URL.',
+      retryable: true,
+    };
+  }
+  return { status: 'ready', url: url.trim() };
+}
+
+const ShareModal = ({
+  open,
+  onClose,
+  evalId,
+  onShare,
+  requiresAvailabilityCheck = true,
+}: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
   const [copied, setCopied] = useState(false);
@@ -48,32 +89,16 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
 
     const share = async () => {
       try {
-        const availability = await checkShareAvailability(evalId, controller.signal);
+        const nextState = await generateShareState(
+          evalId,
+          onShare,
+          requiresAvailabilityCheck,
+          controller.signal,
+        );
         if (!isCurrent()) {
           return;
         }
-        if (!availability.sharingEnabled) {
-          setShareState({
-            status: 'error',
-            message: availability.sharingDisabledReason ?? 'Sharing is unavailable.',
-            retryable: availability.isRetryable,
-          });
-          return;
-        }
-
-        const url = await onShare(evalId);
-        if (!isCurrent()) {
-          return;
-        }
-        if (typeof url !== 'string' || url.trim().length === 0) {
-          setShareState({
-            status: 'error',
-            message: 'The server did not return a valid share URL.',
-            retryable: true,
-          });
-          return;
-        }
-        setShareState({ status: 'ready', url: url.trim() });
+        setShareState(nextState);
       } catch (error) {
         if (!isCurrent() || isAbortError(error)) {
           return;
@@ -82,7 +107,10 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
         setShareState({
           status: 'error',
           message: error instanceof Error ? error.message : 'Failed to generate share URL',
-          retryable: error instanceof ShareAvailabilityError ? error.retryable : true,
+          retryable:
+            error instanceof ShareAvailabilityError || error instanceof ShareRequestError
+              ? error.retryable
+              : true,
         });
       }
     };
@@ -94,7 +122,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       }
       controller.abort();
     };
-  }, [open, evalId, onShare, retryAttempt]);
+  }, [open, evalId, onShare, requiresAvailabilityCheck, retryAttempt]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {

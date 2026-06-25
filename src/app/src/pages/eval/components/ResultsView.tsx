@@ -42,6 +42,7 @@ import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareMenuItem from './ShareMenuItem';
 import ShareModal from './ShareModal';
+import { isRetryableShareStatus, ShareRequestError } from './shareApi';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
@@ -371,7 +372,7 @@ export default function ResultsView({
   };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareLoading, setShareLoading] = React.useState(false);
+  const [sharingEvalId, setSharingEvalId] = React.useState<string | null>(null);
 
   // State for compare eval dialog
   const [compareDialogOpen, setCompareDialogOpen] = React.useState(false);
@@ -397,43 +398,47 @@ export default function ResultsView({
     setShareModalOpen(true);
   };
 
-  const handleShare = React.useCallback(async (id: string): Promise<string> => {
-    if (!IS_RUNNING_LOCALLY) {
-      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-      return `${window.location.origin}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-    }
+  const handleShare = React.useCallback(
+    async (id: string, signal: AbortSignal): Promise<string> => {
+      if (!IS_RUNNING_LOCALLY) {
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        return `${window.location.origin}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
+      }
 
-    setShareLoading(true);
-    try {
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message =
-          data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
-            ? data.error
-            : `Failed to generate share URL (HTTP ${response.status})`;
-        throw new Error(message);
+      setSharingEvalId(id);
+      try {
+        const response = await callApi('/results/share', {
+          method: 'POST',
+          signal,
+          body: JSON.stringify({ id }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        const data: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+              ? data.error
+              : `Failed to generate share URL (HTTP ${response.status})`;
+          throw new ShareRequestError(message, isRetryableShareStatus(response.status));
+        }
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !('url' in data) ||
+          typeof data.url !== 'string' ||
+          data.url.trim().length === 0
+        ) {
+          throw new ShareRequestError('The server did not return a valid share URL.', true);
+        }
+        return (data as ShareResponse).url;
+      } finally {
+        setSharingEvalId((activeEvalId) => (activeEvalId === id ? null : activeEvalId));
       }
-      if (
-        !data ||
-        typeof data !== 'object' ||
-        !('url' in data) ||
-        typeof data.url !== 'string' ||
-        data.url.trim().length === 0
-      ) {
-        throw new Error('The server did not return a valid share URL.');
-      }
-      return (data as ShareResponse).url;
-    } finally {
-      setShareLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     // Prevent self-comparison
@@ -816,7 +821,7 @@ export default function ResultsView({
       <ShareMenuItem
         evalId={currentEvalId}
         onClick={handleShareButtonClick}
-        loading={shareLoading}
+        loading={sharingEvalId === currentEvalId}
       />
       <DropdownMenuItem onClick={handleDeleteEvalClick} className="text-destructive">
         <Trash2 className="size-4 mr-2" />
@@ -1010,6 +1015,7 @@ export default function ResultsView({
         }}
         evalId={currentEvalId}
         onShare={handleShare}
+        requiresAvailabilityCheck={IS_RUNNING_LOCALLY}
       />
       <EvalSelectorDialog
         open={compareDialogOpen}
