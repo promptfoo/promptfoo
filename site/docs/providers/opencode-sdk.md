@@ -35,7 +35,7 @@ npm install @opencode-ai/sdk
 
 :::note
 
-The SDK package is an optional dependency and only needs to be installed if you want to use the OpenCode SDK provider.
+Promptfoo treats the SDK package as an optional runtime dependency, so it only needs to be installed if you want to use the OpenCode SDK provider.
 
 :::
 
@@ -381,6 +381,36 @@ Promptfoo converts the object form above into the `PermissionRuleset` array the 
 For security-conscious deployments, set `doom_loop: deny` and `external_directory: deny` to prevent infinite agent loops and restrict file access to the working directory.
 
 :::
+
+## Skills
+
+OpenCode loads Agent Skills through its native `skill` tool. Enable the tool for
+the eval, point `working_dir` at a repo that contains skills OpenCode can
+discover, and allow the skill permission if you want a non-interactive run:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      working_dir: ./project
+      tools:
+        skill: true
+      permission:
+        skill: allow
+
+tests:
+  - assert:
+      - type: skill-used
+        value: review-standards
+```
+
+Promptfoo normalizes OpenCode's native `skill` tool parts into
+`response.metadata.skillCalls`, so [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used)
+works the same way it does for Claude Agent SDK. Each normalized entry keeps the
+requested skill name and tool input, records tool failures with `is_error: true`,
+and includes the loaded `SKILL.md` path when OpenCode returns the skill directory
+in its result metadata. Those errored entries remain available for diagnostics,
+but they do not count as successful `skill-used` matches.
 
 ## Session Management
 

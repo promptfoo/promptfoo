@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { handleIsSql } from '../../src/assertions/sql';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -24,6 +24,232 @@ describe('is-sql assertion', () => {
         pass: true,
         reason: 'Assertion passed',
         score: 1,
+      });
+    });
+
+    it.each([
+      'SELECT DISTINCT name FROM users',
+      'select distinct id from users',
+      'SELECT SQL_NO_CACHE name FROM users',
+      'SELECT DISTINCT SQL_NO_CACHE name FROM users',
+    ])('should pass valid SELECT modifiers: %s', async (outputString) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        assertion,
+        pass: true,
+        reason: 'Assertion passed',
+        score: 1,
+      });
+    });
+
+    it('should pass a quoted column after DISTINCT', async () => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'PostgreSQL' },
+        outputString: 'SELECT DISTINCT "display name" FROM users',
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      {
+        outputString: "SELECT 'select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
+        outputString:
+          "SELECT 'it''s select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
+        outputString:
+          "SELECT 'it\\'s select distinct first_name last_name from employees' AS sample",
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 /* select distinct first_name last_name from employees */',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 -- select distinct first_name last_name from employees\n',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT 1 # select distinct first_name last_name from employees\n',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT `select distinct first_name last_name from employees` AS sample',
+        renderedValue: undefined,
+      },
+      {
+        outputString: 'SELECT [select distinct first_name last_name from employees] AS sample',
+        renderedValue: { databaseType: 'TransactSQL' },
+      },
+      {
+        outputString: 'SELECT "select distinct first_name last_name from employees" AS sample',
+        renderedValue: { databaseType: 'PostgreSQL' },
+      },
+      {
+        outputString: 'SELECT $$select distinct first_name last_name from employees$$ AS sample',
+        renderedValue: { databaseType: 'PostgreSQL' },
+      },
+    ])('should ignore SQL-like text in literals and comments: $outputString', async ({
+      outputString,
+      renderedValue,
+    }) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      'SELECT a b FROM t',
+      'SELECT DISTINCT first_name last_name FROM employees',
+      'SELECT SQL_NO_CACHE first_name last_name FROM employees',
+      'SELECT first_name /* separator */ last_name FROM employees',
+      'SELECT DISTINCTIVE name FROM users',
+    ])('should fail a likely missing comma between columns: %s', async (outputString) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
+    it.each([
+      'PostgreSQL',
+      'TransactSQL',
+      'BigQuery',
+    ])('should not treat MySQL-only modifiers as modifiers in %s', async (databaseType) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString: 'SELECT SQL_NO_CACHE name FROM users',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('should preserve MySQL-family modifiers for MariaDB', async () => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'MariaDB' },
+        outputString: 'SELECT SQL_NO_CACHE name FROM users',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      'PostgreSQL',
+      'BigQuery',
+    ])('should preserve square-bracket subscripts in %s', async (databaseType) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString: 'SELECT arr[1] value FROM t',
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      { databaseType: 'BigQuery', outputString: "SELECT r'hello' value FROM t" },
+      { databaseType: 'TransactSQL', outputString: "SELECT N'hello' value FROM t" },
+      // Intentionally `Sqlite` (not `SQLite`) to match node-sql-parser dialect naming.
+      { databaseType: 'Sqlite', outputString: "SELECT X'53514C697465' value FROM t" },
+    ])('should preserve prefixed literals in $databaseType', async ({
+      databaseType,
+      outputString,
+    }) => {
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType },
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    });
+
+    it('should handle many unmatched dollar-quote tags without pathological backtracking', async () => {
+      const outputString = `SELECT ${Array.from(
+        { length: 20_000 },
+        (_, index) => `$tag${index}$ value`,
+      ).join(' ')}`;
+      const result = await handleIsSql({
+        assertion,
+        renderedValue: { databaseType: 'PostgreSQL' },
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('should validate SQL extracted from a fenced response', async () => {
+      const containsSqlAssertion: Assertion = { type: 'contains-sql' };
+      const result = await handleContainsSql({
+        assertion: containsSqlAssertion,
+        renderedValue: undefined,
+        outputString: 'Result:\n```sql\nSELECT DISTINCT name FROM users\n```',
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        assertion: containsSqlAssertion,
+        pass: true,
+        reason: 'Assertion passed',
+        score: 1,
+      });
+    });
+
+    it('should fail a likely missing comma inside a fenced response', async () => {
+      const containsSqlAssertion: Assertion = { type: 'contains-sql' };
+      const result = await handleContainsSql({
+        assertion: containsSqlAssertion,
+        renderedValue: undefined,
+        outputString:
+          'Here you go:\n```sql\nSELECT DISTINCT first_name last_name FROM employees\n```',
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
       });
     });
 
@@ -260,8 +486,8 @@ describe('is-sql assertion', () => {
     });
   });
 
-  // ------------------------------------------- White Table/Column List Tests ------------------------------------------- //
-  describe('White Table/Column List Tests', () => {
+  // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
+  describe('Allowed Table/Column List Tests', () => {
     it('should fail if the output SQL statement violate allowedTables', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
@@ -497,5 +723,124 @@ describe('is-sql assertion', () => {
       expect(result.reason).toContain('SQL references unauthorized table(s)');
       expect(result.reason).toContain('select::null::posts');
     });
+  });
+});
+
+describe('contains-sql assertion', () => {
+  const fence = '```';
+  const runContainsSql = (outputString: string, inverse = false) =>
+    handleContainsSql({
+      assertion: { type: inverse ? 'not-contains-sql' : 'contains-sql' },
+      renderedValue: undefined,
+      outputString,
+      inverse,
+    } as AssertionParams);
+
+  it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
+    // Before the fix, the [^`]+ fence regex could not contain backticks, so this
+    // valid MySQL (backtick-quoted identifiers) failed to extract and fell through
+    // to validating the whole fenced string (including the fences) -> failure.
+    const outputString = `Here is the query:\n${fence}sql\nSELECT \`id\` FROM \`users\`;\n${fence}`;
+    const result: GradingResult = await runContainsSql(outputString);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should still extract a plain fenced SQL block', async () => {
+    const outputString = `${fence}sql\nSELECT id, name FROM users\n${fence}`;
+    const result: GradingResult = await runContainsSql(outputString);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should extract SQL with an escaped backtick in an identifier', async () => {
+    const outputString = `${fence}sql\nSELECT \`a\`\`b\` FROM \`users\`;\n${fence}`;
+    const result = await runContainsSql(outputString);
+
+    expect(result.pass).toBe(true);
+  });
+
+  it('should find valid SQL after a non-SQL code block', async () => {
+    const outputString = `${fence}python\nprint('hello')\n${fence}\n${fence}sql\nSELECT 1;\n${fence}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+    await expect(runContainsSql(outputString, true)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+    });
+  });
+
+  it('should find valid SQL after an invalid SQL block', async () => {
+    const outputString = `${fence}sql\nnot sql\n${fence}\n${fence}sql\nSELECT 1;\n${fence}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([
+    ['a four-backtick fence', '````sql\nSELECT `id` FROM `users`;\n````'],
+    ['a tilde fence', '~~~sql\nSELECT 1;\n~~~'],
+    ['a longer closing fence', '```sql\nSELECT 1;\n````'],
+  ])('should extract SQL from %s', async (_description, outputString) => {
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['a whitespace-only string', ' \n\t'],
+    ['an empty fenced block', `${fence}sql\n${fence}`],
+    ['a whitespace-only fenced block', `${fence}sql\n  \n${fence}`],
+    ['an unclosed fenced block', `${fence}sql\nSELECT 1;`],
+    ['a non-SQL fenced block', `${fence}python\nprint('hello')\n${fence}`],
+    ['a tag that merely starts with sql', `${fence}sqlSELECT\nSELECT 1;\n${fence}`],
+  ])('should reject %s', async (_description, outputString) => {
+    const result = await runContainsSql(outputString);
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it('should pass not-contains-sql when every SQL block is invalid', async () => {
+    const outputString = `${fence}sql\nnot sql\n${fence}\n${fence}\nstill not sql\n${fence}`;
+
+    await expect(runContainsSql(outputString, true)).resolves.toMatchObject({
+      pass: true,
+      score: 1,
+    });
+  });
+});
+
+describe('is-sql parser loading', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('node-sql-parser');
+    vi.resetModules();
+  });
+
+  it('should report when node-sql-parser cannot be imported', async () => {
+    vi.doMock('node-sql-parser', () => {
+      throw new Error('module unavailable');
+    });
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
+  });
+
+  it('should report when node-sql-parser has no Parser export', async () => {
+    vi.doMock('node-sql-parser', () => ({ Parser: undefined, default: {} }));
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
   });
 });
