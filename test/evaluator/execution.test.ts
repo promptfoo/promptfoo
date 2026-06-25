@@ -244,6 +244,7 @@ describeEvaluator('evaluator execution control', () => {
     testProviderOverrides?: Partial<ApiProvider>,
     promptConfig?: Prompt['config'],
     testOptions?: AtomicTestCase['options'],
+    promptFunction?: Prompt['function'],
   ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
@@ -302,7 +303,7 @@ describeEvaluator('evaluator execution control', () => {
     }));
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [{ ...toPrompt(rawPrompt), config: promptConfig }],
+      prompts: [{ ...toPrompt(rawPrompt), config: promptConfig, function: promptFunction }],
       tests,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -412,6 +413,21 @@ describeEvaluator('evaluator execution control', () => {
       name: 'OpenCode sessions',
     },
     {
+      config: { stateful: true },
+      id: 'openai:chatkit:workflow',
+      name: 'ChatKit state',
+    },
+    {
+      config: { sessionId: 'shared-session' },
+      id: 'bedrock-agent:agent',
+      name: 'Bedrock Agent sessions',
+    },
+    {
+      config: { session_key: 'shared-session' },
+      id: 'openclaw:agent:main',
+      name: 'OpenClaw sessions',
+    },
+    {
       config: { continue: true },
       id: 'anthropic:claude-agent-sdk',
       name: 'Claude Agent continuation',
@@ -426,10 +442,24 @@ describeEvaluator('evaluator execution control', () => {
     id,
   }) => {
     const { maxActiveCalls } = await runConcurrencyProbe(
-      '{{ question }} {{ _conversation }}',
+      '{{ question }}',
       2,
       {},
       { config, id: vi.fn().mockReturnValue(id) },
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('serializes conversation prompts whose function may add provider-managed state', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ _conversation }}',
+      2,
+      {},
+      { config: {}, id: vi.fn().mockReturnValue('openai:codex-sdk') },
+      undefined,
+      undefined,
+      async () => ({ prompt: 'rendered', config: { persist_threads: true } }),
     );
 
     expect(maxActiveCalls).toBe(1);
@@ -598,6 +628,34 @@ describeEvaluator('evaluator execution control', () => {
     );
   });
 
+  it('isolates conversation history between prompts without explicit IDs', async () => {
+    const renderedPrompts: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        renderedPrompts.push(prompt);
+        return {
+          output: prompt.startsWith('A') ? 'SECRET_FROM_PROMPT_A' : 'prompt-b',
+          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt('A {% for turn in _conversation %}{{ turn.output }}{% endfor %}'),
+        toPrompt('B {% for turn in _conversation %}{{ turn.output }}{% endfor %}'),
+      ],
+      tests: [{ metadata: { conversationId: 'same' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    expect(renderedPrompts).toHaveLength(2);
+    expect(renderedPrompts[1]).not.toContain('SECRET_FROM_PROMPT_A');
+  });
+
   it('does not drop a conversation group when its legacy key resembles an independent key', async () => {
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('independent'),
@@ -612,7 +670,7 @@ describeEvaluator('evaluator execution control', () => {
         { ...toPrompt('{{ _conversation }}'), id: '0' },
         { ...toPrompt('independent prompt'), id: 'plain' },
       ],
-      tests: [{ metadata: { conversationId: 'thread' } }],
+      tests: [{}],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -716,11 +774,16 @@ describeEvaluator('evaluator execution control', () => {
 
   it('settles active groups and skips later turns after a sibling group fails', async () => {
     const events: string[] = [];
+    const callerAbortController = new AbortController();
+    let markB1Aborted!: () => void;
     let markB1Started!: () => void;
     let releaseB1!: () => void;
     let markProgressFailure!: () => void;
     const b1Started = new Promise<void>((resolve) => {
       markB1Started = resolve;
+    });
+    const b1Aborted = new Promise<void>((resolve) => {
+      markB1Aborted = resolve;
     });
     const b1Release = new Promise<void>((resolve) => {
       releaseB1 = resolve;
@@ -730,13 +793,19 @@ describeEvaluator('evaluator execution control', () => {
     });
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation(async (_prompt: string, context) => {
+      callApi: vi.fn().mockImplementation(async (_prompt: string, context, callOptions) => {
         const question = String(context?.test.vars?.question ?? '');
         events.push(`start:${question}`);
         if (question === 'A1') {
           await b1Started;
         } else if (question === 'B1') {
           markB1Started();
+          const signal = callOptions?.abortSignal;
+          if (signal?.aborted) {
+            markB1Aborted();
+          } else {
+            signal?.addEventListener('abort', markB1Aborted, { once: true });
+          }
           await b1Release;
         }
         events.push(`done:${question}`);
@@ -760,6 +829,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     let settled = false;
     const evaluationOutcome = evaluate(testSuite, evalRecord, {
+      abortSignal: callerAbortController.signal,
       maxConcurrency: 2,
       progressCallback: (_completed, _total, _index, evalStep) => {
         if (evalStep.test.vars?.question === 'A1') {
@@ -777,9 +847,10 @@ describeEvaluator('evaluator execution control', () => {
       });
 
     await progressFailure;
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await b1Aborted;
     expect(settled).toBe(false);
 
+    callerAbortController.abort();
     releaseB1();
     const error = await evaluationOutcome;
     expect(error).toBeInstanceOf(Error);
@@ -788,6 +859,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('does not add a late timed-out response to conversation history', async () => {
+    vi.useFakeTimers();
     let releaseFirst!: () => void;
     let markFirstReturned!: () => void;
     const firstRelease = new Promise<void>((resolve) => {
@@ -808,7 +880,6 @@ describeEvaluator('evaluator execution control', () => {
         } else if (question === 'Q2') {
           releaseFirst();
           await firstReturned;
-          await new Promise<void>((resolve) => setImmediate(resolve));
         }
         return {
           output: question,
@@ -831,7 +902,9 @@ describeEvaluator('evaluator execution control', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2, timeoutMs: 50 });
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 2, timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await evaluationPromise;
 
     expect(renderedPrompts.get('Q3')).toContain('history=Q2, current=Q3');
     expect(renderedPrompts.get('Q3')).not.toContain('Q1');

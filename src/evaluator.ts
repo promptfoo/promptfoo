@@ -143,6 +143,13 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
 
+class DeferredConcurrentEvalError {
+  constructor(
+    readonly cause: unknown,
+    readonly wasAborted: boolean,
+  ) {}
+}
+
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
   if (cached !== undefined) {
@@ -159,6 +166,14 @@ function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   return referenced;
 }
 
+function shouldUseConversationVariable(prompt: Prompt, test: AtomicTestCase): boolean {
+  return (
+    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
+    !test.options?.disableConversationVar &&
+    promptUsesConversationVariable(prompt)
+  );
+}
+
 /**
  * Builds the key used to preserve conversation state across related eval steps.
  * Repeat iterations intentionally get separate keys so repeated evals remain isolated.
@@ -173,7 +188,7 @@ export function buildConversationKey(
   const conversationId = test.metadata?.conversationId;
   return JSON.stringify([
     providerKey,
-    prompt.id ?? null,
+    prompt.id ?? generateIdFromPrompt(prompt),
     conversationId == null ? null : String(conversationId),
     repeatIndex,
   ]);
@@ -778,12 +793,7 @@ function attachConversationVar({
   test: AtomicTestCase;
   vars: Vars;
 }) {
-  const usesConversation = promptUsesConversationVariable(prompt);
-  if (
-    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
-    !test.options?.disableConversationVar &&
-    usesConversation
-  ) {
+  if (shouldUseConversationVariable(prompt, test)) {
     vars._conversation = conversations?.[conversationKey] || [];
   }
 }
@@ -2781,7 +2791,7 @@ async function filterCompletedResumeSteps(
   }
 }
 
-function providerUsesManagedState(
+function providerUsesConversationState(
   provider: ApiProvider,
   prompt: Prompt,
   test: AtomicTestCase,
@@ -2792,8 +2802,11 @@ function providerUsesManagedState(
       config?.persist_sessions === true ||
       config?.maintainContext === true ||
       config?.persist_threads === true ||
+      config?.stateful === true ||
       config?.continue === true ||
       Boolean(config?.resume) ||
+      Boolean(config?.sessionId) ||
+      Boolean(config?.session_key) ||
       Boolean(config?.session_id) ||
       Boolean(config?.thread_id),
   );
@@ -2818,20 +2831,13 @@ function adjustConcurrencyForSerialFeatures({
   }
 
   const usesStoreOutputAs = runEvalOptions.some(({ test }) => test.options?.storeOutputAs);
-  const usesPersistentSession = runEvalOptions.some(
-    ({ provider, test }) =>
-      (isApiProvider(test.provider) ? test.provider : provider).config?.persistSession === true,
+  const usesProviderManagedState = runEvalOptions.some(({ prompt, provider, test }) => {
+    const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+    return providerUsesConversationState(activeProvider, prompt, test);
+  });
+  const mayResolveConversationStateDynamically = runEvalOptions.some(
+    ({ prompt, test }) => Boolean(prompt.function) && shouldUseConversationVariable(prompt, test),
   );
-  const usesProviderManagedState =
-    usesPersistentSession ||
-    (usesConversationVar &&
-      runEvalOptions.some(({ prompt, provider, test }) =>
-        providerUsesManagedState(
-          isApiProvider(test.provider) ? test.provider : provider,
-          prompt,
-          test,
-        ),
-      ));
   const usesRunSerially = runEvalOptions.some(({ test }) => test.options?.runSerially);
   const mayMutateTestsBeforeEach = extensions?.some((extension) => {
     const hookName = getExtensionHookName(extension);
@@ -2843,9 +2849,12 @@ function adjustConcurrencyForSerialFeatures({
     }
     return { concurrency: 1, usesConversationVar };
   }
-  if (usesProviderManagedState) {
+  if (usesProviderManagedState || mayResolveConversationStateDynamically) {
     if (!silent) {
-      logger.info('Setting concurrency to 1 because provider-managed state is enabled.');
+      logger.info('Setting concurrency to 1 to preserve provider-managed state', {
+        mayResolveConversationStateDynamically,
+        usesProviderManagedState,
+      });
     }
     return { concurrency: 1, usesConversationVar };
   }
@@ -2876,11 +2885,7 @@ interface GroupedRows {
 }
 
 function shouldSerializeByConversation(evalOption: RunEvalOptions): boolean {
-  return (
-    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
-    !evalOption.test.options?.disableConversationVar &&
-    promptUsesConversationVariable(evalOption.prompt)
-  );
+  return shouldUseConversationVariable(evalOption.prompt, evalOption.test);
 }
 
 function groupConcurrentRunEvalOptions(
@@ -3776,6 +3781,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
         await this.runConcurrentEvalSteps({
           checkAbort,
+          combinedAbortSignal,
           concurrentRunEvalGroups,
           evalStepIndexMap,
           processingContext,
@@ -3784,9 +3790,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         });
       }
     } catch (err) {
-      if (!combinedAbortSignal.aborted) {
-        cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
-        throw err;
+      const deferredError = err instanceof DeferredConcurrentEvalError ? err : undefined;
+      const error = deferredError ? deferredError.cause : err;
+      const wasAborted = deferredError?.wasAborted ?? combinedAbortSignal.aborted;
+      if (!wasAborted) {
+        cleanupProgressAfterError(progressBarManager, ciProgressReporter, error);
+        throw error;
       }
 
       if (isEvalTimedOut()) {
@@ -3974,6 +3983,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async runConcurrentEvalSteps({
     checkAbort,
+    combinedAbortSignal,
     concurrentRunEvalGroups,
     evalStepIndexMap,
     processingContext,
@@ -3981,6 +3991,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts,
   }: {
     checkAbort: () => void;
+    combinedAbortSignal: AbortSignal;
     concurrentRunEvalGroups: RunEvalOptions[][];
     evalStepIndexMap: Map<RunEvalOptions, number>;
     processingContext: EvalProcessingContext;
@@ -3988,7 +3999,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    let firstError: { cause: unknown } | undefined;
+    let firstError: DeferredConcurrentEvalError | undefined;
+    const siblingAbortController =
+      processingContext.concurrency > 1 && concurrentRunEvalGroups.length > 1
+        ? new AbortController()
+        : undefined;
     await async.forEachOfLimit(
       concurrentRunEvalGroups,
       processingContext.concurrency,
@@ -4003,7 +4018,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             }
             checkAbort();
             const idx = evalStepIndexMap.get(evalStep)!;
-            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            const evalStepWithSignal = siblingAbortController
+              ? {
+                  ...evalStep,
+                  abortSignal: evalStep.abortSignal
+                    ? AbortSignal.any([evalStep.abortSignal, siblingAbortController.signal])
+                    : siblingAbortController.signal,
+                }
+              : evalStep;
+            await this.processEvalStepWithTimeout(evalStepWithSignal, idx, {}, processingContext);
             processedIndices.add(idx);
             const now = Date.now();
             if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -4012,12 +4035,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             }
           }
         } catch (cause) {
-          firstError ??= { cause };
+          firstError ??= new DeferredConcurrentEvalError(cause, combinedAbortSignal.aborted);
+          siblingAbortController?.abort();
         }
       },
     );
     if (firstError) {
-      throw firstError.cause;
+      throw firstError;
     }
   }
 

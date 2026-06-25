@@ -229,6 +229,8 @@ Try it yourself by using the [full example config](https://github.com/promptfoo/
 When a prompt references `_conversation` as a Nunjucks variable, steps that share the
 same conversation history run sequentially. Different `conversationId` values can run
 in parallel up to your configured max concurrency.
+Each repeat index has a separate history, so repeated runs do not continue one another
+and may also run in parallel.
 Providers that maintain their own persistent session or thread state continue to run globally
 serially so that provider-managed context is not interleaved.
 
