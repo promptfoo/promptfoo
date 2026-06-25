@@ -1,6 +1,9 @@
+import { Agent, tool } from '@openai/agents';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type UnifiedConfig } from '../../../src/types/index';
+import { dereferenceWithStandaloneSchemas } from '../../../src/util/config/jsonSchema';
 import { dereferenceConfig } from '../../../src/util/config/load';
+import { mockProcessEnv } from '../utils';
 
 function statusSchema() {
   return {
@@ -104,7 +107,8 @@ describe('dereferenceConfig JSON Schema isolation', () => {
 
   it('preserves schemas in nested test and assertion provider overrides', async () => {
     const result = (await dereferenceConfig({
-      prompts: ['hello world'],
+      definitions: { prompt: 'hello world' },
+      prompts: [{ $ref: '#/definitions/prompt' }],
       providers: ['openai:chat:gpt-4o'],
       tests: [
         {
@@ -202,6 +206,134 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     });
   });
 
+  it('preserves every supported provider-owned schema surface', async () => {
+    const schema = {
+      ...statusSchema(),
+      allOf: [{ $ref: '#/$defs/Status' }],
+      properties: {
+        items: {
+          items: { $ref: '#/$defs/Status' },
+          type: 'array',
+        },
+        missing: { $ref: './missing-schema.json#/$defs/Missing' },
+        remote: { $ref: 'https://example.com/status.json#/$defs/Status' },
+        status: { $ref: '#/$defs/Status' },
+      },
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const result = (await dereferenceConfig({
+      $defs: { Status: { const: 'CONFIG_ROOT' } },
+      prompts: ['hello world'],
+      providers: [
+        { id: 'openai:codex-sdk', config: { output_schema: schema } },
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { output_format: { type: 'json_schema', schema } },
+        },
+        { id: 'opencode:chat', config: { format: { type: 'json_schema', schema } } },
+        { id: 'gateway:vercel-ai-gateway:openai/gpt-5', config: { responseSchema: schema } },
+        {
+          id: 'anthropic:messages:claude',
+          config: { tools: [{ name: 'a', input_schema: schema }] },
+        },
+        { id: 'bedrock:converse:claude', config: { tools: [{ name: 'b', parameters: schema }] } },
+        {
+          id: 'bedrock:converse:claude',
+          config: {
+            tools: [{ toolSpec: { name: 'c', inputSchema: { json: schema } } }],
+          },
+        },
+        {
+          id: 'google:gemini-2.5-pro',
+          config: {
+            generationConfig: { response_schema: schema },
+            tools: [
+              {
+                functionDeclarations: [{ name: 'd', parameters: schema, response: schema }],
+              },
+            ],
+          },
+        },
+        {
+          id: 'bedrock:amazon.nova-pro-v1:0',
+          config: {
+            toolConfig: {
+              tools: [{ toolSpec: { name: 'e', inputSchema: { json: schema } } }],
+            },
+          },
+        },
+        {
+          id: 'openai:agents:gpt-5-mini',
+          config: {
+            agent: {
+              outputType: { name: 'agent', schema, strict: true, type: 'json_schema' },
+              tools: [{ parameters: schema }],
+              handoffs: [
+                {
+                  agent: {
+                    outputType: { name: 'handoff', schema, strict: true, type: 'json_schema' },
+                    tools: [{ parameters: schema }],
+                  },
+                },
+              ],
+            },
+            handoffs: [
+              {
+                agent: {
+                  outputType: { name: 'root-handoff', schema, strict: true, type: 'json_schema' },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.providers[0].config.output_schema).toEqual(schema);
+    expect(result.providers[1].config.output_format.schema).toEqual(schema);
+    expect(result.providers[2].config.format.schema).toEqual(schema);
+    expect(result.providers[3].config.responseSchema).toEqual(schema);
+    expect(result.providers[4].config.tools[0].input_schema).toEqual(schema);
+    expect(result.providers[5].config.tools[0].parameters).toEqual(schema);
+    expect(result.providers[6].config.tools[0].toolSpec.inputSchema.json).toEqual(schema);
+    expect(result.providers[7].config.generationConfig.response_schema).toEqual(schema);
+    expect(result.providers[7].config.tools[0].functionDeclarations[0].parameters).toEqual(schema);
+    expect(result.providers[7].config.tools[0].functionDeclarations[0].response).toEqual(schema);
+    expect(result.providers[8].config.toolConfig.tools[0].toolSpec.inputSchema.json).toEqual(
+      schema,
+    );
+    expect(result.providers[9].config.agent.outputType.schema).toEqual(schema);
+    expect(result.providers[9].config.agent.tools[0].parameters).toEqual(schema);
+    expect(result.providers[9].config.agent.handoffs[0].agent.outputType.schema).toEqual(schema);
+    expect(result.providers[9].config.agent.handoffs[0].agent.tools[0].parameters).toEqual(schema);
+    expect(result.providers[9].config.handoffs[0].agent.outputType.schema).toEqual(schema);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves config-level refs selecting Codex and Claude schemas', async () => {
+    const schema = statusSchema();
+    const outputFormat = { type: 'json_schema', schema };
+    const result = (await dereferenceConfig({
+      definitions: { outputFormat, schema },
+      prompts: ['hello world'],
+      providers: [
+        {
+          id: 'openai:codex-sdk',
+          config: { output_schema: { $ref: '#/definitions/schema' } },
+        },
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { output_format: { $ref: '#/definitions/outputFormat' } },
+        },
+      ],
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.providers[0].config.output_schema).toEqual(schema);
+    expect(result.providers[1].config.output_format).toEqual(outputFormat);
+  });
+
   it('resolves config-level schema refs while preserving refs inside the selected schema', async () => {
     const sharedSchema = statusSchema();
     const result = (await dereferenceConfig({
@@ -264,6 +396,8 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       tests: [
         {
           vars: {
+            output_schema: { $ref: '#/definitions/value' },
+            output_format: { schema: { $ref: '#/definitions/value' } },
             response_format: {
               schema: { $ref: '#/definitions/value' },
             },
@@ -272,7 +406,138 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       ],
     } as unknown as UnifiedConfig)) as any;
 
+    expect(result.tests[0].vars.output_schema).toEqual({ type: 'string' });
+    expect(result.tests[0].vars.output_format.schema).toEqual({ type: 'string' });
     expect(result.tests[0].vars.response_format.schema).toEqual({ type: 'string' });
+  });
+
+  it('honors the ref-parser opt-out for direct standalone test callers', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REF_PARSER: '1' });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
+    const tests = [
+      {
+        vars: {
+          cyclic: { $ref: '#/0/vars/cyclic' },
+          file: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' },
+          malformed: { $ref: '#/%ZZ' },
+          missing: { $ref: '#/missing' },
+          relative: { $ref: './missing.json' },
+          remote: { $ref: 'https://example.com/missing.json' },
+        },
+      },
+    ];
+
+    try {
+      const result = await dereferenceWithStandaloneSchemas(tests, 'tests');
+
+      expect(result).toBe(tests);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves supported programmatic config instances as opaque values', async () => {
+    let getterReads = 0;
+    class CustomProvider {
+      readonly #value = 'provider-result';
+
+      constructor() {
+        Object.defineProperty(this, 'dangerous', {
+          enumerable: true,
+          get() {
+            getterReads += 1;
+            throw new Error('opaque getter was evaluated');
+          },
+        });
+      }
+
+      async callApi() {
+        return { output: this.#value };
+      }
+
+      id() {
+        return this.#value;
+      }
+    }
+
+    const provider = new CustomProvider();
+    const agent = new Agent({ instructions: 'Help the user.', name: 'Programmatic Agent' });
+    const transformResponse = () => ({ output: 'transformed' });
+    const agentTool = tool({
+      description: 'Return a result.',
+      execute: async () => 'tool-result',
+      name: 'programmatic_tool',
+      parameters: {
+        additionalProperties: false,
+        properties: {},
+        required: [],
+        type: 'object',
+      },
+    });
+    const result = (await dereferenceConfig({
+      definitions: { body: { ok: true }, prompt: 'hello world' },
+      prompts: [{ $ref: '#/definitions/prompt' }],
+      providers: [
+        provider,
+        {
+          id: 'openai:agents:gpt-5-mini',
+          config: { agent, tools: [agentTool] },
+        },
+        {
+          id: 'http',
+          config: {
+            body: { $ref: '#/definitions/body' },
+            transformResponse,
+          },
+        },
+      ],
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.providers[0]).toBe(provider);
+    expect(result.providers[0]).toBeInstanceOf(CustomProvider);
+    await expect(result.providers[0].callApi()).resolves.toEqual({ output: 'provider-result' });
+    expect(result.providers[1].config.agent).toBe(agent);
+    expect(result.providers[1].config.agent).toBeInstanceOf(Agent);
+    expect(result.providers[1].config.tools[0].invoke).toBe(agentTool.invoke);
+    expect(result.providers[2].config.body).toEqual({ ok: true });
+    expect(result.providers[2].config.transformResponse).toBe(transformResponse);
+    expect(result.prompts).toEqual(['hello world']);
+    expect(getterReads).toBe(0);
+  });
+
+  it('keeps exotic arrays opaque while resolving refs in frozen JSON values', async () => {
+    let getterReads = 0;
+    class CustomArray extends Array<unknown> {}
+    const customArray = new CustomArray();
+    const marker = Symbol('marker');
+    Object.defineProperty(customArray, marker, { value: 'preserved' });
+    Object.defineProperty(customArray, 'dangerous', {
+      enumerable: true,
+      get() {
+        getterReads += 1;
+        throw new Error('array getter was evaluated');
+      },
+    });
+    const frozen = Object.freeze({ $ref: '#/definitions/frozen' });
+
+    const result = (await dereferenceConfig({
+      definitions: { frozen: { value: 'resolved' } },
+      prompts: ['hello world'],
+      providers: [
+        {
+          id: 'http',
+          config: { customArray, frozen },
+        },
+      ],
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.providers[0].config.customArray).toBe(customArray);
+    expect(result.providers[0].config.customArray[marker]).toBe('preserved');
+    expect(result.providers[0].config.frozen).toEqual({ value: 'resolved' });
+    expect(getterReads).toBe(0);
   });
 
   it('preserves JSON assertion schemas while resolving ordinary assertion values', async () => {

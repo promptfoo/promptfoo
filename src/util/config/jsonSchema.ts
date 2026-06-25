@@ -1,7 +1,9 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import { getEnvBool } from '../../envars';
 
 type MutableContainer = Record<string, unknown> | unknown[];
 type SchemaSource = 'config' | 'tests';
+type PlaceholderReplacement = { traverse: boolean; value: unknown };
 
 type ValueLocation = {
   parent: MutableContainer;
@@ -16,7 +18,7 @@ type TraversalItem = Partial<Pick<ValueLocation, 'key' | 'parent'>> & {
 };
 
 const SCHEMA_PATH_SUFFIX =
-  /\/(?:tools\/\d+\/function\/parameters|functions\/\d+\/parameters|response_format\/(?:json_schema\/)?schema)$/;
+  /\/(?:format\/schema|generationConfig\/response_schema|outputType\/schema|output_schema|output_format\/schema|responseSchema|toolConfig\/tools\/\d+\/toolSpec\/inputSchema\/json|tools\/\d+\/(?:function\/parameters|functionDeclarations\/\d+\/(?:parameters|response)|input_schema|parameters|toolSpec\/inputSchema\/json)|functions\/\d+\/parameters|response_format\/(?:json_schema\/)?schema)$/;
 
 function isMutableContainer(value: unknown): value is MutableContainer {
   return typeof value === 'object' && value !== null;
@@ -39,8 +41,32 @@ function setValue(parent: MutableContainer, key: string, value: unknown): void {
   });
 }
 
+function isJsonContainer(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  if (
+    Array.isArray(value)
+      ? prototype !== Array.prototype
+      : prototype !== Object.prototype && prototype !== null
+  ) {
+    return false;
+  }
+  return Reflect.ownKeys(value).every((key) => {
+    if (typeof key !== 'string') {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (Array.isArray(value) && key === 'length') {
+      return Boolean(
+        descriptor && 'value' in descriptor && !descriptor.enumerable && !descriptor.configurable,
+      );
+    }
+    return Boolean(descriptor?.enumerable && 'value' in descriptor);
+  });
+}
+
 function cloneConfigValue<T>(
   value: T,
+  replacements: Map<object, PlaceholderReplacement>,
   ancestors: object[] = [],
   ancestorClones: unknown[] = [],
 ): T {
@@ -48,50 +74,37 @@ function cloneConfigValue<T>(
     return value;
   }
 
+  // Programmatic configs can contain provider and SDK instances. Keep them opaque so cloning or
+  // ref-parser traversal cannot strip prototypes, private state, accessors, or symbol properties.
+  if (!isJsonContainer(value)) {
+    const placeholder = {};
+    replacements.set(placeholder, { traverse: false, value });
+    return placeholder as T;
+  }
+
   const ancestorIndex = ancestors.indexOf(value);
   if (ancestorIndex !== -1) {
     return ancestorClones[ancestorIndex] as T;
   }
-  if (value instanceof Date || value instanceof RegExp || value instanceof ArrayBuffer) {
-    return structuredClone(value);
-  }
-  if (Buffer.isBuffer(value)) {
-    return Buffer.from(value) as T;
-  }
-  if (ArrayBuffer.isView(value)) {
-    return structuredClone(value);
-  }
 
   const result: unknown = Array.isArray(value)
     ? new Array(value.length)
-    : value instanceof Map
-      ? new Map()
-      : value instanceof Set
-        ? new Set()
-        : {};
+    : Object.create(Object.getPrototypeOf(value));
   ancestors.push(value);
   ancestorClones.push(result);
 
-  if (value instanceof Map && result instanceof Map) {
-    for (const [key, item] of value) {
-      result.set(
-        cloneConfigValue(key, ancestors, ancestorClones),
-        cloneConfigValue(item, ancestors, ancestorClones),
-      );
-    }
-  } else if (value instanceof Set && result instanceof Set) {
-    for (const item of value) {
-      result.add(cloneConfigValue(item, ancestors, ancestorClones));
-    }
-  } else {
-    for (const key of Object.keys(value)) {
-      Object.defineProperty(result, key, {
-        configurable: true,
-        enumerable: true,
-        value: cloneConfigValue((value as Record<string, unknown>)[key], ancestors, ancestorClones),
-        writable: true,
-      });
-    }
+  for (const key of Object.keys(value)) {
+    Object.defineProperty(result, key, {
+      configurable: true,
+      enumerable: true,
+      value: cloneConfigValue(
+        (value as Record<string, unknown>)[key],
+        replacements,
+        ancestors,
+        ancestorClones,
+      ),
+      writable: true,
+    });
   }
 
   ancestors.pop();
@@ -149,15 +162,16 @@ function getTestPathSuffix(path: string, source: SchemaSource): string | undefin
 }
 
 function isSchemaOwnerPath(path: string, source: SchemaSource): boolean {
+  const ownerPath = path.replace(/(?:\/agent)?(?:\/handoffs\/\d+\/agent)*$/, '');
   if (
-    /^#\/(?:providers|targets)\/\d+(?:\/[^/]+)?\/config$/.test(path) ||
-    /^#\/prompts\/\d+(?:\/[^/]+)?\/config$/.test(path) ||
-    /^#\/redteam\/provider(?:\/[^/]+)?\/config$/.test(path)
+    /^#\/(?:providers|targets)\/\d+(?:\/[^/]+)?\/config$/.test(ownerPath) ||
+    /^#\/prompts\/\d+(?:\/[^/]+)?\/config$/.test(ownerPath) ||
+    /^#\/redteam\/provider(?:\/[^/]+)?\/config$/.test(ownerPath)
   ) {
     return true;
   }
 
-  const suffix = getTestPathSuffix(path, source);
+  const suffix = getTestPathSuffix(ownerPath, source);
   if (suffix === undefined) {
     return false;
   }
@@ -289,7 +303,7 @@ function addMask(
   masks.set(location.parent, parentMasks);
 }
 
-function restorePlaceholders<T>(value: T, replacements: Map<object, unknown>): T {
+function restorePlaceholders<T>(value: T, replacements: Map<object, PlaceholderReplacement>): T {
   let root: unknown = value;
   const visited = new WeakSet<object>();
   const stack: Array<{ key?: string; parent?: MutableContainer; value: unknown }> = [{ value }];
@@ -297,15 +311,21 @@ function restorePlaceholders<T>(value: T, replacements: Map<object, unknown>): T
   while (stack.length > 0) {
     const item = stack.pop()!;
     let current = item.value;
+    let traverse = true;
     while (isMutableContainer(current) && replacements.has(current)) {
-      current = replacements.get(current);
+      const replacement = replacements.get(current)!;
+      current = replacement.value;
       if (item.parent && item.key !== undefined) {
         setValue(item.parent, item.key, current);
       } else {
         root = current;
       }
+      if (!replacement.traverse) {
+        traverse = false;
+        break;
+      }
     }
-    if (!isMutableContainer(current) || visited.has(current)) {
+    if (!traverse || !isMutableContainer(current) || visited.has(current)) {
       continue;
     }
     visited.add(current);
@@ -328,9 +348,14 @@ export async function dereferenceWithStandaloneSchemas<T extends object>(
   value: T,
   source: SchemaSource,
 ): Promise<T> {
+  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
+    return value;
+  }
+
   // Raw YAML/JSON is cloned so failed dereferences and concurrent loads cannot mutate the caller.
   // Non-cyclic aliases are detached so an unprotected alias cannot expose a masked schema.
-  const workingValue = cloneConfigValue(value);
+  const replacements = new Map<object, PlaceholderReplacement>();
+  const workingValue = cloneConfigValue(value, replacements);
   const schemaLocations = collectStandaloneSchemaLocations(workingValue, source);
   const masks = new Map<MutableContainer, Map<string, unknown>>();
 
@@ -345,11 +370,10 @@ export async function dereferenceWithStandaloneSchemas<T extends object>(
     }
   }
 
-  const replacements = new Map<object, unknown>();
   for (const [parent, parentMasks] of masks) {
     for (const [key, restoreValue] of parentMasks) {
       const placeholder = {};
-      replacements.set(placeholder, restoreValue);
+      replacements.set(placeholder, { traverse: true, value: restoreValue });
       setValue(parent, key, placeholder);
     }
   }

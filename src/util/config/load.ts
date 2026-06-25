@@ -176,10 +176,6 @@ export function resolveCliProvidersWithConfig(
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
-  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
-    return rawConfig;
-  }
-
   return dereferenceWithStandaloneSchemas(rawConfig, 'config');
 }
 

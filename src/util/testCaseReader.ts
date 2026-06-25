@@ -42,6 +42,10 @@ type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
+function loadExternalFilesBeforeRefParser(value: unknown): unknown {
+  return maybeLoadConfigFromExternalFile(value, undefined, { preserveRefs: true });
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -229,7 +233,7 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
+    const rows = loadExternalFilesBeforeRefParser(rawContent) as unknown as CsvRow[];
     return dereferenceWithStandaloneSchemas(csvRowsToTestCases(rows), 'tests');
   }
 
@@ -405,7 +409,7 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
+    const rawTestCase = loadExternalFilesBeforeRefParser(rawContent) as TestCaseWithVarsFile;
     const [dereferencedTestCase] = await dereferenceWithStandaloneSchemas([rawTestCase], 'tests');
     testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
@@ -520,7 +524,7 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
@@ -528,11 +532,11 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
