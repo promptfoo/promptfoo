@@ -289,7 +289,7 @@ describe('scenarioMatrix (real filesystem)', () => {
     id: exec:./target.sh
 - vars:
     case: provider-exec-command
-  provider: exec:node ./provider.js --mode local
+  provider: exec:node ./provider.js --endpoint https://api.example/v1
 - vars:
     case: provider-map
   provider:
@@ -329,7 +329,7 @@ describe('scenarioMatrix (real filesystem)', () => {
         },
         {
           vars: { case: 'provider-exec-command' },
-          provider: `exec:node ${path.join(tmpDir, 'matrices/provider.js')} --mode local`,
+          provider: `exec:node ${path.join(tmpDir, 'matrices/provider.js')} --endpoint https://api.example/v1`,
         },
         {
           vars: { case: 'provider-map' },
@@ -485,6 +485,35 @@ describe('scenarioMatrix (real filesystem)', () => {
         vars: { case: 'filters' },
         providers: ['scenario-provider'],
         prompts: ['main-prompt'],
+      });
+    });
+
+    it('renders matrix row data with the source env', async () => {
+      const matrixPath = write(
+        'matrices/env-data.yaml',
+        `- vars:
+    tenant: "{{ env.TENANT }}"
+  providerOutput: "{{ env.PROVIDER_OUTPUT }}"
+  assert:
+    - type: contains
+      value: "{{ env.EXPECTED_OUTPUT }}"
+`,
+      );
+
+      const [expanded] = await expandScenarioConfigValues(
+        [{ $values: `file://${matrixPath}` }],
+        tmpDir,
+        {
+          TENANT: 'acme',
+          PROVIDER_OUTPUT: 'hello acme',
+          EXPECTED_OUTPUT: 'hello',
+        },
+      );
+
+      expect(expanded).toMatchObject({
+        vars: { tenant: 'acme' },
+        providerOutput: 'hello acme',
+        assert: [{ type: 'contains', value: 'hello' }],
       });
     });
 
@@ -1006,6 +1035,19 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(tests?.[0].assertScoringFunction).toBe(
         `file://${path.join(path.dirname(testsPath), 'score.js')}:customScore`,
       );
+    });
+
+    it('loads vars file refs in file-backed scenario tests against the test file', async () => {
+      const testsPath = write(
+        'tests/cases.yaml',
+        `- vars: file://vars.yaml
+`,
+      );
+      write('tests/vars.yaml', 'source: file-backed\n');
+
+      const tests = await readScenarioTests(`file://${testsPath}`, tmpDir);
+
+      expect(tests).toEqual([expect.objectContaining({ vars: { source: 'file-backed' } })]);
     });
 
     it('keeps file-backed scenario test provider refs serializable', async () => {

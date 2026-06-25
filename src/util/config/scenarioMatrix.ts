@@ -209,9 +209,7 @@ function parseExecParts(command: string): string[] {
 }
 
 function isLocalExecPart(part: string): boolean {
-  return (
-    path.isAbsolute(part) || /^\.{1,2}[\\/]/.test(part) || part.includes('/') || part.includes('\\')
-  );
+  return path.isAbsolute(part) || /^\.{1,2}[\\/]/.test(part);
 }
 
 function resolveExecProviderIdFromBase(basePath: string, providerId: string): string {
@@ -725,16 +723,42 @@ export function materializeScenarioTestCase<T>(
   testCase: T,
   envOverrides?: EnvOverrides,
 ): T {
-  if (!containsFileRefString(testCase)) {
-    return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
+  const rendered = renderSourceEnvTemplates(testCase, envOverrides);
+  const materialized = containsFileRefString(rendered)
+    ? resolveScenarioConfigRowProviders(
+        basePath,
+        maybeLoadConfigFromExternalFile(
+          resolveNestedFileRefs(basePath, rendered, envOverrides),
+          'scenario-test',
+          envOverrides,
+        ),
+        envOverrides,
+      )
+    : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
+  return resolveScenarioTestVarsFileRefs(basePath, materialized, envOverrides) as T;
+}
+
+function resolveScenarioTestVarsFileRefs(
+  basePath: string,
+  testCase: unknown,
+  envOverrides?: EnvOverrides,
+): unknown {
+  if (!isPlainRecord(testCase)) {
+    return testCase;
   }
-  const resolvedFileRefs = resolveNestedFileRefs(basePath, testCase, envOverrides);
-  const loadedFileRefs = maybeLoadConfigFromExternalFile(
-    resolvedFileRefs,
-    'scenario-test',
-    envOverrides,
-  );
-  return resolveScenarioConfigRowProviders(basePath, loadedFileRefs, envOverrides) as T;
+  const vars = testCase.vars;
+  const resolveVarRef = (varsRef: unknown) =>
+    typeof varsRef === 'string' && varsRef.startsWith(FILE_REF_PREFIX)
+      ? resolveScenarioVarsRef(basePath, varsRef, envOverrides)
+      : varsRef;
+  const resolvedVars = Array.isArray(vars) ? vars.map(resolveVarRef) : resolveVarRef(vars);
+  if (resolvedVars === vars) {
+    return testCase;
+  }
+  return {
+    ...testCase,
+    vars: resolvedVars,
+  };
 }
 
 function materializeScenarioConfigRow(
@@ -742,10 +766,11 @@ function materializeScenarioConfigRow(
   row: unknown,
   envOverrides?: EnvOverrides,
 ): Scenario['config'][number] {
-  if (!containsFileRefString(row)) {
-    return resolveScenarioConfigRowProviders(basePath, row, envOverrides);
+  const rendered = renderSourceEnvTemplates(row, envOverrides);
+  if (!containsFileRefString(rendered)) {
+    return resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
   }
-  const resolvedFileRefs = resolveNestedFileRefs(basePath, row, envOverrides);
+  const resolvedFileRefs = resolveNestedFileRefs(basePath, rendered, envOverrides);
   const loadedFileRefs = maybeLoadConfigFromExternalFile(
     resolvedFileRefs,
     'scenario-test',
