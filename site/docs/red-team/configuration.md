@@ -29,6 +29,15 @@ Red teams happen in three steps:
 
 `promptfoo redteam run` is a shortcut that combines `redteam generate` and `redteam eval` steps, ensuring that your generated test cases are always synced with the latest configuration.
 
+In CI/CD, use repeatable `--tag key=value` options with `redteam run` or
+`redteam eval` to record run-specific context without changing your scan template or
+generated `redteam.yaml`. Tags are saved with the eval and included when results are
+shared.
+
+```bash
+promptfoo redteam run --tag ci.run-id="$CI_RUN_ID" --tag git.sha="$GIT_SHA"
+```
+
 ## Configuration Structure
 
 The red team configuration uses the following YAML structure:

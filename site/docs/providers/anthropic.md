@@ -10,7 +10,7 @@ This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) 
 > **Note:** Anthropic models can also be accessed through [Azure AI Foundry](/docs/providers/azure/#using-claude-models), [AWS Bedrock](/docs/providers/aws-bedrock/), and [Google Vertex](/docs/providers/vertex/).
 
 :::tip Agentic Evals
-For agentic evaluations with file access, tool use, and MCP servers, see the [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/).
+For agentic evaluations that need built-in file access and skill plugins on top of the Messages API, see the [Claude Agent SDK provider](/docs/providers/claude-agent-sdk/). The Messages provider documented here speaks directly to MCP servers via the [`mcp` config](#model-context-protocol-mcp) so you can plug in your own tools without changing providers.
 :::
 
 ## Setup
@@ -53,6 +53,9 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description            |
 | -------------------------------------------------------------------------- | ---------------------- |
+| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
+| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
+| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
 | `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
@@ -75,6 +78,9 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
+| Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
@@ -154,6 +160,8 @@ The Anthropic provider supports several options to customize the behavior of the
 - `stop_sequences`: An array of strings that stop generation when encountered.
 - `metadata`: Request metadata (e.g., `user_id`) passed to the API.
 - `extra_body`: Additional parameters to pass directly to the Anthropic API request body.
+- `mcp`: Connect to one or more [Model Context Protocol](#model-context-protocol-mcp) servers. Tools exposed by the server become callable by Claude.
+- `max_tool_calls`: Maximum number of MCP tool executions promptfoo will perform per request before aborting the loop. Defaults to `8` and is only relevant when `mcp.enabled` is `true`.
 
 Example configuration with options and prompts:
 
@@ -364,6 +372,42 @@ providers:
   - Use `blocked_domains` to blacklist specific domains
   - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
 
+#### Model Context Protocol (MCP)
+
+The Anthropic Messages provider can connect to any [MCP server](https://modelcontextprotocol.io) — stdio, SSE, or streamable HTTP — and execute the model's `tool_use` blocks against that server, feeding the `tool_result` back into the conversation until Claude produces a final reply.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      mcp:
+        enabled: true
+        # Inline command-based stdio server, or `path` to a local script
+        server:
+          command: npx
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/workspace']
+        # Or use a remote SSE / streamable HTTP server
+        # servers:
+        #   - name: deepwiki
+        #     url: https://mcp.deepwiki.com/mcp
+      # Optional cap on MCP rounds per request (default 8). Enforced locally;
+      # not sent to Anthropic.
+      max_tool_calls: 5
+```
+
+How it works:
+
+- Tools discovered on the MCP server are passed to Claude alongside any inline `tools`.
+- When Claude returns a `tool_use` block whose name matches an MCP tool, promptfoo calls the tool with the model's arguments and appends a matching `tool_result` block on the user turn.
+- The loop repeats until Claude returns text (no more `tool_use`) or `max_tool_calls` is hit. Tool errors are forwarded as `tool_result` blocks with `is_error: true` so the model can recover.
+- Non-MCP `tool_use` blocks (regular function tools, or built-ins like `web_search`) are passed through to the existing output and not auto-executed.
+
+:::note Response caching with MCP
+The disk response cache is skipped while `mcp.enabled` is `true`, because tool results can be non-deterministic between runs. Use `max_tool_calls` to bound spend.
+:::
+
+See the [MCP integration guide](/docs/integrations/mcp/) for full server configuration options (auth, timeouts, multiple servers, etc.) and the [Anthropic MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp).
+
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
 
 ### Images / Vision
@@ -476,6 +520,31 @@ tests:
   - vars:
       pdf_base64: file://document.pdf
 ```
+
+### Claude Fable 5 and Mythos 5 notes
+
+Fable 5 and Mythos 5 use always-on adaptive thinking. Promptfoo omits unsupported
+`temperature`, `top_p`, and `top_k` values, converts legacy
+`thinking: { type: 'enabled', budget_tokens: N }` configs to adaptive thinking, and
+omits `thinking: { type: 'disabled' }` because thinking cannot be disabled.
+Set `thinking: { type: 'adaptive', display: 'summarized' }` to include a readable
+thinking summary; the default `display: 'omitted'` returns an empty thinking block,
+which Promptfoo excludes from the output.
+
+Both models use a 1M-token context window, support up to 128K output tokens, and are
+priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
+access is limited through Project Glasswing and may require provider approval. Both
+model IDs are pinned; Anthropic does not publish `-latest` aliases for them.
+
+### Claude Opus 4.8 notes
+
+Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+
+- **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
+- **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.
+- **`effort` defaults to `high` and `xhigh` is available.** Setting `effort: high` behaves the same as omitting it. Start with `xhigh` for coding and agentic work. See the [Effort Level](#effort-level) section.
+
+The same suppression applies when you reach Opus 4.8 through AWS Bedrock, GCP Vertex, or Azure AI Foundry — promptfoo omits the unsupported sampling parameters on each of those paths too (silently; the one-time warning above is specific to the Anthropic Messages provider).
 
 ### Claude Opus 4.7 notes
 
@@ -824,6 +893,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 #### Core Features
 
 - [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use) - Shows how to use Claude's tool calling capabilities
+- [MCP Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp) - Connect Claude to a Model Context Protocol server and let it execute the discovered tools
 - [Structured Outputs Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) - Demonstrates JSON outputs and strict tool use for guaranteed schema compliance
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 

@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { getEnvInt, getEnvString } from '../../src/envars';
 import { createQuiverAiProvider, QuiverAiProvider } from '../../src/providers/quiverai';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
 
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -6,14 +7,19 @@ import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
-import { isTransientConnectionError } from './util/fetch/errors';
+import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
-import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
+import {
+  getCloudBearerToken,
+  getCloudTaskTeamId,
+  getRequestUrlString,
+  PROMPTFOO_TEAM_ID_HEADER,
+} from './util/fetch/monkeyPatchFetch';
+import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -285,23 +291,143 @@ type PreparedFetchResponse = {
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
+const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
+// A fixed, compiled-in salt (NOT a secret). It must be deterministic across
+// processes so that a request carrying a static secret — or a binary body —
+// hashes to the same on-disk cache key on every run and stays cacheable. A
+// per-process random key broke that: each `promptfoo eval` run produced a new
+// key and re-hit the upstream endpoint. The salt only domain-separates the
+// one-way HMAC so raw secrets are never written into the cache key; it does not
+// need to be unpredictable, and this matches the pre-existing (pre-isolation)
+// behavior of hashing the value directly.
+const FETCH_CACHE_SECRET_HMAC_SALT = 'promptfoo:fetch-cache-secret-hmac-salt:v1';
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
+
+function fingerprintFetchCacheSecret(value: string) {
+  return {
+    __promptfooSecretFingerprint: crypto
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
+      .update(FETCH_CACHE_SECRET_HMAC_CONTEXT)
+      .update('\0')
+      .update(value)
+      .digest('hex'),
+  };
+}
+
+function isSensitiveFetchCacheString(value: string, fieldName?: string) {
+  return (fieldName && isSecretField(fieldName)) || looksLikeSecret(value);
+}
+
+function getStringForFetchCacheKey(value: string, fieldName?: string): unknown {
+  if (isSensitiveFetchCacheString(value, fieldName)) {
+    return fingerprintFetchCacheSecret(value);
+  }
+  return value;
+}
+
+function hasSensitiveJsonValue(value: unknown, fieldName?: string): boolean {
+  if (typeof value === 'string') {
+    return isSensitiveFetchCacheString(value, fieldName);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSensitiveJsonValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, nestedValue]) =>
+      hasSensitiveJsonValue(nestedValue, key),
+    );
+  }
+  return false;
+}
+
+function getJsonValueForFetchCacheKey(value: unknown, fieldName?: string): unknown {
+  if (typeof value === 'string') {
+    return getStringForFetchCacheKey(value, fieldName);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => getJsonValueForFetchCacheKey(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        getJsonValueForFetchCacheKey(nestedValue, key),
+      ]),
+    );
+  }
+  return value;
+}
+
+function getBodyStringForFetchCacheKey(value: string): unknown {
+  try {
+    const parsedValue = JSON.parse(value);
+    return hasSensitiveJsonValue(parsedValue)
+      ? {
+          encoding: 'json',
+          value: getJsonValueForFetchCacheKey(parsedValue),
+        }
+      : value;
+  } catch {
+    return getStringForFetchCacheKey(value);
+  }
+}
+
+function hasSensitiveSearchParam(searchParams: URLSearchParams) {
+  return Array.from(searchParams.entries()).some(([name, value]) =>
+    isSensitiveFetchCacheString(value, name),
+  );
+}
+
+function getSearchParamsForFetchCacheKey(searchParams: URLSearchParams): unknown {
+  if (!hasSensitiveSearchParam(searchParams)) {
+    return searchParams.toString();
+  }
+  return Array.from(searchParams.entries()).map(([name, value]) => [
+    name,
+    getStringForFetchCacheKey(value, name),
+  ]);
+}
+
+function getUrlForFetchCacheKey(url: RequestInfo) {
+  const urlString = url instanceof Request ? url.url : String(url);
+  try {
+    const parsedUrl = new URL(urlString);
+    if (!hasSensitiveSearchParam(parsedUrl.searchParams)) {
+      return urlString;
+    }
+    parsedUrl.search = '';
+    return {
+      href: parsedUrl.toString(),
+      searchParams: getSearchParamsForFetchCacheKey(new URL(urlString).searchParams),
+    };
+  } catch {
+    return getStringForFetchCacheKey(urlString);
+  }
+}
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  if (isPromptfooCloudApiHost(url)) {
-    const token = cloudConfig.getApiKey();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
+  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
+  // without overriding a caller-supplied Authorization.
+  const cloudAuth = getCloudBearerToken(url);
+  if (cloudAuth && !headers.has('Authorization')) {
+    headers.set('Authorization', cloudAuth);
   }
 
-  return Array.from(headers.entries()).sort(([nameA, valueA], [nameB, valueB]) => {
-    const nameComparison = nameA.localeCompare(nameB);
-    return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
-  });
+  const cloudTaskTeamId = getCloudTaskTeamId(url);
+  if (cloudTaskTeamId && !headers.has(PROMPTFOO_TEAM_ID_HEADER)) {
+    headers.set(PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
+  }
+
+  return Array.from(headers.entries())
+    .sort(([nameA, valueA], [nameB, valueB]) => {
+      const nameComparison = nameA.localeCompare(nameB);
+      return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
+    })
+    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
 }
 
 function hashFetchCacheKey(identity: unknown) {
@@ -314,7 +440,12 @@ function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
     : Buffer.from(bytes);
   return {
     byteLength: buffer.byteLength,
-    sha256: sha256(buffer),
+    hmacSha256: crypto
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_SALT)
+      .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
+      .update('\0')
+      .update(buffer)
+      .digest('hex'),
   };
 }
 
@@ -324,11 +455,17 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   }
 
   if (typeof body === 'string') {
-    return { cacheable: true, identity: { type: 'string', value: body } };
+    return {
+      cacheable: true,
+      identity: { type: 'string', value: getBodyStringForFetchCacheKey(body) },
+    };
   }
 
   if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
-    return { cacheable: true, identity: { type: 'url-search-params', value: body.toString() } };
+    return {
+      cacheable: true,
+      identity: { type: 'url-search-params', value: getSearchParamsForFetchCacheKey(body) },
+    };
   }
 
   if (body instanceof ArrayBuffer) {
@@ -401,7 +538,7 @@ function getFetchCacheKey(
       headers: getHeadersForCacheKey(url, options),
       method,
       options: optionsForCacheKey.identity,
-      url: url instanceof Request ? url.url : String(url),
+      url: getUrlForFetchCacheKey(url),
     })}${repeatSuffix}`,
   );
 }
@@ -486,7 +623,24 @@ async function fetchAndReadBody(
         await sleep(backoffMs);
         continue;
       }
-      throw err;
+      // Preserve cancellation: an aborted body read rejects with an AbortError, and
+      // callers (e.g. evaluator.ts) suppress expected cancellation by checking
+      // `err.name === 'AbortError'`. Wrapping it would reset the name to 'Error' and
+      // turn cancelled evals into ordinary provider failures, so rethrow aborts as-is.
+      if (isAbortError(err)) {
+        throw err;
+      }
+      // Surface the URL and HTTP response context so opaque body-read failures
+      // (e.g. "TypeError: terminated" from a Cloudflare-originated 403) include
+      // actionable diagnostics instead of a bare platform error. Sanitize the URL so
+      // credential-bearing userinfo / query params are not leaked into logs.
+      const wrappedError = new Error(
+        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
+          (err as Error).message
+        }. HTTP ${resp.status} ${resp.statusText}`,
+      ) as Error & { cause?: unknown };
+      wrappedError.cause = err;
+      throw wrappedError;
     }
   }
   // Unreachable: loop always returns or throws, but TypeScript needs this
@@ -552,7 +706,7 @@ async function prepareFetchResponse(
     throw new Error(
       `Error parsing response from ${url}: ${
         (err as Error).message
-      }. Received text: ${responseText}`,
+      }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
   }
 }
@@ -634,8 +788,12 @@ export async function fetchWithCache<T = unknown>(
           // No-op when cache is disabled
         },
       };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+    } catch (err) {
+      throw new Error(
+        `Error parsing response from ${url}: ${
+          (err as Error).message
+        }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
+      );
     }
   }
 

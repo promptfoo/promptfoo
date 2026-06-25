@@ -6,6 +6,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "noEmit": true,
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,

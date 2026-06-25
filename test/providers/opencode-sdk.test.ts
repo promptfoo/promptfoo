@@ -126,7 +126,6 @@ describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
   let rmSpy: MockInstance;
-  let _readdirSyncSpy: MockInstance;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -190,7 +189,7 @@ describe('OpenCodeSDKProvider', () => {
       mtimeMs: 1234567890,
     } as fs.Stats);
     rmSpy = vi.spyOn(fsPromises, 'rm').mockResolvedValue(undefined);
-    _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
     // Mock readFileSync to return package.json for SDK resolution
     vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
       if (String(filePath).includes('@opencode-ai/sdk/package.json')) {

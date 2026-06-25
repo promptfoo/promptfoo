@@ -35,7 +35,7 @@ npm install @opencode-ai/sdk
 
 :::note
 
-The SDK package is an optional dependency and only needs to be installed if you want to use the OpenCode SDK provider.
+Promptfoo treats the SDK package as an optional runtime dependency, so it only needs to be installed if you want to use the OpenCode SDK provider.
 
 :::
 
