@@ -3,17 +3,15 @@ import { act, StrictMode } from 'react';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+
+type TestEvaluateTable = NonNullable<ReturnType<typeof useTableStore>['table']>;
+type TestEvaluateTableOutput = TestEvaluateTable['body'][number]['outputs'][number];
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -2608,9 +2606,9 @@ describe('ResultsTable Variable JSON Formatting', () => {
   const JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST =
     '[JSON value exceeds safe display limit; export results to inspect]';
 
-  const createMockOutput = (metadata: Record<string, unknown>): EvaluateTableOutput => ({
+  const createMockOutput = (metadata: Record<string, unknown>): TestEvaluateTableOutput => ({
     cost: 0,
-    failureReason: ResultFailureReason.NONE,
+    failureReason: 0,
     id: 'test-output',
     latencyMs: 0,
     metadata,
@@ -2628,7 +2626,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
     raw: 'test prompt',
   };
 
-  const mockTable: EvaluateTable = {
+  const mockTable: TestEvaluateTable = {
     body: [
       {
         outputs: [
@@ -2655,14 +2653,14 @@ describe('ResultsTable Variable JSON Formatting', () => {
   }: {
     vars: unknown[];
     transformedDisplayVars?: Record<string, unknown>;
-  }): EvaluateTable => ({
+  }): TestEvaluateTable => ({
     body: [
       {
         outputs: [createMockOutput({ transformDisplayVars: transformedDisplayVars })],
         test: {},
         testIdx: 0,
         // Real eval payloads may contain structured values despite the narrower table wire type.
-        vars: vars as EvaluateTable['body'][number]['vars'],
+        vars: vars as TestEvaluateTable['body'][number]['vars'],
       },
     ],
     head: {
@@ -2687,7 +2685,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  const mockTableState = (table: EvaluateTable) => {
+  const mockTableState = (table: TestEvaluateTable) => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
