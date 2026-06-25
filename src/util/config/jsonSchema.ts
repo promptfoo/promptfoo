@@ -173,6 +173,19 @@ function isStandaloneSchemaPath(path: string, source: SchemaSource): boolean {
   return Boolean(suffix && isSchemaOwnerPath(path.slice(0, -suffix.length), source));
 }
 
+function isAssertionSchemaPath(
+  path: string,
+  parent: MutableContainer,
+  source: SchemaSource,
+): boolean {
+  const suffix = getTestPathSuffix(path, source);
+  if (!suffix || !/^(?:\/assert\/\d+)+\/value$/.test(suffix) || Array.isArray(parent)) {
+    return false;
+  }
+  const assertionType = (parent as Record<string, unknown>).type;
+  return typeof assertionType === 'string' && /^(?:not-)?(?:is|contains)-json$/.test(assertionType);
+}
+
 function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): ValueLocation[] {
   const locations: ValueLocation[] = [];
   const seenLocations = new Map<MutableContainer, Set<string>>();
@@ -193,7 +206,11 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
     if (!isMutableContainer(value)) {
       continue;
     }
-    if (key !== undefined && parent && isStandaloneSchemaPath(path, source)) {
+    if (
+      key !== undefined &&
+      parent &&
+      (isStandaloneSchemaPath(path, source) || isAssertionSchemaPath(path, parent, source))
+    ) {
       addLocation({ key, parent, value });
       continue;
     }

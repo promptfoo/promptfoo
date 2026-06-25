@@ -143,19 +143,19 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     telemetry.record('feature_used', {
       feature: 'json tests file - azure blob',
     });
-    return dereferenceWithStandaloneSchemas(parseJsonTestCases(fileContent), 'tests');
+    return parseJsonTestCases(fileContent);
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file - azure blob',
     });
-    return dereferenceWithStandaloneSchemas(parseJsonlTestCases(fileContent), 'tests');
+    return parseJsonlTestCases(fileContent);
   }
 
   telemetry.record('feature_used', {
     feature: 'yaml tests file - azure blob',
   });
-  return dereferenceWithStandaloneSchemas(parseYamlTestCases(fileContent), 'tests');
+  return parseYamlTestCases(fileContent);
 }
 
 function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExtension | undefined {

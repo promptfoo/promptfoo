@@ -275,6 +275,37 @@ describe('dereferenceConfig JSON Schema isolation', () => {
     expect(result.tests[0].vars.response_format.schema).toEqual({ type: 'string' });
   });
 
+  it('preserves JSON assertion schemas while resolving ordinary assertion values', async () => {
+    const schema = statusSchema();
+    const result = (await dereferenceConfig({
+      definitions: {
+        assertionSchema: schema,
+        expected: { answer: 42 },
+      },
+      prompts: ['hello world'],
+      providers: ['echo'],
+      tests: [
+        {
+          assert: [
+            { type: 'is-json', value: { $ref: '#/definitions/assertionSchema' } },
+            { type: 'contains-json', value: schema },
+            { type: 'not-is-json', value: schema },
+            { type: 'not-contains-json', value: schema },
+            { type: 'equals', value: { $ref: '#/definitions/expected' } },
+          ],
+        },
+      ],
+    } as unknown as UnifiedConfig)) as any;
+
+    expect(result.tests[0].assert.slice(0, 4).map((assertion: any) => assertion.value)).toEqual([
+      schema,
+      schema,
+      schema,
+      schema,
+    ]);
+    expect(result.tests[0].assert[4].value).toEqual({ answer: 42 });
+  });
+
   it('isolates a provider schema that is also exposed through a YAML-style alias', async () => {
     const sharedSchema = statusSchema();
     const result = (await dereferenceConfig({

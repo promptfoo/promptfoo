@@ -1126,6 +1126,25 @@ describe('readTests', () => {
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+  ])('readTests keeps Azure %s refs as inert remote data', async (extension, serialize) => {
+    const blobUri = `az://account/container/tests.${extension}`;
+    const testCase = {
+      description: `Azure ${extension} remote ref`,
+      vars: { payload: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' } },
+    };
+    vi.mocked(readAzureBlobText).mockResolvedValue(serialize(testCase));
+
+    const result = await readTests(blobUri);
+
+    expect(result).toEqual([testCase]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',
@@ -1549,11 +1568,16 @@ describe('readTests', () => {
   ])('should preserve schema refs through the scalar external %s route', async (extension) => {
     const schema = {
       type: 'object',
-      properties: { status: { $ref: 'https://example.com/status.json' } },
+      $defs: { Status: { type: 'string' } },
+      properties: {
+        remote: { $ref: 'https://example.com/status.json' },
+        status: { $ref: '#/$defs/Status' },
+      },
     };
     const testCase = {
       description: 'Scalar external structured output schema',
       options: { response_format: { type: 'json_schema', schema } },
+      assert: [{ type: 'is-json', value: schema }],
     };
     vi.mocked(fs.readFileSync).mockReturnValue(
       extension === 'json' ? JSON.stringify([testCase]) : JSON.stringify(testCase),
@@ -1562,6 +1586,7 @@ describe('readTests', () => {
     const result = await readTests(`test.${extension}`);
 
     expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
+    expect((result[0].assert?.[0] as any)?.value).toEqual(schema);
   });
 
   it('should warn when assert is found in vars', async () => {
