@@ -1,9 +1,11 @@
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  calculateErrorOpenAICost,
   calculateOpenAICost,
   failApiCall,
   formatOpenAiError,
+  getErrorTokenUsage,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
   OPENAI_REALTIME_MODELS,
@@ -137,6 +139,96 @@ describe('getTokenUsage', () => {
         cacheReadInputTokens: 32,
       },
     });
+  });
+});
+
+describe('getErrorTokenUsage', () => {
+  it('preserves valid usage and explicit fresh request accounting', () => {
+    expect(
+      getErrorTokenUsage(
+        {
+          usage: {
+            total_tokens: 100,
+            prompt_tokens: 40,
+            completion_tokens: 60,
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+    });
+  });
+
+  it('does not count a cached error as a new request', () => {
+    expect(getErrorTokenUsage({}, true)).toEqual({ numRequests: 0 });
+  });
+
+  it('drops malformed usage fields without losing request accounting', () => {
+    expect(
+      getErrorTokenUsage(
+        {
+          usage: {
+            total_tokens: { private: 'must-not-appear' },
+            prompt_tokens: { private: 'must-not-appear' },
+            completion_tokens: { private: 'must-not-appear' },
+          },
+        },
+        false,
+      ),
+    ).toEqual({ numRequests: 1 });
+  });
+
+  it('drops negative and unsafe token counts while preserving valid fields', () => {
+    expect(
+      getErrorTokenUsage(
+        {
+          usage: {
+            total_tokens: Number.MAX_VALUE,
+            prompt_tokens: -1,
+            completion_tokens: 2,
+          },
+        },
+        false,
+      ),
+    ).toEqual({ completion: 2, numRequests: 1 });
+  });
+
+  it('bounds coercion failures from adversarial nested usage', () => {
+    let cachedTokens: unknown = 1;
+    for (let i = 0; i < 5_000; i++) {
+      cachedTokens = [cachedTokens];
+    }
+
+    const result = getErrorTokenUsage(
+      { usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } },
+      false,
+    );
+
+    expect(result).toEqual({ numRequests: 1 });
+  });
+});
+
+describe('calculateErrorOpenAICost', () => {
+  const config = { inputCost: 0.001, outputCost: 0.002 };
+
+  it('preserves cost for valid usage', () => {
+    expect(
+      calculateErrorOpenAICost('gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it.each([
+    ['negative counts', { prompt_tokens: -2, completion_tokens: -1 }],
+    ['unsafe counts', { prompt_tokens: 1e308, completion_tokens: 1e308 }],
+    ['mixed-type counts', { prompt_tokens: 3, completion_tokens: '2' }],
+  ])('omits cost for %s', (_description, usage) => {
+    expect(calculateErrorOpenAICost('gpt-4o', config, { usage })).toBeUndefined();
   });
 });
 

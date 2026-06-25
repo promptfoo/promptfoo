@@ -2,7 +2,14 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  calculateErrorOpenAICost,
+  calculateOpenAICost,
+  formatOpenAiError,
+  getErrorTokenUsage,
+  getTokenUsage,
+  validateChatCompletionMessage,
+} from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -13,6 +20,16 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+
+function getSnowflakeErrorCode(
+  data: { code?: unknown; error_code?: unknown } | null | undefined,
+): string | undefined {
+  const value = data?.code ?? data?.error_code;
+  return (typeof value === 'number' || typeof value === 'string') &&
+    /^[A-Za-z0-9_.-]{1,64}$/.test(String(value))
+    ? String(value)
+    : undefined;
+}
 
 /**
  * Snowflake Cortex provider extends OpenAI chat completion provider
@@ -115,10 +132,14 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     }
 
     type SnowflakeCortexResponse = OpenAI.ChatCompletion & {
+      code?: number | string;
       error?: {
         code?: string;
         message?: string;
       };
+      error_code?: number | string;
+      message?: string;
+      request_id?: string;
     };
 
     let data: SnowflakeCortexResponse;
@@ -166,7 +187,6 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
 
     const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
-    const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
     const cost = calculateOpenAICost(
       this.modelName,
       config,
@@ -174,36 +194,47 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       data?.usage?.completion_tokens,
     );
 
+    const snowflakeErrorCode = getSnowflakeErrorCode(data);
+    if (!choice && typeof data?.message === 'string' && snowflakeErrorCode) {
+      await deleteFromCache?.();
+      return {
+        error: `API error: Snowflake provider returned error code ${snowflakeErrorCode}`,
+        tokenUsage: getErrorTokenUsage(data, cached),
+        cached,
+        latencyMs,
+        cost: calculateErrorOpenAICost(this.modelName, config, data),
+        metadata: { snowflakeErrorCode },
+      };
+    }
+
     // Process the response (should be OpenAI-compatible)
-    const message = choice?.message;
-    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    const message = validateChatCompletionMessage(choice?.message, { finishReason });
+    if (!message) {
       await deleteFromCache?.();
       return {
         error: 'Malformed response data: expected choices[0].message',
-        tokenUsage,
+        tokenUsage: getErrorTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost,
+        cost: calculateErrorOpenAICost(this.modelName, config, data),
         ...(finishReason && { finishReason }),
       };
     }
 
     // Handle tool calls and content
     let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
 
-    if (hasFunctionCall || hasToolCalls) {
+    if (message.functionCall || message.toolCalls) {
       // Tool calls always take priority
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
+      output = message.functionCall ?? message.toolCalls!;
+    } else if (typeof message.content === 'string' && message.content.trim()) {
       output = message.content;
     }
 
     // Handle structured output
     if (config.response_format?.type === 'json_schema') {
       const jsonCandidate =
-        typeof message?.content === 'string'
+        typeof message.content === 'string'
           ? message.content
           : typeof output === 'string'
             ? output

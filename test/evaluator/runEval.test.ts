@@ -350,6 +350,36 @@ describe('runEval', () => {
     expect(conversations).toEqual({});
   });
 
+  it('should preserve usable errored output in conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const partialOutputProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('partial-output-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Partial model output',
+        error: 'Provider disconnected',
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: partialOutputProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider disconnected');
+    expect(conversations['partial-output-provider:undefined']).toEqual([
+      {
+        prompt: 'Hello ',
+        input: 'Hello ',
+        output: 'Partial model output',
+      },
+    ]);
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 

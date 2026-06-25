@@ -715,6 +715,27 @@ export function calculateOpenAICost(
   return totalCost;
 }
 
+function isSafeTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * Calculate cost for an error response without trusting provider-controlled usage counts.
+ */
+export function calculateErrorOpenAICost(
+  modelName: string,
+  config: ProviderConfig,
+  data: any,
+): number | undefined {
+  const promptTokens = data?.usage?.prompt_tokens;
+  const completionTokens = data?.usage?.completion_tokens;
+  if (!isSafeTokenCount(promptTokens) || !isSafeTokenCount(completionTokens)) {
+    return undefined;
+  }
+  const cost = calculateOpenAICost(modelName, config, promptTokens, completionTokens);
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+}
+
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     const errorType = err.error?.type || err.type || 'unknown';
@@ -764,6 +785,125 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+/**
+ * Preserve request accounting on provider errors without trusting malformed usage metadata.
+ */
+export function getErrorTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  const sanitized: Partial<TokenUsage> = { numRequests: cached ? 0 : 1 };
+  try {
+    const usage = getTokenUsage(data, cached);
+    const tokenFields = ['total', 'prompt', 'completion', 'cached'] as const;
+    for (const field of tokenFields) {
+      const value = usage[field];
+      if (isSafeTokenCount(value)) {
+        sanitized[field] = value;
+      }
+    }
+
+    if (usage.completionDetails) {
+      const details: NonNullable<TokenUsage['completionDetails']> = {};
+      const detailFields = [
+        'reasoning',
+        'acceptedPrediction',
+        'rejectedPrediction',
+        'cacheReadInputTokens',
+        'cacheCreationInputTokens',
+      ] as const;
+      for (const field of detailFields) {
+        const value = usage.completionDetails[field];
+        if (isSafeTokenCount(value)) {
+          details[field] = value;
+        }
+      }
+      if (Object.keys(details).length > 0) {
+        sanitized.completionDetails = details;
+      }
+    }
+  } catch {
+    // Ignore malformed provider-controlled usage fields.
+  }
+  return sanitized;
+}
+
+export interface ValidatedChatCompletionMessage {
+  content: string | null | undefined;
+  functionCall: Record<string, unknown> | undefined;
+  reasoning: string | undefined;
+  structuredContent: Record<string, unknown>[] | undefined;
+  toolCalls: Record<string, unknown>[] | undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasNamedPayload(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value.name === 'string' && value.name.trim().length > 0;
+}
+
+function isToolCall(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    (value.type === 'function' && hasNamedPayload(value.function)) ||
+    (value.type === 'custom' && hasNamedPayload(value.custom))
+  );
+}
+
+/**
+ * Validate the response fields that providers inspect before returning a completion.
+ */
+export function validateChatCompletionMessage(
+  value: unknown,
+  options: { allowStructuredContent?: boolean; finishReason?: string } = {},
+): ValidatedChatCompletionMessage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const functionCall = hasNamedPayload(value.function_call) ? value.function_call : undefined;
+  if (value.function_call != null && !functionCall) {
+    return undefined;
+  }
+
+  if (
+    value.tool_calls != null &&
+    (!Array.isArray(value.tool_calls) || !value.tool_calls.every(isToolCall))
+  ) {
+    return undefined;
+  }
+  const toolCalls =
+    Array.isArray(value.tool_calls) && value.tool_calls.length > 0 ? value.tool_calls : undefined;
+
+  const hasContent = Object.prototype.hasOwnProperty.call(value, 'content');
+  const content =
+    value.content === null || typeof value.content === 'string' ? value.content : undefined;
+  const structuredContent =
+    options.allowStructuredContent &&
+    Array.isArray(value.content) &&
+    value.content.every((item) => isRecord(item) && typeof item.type === 'string')
+      ? value.content
+      : undefined;
+  if (hasContent && content === undefined && structuredContent === undefined) {
+    return undefined;
+  }
+
+  const reasoning = typeof value.reasoning === 'string' ? value.reasoning : undefined;
+  if (
+    !functionCall &&
+    !toolCalls &&
+    !hasContent &&
+    reasoning === undefined &&
+    typeof value.refusal !== 'string' &&
+    options.finishReason !== 'content_filter'
+  ) {
+    return undefined;
+  }
+
+  return { content, functionCall, reasoning, structuredContent, toolCalls };
 }
 
 export interface OpenAiFunction {

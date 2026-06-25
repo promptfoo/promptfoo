@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
+import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
@@ -21,6 +23,7 @@ describe('OpenRouter', () => {
 
   afterEach(async () => {
     await clearCache();
+    mockedFetchWithRetries.mockReset();
     vi.clearAllMocks();
   });
 
@@ -177,6 +180,15 @@ describe('OpenRouter', () => {
       ['a null message', { choices: [{ message: null }] }],
       ['a primitive message', { choices: [{ message: 'wrong shape' }] }],
       ['an array message', { choices: [{ message: [] }] }],
+      ['an empty message', { choices: [{ message: {} }] }],
+      ['object content', { choices: [{ message: { content: { private: 'secret' } } }] }],
+      ['numeric content', { choices: [{ message: { content: 42 } }] }],
+      ['true content', { choices: [{ message: { content: true } }] }],
+      ['false content', { choices: [{ message: { content: false } }] }],
+      ['zero content', { choices: [{ message: { content: 0 } }] }],
+      ['an invalid content array', { choices: [{ message: { content: [42] } }] }],
+      ['an invalid function call', { choices: [{ message: { function_call: { name: 42 } } }] }],
+      ['an invalid tool call', { choices: [{ message: { tool_calls: [null] } }] }],
     ])('returns a structured error for %s', async (_description, responseBody) => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
@@ -195,6 +207,38 @@ describe('OpenRouter', () => {
         expect(result.error).toBe('Malformed response data: expected choices[0].message');
         expect(result.cached).toBe(false);
         expect(result.output).toBeUndefined();
+        expect(result.tokenUsage).toEqual({ numRequests: 1 });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves structured array content allowed by OpenRouter', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+        const content = [
+          { type: 'text', text: 'Hello' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
+        ];
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content }, finish_reason: 'stop' }],
+              usage: { total_tokens: 2, prompt_tokens: 1, completion_tokens: 1 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toEqual(content);
       } finally {
         restoreEnv();
       }
@@ -307,6 +351,58 @@ describe('OpenRouter', () => {
         expect(recovered.output).toBe('Recovered');
         expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
       } finally {
+        restoreEnv();
+      }
+    });
+
+    it('retries a documented choice-level rate limit without exposing its diagnostic', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', { config: { maxRetries: 1 } });
+        mockedFetchWithRetries
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: { content: 'partial output' },
+                    finish_reason: 'error',
+                    error: { code: 429, message: 'PRIVATE_RATE_LIMIT_DIAGNOSTIC' },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+              }),
+              {
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers({ 'Content-Type': 'application/json' }),
+              },
+            ),
+          );
+
+        const result = await registry.execute(provider, () => provider.callApi('Test prompt'), {
+          ...createProviderRateLimitOptions(),
+          getRetryAfter: () => 0,
+        });
+
+        expect(result.output).toBe('Recovered');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_RATE_LIMIT_DIAGNOSTIC');
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+      } finally {
+        registry.dispose();
         restoreEnv();
       }
     });

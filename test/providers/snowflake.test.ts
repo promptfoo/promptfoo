@@ -244,6 +244,15 @@ describe('Snowflake Cortex Provider', () => {
       ['a null message', { choices: [{ message: null }] }],
       ['a primitive message', { choices: [{ message: 'wrong shape' }] }],
       ['an array message', { choices: [{ message: [] }] }],
+      ['an empty message', { choices: [{ message: {} }] }],
+      ['object content', { choices: [{ message: { content: { private: 'secret' } } }] }],
+      ['array content', { choices: [{ message: { content: [{ type: 'text', text: 'hello' }] } }] }],
+      ['numeric content', { choices: [{ message: { content: 42 } }] }],
+      ['true content', { choices: [{ message: { content: true } }] }],
+      ['false content', { choices: [{ message: { content: false } }] }],
+      ['zero content', { choices: [{ message: { content: 0 } }] }],
+      ['an invalid function call', { choices: [{ message: { function_call: { name: 42 } } }] }],
+      ['an invalid tool call', { choices: [{ message: { tool_calls: [null] } }] }],
     ])('returns a structured error for %s', async (_description, responseBody) => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {
@@ -266,6 +275,42 @@ describe('Snowflake Cortex Provider', () => {
       expect(result.error).toBe('Malformed response data: expected choices[0].message');
       expect(result.cached).toBe(false);
       expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toEqual({ numRequests: 1 });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('preserves a bounded Snowflake HTTP-200 error code without copying diagnostics', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          message: 'PRIVATE_SESSION_DIAGNOSTIC',
+          code: 390112,
+          request_id: '550e8400-e29b-41d4-a716-446655440000',
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        latencyMs: 42,
+        deleteFromCache,
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({
+        error: 'API error: Snowflake provider returned error code 390112',
+        tokenUsage: { numRequests: 1 },
+        cached: false,
+        latencyMs: 42,
+        metadata: { snowflakeErrorCode: '390112' },
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_SESSION_DIAGNOSTIC');
       expect(deleteFromCache).toHaveBeenCalledOnce();
     });
 
@@ -297,7 +342,7 @@ describe('Snowflake Cortex Provider', () => {
       const result = await provider.callApi('Test prompt');
       expect(result).toEqual({
         error: 'Malformed response data: expected choices[0].message',
-        tokenUsage: { cached: 5, total: 5 },
+        tokenUsage: { cached: 5, total: 5, numRequests: 0 },
         cached: true,
         latencyMs: 42,
         cost: 0.007,

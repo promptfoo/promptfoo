@@ -3,7 +3,14 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  calculateErrorOpenAICost,
+  calculateOpenAICost,
+  formatOpenAiError,
+  getErrorTokenUsage,
+  getTokenUsage,
+  validateChatCompletionMessage,
+} from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -191,7 +198,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
-    const tokenUsage = data?.usage ? getTokenUsage(data, cached) : undefined;
     const cost = calculateOpenAICost(
       this.modelName,
       config,
@@ -203,39 +209,45 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       await deleteFromCache?.();
       return {
         error: 'API error: OpenRouter provider returned a generation error',
-        tokenUsage,
+        tokenUsage: getErrorTokenUsage(data, cached),
         cached,
-        cost,
+        cost: calculateErrorOpenAICost(this.modelName, config, data),
         ...(finishReason && { finishReason }),
+        ...((choice.error.code === 429 || choice.error.code === '429') && {
+          metadata: { rateLimitKind: 'rate_limit' as const },
+        }),
       };
     }
 
     // Process the response with special handling for Gemini
-    const message: any = choice?.message;
-    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    const message = validateChatCompletionMessage(choice?.message, {
+      allowStructuredContent: true,
+      finishReason,
+    });
+    if (!message) {
       await deleteFromCache?.();
       return {
         error: 'Malformed response data: expected choices[0].message',
-        tokenUsage,
+        tokenUsage: getErrorTokenUsage(data, cached),
         cached,
-        cost,
+        cost: calculateErrorOpenAICost(this.modelName, config, data),
         ...(finishReason && { finishReason }),
       };
     }
 
     // Prioritize tool calls over content and reasoning
     let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-    if (hasFunctionCall || hasToolCalls) {
+    if (message.functionCall || message.toolCalls) {
       // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
+      output = message.functionCall ?? message.toolCalls!;
+    } else if (typeof message.content === 'string' && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
+    } else if (message.structuredContent?.length) {
+      output = message.structuredContent;
     } else if (message.reasoning && (this.config.showThinking ?? true)) {
       // Fallback to reasoning if no content and showThinking is enabled
       output = message.reasoning;
@@ -244,7 +256,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (config.response_format?.type === 'json_schema') {
       // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
       const jsonCandidate =
-        typeof message?.content === 'string'
+        typeof message.content === 'string'
           ? message.content
           : typeof output === 'string'
             ? output
