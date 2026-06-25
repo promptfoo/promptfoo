@@ -3,14 +3,17 @@ version = 1
 name = "promptfoo"
 
 [setup]
-script = "npm ci"
-
-[setup.darwin]
 script = """
 set -e
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 . "$NVM_DIR/nvm.sh"
 nvm use
+npm ci
+"""
+
+[setup.win32]
+script = """
+nvm use 24.18.0
 npm ci
 """
 
