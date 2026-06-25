@@ -350,7 +350,7 @@ You can load `defaultTest` configuration from external files using `defaultTest:
 
 ### YAML references
 
-promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
+Promptfoo YAML and JSON configurations support [references](https://opis.io/json-schema/2.x/references.html) that reuse blocks from the surrounding config.
 
 Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
 
@@ -386,7 +386,11 @@ assertionTemplates:
 ```
 
 :::info
-`tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
+
+Promptfoo resolves a pure local `$ref` object used to select a schema from the surrounding config. Once selected, references owned by the standalone JSON Schema are passed through unchanged. This boundary applies to provider-owned structured-output and tool schema fields, including OpenAI-compatible response formats and tools, Codex `output_schema`, OpenAI Agents output and tool schemas, Anthropic `output_format.schema`, Google response and function-declaration schemas, OpenCode `format.schema`, Vercel `responseSchema`, and Anthropic or Bedrock tool schemas in provider, target, prompt, and test-option config.
+
+Loading a complete response format with `file://` remains supported. Whether a provider accepts internal, relative, remote, cyclic, or malformed schema references depends on that provider.
+
 :::
 
 ## Multiple variables in a single test case

@@ -253,14 +253,16 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param options - Options for callers that defer `$ref` handling to the JSON reference parser
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  options: { preserveRefs?: boolean } = {},
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) => maybeLoadConfigFromExternalFile(item, context, options));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
@@ -278,7 +280,10 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value =
+        options.preserveRefs && key === '$ref'
+          ? config[key]
+          : maybeLoadConfigFromExternalFile(config[key], childContext, options);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {

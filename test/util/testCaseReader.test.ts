@@ -994,6 +994,27 @@ describe('readTest', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual(testContent);
   });
+
+  it('should keep refs inert in a file-backed test when the ref parser is disabled', async () => {
+    const testContent = {
+      description: 'Disabled ref parser',
+      vars: {
+        missing: { $ref: '#/missing' },
+        remote: { $ref: 'https://example.com/missing.json' },
+      },
+    };
+    vi.mocked(getEnvBool).mockImplementation(
+      (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest('disabled.yaml');
+
+    expect(result).toEqual(testContent);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(testContent, undefined, {
+      preserveRefs: true,
+    });
+  });
 });
 
 describe('readTests', () => {
@@ -1122,6 +1143,25 @@ describe('readTests', () => {
         vars: 'vars1.yaml',
       },
     ]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+  ])('readTests keeps Azure %s refs as inert remote data', async (extension, serialize) => {
+    const blobUri = `az://account/container/tests.${extension}`;
+    const testCase = {
+      description: `Azure ${extension} remote ref`,
+      vars: { payload: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' } },
+    };
+    vi.mocked(readAzureBlobText).mockResolvedValue(serialize(testCase));
+
+    const result = await readTests(blobUri);
+
+    expect(result).toEqual([testCase]);
     expect(globSync).not.toHaveBeenCalled();
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
@@ -1487,6 +1527,121 @@ describe('readTests', () => {
       expect.stringContaining('products.yaml'),
       expect.any(Object),
     );
+  });
+
+  it.each([
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+  ])('should preserve schema refs in external %s test files', async (extension, serialize) => {
+    const mockProvider = createMockProvider({ id: 'openai:chat:gpt-4o' });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const schema = {
+      type: 'object',
+      $defs: { Status: { type: 'string' } },
+      properties: {
+        status: { $ref: '#/$defs/Status' },
+        relative: { $ref: './missing-schema.json#/$defs/Relative' },
+      },
+    };
+    const testCase = {
+      description: 'External structured output schema',
+      provider: {
+        id: 'openai:chat:gpt-4o',
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'status', schema },
+          },
+        },
+      },
+      options: {
+        response_format: { type: 'json_schema', schema },
+      },
+      assert: [{ type: 'contains', value: 'ready' }],
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(serialize(testCase));
+    vi.mocked(globSync).mockReturnValue([`test.${extension}`]);
+
+    const result = await readTests([`test.${extension}`]);
+
+    expect(result[0].provider).toBe(mockProvider);
+    expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.any(Array), undefined, {
+      preserveRefs: true,
+    });
+    expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
+      basePath: '.',
+      options: expect.objectContaining({
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'status',
+              schema,
+            },
+          },
+        },
+      }),
+    });
+  });
+
+  it.each([
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+  ])('should keep refs inert in external %s tests when the ref parser is disabled', async (extension, serialize) => {
+    const refs = {
+      cyclic: { $ref: '#/0/vars/refs' },
+      file: { $ref: 'file:///definitely/missing/promptfoo-pr-5256.json' },
+      malformed: { $ref: '#/%ZZ' },
+      missing: { $ref: '#/missing' },
+      relative: { $ref: './missing.json' },
+      remote: { $ref: 'https://example.com/missing.json' },
+    };
+    const testCase = {
+      description: 'Disabled ref parser',
+      vars: { refs },
+    };
+    vi.mocked(getEnvBool).mockImplementation(
+      (key, defaultValue = false) => key === 'PROMPTFOO_DISABLE_REF_PARSER' || defaultValue,
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(serialize(testCase));
+    vi.mocked(globSync).mockReturnValue([`test.${extension}`]);
+
+    const result = await readTests([`test.${extension}`]);
+
+    expect(result[0].vars?.refs).toEqual(refs);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(expect.any(Array), undefined, {
+      preserveRefs: true,
+    });
+  });
+
+  it.each([
+    'json',
+    'jsonl',
+  ])('should preserve schema refs through the scalar external %s route', async (extension) => {
+    const schema = {
+      type: 'object',
+      $defs: { Status: { type: 'string' } },
+      properties: {
+        remote: { $ref: 'https://example.com/status.json' },
+        status: { $ref: '#/$defs/Status' },
+      },
+    };
+    const testCase = {
+      description: 'Scalar external structured output schema',
+      options: { response_format: { type: 'json_schema', schema } },
+      assert: [{ type: 'is-json', value: schema }],
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      extension === 'json' ? JSON.stringify([testCase]) : JSON.stringify(testCase),
+    );
+
+    const result = await readTests(`test.${extension}`);
+
+    expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
+    expect((result[0].assert?.[0] as any)?.value).toEqual(schema);
   });
 
   it('should warn when assert is found in vars', async () => {

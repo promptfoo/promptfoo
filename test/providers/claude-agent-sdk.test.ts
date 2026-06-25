@@ -2134,8 +2134,11 @@ describe('ClaudeCodeSDKProvider', () => {
             type: 'json_schema' as const,
             schema: {
               type: 'object',
+              $defs: {
+                Name: { type: 'string' },
+              },
               properties: {
-                name: { type: 'string' },
+                name: { $ref: '#/$defs/Name' },
                 age: { type: 'number' },
               },
               required: ['name', 'age'],

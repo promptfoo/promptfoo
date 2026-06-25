@@ -406,6 +406,43 @@ describe('file utilities', () => {
       expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
     });
 
+    it('should load $ref file URLs by default', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"string"}');
+      const config = {
+        schema: {
+          $ref: 'file://schemas/shared.json',
+        },
+      };
+
+      expect(maybeLoadConfigFromExternalFile(config)).toEqual({
+        schema: { $ref: { type: 'string' } },
+      });
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'schemas/shared.json'),
+        'utf8',
+      );
+    });
+
+    it('should preserve $ref files only when a reference parser follows', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue('sibling content');
+      const config = {
+        schema: {
+          $ref: 'file://schemas/shared.json#/$defs/Shared',
+        },
+        sibling: 'file://sibling.txt',
+      };
+
+      expect(maybeLoadConfigFromExternalFile(config, undefined, { preserveRefs: true })).toEqual({
+        schema: config.schema,
+        sibling: 'sibling content',
+      });
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        path.resolve('/mock/base/path', 'sibling.txt'),
+        'utf8',
+      );
+    });
+
     it('should handle arrays and nested structures', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce('test content');
 

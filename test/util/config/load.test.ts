@@ -1522,6 +1522,53 @@ describe('dereferenceConfig', () => {
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(rawConfig);
   });
+
+  it('should hide standalone JSON Schemas from the ref parser and restore the input', async () => {
+    const rawConfig = {
+      prompts: [{ $ref: '#/definitions/prompt' }],
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'schema',
+                schema: { properties: { status: { $ref: '#/$defs/Status' } } },
+              },
+            },
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'tool',
+                  parameters: { properties: { priority: { $ref: '#/$defs/Priority' } } },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      definitions: { prompt: 'hello world' },
+    };
+    const originalConfig = structuredClone(rawConfig);
+    let parserInput: typeof rawConfig | undefined;
+    mockDereference.mockImplementationOnce((config: typeof rawConfig) => {
+      parserInput = structuredClone(config);
+      return Promise.resolve(config);
+    });
+
+    const result = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+
+    expect(parserInput?.prompts).toEqual([{ $ref: '#/definitions/prompt' }]);
+    expect(parserInput?.providers[0].config.response_format.json_schema.schema).toEqual({});
+    expect(parserInput?.providers[0].config.tools[0].function.parameters).toEqual({});
+    expect(result).toEqual(originalConfig);
+    expect(rawConfig).toEqual(originalConfig);
+  });
 });
 
 describe('resolveConfigs', () => {

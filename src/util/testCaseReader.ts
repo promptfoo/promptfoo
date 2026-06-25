@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
 
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -18,6 +17,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { dereferenceWithStandaloneSchemas } from './config/jsonSchema';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -41,6 +41,16 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
+
+function loadExternalFilesBeforeRefParser(value: unknown): unknown {
+  return maybeLoadConfigFromExternalFile(value, undefined, { preserveRefs: true });
+}
+
+function dereferenceStandaloneTestCases<T extends object>(value: T): Promise<T> {
+  return dereferenceWithStandaloneSchemas(value, 'tests', {
+    disabled: getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+  });
+}
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -216,21 +226,21 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    return readJsonTestCases(resolvedVarsPath);
+    return dereferenceStandaloneTestCases(await readJsonTestCases(resolvedVarsPath));
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
-    return readJsonlTestCases(resolvedVarsPath);
+    return dereferenceStandaloneTestCases(await readJsonlTestCases(resolvedVarsPath));
   }
   if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
-    return csvRowsToTestCases(rows);
+    const rows = loadExternalFilesBeforeRefParser(rawContent) as unknown as CsvRow[];
+    return dereferenceStandaloneTestCases(csvRowsToTestCases(rows));
   }
 
   return [];
@@ -405,8 +415,9 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
+    const rawTestCase = loadExternalFilesBeforeRefParser(rawContent) as TestCaseWithVarsFile;
+    const [dereferencedTestCase] = await dereferenceStandaloneTestCases([rawTestCase]);
+    testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
   }
@@ -491,7 +502,7 @@ export async function loadTestsFromGlob(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases)) as TestCase[];
+    return dereferenceStandaloneTestCases(testCases);
   };
 
   const ret: TestCase[] = [];
@@ -519,7 +530,7 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
@@ -527,11 +538,11 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
