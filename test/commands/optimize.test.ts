@@ -184,6 +184,38 @@ describe('optimize command', () => {
     expect(concurrencySpy).toHaveBeenCalledWith(1, expect.any(Function));
   });
 
+  it('applies configured first-N, pattern, and metadata test filters', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [
+          { description: 'keep first', metadata: { tier: 'gold' }, vars: { id: 0 } },
+          { description: 'keep second', metadata: { tier: 'gold' }, vars: { id: 1 } },
+          { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 2 } },
+          { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 3 } },
+        ],
+      },
+      basePath: '',
+      commandLineOptions: {
+        filterFirstN: 1,
+        filterMetadata: 'tier=gold',
+        filterPattern: 'keep',
+      },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        tests: [expect.objectContaining({ vars: { id: 0 } })],
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('does not merge command prompt-suggestion settings into optimizer eval config', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {

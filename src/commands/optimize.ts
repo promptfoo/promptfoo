@@ -11,7 +11,7 @@ import {
   type UnifiedConfig,
 } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
-import { filterTests } from '../util/eval/filterTests';
+import { type FilterOptions, filterTests } from '../util/eval/filterTests';
 import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 
@@ -53,12 +53,22 @@ async function applyOptimizationTestFilters(
   commandLineOptions: Partial<CommandLineOptions> | undefined,
 ): Promise<{ config: Partial<UnifiedConfig>; testSuite: TestSuite }> {
   const range = config.evaluateOptions?.filterRange;
-  const sample = commandLineOptions?.filterSample;
-  if (range === undefined && sample === undefined) {
+  const hasScenarios = Boolean(testSuite.scenarios?.length);
+  const filterOptions: FilterOptions = {
+    errorsOnly: commandLineOptions?.filterErrorsOnly,
+    failing: commandLineOptions?.filterFailing,
+    failingOnly: commandLineOptions?.filterFailingOnly,
+    firstN: commandLineOptions?.filterFirstN,
+    metadata: commandLineOptions?.filterMetadata,
+    pattern: commandLineOptions?.filterPattern,
+    range: hasScenarios ? undefined : range,
+    sample: commandLineOptions?.filterSample,
+    sampleSeed: commandLineOptions?.filterSampleSeed,
+  };
+  if (Object.values(filterOptions).every((value) => value === undefined)) {
     return { config, testSuite };
   }
 
-  const hasScenarios = Boolean(testSuite.scenarios?.length);
   const explicitTestCount = testSuite.tests?.length ?? 0;
   // A defaultTest-only suite has one implicit row. Sampling cannot reduce it,
   // and the optimizer already delegates range handling to the evaluator.
@@ -66,11 +76,7 @@ async function applyOptimizationTestFilters(
     return { config, testSuite };
   }
 
-  const tests = await filterTests(testSuite, {
-    range: hasScenarios ? undefined : range,
-    sample,
-    sampleSeed: commandLineOptions?.filterSampleSeed,
-  });
+  const tests = await filterTests(testSuite, filterOptions);
   const shouldSuppressImplicitDefaultTest =
     !hasScenarios && tests.length === 0 && explicitTestCount > 0;
 
