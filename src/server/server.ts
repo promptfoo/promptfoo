@@ -44,6 +44,7 @@ import {
   getTestCases,
   readResult,
 } from '../util/database';
+import { isAbortError } from '../util/fetch/errors';
 import { redactAzureBlobSasTokens } from '../util/sanitizer';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
@@ -157,6 +158,7 @@ export function findStaticDir(): string {
 
 export function createApp() {
   const app = express();
+  const shareQueues = new Map<string, Promise<unknown>>();
 
   const staticDir = findStaticDir();
 
@@ -375,12 +377,38 @@ export function createApp() {
       return;
     }
 
+    const shareController = new AbortController();
+    const abortShare = () => {
+      if (!res.writableEnded && !shareController.signal.aborted) {
+        shareController.abort();
+      }
+    };
+    req.once('aborted', abortShare);
+    res.once('close', abortShare);
+
     try {
-      const url = await createShareableUrl(eval_, {
-        showAuth: true,
-        silent: true,
-        throwOnError: true,
-      });
+      // Serialize shares for the same eval so cancellation rollback cannot race a retry.
+      const previousShare = shareQueues.get(id) ?? Promise.resolve();
+      const shareOperation = previousShare
+        .catch(() => {})
+        .then(() =>
+          createShareableUrl(eval_, {
+            showAuth: true,
+            silent: true,
+            throwOnError: true,
+            signal: shareController.signal,
+          }),
+        );
+      shareQueues.set(id, shareOperation);
+      void shareOperation
+        .finally(() => {
+          if (shareQueues.get(id) === shareOperation) {
+            shareQueues.delete(id);
+          }
+        })
+        .catch(() => {});
+
+      const url = await shareOperation;
       if (!url) {
         res.status(422).json({
           error: 'Sharing is disabled or this evaluation has no results to share',
@@ -390,11 +418,18 @@ export function createApp() {
       logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url) });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
+      if (shareController.signal.aborted && isAbortError(error)) {
+        logger.debug('Share request cancelled after client disconnect', { id });
+        return;
+      }
       if (error instanceof ConfigPermissionError) {
         sendError(res, 403, 'Cloud permissions do not allow sharing this evaluation', error);
         return;
       }
       sendError(res, 500, 'Failed to generate share URL', error);
+    } finally {
+      req.off('aborted', abortShare);
+      res.off('close', abortShare);
     }
   });
 

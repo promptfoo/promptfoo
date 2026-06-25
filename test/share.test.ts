@@ -1277,6 +1277,43 @@ describe('adaptive chunk retry', () => {
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
+
+  it('cancels chunk upload and rolls back a remote eval', async () => {
+    const controller = new AbortController();
+    let rejectChunk!: (error: unknown) => void;
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockImplementationOnce(
+        (_url: string, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            rejectChunk = reject;
+            options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+              once: true,
+            });
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      throwOnError: true,
+      signal: controller.signal,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(rejectChunk).toBeTypeOf('function'));
+
+    controller.abort();
+
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls[0][1].signal).toBe(controller.signal);
+    expect(mockFetch.mock.calls[1][1].signal).toBe(controller.signal);
+    expect(mockFetch.mock.calls[2][0]).toBe('https://api.example.com/api/v1/results/mock-eval-id');
+    expect(mockFetch.mock.calls[2][1]).toMatchObject({ method: 'DELETE' });
+    expect(mockFetch.mock.calls[2][1].signal).toBeUndefined();
+  });
 });
 
 describe('hasEvalBeenShared', () => {

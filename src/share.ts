@@ -15,6 +15,7 @@ import {
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
+import { isAbortError } from './util/fetch/errors';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { redactAzureBlobSasTokens } from './util/sanitizer';
@@ -34,6 +35,8 @@ export interface ShareOptions {
   showAuth?: boolean;
   /** Propagate upload failures to callers that can return a structured error */
   throwOnError?: boolean;
+  /** Cancel an in-flight share and roll back any remote eval already created */
+  signal?: AbortSignal;
 }
 
 /** Error types that indicate chunk size issues */
@@ -144,6 +147,7 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
@@ -184,6 +188,7 @@ async function sendEvalRecord(
     headers,
     body: jsonData,
     compress: true,
+    signal,
   });
 
   if (!response.ok) {
@@ -221,6 +226,7 @@ async function sendChunkOfResults(
   url: string,
   evalId: string,
   headers: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(chunk);
@@ -236,6 +242,7 @@ async function sendChunkOfResults(
       headers,
       body: stringifiedChunk,
       compress: true,
+      signal,
     });
 
     if (!response.ok) {
@@ -303,9 +310,11 @@ async function sendChunkWithRetry(
   headers: Record<string, string>,
   config: AdaptiveChunkConfig,
   onProgress: (sentCount: number) => void,
+  signal?: AbortSignal,
   depth: number = 0,
   maxDepth?: number,
 ): Promise<number> {
+  signal?.throwIfAborted();
   // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
   const effectiveMaxDepth =
     maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
@@ -318,7 +327,7 @@ async function sendChunkWithRetry(
     return 0;
   }
 
-  const result = await sendChunkOfResults(chunk, url, evalId, headers);
+  const result = await sendChunkOfResults(chunk, url, evalId, headers, signal);
 
   if (result.success) {
     onProgress(chunk.length);
@@ -352,6 +361,7 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
+      signal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -362,6 +372,7 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
+      signal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -396,7 +407,9 @@ async function prepareChunkForShare(
   remoteEvalId: string,
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+  signal?: AbortSignal,
 ): Promise<EvalResult[]> {
+  signal?.throwIfAborted();
   const chunkToSend = inlineCache
     ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
     : chunk;
@@ -414,6 +427,7 @@ async function prepareChunkForShare(
     );
   }
 
+  signal?.throwIfAborted();
   return chunkToSend;
 }
 
@@ -438,10 +452,12 @@ async function sendChunkedResults(
   options: ShareOptions = {},
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false, throwOnError = false } = options;
+  const { silent = false, throwOnError = false, signal } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
+  signal?.throwIfAborted();
   await checkCloudPermissions(evalRecord.config);
+  signal?.throwIfAborted();
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
@@ -452,6 +468,7 @@ async function sendChunkedResults(
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  signal?.throwIfAborted();
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;
@@ -491,6 +508,7 @@ async function sendChunkedResults(
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
+  signal?.throwIfAborted();
   logger.debug(`Total results to share: ${totalResults}`);
 
   // Setup progress bar only if not in verbose mode, CI, or silent mode
@@ -509,7 +527,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, signal);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -530,6 +548,7 @@ async function sendChunkedResults(
     let chunkNumber = 0;
 
     for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
+      signal?.throwIfAborted();
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= resultsPerChunk) {
@@ -542,9 +561,18 @@ async function sendChunkedResults(
             evalId,
             inlineCache,
             remoteBlobUploadCache,
+            signal,
           );
 
-          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+          await sendChunkWithRetry(
+            chunkToSend,
+            url,
+            evalId,
+            headers,
+            chunkConfig,
+            onProgress,
+            signal,
+          );
           currentChunk = [];
         }
       }
@@ -561,21 +589,28 @@ async function sendChunkedResults(
         evalId,
         inlineCache,
         remoteBlobUploadCache,
+        signal,
       );
 
-      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress, signal);
     }
 
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
 
+    signal?.throwIfAborted();
     await warnAboutFailedBlobUploads(remoteBlobUploadCache);
+    signal?.throwIfAborted();
 
     return evalId;
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
-    logger.error('[share] Upload failed', { evalId, error, url });
+    if (isAbortError(error)) {
+      logger.debug('[share] Upload cancelled', { evalId, url });
+    } else {
+      logger.error('[share] Upload failed', { evalId, error, url });
+    }
 
     if (evalId) {
       logger.info('[share] Rolling back after failed upload', { evalId, url });
@@ -697,7 +732,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false, throwOnError = false } = options;
+  const { silent = false, showAuth = false, throwOnError = false, signal } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -705,9 +740,12 @@ export async function createShareableUrl(
     return null;
   }
 
+  signal?.throwIfAborted();
+
   // Show org/team context before uploading (only when cloud is enabled and not silent)
   if (!silent) {
     const orgContext = await getOrgContext();
+    signal?.throwIfAborted();
     if (orgContext) {
       const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
       logger.info(
@@ -719,6 +757,7 @@ export async function createShareableUrl(
   // Interactive metadata collection is only appropriate for foreground CLI shares.
   if (!silent) {
     await handleEmailCollection(evalRecord);
+    signal?.throwIfAborted();
   }
 
   // 2. Get API configuration
@@ -730,7 +769,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError });
+  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError, signal });
 
   if (!evalId) {
     return null;

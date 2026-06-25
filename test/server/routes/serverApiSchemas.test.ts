@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { request as makeHttpRequest, type Server } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -437,6 +437,7 @@ describe('inline server API DTO validation', () => {
     expect(valid.body).toEqual({ url: 'https://share.example/eval-1' });
     expect(mockedCreateShareableUrl).toHaveBeenCalledWith(expect.anything(), {
       showAuth: true,
+      signal: expect.any(AbortSignal),
       silent: true,
       throwOnError: true,
     });
@@ -481,6 +482,73 @@ describe('inline server API DTO validation', () => {
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'Failed to generate share URL' });
     expect(JSON.stringify(response.body)).not.toContain('token');
+  });
+
+  it('cancels share creation when the client disconnects', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    let shareSignal: AbortSignal | undefined;
+    mockedCreateShareableUrl.mockImplementation((_eval, options) => {
+      const signal = options?.signal;
+      if (!signal) {
+        throw new Error('Expected a request-scoped share signal');
+      }
+      shareSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    });
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected the test server to listen on a TCP port');
+    }
+    const clientRequest = makeHttpRequest({
+      hostname: '127.0.0.1',
+      port: address.port,
+      path: '/api/results/share',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.end(JSON.stringify({ id: 'eval-1' }));
+
+    await vi.waitFor(() => expect(shareSignal).toBeDefined());
+    clientRequest.destroy();
+
+    await vi.waitFor(() => expect(shareSignal?.aborted).toBe(true));
+    expect(mockedCreateShareableUrl).toHaveBeenCalledOnce();
+  });
+
+  it('serializes concurrent share requests for the same eval', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    let finishFirstShare!: (url: string) => void;
+    const firstShare = new Promise<string>((resolve) => {
+      finishFirstShare = resolve;
+    });
+    mockedCreateShareableUrl
+      .mockReturnValueOnce(firstShare)
+      .mockResolvedValueOnce('https://share.example/eval-1-retry');
+
+    const firstResponse = api.post('/api/results/share').send({ id: 'eval-1' }).then();
+    await vi.waitFor(() => expect(mockedCreateShareableUrl).toHaveBeenCalledOnce());
+
+    const secondResponse = api.post('/api/results/share').send({ id: 'eval-1' }).then();
+    await vi.waitFor(() => expect(mockedEval.findById).toHaveBeenCalledTimes(2));
+    expect(mockedCreateShareableUrl).toHaveBeenCalledOnce();
+
+    finishFirstShare('https://share.example/eval-1');
+
+    await expect(firstResponse).resolves.toMatchObject({
+      status: 200,
+      body: { url: 'https://share.example/eval-1' },
+    });
+    await expect(secondResponse).resolves.toMatchObject({
+      status: 200,
+      body: { url: 'https://share.example/eval-1-retry' },
+    });
+    expect(mockedCreateShareableUrl).toHaveBeenCalledTimes(2);
   });
 
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {
