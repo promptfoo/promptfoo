@@ -511,7 +511,7 @@ Promptfoo uses OpenAI's published Standard price for the alias. Batch, Flex, Pri
 providers:
   - id: openai:chat:chat-latest
     config:
-      max_completion_tokens: 2048
+      max_tokens: 2048
 
   - id: openai:responses:chat-latest
     config:
