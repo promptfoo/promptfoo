@@ -28,7 +28,7 @@ import {
   TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy } from '../redteam/constants/strategies';
+import { isCustomStrategy, MULTI_TURN_STRATEGIES } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -242,6 +242,12 @@ function strategyTargetsPlugin(
     getExpandedPluginIds(pluginId).some((expandedPluginId) =>
       expandedPluginId.startsWith('coding-agent:'),
     )
+  ) {
+    return false;
+  }
+  if (
+    (MULTI_TURN_STRATEGIES as readonly string[]).includes(strategyId) &&
+    getExpandedPluginIds(pluginId).includes('cross-session-leak')
   ) {
     return false;
   }

@@ -337,6 +337,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(true);
   });
 
+  it('should ignore default cross-session strategy exclusions in message length ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'cross-session-leak', config: { minCharsPerMessage: 10 } }],
+        strategies: [{ id: 'goat', config: { maxCharsPerMessage: 5 } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject collection plugin ranges targeted after expansion', () => {
     expect(
       RedteamConfigSchema.safeParse({
