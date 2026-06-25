@@ -20,6 +20,7 @@ import {
   formatPromptLlama3Instruct,
   formatPromptLlama4,
   formatPromptLlama32Vision,
+  getHandlerForModel,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
@@ -34,6 +35,24 @@ import type {
   LlamaMessage,
   TextGenerationOptions,
 } from '../../../src/providers/bedrock/index';
+
+const RETIRED_BEDROCK_MODEL_IDS = [
+  'amazon.titan-text-express-v1',
+  'amazon.titan-text-lite-v1',
+  'amazon.titan-text-premier-v1:0',
+  'anthropic.claude-3-opus-20240229-v1:0',
+  'us.anthropic.claude-3-opus-20240229-v1:0',
+  'anthropic.claude-opus-4-20250514-v1:0',
+  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-instant-v1',
+  'anthropic.claude-v1',
+  'anthropic.claude-v2',
+  'anthropic.claude-v2:1',
+  'cohere.command-text-v14',
+  'cohere.command-light-text-v14',
+  'meta.llama2-13b-chat-v1',
+  'meta.llama2-70b-chat-v1',
+] as const;
 
 const bedrockRuntimeFactory = vi.hoisted(() => {
   const mockInvokeModel = vi.fn();
@@ -669,6 +688,54 @@ describe('AwsBedrockGenericProvider', () => {
         'us.anthropic.claude-opus-4-8',
       );
       expect(params.thinking).toEqual({ type: 'adaptive' });
+    });
+
+    it('normalizes unsupported controls for Claude Fable 5 on Bedrock invokeModel', async () => {
+      const enabledParams = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          temperature: 0.5,
+          thinking: { type: 'enabled', budget_tokens: 5000, display: 'summarized' },
+        },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+      expect(enabledParams.temperature).toBeUndefined();
+      expect(enabledParams.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+
+      const disabledParams = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+      expect(disabledParams.thinking).toBeUndefined();
+    });
+
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+    ])('omits forced tool choice for Claude Fable 5: %j', async (tool_choice) => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice,
+        },
+        'hi',
+        undefined,
+        'anthropic.claude-fable-5',
+      );
+
+      expect(params.tools).toHaveLength(1);
+      expect(params.tool_choice).toBeUndefined();
     });
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
@@ -1950,14 +2017,17 @@ describe('BEDROCK_MODEL MISTRAL', () => {
 
       const params = await modelHandler.params(config, prompt, stop);
 
+      // top_k is intentionally omitted: the Bedrock Mistral InvokeModel API validates
+      // `top_k >= 1` and rejects `top_k: 0` with a ValidationException, so there is no safe
+      // hardcoded default — let the model use its own.
       expect(params).toEqual({
         prompt,
         stop,
         max_tokens: 1024,
         temperature: 0,
         top_p: 1,
-        top_k: 0,
       });
+      expect(params).not.toHaveProperty('top_k');
     });
   });
 
@@ -2093,7 +2163,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should handle reasoning_effort by adding it to system message', async () => {
+    it('should pass reasoning_effort as a native parameter without modifying messages', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'high' as const,
@@ -2103,16 +2173,14 @@ describe('BEDROCK_MODEL OPENAI', () => {
       const params = await modelHandler.params(config, prompt);
 
       expect(params).toEqual({
-        messages: [
-          { role: 'system', content: 'Reasoning: high' },
-          { role: 'user', content: 'Test prompt' },
-        ],
+        messages: [{ role: 'user', content: 'Test prompt' }],
         temperature: 0.7,
         top_p: 1.0,
+        reasoning_effort: 'high',
       });
     });
 
-    it('should append reasoning_effort to existing system message', async () => {
+    it('should keep an existing system message intact when reasoning_effort is set', async () => {
       const config = {
         temperature: 0.7,
         reasoning_effort: 'medium' as const,
@@ -2126,15 +2194,27 @@ describe('BEDROCK_MODEL OPENAI', () => {
 
       expect(params).toEqual({
         messages: [
-          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'What is machine learning?' },
         ],
         temperature: 0.7,
         top_p: 1.0,
+        reasoning_effort: 'medium',
       });
     });
 
-    it('should not modify messages when reasoning_effort is not specified', async () => {
+    it('should forward the configured reasoning_effort verbatim', async () => {
+      const config = {
+        reasoning_effort: 'low' as const,
+      };
+      const prompt = 'Test prompt';
+
+      const params = await modelHandler.params(config, prompt);
+
+      expect(params.reasoning_effort).toBe('low');
+    });
+
+    it('should not include reasoning_effort when it is not specified', async () => {
       const config = { temperature: 0.5 };
       const prompt = 'Test prompt';
 
@@ -2145,6 +2225,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
         temperature: 0.5,
         top_p: 1.0,
       });
+      expect(params).not.toHaveProperty('reasoning_effort');
     });
   });
 
@@ -2162,6 +2243,120 @@ describe('BEDROCK_MODEL OPENAI', () => {
 
       expect(modelHandler.output({}, mockResponse)).toBe(
         'This is a test response from OpenAI model.',
+      );
+    });
+
+    it('should return the model output verbatim by default (reasoning preserved for assertions/red-team)', async () => {
+      // An eval framework must not hide application-visible content by default. The raw
+      // <reasoning>...</reasoning> block the API returned stays in `output` unless the user
+      // explicitly opts into a transformation via showThinking.
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        '<reasoning>Think think</reasoning>The answer is 42.',
+      );
+    });
+
+    it('should strip the <reasoning> block when showThinking is false (parity with the openai: providers)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
+    });
+
+    it('should surface reasoning as Thinking: when showThinking is true', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
+        'Thinking: Think think\n\nThe answer is 42.',
+      );
+    });
+
+    it('should strip a multi-line <reasoning> block and leading whitespace when showThinking is false', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: '<reasoning>line one\nline two</reasoning>\n\nFinal answer',
+            },
+          },
+        ],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Final answer');
+    });
+
+    it('should leave content untouched when no reasoning block is present (any showThinking value)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Just the answer.' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe('Just the answer.');
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe('Just the answer.');
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('Just the answer.');
+    });
+
+    it('should handle a reasoning-only response across all showThinking values', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>just thinking</reasoning>' } }],
+      };
+
+      // Default: verbatim.
+      expect(modelHandler.output({}, mockResponse)).toBe('<reasoning>just thinking</reasoning>');
+      // showThinking:false would strip to '', so it falls back to the full content instead of
+      // silently dropping the whole response.
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        '<reasoning>just thinking</reasoning>',
+      );
+      // showThinking:true still surfaces the reasoning even when the answer is empty.
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
+        'Thinking: just thinking\n\n',
+      );
+    });
+
+    it('should return content verbatim for an unterminated <reasoning> tag (no data loss)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: '<reasoning>oops no closing tag, the answer is 42' } }],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        '<reasoning>oops no closing tag, the answer is 42',
+      );
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        '<reasoning>oops no closing tag, the answer is 42',
+      );
+    });
+
+    it('should only strip the leading <reasoning> block when showThinking is false, leaving later ones as answer content', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content:
+                '<reasoning>first</reasoning>answer with <reasoning>literal</reasoning> data',
+            },
+          },
+        ],
+      };
+
+      // Non-greedy match strips only the first block; subsequent ones are part of the answer.
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        'answer with <reasoning>literal</reasoning> data',
+      );
+    });
+
+    it('should not strip a mid-content <reasoning> block when showThinking is false (regex is start-anchored)', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'The answer <reasoning>is</reasoning> here.' } }],
+      };
+
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe(
+        'The answer <reasoning>is</reasoning> here.',
       );
     });
 
@@ -2212,6 +2407,115 @@ describe('BEDROCK_MODEL OPENAI', () => {
         prompt: 30,
         completion: 60,
         total: 90,
+        numRequests: 1,
+      });
+    });
+
+    it('should surface reasoning and cached token details for parity with the OpenAI provider', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 19,
+          completion_tokens: 22,
+          total_tokens: 41,
+          completion_tokens_details: { reasoning_tokens: 12 },
+          prompt_tokens_details: { cached_tokens: 8 },
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 19,
+        completion: 22,
+        total: 41,
+        numRequests: 1,
+        completionDetails: { reasoning: 12, cacheReadInputTokens: 8 },
+      });
+    });
+
+    it('should surface reasoning alone when no cached-token detail is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            completion_tokens_details: { reasoning_tokens: 7 },
+          },
+        },
+        'Test prompt',
+      );
+      // No prompt_tokens_details => cacheReadInputTokens must be absent (not 0).
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      });
+    });
+
+    it('should surface cached input tokens alone when no reasoning detail is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            prompt_tokens_details: { cached_tokens: 5 },
+          },
+        },
+        'Test prompt',
+      );
+      // No completion_tokens_details => reasoning must be absent.
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 5 },
+      });
+    });
+
+    it('should include reasoning:0 but drop cached_tokens:0 (asymmetric guards: !== undefined vs > 0)', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            completion_tokens_details: { reasoning_tokens: 0 },
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        },
+        'Test prompt',
+      );
+      // reasoning:0 is reported (guard is `!== undefined`); cached:0 is dropped (guard is `> 0`).
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
+        numRequests: 1,
+        completionDetails: { reasoning: 0 },
+      });
+    });
+
+    it('should omit completionDetails entirely when only cached_tokens:0 is present', async () => {
+      const result = modelHandler.tokenUsage!(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        },
+        'Test prompt',
+      );
+      // cached:0 dropped and no reasoning => no completionDetails key at all.
+      expect(result).toEqual({
+        prompt: 10,
+        completion: 20,
+        total: 30,
         numRequests: 1,
       });
     });
@@ -2974,6 +3278,21 @@ describe('BEDROCK_MODEL token counting functionality', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
+  it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-fable-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-mythos-5']).toBeUndefined();
+    expect(getHandlerForModel('anthropic.claude-fable-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(() => getHandlerForModel('anthropic.claude-mythos-5')).toThrow(/Anthropic Messages API/);
+    expect(() => getHandlerForModel('us.anthropic.claude-mythos-5')).toThrow(
+      /Anthropic Messages API/,
+    );
+  });
+
   it('should have the correct model mappings', async () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -3057,6 +3376,50 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
   });
 
+  it('should not register frontier gpt-5.x models for the InvokeModel path', async () => {
+    // Frontier models are served via the OpenAI-compatible Responses API, not InvokeModel,
+    // so they must not appear in the InvokeModel model map.
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBeUndefined();
+  });
+
+  describe('getHandlerForModel OpenAI routing', () => {
+    it('should resolve versioned gpt-oss runtime ids to the InvokeModel OpenAI handler', () => {
+      expect(getHandlerForModel('openai.gpt-oss-120b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
+      expect(getHandlerForModel('openai.gpt-oss-20b-1:0')).toBe(BEDROCK_MODEL.OPENAI);
+      // Registered bare safeguard ids resolve via the exact-match lookup.
+      expect(getHandlerForModel('openai.gpt-oss-safeguard-120b')).toBe(BEDROCK_MODEL.OPENAI);
+    });
+
+    it('should reject the bare Mantle gpt-oss id instead of sending it to InvokeModel', () => {
+      // `openai.gpt-oss-120b` (no version suffix) is the Bedrock Mantle id; the bedrock:
+      // provider uses the InvokeModel runtime API, so it must reject it with the runtime id.
+      expect(() => getHandlerForModel('openai.gpt-oss-120b')).toThrow(/Mantle id/);
+      expect(() => getHandlerForModel('openai.gpt-oss-120b')).toThrow(/openai\.gpt-oss-120b-1:0/);
+      expect(() => getHandlerForModel('openai.gpt-oss-20b')).toThrow(/Mantle id/);
+    });
+
+    it('should throw a clear error for frontier gpt-5.x ids on the InvokeModel path', () => {
+      // Frontier models are routed to the Responses provider before reaching this handler;
+      // a direct/forced InvokeModel resolution should explain that rather than silently try.
+      expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+    });
+
+    it('should suggest the bare frontier id when a region/geo-prefixed frontier id is forced down InvokeModel', () => {
+      // AWS offers no Geo/Global inference profiles for the frontier models; the error should
+      // point at the supported bare id rather than echo the invalid prefixed one.
+      expect(() => getHandlerForModel('us.openai.gpt-5.5')).toThrow(/bedrock:openai\.gpt-5\.5/);
+      expect(() => getHandlerForModel('global.openai.gpt-5.4')).toThrow(/bedrock:openai\.gpt-5\.4/);
+    });
+
+    it('should still throw for genuinely unknown models', () => {
+      expect(() => getHandlerForModel('totally.unknown-model')).toThrow(
+        'Unknown Amazon Bedrock model',
+      );
+    });
+  });
+
   it('should map APAC regional models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['apac.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['apac.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
@@ -3130,12 +3493,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-3-opus-20240229-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-20250514-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3162,6 +3519,33 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
+  it('does not list models that are EOL on Bedrock (removed from all regions)', () => {
+    // Verified via `aws bedrock list-foundation-models` across all commercial regions: these
+    // are no longer offered anywhere, so they must not appear in the supported-models list.
+    // (Claude 3.5/3.7 Sonnet are intentionally kept — still offered in APAC regions.)
+    for (const id of RETIRED_BEDROCK_MODEL_IDS) {
+      expect(AWS_BEDROCK_MODELS[id]).toBeUndefined();
+    }
+  });
+
+  it.each(RETIRED_BEDROCK_MODEL_IDS)('rejects retired direct model id %s', (modelName) => {
+    expect(() => getHandlerForModel(modelName)).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
+  it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-3-7-sonnet-20250219-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
   });
@@ -3267,6 +3651,137 @@ describe('AwsBedrockCompletionProvider', () => {
 
   afterEach(() => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
+  });
+
+  it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 100, output_tokens: 50 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-fable-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00385, 6);
+  });
+
+  it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 10000, completion_tokens: 5000, total_tokens: 15000 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('zai.glm-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo((10000 / 1e6) * 1.0 + (5000 / 1e6) * 3.2, 6);
+  });
+
+  it('uses current GPT-OSS Runtime pricing in the shared cost fallback', async () => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1_000_000,
+        completion_tokens: 1_000_000,
+        total_tokens: 2_000_000,
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('openai.gpt-oss-120b-1:0', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.75, 6);
+  });
+
+  it('does not apply the stale Converse Command R+ rate to Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      text: 'ok',
+      meta: {
+        billed_units: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('cohere.command-r-plus-v1:0', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('does not apply the unverified Converse Claude Sonnet rate to Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 200_001, output_tokens: 1_000 },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-sonnet-4-6', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('does not apply the unverified Converse Claude Opus rate to Runtime responses', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: {
+        input_tokens: 10000,
+        output_tokens: 5000,
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 2000,
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body,
+    });
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-opus-4-8', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeUndefined();
   });
 
   it('should pass base config to model.params when context is not provided', async () => {
@@ -3380,6 +3895,68 @@ describe('AwsBedrockCompletionProvider', () => {
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       {}, // vars from context
     );
+  });
+
+  it('should pass merged prompt-level config to model.output (e.g. showThinking)', async () => {
+    // Exercise the cached path, which reaches model.output with the effective config.
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify({ completion: 'cached' }));
+    vi.mocked(isCacheEnabled).mockImplementation(() => true);
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: { region: 'us-east-1', showThinking: false } as any,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        // Prompt-level override should reach output(), not just params().
+        config: { showThinking: true } as any,
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context as any);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
+  });
+
+  it('should pass merged prompt-level config to model.output on the live (non-cached) path', async () => {
+    // Default beforeEach has caching disabled, so this exercises the live InvokeModel path.
+    // The live path both logs via body.transformToString() and decodes via TextDecoder, so the
+    // mock body must be a real byte view that also carries transformToString().
+    const liveBytes = new TextEncoder().encode(JSON.stringify({ completion: 'live' }));
+    (liveBytes as any).transformToString = () => JSON.stringify({ completion: 'live' });
+    mockInvokeModel.mockResolvedValueOnce({ body: liveBytes });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: { region: 'us-east-1', showThinking: false } as any,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: { showThinking: true } as any,
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context as any);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(expect.objectContaining({ showThinking: true }), expect.anything());
   });
 
   it('should set cached flag when returning cached response', async () => {
@@ -3956,5 +4533,300 @@ describe('coerceStrToNum', () => {
 
   it('should convert invalid string numbers to NaN', async () => {
     expect(Number.isNaN(coerceStrToNum('not-a-number') as number)).toBe(true);
+  });
+});
+
+describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
+  const modelHandler = BEDROCK_MODEL.OPENAI_COMPAT;
+
+  describe('params', () => {
+    it('sends max_tokens (not max_completion_tokens) with the OpenAI chat schema', async () => {
+      const params = await modelHandler.params(
+        { max_tokens: 256, temperature: 0.4, top_p: 0.9 },
+        'Hello there',
+        ['STOP'],
+      );
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Hello there' }],
+        max_tokens: 256,
+        temperature: 0.4,
+        top_p: 0.9,
+        stop: ['STOP'],
+      });
+      expect(params).not.toHaveProperty('max_completion_tokens');
+    });
+
+    it('omits temperature and top_p when not configured', async () => {
+      const params = await modelHandler.params({}, 'Hi', []);
+      expect(params).toEqual({ messages: [{ role: 'user', content: 'Hi' }] });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+    });
+
+    it('passes through reasoning_effort and OpenAI-format tools', async () => {
+      const tools = [
+        {
+          type: 'function' as const,
+          function: { name: 'calc', description: 'do math', parameters: { type: 'object' } },
+        },
+      ];
+      const params = await modelHandler.params(
+        { reasoning_effort: 'high', tools, tool_choice: 'auto' },
+        'compute',
+        [],
+      );
+      expect(params.reasoning_effort).toBe('high');
+      expect(params.tools).toEqual(tools);
+      expect(params.tool_choice).toBe('auto');
+    });
+
+    it('does not let an explicit empty stop array shadow config.stop', async () => {
+      const params = await modelHandler.params({ stop: ['CONFIG_STOP'] }, 'Hi', []);
+      expect(params.stop).toEqual(['CONFIG_STOP']);
+    });
+
+    it('prefers explicit config.stop over the environment-derived stop argument', async () => {
+      const params = await modelHandler.params({ stop: ['CONFIG_STOP'] }, 'Hi', [
+        'ENVIRONMENT_STOP',
+      ]);
+      expect(params.stop).toEqual(['CONFIG_STOP']);
+    });
+
+    it('applies env-var fallbacks for max_tokens/temperature/top_p when not configured', async () => {
+      const restore = mockProcessEnv({
+        AWS_BEDROCK_MAX_TOKENS: '512',
+        AWS_BEDROCK_TEMPERATURE: '0.2',
+        AWS_BEDROCK_TOP_P: '0.8',
+      });
+      try {
+        const params = await modelHandler.params({}, 'Hi', []);
+        expect(params).toEqual({
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 512,
+          temperature: 0.2,
+          top_p: 0.8,
+        });
+      } finally {
+        restore();
+      }
+    });
+  });
+
+  describe('output', () => {
+    it('extracts content from the chat-completion response', () => {
+      expect(modelHandler.output({}, { choices: [{ message: { content: 'final answer' } }] })).toBe(
+        'final answer',
+      );
+    });
+
+    it('returns reasoning verbatim by default and strips it when showThinking is false', () => {
+      const withThink = { choices: [{ message: { content: '<think>steps</think>answer' } }] };
+      const withReasoning = {
+        choices: [{ message: { content: '<reasoning>steps</reasoning>answer' } }],
+      };
+      // Default: raw output preserved.
+      expect(modelHandler.output({}, withThink)).toBe('<think>steps</think>answer');
+      expect(modelHandler.output({}, withReasoning)).toBe('<reasoning>steps</reasoning>answer');
+      // showThinking: false strips either tag style.
+      expect(modelHandler.output({ showThinking: false }, withThink)).toBe('answer');
+      expect(modelHandler.output({ showThinking: false }, withReasoning)).toBe('answer');
+    });
+
+    it('falls back to raw content when stripping a reasoning-only response would empty it', () => {
+      // A reasoning-only/truncated turn must not become an empty string under showThinking:false.
+      const reasoningOnly = {
+        choices: [{ message: { content: '<think>only reasoning</think>' } }],
+      };
+      expect(modelHandler.output({ showThinking: false }, reasoningOnly)).toBe(
+        '<think>only reasoning</think>',
+      );
+    });
+
+    it('does not strip an unclosed reasoning tag', () => {
+      const unclosed = { choices: [{ message: { content: '<think>truncated reasoning' } }] };
+      expect(modelHandler.output({ showThinking: false }, unclosed)).toBe(
+        '<think>truncated reasoning',
+      );
+    });
+
+    it('does not truncate when a reasoning tag appears mid-message (only strips a leading block)', () => {
+      // A code sample / preamble containing the tag must be preserved verbatim.
+      const midMessage = {
+        choices: [
+          { message: { content: 'Here is an example: <think>not real reasoning</think> done.' } },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, midMessage)).toBe(
+        'Here is an example: <think>not real reasoning</think> done.',
+      );
+    });
+
+    it('returns non-string content (e.g. multimodal blocks) unchanged', () => {
+      const blocks = [{ type: 'text', text: 'hi' }];
+      expect(modelHandler.output({}, { choices: [{ message: { content: blocks } }] })).toBe(blocks);
+    });
+
+    it('returns undefined when the response has no choices', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+    });
+
+    it('renders tool calls', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Called function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('concatenates assistant content with tool calls when both are present', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: 'Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('strips leading reasoning before rendering tool calls when showThinking is false', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '<think>private steps</think>Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('strips whitespace-prefixed reasoning before rendering tool calls', () => {
+      const response = {
+        choices: [
+          {
+            message: {
+              content: '\n  <reasoning>private steps</reasoning>Let me check.',
+              tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+            },
+          },
+        ],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe(
+        'Let me check.\n\nCalled function calc with arguments: {"x":1}',
+      );
+    });
+
+    it('ignores empty tool call arrays before stripping reasoning', () => {
+      const response = {
+        choices: [{ message: { content: '<think>steps</think>answer', tool_calls: [] } }],
+      };
+      expect(modelHandler.output({ showThinking: false }, response)).toBe('answer');
+    });
+
+    it('does not throw on a malformed tool_call missing its function field', () => {
+      const response = { choices: [{ message: { content: '', tool_calls: [{ id: 'x' }] } }] };
+      expect(() => modelHandler.output({}, response)).not.toThrow();
+      expect(modelHandler.output({}, response)).toContain('Called function');
+    });
+
+    it('throws on an error response', () => {
+      expect(() => modelHandler.output({}, { error: 'boom' })).toThrow('Bedrock API error: boom');
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('extracts usage from the OpenAI usage object', () => {
+      expect(
+        modelHandler.tokenUsage!(
+          { usage: { prompt_tokens: 11, completion_tokens: 22, total_tokens: 33 } },
+          'prompt',
+        ),
+      ).toEqual({ prompt: 11, completion: 22, total: 33, numRequests: 1 });
+    });
+
+    it('returns undefined counts when usage is absent', () => {
+      expect(modelHandler.tokenUsage!({}, 'prompt')).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+const OPENAI_COMPAT_MODEL_IDS = [
+  'zai.glm-5',
+  'zai.glm-4.7',
+  'zai.glm-4.7-flash',
+  'minimax.minimax-m2',
+  'minimax.minimax-m2.1',
+  'minimax.minimax-m2.5',
+  'moonshotai.kimi-k2.5',
+  'moonshot.kimi-k2-thinking',
+  'nvidia.nemotron-nano-9b-v2',
+  'nvidia.nemotron-nano-12b-v2',
+  'nvidia.nemotron-nano-3-30b',
+  'nvidia.nemotron-super-3-120b',
+  'us-gov.nvidia.nemotron-nano-9b-v2',
+  'us-gov.nvidia.nemotron-nano-12b-v2',
+  'us-gov.nvidia.nemotron-nano-3-30b',
+  'us-gov.nvidia.nemotron-super-3-120b',
+  'google.gemma-3-4b-it',
+  'google.gemma-3-12b-it',
+  'google.gemma-3-27b-it',
+  'us.writer.palmyra-x5-v1:0',
+  'us.writer.palmyra-x4-v1:0',
+  'writer.palmyra-vision-7b',
+] as const;
+
+describe('getHandlerForModel routing for OpenAI-compatible families', () => {
+  it.each([
+    'us.zai.glm-5',
+    'global.zai.glm-5',
+    'writer.palmyra-x5-v1:0',
+    'writer.palmyra-x4-v1:0',
+    'zai.glm-4.6',
+    'google.gemma-4-31b',
+  ])('rejects unsupported direct InvokeModel id %s', (modelName) => {
+    expect(() => getHandlerForModel(modelName)).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
+  it.each(OPENAI_COMPAT_MODEL_IDS)('registers and routes %s to OPENAI_COMPAT', (modelName) => {
+    expect(AWS_BEDROCK_MODELS[modelName]).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+  });
+
+  it.each([
+    'zai',
+    'minimax',
+    'moonshot',
+    'nvidia',
+    'writer',
+    'gemma',
+  ] as const)('maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT', (inferenceModelType) => {
+    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
+    expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
   });
 });

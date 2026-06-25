@@ -364,6 +364,32 @@ describe('production layer config', () => {
     expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
   });
 
+  it('allows core logic to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const coreLayer = config.layers.find((layer) => layer.name === 'core');
+
+    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('allows transitional runtime shims to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const legacyRuntimeLayer = config.layers.find((layer) => layer.name === 'legacy-runtime');
+
+    expect(legacyRuntimeLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('classifies evaluator runtime ports as transitional runtime modules', () => {
+    expect(getLayerForFile('src/evaluator/runtime.ts', readLayerConfig(process.cwd()))).toBe(
+      'legacy-runtime',
+    );
+  });
+
+  it('classifies the evaluator runtime adapter as a node module', () => {
+    expect(getLayerForFile('src/node/evaluatorRuntime.ts', readLayerConfig(process.cwd()))).toBe(
+      'node',
+    );
+  });
+
   it('keeps the contracts leaf layer free of disallowed external dependencies', () => {
     const leafExternal = findViolations(process.cwd(), readLayerConfig(process.cwd())).filter(
       (violation) => violation.kind === 'leaf-external',

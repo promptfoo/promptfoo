@@ -1,7 +1,13 @@
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { JsonlFileWriter } from '../src/util/exportToFile/writeToFile';
 import { createMockProvider } from './factories/provider';
 
 import type { ApiProvider, TestSuite } from '../src/types';
@@ -275,5 +281,100 @@ describe('evaluate SIGINT/abort handling', () => {
 
     // Non-persisted evals are not visible to database watchers.
     expect(updateSignalFile).not.toHaveBeenCalled();
+  });
+
+  it('should redact streamed JSONL rows when user aborts before final export', async () => {
+    const outputPath = path.join(os.tmpdir(), `promptfoo-abort-${randomUUID()}.jsonl`);
+    const abortController = new AbortController();
+    let providerCallCount = 0;
+    const provider = createMockProvider({
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
+        providerCallCount++;
+        if (providerCallCount === 1) {
+          return {
+            output: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  authorization: 'model output should stay intact',
+                },
+              },
+            },
+            metadata: {
+              headers: {
+                'x-request-id': 'legacy_abort_should_not_persist',
+                'x-safe-debug': 'keep-legacy',
+              },
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  'set-cookie': 'session=secret',
+                  'x-request-id': 'req_should_not_persist',
+                },
+              },
+            },
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }
+        throw new Error('Operation cancelled');
+      }),
+    });
+    // Abort right after the first row streams to disk, so finalization never runs and the
+    // on-disk artifact is the streamed (write-time-sanitized) row.
+    const originalWrite = JsonlFileWriter.prototype.write;
+    const writeSpy = vi
+      .spyOn(JsonlFileWriter.prototype, 'write')
+      .mockImplementation(async function (this: JsonlFileWriter, data) {
+        await originalWrite.call(this, data);
+        abortController.abort();
+      });
+    const evalRecord = new Eval({ outputPath });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+      tests: [{ vars: { apiKey: 'sk-abort-vars-should-not-persist', safe: 'keep-me' } }, {}],
+    };
+
+    try {
+      await evaluate(testSuite, evalRecord, {
+        abortSignal: abortController.signal,
+        maxConcurrency: 1,
+      });
+
+      const rows = fs
+        .readFileSync(outputPath, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response.metadata.headers).toEqual({
+        'x-request-id': '[REDACTED]',
+        'x-safe-debug': 'keep-legacy',
+      });
+      expect(rows[0].response.metadata.http.headers).toEqual({
+        'set-cookie': '[REDACTED]',
+        'x-request-id': '[REDACTED]',
+      });
+      expect(rows[0].response.output.http.headers.authorization).toBe(
+        'model output should stay intact',
+      );
+      expect(rows[0].vars).toEqual({
+        apiKey: '[REDACTED]',
+        safe: 'keep-me',
+      });
+      expect(rows[0].testCase.vars).toEqual({
+        apiKey: '[REDACTED]',
+        safe: 'keep-me',
+      });
+      expect(JSON.stringify(rows[0])).not.toContain('session=secret');
+      expect(JSON.stringify(rows[0])).not.toContain('req_should_not_persist');
+      expect(JSON.stringify(rows[0])).not.toContain('legacy_abort_should_not_persist');
+      expect(JSON.stringify(rows[0])).not.toContain('sk-abort-vars-should-not-persist');
+    } finally {
+      writeSpy.mockRestore();
+      fs.rmSync(outputPath, { force: true });
+    }
   });
 });

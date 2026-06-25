@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -37,6 +38,9 @@ const shouldRemoveMcpConfig = (
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
 
+const containsNunjucksTemplate = (value: string): boolean =>
+  /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -59,6 +63,7 @@ function ProviderConfigEditor({
     JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
+  const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -72,6 +77,14 @@ function ProviderConfigEditor({
     } catch {
       return false;
     }
+  }, []);
+
+  const getA2AShorthandUrl = useCallback((id?: string): string | undefined => {
+    if (!id?.startsWith('a2a:')) {
+      return undefined;
+    }
+    const url = id.slice('a2a:'.length);
+    return url.trim().length > 0 ? url : undefined;
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
@@ -249,11 +262,49 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (providerType === 'a2a') {
+        if (provider.id !== 'a2a' && !provider.id?.startsWith('a2a:')) {
+          errors.push('A2A Provider ID must be "a2a" or start with "a2a:"');
+        }
+        const configuredUrl =
+          typeof provider.config?.url === 'string' ? provider.config.url.trim() : '';
+        const agentCardUrl =
+          typeof provider.config?.agentCardUrl === 'string'
+            ? provider.config.agentCardUrl.trim()
+            : '';
+        const shorthandUrl = getA2AShorthandUrl(provider.id) ?? '';
+
+        const hasUrl =
+          configuredUrl.length > 0 &&
+          (validateUrl(configuredUrl) || containsNunjucksTemplate(configuredUrl));
+        const hasShorthandUrl =
+          shorthandUrl.length > 0 &&
+          (validateUrl(shorthandUrl) || containsNunjucksTemplate(shorthandUrl));
+        const hasAgentCardUrl =
+          agentCardUrl.length > 0 &&
+          (validateUrl(agentCardUrl) || containsNunjucksTemplate(agentCardUrl));
+
+        if (configuredUrl.length > 0 && !hasUrl) {
+          errors.push('A2A endpoint URL must be a valid HTTP(S) URL');
+        }
+        if (agentCardUrl.length > 0 && !hasAgentCardUrl) {
+          errors.push('A2A Agent Card URL must be a valid HTTP(S) URL');
+        }
+        if (shorthandUrl.length > 0 && !hasShorthandUrl) {
+          errors.push('A2A shorthand URL must be a valid HTTP(S) URL');
+        }
+        if (!hasUrl && !hasShorthandUrl && !hasAgentCardUrl) {
+          errors.push('A valid A2A endpoint URL or Agent Card URL is required');
+        }
+        if (a2aAdvancedConfigError) {
+          errors.push(a2aAdvancedConfigError);
+        }
       }
     }
 
@@ -270,7 +321,17 @@ function ProviderConfigEditor({
       onValidate(!hasErrors);
     }
     return !hasErrors;
-  }, [providerType, provider, bodyError, extensionErrors, setError, onValidate, validateUrl]);
+  }, [
+    providerType,
+    provider,
+    bodyError,
+    extensionErrors,
+    a2aAdvancedConfigError,
+    setError,
+    onValidate,
+    validateUrl,
+    getA2AShorthandUrl,
+  ]);
 
   useEffect(() => {
     if (validateAll) {
@@ -323,6 +384,17 @@ function ProviderConfigEditor({
         <BrowserAutomationConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
+        />
+      )}
+
+      {providerType === 'a2a' && (
+        <A2AEndpointConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={rawConfigJson}
+          setRawConfigJson={setRawConfigJson}
+          bodyError={bodyError}
+          onAdvancedConfigErrorChange={setA2AAdvancedConfigError}
         />
       )}
 

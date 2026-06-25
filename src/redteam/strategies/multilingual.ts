@@ -10,7 +10,12 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -128,6 +133,7 @@ async function processRemoteChunk(
     testCases,
     injectVar,
     config,
+    ...remoteGenerationContextPayload(config.targetId),
     email: getUserEmail(),
   };
 
@@ -135,9 +141,7 @@ async function processRemoteChunk(
     getRemoteGenerationUrl(),
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify(payload),
     },
     getRequestTimeoutMs(),

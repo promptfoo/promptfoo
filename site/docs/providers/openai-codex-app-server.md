@@ -69,6 +69,26 @@ export OPENAI_API_KEY=your_api_key_here
 
 Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible evals, prefer API-key-backed runs or set `cli_env.CODEX_HOME` to a fixture home directory that already contains the intended Codex login state.
 
+### Run on Amazon Bedrock
+
+Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-app-server
+    config:
+      model: openai.gpt-5.5 # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      sandbox_mode: read-only
+      approval_policy: never
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+```
+
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model ids, request model access in a supported Region (`us-east-2` for GPT-5.5), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"

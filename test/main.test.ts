@@ -303,6 +303,33 @@ describe('addCommonOptionsRecursively', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
 
+  it('keeps structured code-scan output muted even when --verbose is present', () => {
+    const mockHookRegister = vi.fn();
+    (program as any).hook = mockHookRegister;
+
+    addCommonOptionsRecursively(program);
+
+    const preActionFn = mockHookRegister.mock.calls[0][1];
+    const originalArgv = process.argv;
+
+    process.argv = ['node', 'promptfoo', 'code-scans', 'run', '.', '--json', '--verbose'];
+
+    try {
+      preActionFn({
+        opts: () => ({ verbose: true }),
+        name: () => 'run',
+        parent: {
+          name: () => 'code-scans',
+          parent: null,
+        },
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(mockSetLogLevel).not.toHaveBeenCalledWith('debug');
+  });
+
   it('should parse --env-file without consuming positional subcommand arguments', async () => {
     const action = vi.fn();
     const documentCommand = program.command('scan-model').argument('<model>').action(action);

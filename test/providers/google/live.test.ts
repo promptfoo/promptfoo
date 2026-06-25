@@ -56,7 +56,7 @@ vi.mock('child_process', async (importOriginal) => {
     })),
   };
 });
-vi.mock('../../../src/util/fetch', async (importOriginal) => {
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     fetchWithProxy: vi.fn(),

@@ -109,6 +109,71 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('treats configured shell tool names as command steps', () => {
+    const customShellTrace: TraceData = {
+      traceId: 'custom-shell',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'pytest tests/' }),
+          },
+        },
+      ],
+    };
+
+    // By default, a tool named 'bash' normalizes to type:tool, not type:command.
+    expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
+
+    const steps = extractTrajectorySteps({
+      ...customShellTrace,
+      metadata: { commandToolNames: ['bash'] },
+    });
+    expect(steps[0].type).toBe('command');
+    // The command argument should also be reflected in the step name.
+    expect(steps[0].name).toBe('pytest tests/');
+  });
+
+  it('matches configured command tool names case-insensitively and ignores invalid entries', () => {
+    const trace: TraceData = {
+      traceId: 'custom-shell-2',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'ls -la' }),
+          },
+        },
+      ],
+    };
+
+    // An uppercase override matches the lowercase tool name.
+    const upper = extractTrajectorySteps({ ...trace, metadata: { commandToolNames: ['BASH'] } });
+    expect(upper[0].type).toBe('command');
+    expect(upper[0].name).toBe('ls -la');
+
+    // Non-string / blank entries are ignored without throwing; the valid name still applies.
+    const mixed = extractTrajectorySteps({
+      ...trace,
+      metadata: { commandToolNames: ['bash', 123, '', '  '] as any },
+    });
+    expect(mixed[0].type).toBe('command');
+  });
+
   it('extracts normalized trajectory steps from trace spans', () => {
     const steps = extractTrajectorySteps(mockTraceData);
 

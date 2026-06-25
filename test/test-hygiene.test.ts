@@ -122,10 +122,22 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/extension-hooks.test.ts',
+    kind: 'skipIf',
+    linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,
+    reason: 'Python extension-hook smoke coverage requires an available Python interpreter',
+  },
+  {
     file: 'redteam/plugins/codingAgent.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
     reason: 'Host-side unreadable-file sandbox coverage depends on Unix permissions',
+  },
+  {
+    file: 'examples/integrationLangchain.test.ts',
+    kind: 'skip',
+    linePattern: /const itPy = PYTHON_PATH \? it : it\.skip;/,
+    reason: 'LangChain example subprocess coverage requires an available Python interpreter',
   },
 ];
 
@@ -201,7 +213,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/watsonx.test.ts',
   'redteam/commands/crossSessionLeakGenerate.test.ts',
   'redteam/commands/generate.test.ts',
-  'redteam/commands/report.test.ts',
+  'commands/redteam/report.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
   'redteam/extraction/util.test.ts',
@@ -229,16 +241,14 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
-  'tracing/evaluatorTracing.test.ts',
   'tracing/integration.test.ts',
   'util/agent/fsOperations.test.ts',
   'util/config/load.test.ts',
   'util/jsonExport.test.ts',
   'util/jsonlOutput.test.ts',
-  'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
-  'validators/testProvider.test.ts',
+  'node/testProvider.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;

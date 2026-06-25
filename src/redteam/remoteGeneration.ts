@@ -3,10 +3,22 @@ import { getEnvBool, getEnvString } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
+import { remoteGenerationContextPayload as buildRemoteGenerationContextPayload } from './remoteGenerationContext';
+
+export { remoteGenerationContextPayload } from './remoteGenerationContext';
+export { getCloudTargetIdFromProviders } from './remoteGenerationContextFromProviders';
 
 interface ShouldGenerateRemoteOptions {
   canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
+}
+
+// Provider implementations already depend on this module. Re-exporting the leaf helper here
+// avoids introducing a providers -> redteam context dependency solely for payload construction.
+export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {
+  targetId?: string;
+} {
+  return buildRemoteGenerationContextPayload(contextOrCloudTargetId);
 }
 
 /**
@@ -27,6 +39,24 @@ export function getRemoteGenerationUrl(): string {
   }
   // otherwise use the default
   return 'https://api.promptfoo.app/api/v1/task';
+}
+
+/**
+ * Builds headers for a remote-generation request.
+ *
+ * Authentication is injected centrally at the fetch layer (monkeyPatchFetch, mirrored
+ * in cache.ts for cache-key parity) and only when the request URL's origin matches the
+ * configured Promptfoo Cloud host (cloudConfig.getApiHost(), incl. on-prem). Keeping
+ * this helper auth-free prevents cloud credentials from leaking to custom
+ * remote-generation endpoints.
+ */
+export function getRemoteGenerationHeaders(
+  extraHeaders?: Record<string, string>,
+): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  };
 }
 
 /**

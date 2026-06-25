@@ -15,13 +15,14 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
-import { type Prompt, ResultFailureReason } from '../../src/types/index';
+import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
+import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -594,6 +595,107 @@ describe('evaluator', () => {
       expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockAuthor);
+    });
+
+    it('preserves trace linkage when results are inserted during eval creation', async () => {
+      const tracedResult = createEvaluateResult({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage create coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+    });
+
+    it('surfaces trace linkage without leaking the reserved namespace through toEvaluateSummary (export path)', async () => {
+      // output.ts serializes JSON/JSONL/CSV via toEvaluateSummary(); assert that path surfaces
+      // traceId/evaluationId at the top level and never emits the internal `__promptfoo` key.
+      const tracedResult = createEvaluateResult({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage export coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const summary = await evaluation.toEvaluateSummary();
+      expect('results' in summary).toBe(true);
+      const [exportedRow] = (summary as { results: EvaluateResult[] }).results;
+      expect(exportedRow).toMatchObject({
+        traceId: 'export-trace-id',
+        evaluationId: 'export-evaluation-id',
+        metadata: { source: 'export-path' },
+      });
+      expect(exportedRow.metadata).not.toHaveProperty('__promptfoo');
+      expect(JSON.stringify(summary)).not.toContain('__promptfoo');
+    });
+  });
+
+  describe('setResults trace linkage', () => {
+    it('preserves trace linkage when results are appended to an existing eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const tracedResult = createEvaluateResult({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
+
+      await eval_.setResults([
+        {
+          id: 'append-trace-result',
+          evalId: eval_.id,
+          ...tracedResult,
+          failureReason: ResultFailureReason.NONE,
+          persisted: false,
+        } as unknown as EvalResult,
+      ]);
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(eval_.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
+    });
+  });
+
+  describe('copy', () => {
+    it('drops trace linkage from copied results without copied trace records', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await EvalResult.createFromEvaluateResult(
+        eval_.id,
+        createEvaluateResult({
+          traceId: 'copy-source-trace',
+          evaluationId: eval_.id,
+          metadata: {
+            source: 'copy-path',
+            __promptfoo: { retained: 'internal-metadata' },
+          },
+        }),
+      );
+
+      const copy = await eval_.copy();
+      const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
+
+      expect(copiedResult.toEvaluateResult()).toMatchObject({
+        metadata: {
+          source: 'copy-path',
+          __promptfoo: { retained: 'internal-metadata' },
+        },
+      });
+      expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
+      expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
     });
   });
 
@@ -1397,6 +1499,45 @@ describe('evaluator', () => {
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
+    });
+
+    it('hides the reserved __promptfoo namespace from key listings', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = await getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+      expect(keys).toContain('userKey');
+      expect(keys).not.toContain('__promptfoo');
+    });
+  });
+
+  describe('EvalQueries.getMetadataValuesFromEval', () => {
+    it('refuses to return values under the reserved __promptfoo namespace', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = await getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-val-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      expect(await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo')).toEqual([]);
+      expect(
+        await EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo.traceLinkage'),
+      ).toEqual([]);
     });
   });
 

@@ -126,7 +126,7 @@ tracing:
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
 ```javascript
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
@@ -151,7 +151,7 @@ module.exports = {
   async callApi(prompt, promptfooContext) {
     // Parse trace context from Promptfoo
     if (promptfooContext.traceparent) {
-      const activeContext = trace.propagation.extract(context.active(), {
+      const activeContext = propagation.extract(context.active(), {
         traceparent: promptfooContext.traceparent,
       });
 
@@ -290,13 +290,72 @@ External providers that wrap their own agent loops can adopt the same convention
 ```yaml
 tracing:
   enabled: true # Enable/disable tracing
+  # Abort the eval if the OTLP receiver can't start (default: false — log and continue without traces)
+  failOnReceiverStartFailure: true
+  # Extra tool names treated as command steps, merged with the built-ins (shell, exec_command, local_shell)
+  commandToolNames: ['bash']
   otlp:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
-      # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
+      # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
+  storage:
+    type: sqlite # sqlite is the only supported store
+    # Remove trace and span records older than this many days
+    retentionDays: 30
 ```
+
+`redactAttributes` is matched case-insensitively as a **substring** of each attribute
+key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
+`key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
+Patterns are matched against each attribute key **at every nesting level individually**: a
+nested key like `authorization` inside a `headers` object is matched by the pattern
+`authorization`, but a full dotted path such as `request.headers.authorization` will **not**
+match the nested leaf key — use the key's own name.
+Redaction covers span **attributes** (recursively, including nested objects and arrays),
+and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
+attribute**. A secret that appears solely in a span name, status/error message, or log
+body — without also being a redacted attribute value — is not detected. Redaction also does
+**not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
+secrets in test variables when traces are retained.
+
+:::warning Scope of `redactAttributes`
+
+`redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
+`/v1/traces` and `/v1/logs`. Spans emitted by Promptfoo's **built-in provider
+instrumentation** are exported in-process (not over HTTP) and are **not** filtered by
+`redactAttributes`; values like `promptfoo.request.body` and request headers can therefore
+be stored in the local trace DB. A built-in sanitizer still masks common credential-shaped
+keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when traces are read,
+but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
+Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
+
+:::
+
+Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
+of days from the local store at the **start of each traced eval**. The default is **30 days**,
+applied only when a `storage` block is present — omit `storage` to keep traces indefinitely, or
+set `retentionDays` to `0` or less to disable pruning. Pruning permanently deletes rows.
+
+When several evaluations run in the same process (e.g. the Promptfoo server), they **share a
+single OTLP receiver**: it starts on first use and stops when the last evaluation finishes. The
+receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a later overlapping
+evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
+are tracked per trace so each evaluation's traces use its own policy.
+
+For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
+`commandToolNames` policy with that trace so overlapping evaluations do not change one
+another's results — each trace is redacted with its own policy, not the active receiver's.
+Traces created only when spans arrive at the receiver (no evaluation row) use the
+registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
+startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
+and is not changed by an overlapping evaluation.
+
+The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
+different container or host and must reach the receiver over the network, set
+`host: '0.0.0.0'` explicitly and restrict access to trusted networks.
 
 ### Supported Formats
 
@@ -453,6 +512,23 @@ Click the **Export Traces** button to download all traces for the current evalua
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
+### Trace Linkage on Result Rows
+
+When tracing is enabled, every `EvaluateResult` row carries `traceId` and `evaluationId` at the top level so external tooling can correlate result rows to traces without re-deriving the linkage:
+
+```json
+{
+  "promptIdx": 0,
+  "testIdx": 0,
+  "success": true,
+  "traceId": "b01f108667a48e148ee80deb42c7f16d",
+  "evaluationId": "eval-Lie-2026-05-08T13:43:46",
+  "metadata": { "...": "..." }
+}
+```
+
+Use the `traceId` to look up an individual trace via `GET /api/traces/:traceId`, or pass the `evaluationId` to `GET /api/traces/evaluation/:evaluationId` to fetch every trace for the eval. Both fields are absent when tracing is not enabled for the row, so their presence is an unambiguous "this row was traced" signal.
+
 ## Best Practices
 
 ### 1. Semantic Naming
@@ -537,13 +613,13 @@ const provider = new NodeTracerProvider({
 Trace across multiple services:
 
 ```javascript
-// Service A: Forward trace context
+// Service A: Forward trace context (import `propagation` from '@opentelemetry/api')
 const headers = {};
-trace.propagation.inject(context.active(), headers);
+propagation.inject(context.active(), headers);
 await fetch(serviceB, { headers });
 
 // Service B: Extract and continue trace
-const extractedContext = trace.propagation.extract(context.active(), request.headers);
+const extractedContext = propagation.extract(context.active(), request.headers);
 ```
 
 ## Troubleshooting

@@ -252,6 +252,8 @@ function stableStringify(value: unknown): string {
 const SENSITIVE_HEADER_PATTERN =
   /^(authorization|cookie|proxy-authorization|x-?api-?key|x-?auth-?token|x-?access-?token|x-?secret|x-?signature|bearer)$/i;
 
+type N8nRequestBody = Record<string, any> | any[] | string;
+
 function redactHeadersForFingerprint(
   headers: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
@@ -370,12 +372,9 @@ export class N8nProvider implements ApiProvider {
     };
   }
 
-  private addSessionField(
-    body: Record<string, any> | string,
-    context?: CallApiContextParams,
-  ): Record<string, any> | string {
+  private addSessionField(body: N8nRequestBody, context?: CallApiContextParams): N8nRequestBody {
     const sessionId = this.getRequestSessionId(context);
-    if (!sessionId || typeof body === 'string') {
+    if (!sessionId || typeof body !== 'object' || body === null || Array.isArray(body)) {
       return body;
     }
 
@@ -383,10 +382,7 @@ export class N8nProvider implements ApiProvider {
     return body[sessionField] === undefined ? { ...body, [sessionField]: sessionId } : body;
   }
 
-  private buildRequestBody(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Record<string, any> | string {
+  private buildRequestBody(prompt: string, context?: CallApiContextParams): N8nRequestBody {
     const templateVars = this.getTemplateVars(prompt, context);
     const nunjucks = getNunjucksEngine();
     const renderValue = (value: any): any => {
@@ -434,7 +430,7 @@ export class N8nProvider implements ApiProvider {
     return this.addSessionField(renderValue(this.config.body), context);
   }
 
-  private buildGetUrl(body: Record<string, any> | string): string {
+  private buildGetUrl(body: N8nRequestBody): string {
     const requestUrl = new URL(this.getUrl());
 
     if (typeof body === 'string') {

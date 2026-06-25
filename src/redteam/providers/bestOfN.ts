@@ -10,9 +10,11 @@ import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 
@@ -30,6 +32,7 @@ interface BestOfNResponse {
 
 interface BestOfNConfig {
   injectVar: string;
+  targetId?: string;
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
@@ -48,6 +51,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency?: number;
       nSteps?: number;
       maxCandidatesPerStep?: number;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -60,6 +64,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency: options.maxConcurrency || 3,
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
+      targetId: options.targetId,
     };
   }
 
@@ -81,11 +86,10 @@ export default class BestOfNProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
+            ...remoteGenerationContextPayload(this.config.targetId),
             prompt: context.vars[this.config.injectVar],
             nSteps: this.config.nSteps,
             maxCandidatesPerStep: this.config.maxCandidatesPerStep,

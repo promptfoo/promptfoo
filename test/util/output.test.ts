@@ -44,15 +44,23 @@ const mockFileHandle = vi.hoisted(() => ({
   write: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
 }));
+const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
+const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
+const JSONL_REPLACEMENT_PATH = path.join(JSONL_TEMP_DIRECTORY, 'replacement.jsonl');
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
-  rename: vi.fn(),
-  rm: vi.fn(),
-  stat: vi.fn().mockResolvedValue({ mode: 0o644 }),
+  copyFile: vi.fn(),
   chmod: vi.fn(),
+  lstat: vi.fn(),
+  mkdtemp: vi.fn(),
+  stat: vi.fn(),
+  realpath: vi.fn(),
+  readlink: vi.fn(),
+  rename: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn(),
   open: vi.fn().mockResolvedValue(mockFileHandle),
 }));
@@ -65,6 +73,7 @@ describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
   beforeEach(() => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     vi.clearAllMocks();
     // Restore mock implementations that vi.resetAllMocks() clears
     mockFileHandle.write.mockResolvedValue(undefined);
@@ -72,11 +81,12 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
-    // Restore the stat implementation that vi.resetAllMocks() clears; the atomic JSONL rewrite
-    // reads the destination's mode through it before renaming the temp file into place.
-    vi.mocked(fsPromises.stat).mockResolvedValue({ mode: 0o644 } as Awaited<
-      ReturnType<typeof fsPromises.stat>
-    >);
+    vi.mocked(fsPromises.rename).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.copyFile).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdtemp).mockResolvedValue(JSONL_TEMP_DIRECTORY);
+    vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
+    vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockResolvedValue({
@@ -1123,10 +1133,190 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval(config);
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
-    // JSONL is rebuilt in a temp file then atomically renamed over the destination, so the
-    // empty truncation lands on the temp path and the swap targets the real output path.
-    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringContaining(outputPath), '');
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+  });
+
+  it('rewrites JSONL through an external backup when the output directory is not writable', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, '');
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, outputPath);
+    expect(fsPromises.rename).not.toHaveBeenCalled();
+  });
+
+  it('warns when the temporary JSONL backup directory cannot be removed', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.rm).mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL backup directory',
+      expect.objectContaining({
+        tempDirectory: JSONL_TEMP_DIRECTORY,
+      }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('rewrites JSONL through an external backup when replacing the output file is not permitted', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+
+    const outputPath = 'output.jsonl';
+    const eval_ = new Eval({});
+    const fetchResultsBatchedSpy = vi.spyOn(eval_, 'fetchResultsBatched');
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+    expect(fsPromises.rm).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), { force: true });
+    expect(fetchResultsBatchedSpy).toHaveBeenCalledTimes(1);
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/\.tmp$/),
+      JSONL_REPLACEMENT_PATH,
+    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_REPLACEMENT_PATH, outputPath);
+  });
+
+  it('warns when a populated JSONL sidecar cannot be removed after an external rewrite', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.rm)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL output',
+      expect.objectContaining({
+        tempOutputPath: expect.stringMatching(/\.tmp$/),
+      }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('rewrites the target of a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
+  });
+
+  it('creates the resolved target directory when rewriting a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput(outputPath, new Eval({}), null);
+
+    // The link's resolved target may live in a directory that does not exist yet; it must be
+    // created so the sibling temp-file rewrite can land next to it (otherwise the temp-file
+    // write fails with ENOENT instead of preserving the symlink).
+    expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(resolvedTarget), {
+      recursive: true,
+    });
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
+  });
+
+  it('surfaces the permission error when a first-time JSONL write hits a read-only directory', async () => {
+    const accessError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    // The output file does not exist yet and its directory is not writable: the temp-file
+    // create fails with EACCES, routing into the external-backup fallback.
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(accessError) // temp file in the read-only output directory
+      .mockResolvedValueOnce(undefined); // replacement file in the OS temp directory
+    // There is no existing artifact to back up (ENOENT); the replacement copy back into the
+    // read-only directory then fails with the real EACCES, which must be what surfaces.
+    vi.mocked(fsPromises.copyFile)
+      .mockRejectedValueOnce(fileNotFoundError) // copyFile(outputPath, backup) → ENOENT (absent)
+      .mockRejectedValueOnce(accessError); // copyFile(replacement, outputPath) → EACCES
+
+    await expect(writeOutput('output.jsonl', new Eval({}), null)).rejects.toThrow('EACCES');
+
+    // No backup was ever created, so the restore copy must be skipped (exactly two copies).
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores the JSONL backup when an external rewrite fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const copyError = new Error('copy failed');
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(copyError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('copy failed');
+
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_BACKUP_PATH, outputPath);
+  });
+
+  it('preserves the existing JSONL artifact when an external backup cannot be created', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.copyFile).mockRejectedValueOnce(new Error('backup failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('backup failed');
+
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the external JSONL backup when restoration fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('copy failed'))
+      .mockRejectedValueOnce(new Error('restore failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow(
+      `Backup retained at ${JSONL_BACKUP_PATH}`,
+    );
+
+    expect(fsPromises.rm).not.toHaveBeenCalledWith(JSONL_TEMP_DIRECTORY, {
+      recursive: true,
+      force: true,
+    });
   });
 
   it('preserves the existing output file permissions across the atomic JSONL rewrite', async () => {
@@ -1140,8 +1330,8 @@ describe('writeOutput', () => {
 
     // The temp file is chmod'd to the destination's prior mode before the rename, so a
     // restricted (0600) reused path is not silently widened to the umask default.
-    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringContaining(outputPath), 0o600);
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), 0o600);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
   it('skips the chmod when the JSONL output file does not yet exist', async () => {
@@ -1154,7 +1344,7 @@ describe('writeOutput', () => {
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
 
     expect(fsPromises.chmod).not.toHaveBeenCalled();
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
   it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
@@ -1253,6 +1443,40 @@ describe('writeOutput', () => {
     await writeMultipleOutputs(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for every output write before rejecting', async () => {
+    let resolveSlowWrite: () => void;
+    const slowWrite = new Promise<void>((resolve) => {
+      resolveSlowWrite = resolve;
+    });
+    vi.mocked(fsPromises.writeFile).mockImplementation(async (outputPath) => {
+      if (outputPath === 'output.json') {
+        throw new Error('json write failed');
+      }
+      if (outputPath === 'output.txt') {
+        await slowWrite;
+      }
+    });
+
+    let settled = false;
+    const writePromise = writeMultipleOutputs(['output.json', 'output.txt'], new Eval({}), null);
+    void writePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await vi.waitFor(() => {
+      expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+    });
+    expect(settled).toBe(false);
+
+    resolveSlowWrite!();
+    await expect(writePromise).rejects.toThrow('One or more output writes failed');
   });
 
   it('writeOutput with HTML template escapes special characters', async () => {
