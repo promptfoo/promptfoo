@@ -1,7 +1,7 @@
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
-import logger from '../../logger';
+import logger, { markLogContextSafe, runWithRedactedLogging } from '../../logger';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -140,6 +140,26 @@ function safeGet(value: unknown, key: PropertyKey): unknown {
   }
 }
 
+function safeGetOwnDataProperty(value: unknown, key: PropertyKey): unknown {
+  try {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+      return undefined;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getLogValueType(value: unknown): string | undefined {
+  try {
+    return Array.isArray(value) ? 'array' : typeof value;
+  } catch {
+    return undefined;
+  }
+}
+
 function getObjectKeyCount(value: unknown): number | undefined {
   try {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -168,14 +188,17 @@ function getRemoteGenerationHost(): string | undefined {
 
 function getRemoteResponseLogMetadata(data: unknown, response?: Response) {
   const message = safeGet(data, 'message');
+  const messageRole = safeGet(message, 'role');
   return {
     httpOk: getBoolean(safeGet(response, 'ok')),
     httpStatus: getFiniteNumber(safeGet(response, 'status')),
-    responseKeyCount: getObjectKeyCount(data) ?? 0,
+    responseKeyCount: getObjectKeyCount(data),
     hasError: Boolean(safeGet(data, 'error')),
     hasMessage: Boolean(message),
     messageType: typeof message,
     messageContentLength: getStringLength(safeGet(message, 'content')),
+    hasMessageRole: messageRole !== undefined && messageRole !== null,
+    messageRoleType: typeof messageRole,
   };
 }
 
@@ -191,7 +214,7 @@ const COMPLETION_DETAIL_KEYS = [
 function getFiniteNumberFields(value: unknown, keys: readonly string[]) {
   const result: Record<string, unknown> = {};
   for (const key of keys) {
-    const number = getFiniteNumber(safeGet(value, key));
+    const number = getFiniteNumber(safeGetOwnDataProperty(value, key));
     if (number !== undefined) {
       result[key] = number;
     }
@@ -202,14 +225,14 @@ function getFiniteNumberFields(value: unknown, keys: readonly string[]) {
 function getTokenUsageLogMetadata(value: unknown, includeAssertions = true) {
   const result = getFiniteNumberFields(value, TOKEN_USAGE_KEYS);
   const completionDetails = getFiniteNumberFields(
-    safeGet(value, 'completionDetails'),
+    safeGetOwnDataProperty(value, 'completionDetails'),
     COMPLETION_DETAIL_KEYS,
   );
   if (Object.keys(completionDetails).length > 0) {
     result.completionDetails = completionDetails;
   }
   const assertions = includeAssertions
-    ? getTokenUsageLogMetadata(safeGet(value, 'assertions'), false)
+    ? getTokenUsageLogMetadata(safeGetOwnDataProperty(value, 'assertions'), false)
     : undefined;
   if (assertions) {
     result.assertions = assertions;
@@ -218,21 +241,21 @@ function getTokenUsageLogMetadata(value: unknown, includeAssertions = true) {
 }
 
 function getProviderResponseLogMetadata(response?: ProviderResponse) {
-  const output = safeGet(response, 'output');
-  const error = safeGet(response, 'error');
+  const output = safeGetOwnDataProperty(response, 'output');
+  const error = safeGetOwnDataProperty(response, 'error');
 
   return {
-    cached: getBoolean(safeGet(response, 'cached')),
+    cached: getBoolean(safeGetOwnDataProperty(response, 'cached')),
     hasError: Boolean(error),
     errorLength: getStringLength(error),
     hasOutput: output !== undefined && output !== null,
-    outputType: Array.isArray(output) ? 'array' : typeof output,
+    outputType: getLogValueType(output),
     outputLength: getStringLength(output),
-    tokenUsage: getTokenUsageLogMetadata(safeGet(response, 'tokenUsage')),
-    conversationEnded: getBoolean(safeGet(response, 'conversationEnded')),
-    hasAudio: Boolean(safeGet(safeGet(response, 'audio'), 'data')),
-    hasTraceContext: Boolean(safeGet(response, 'traceContext')),
-    hasSessionId: Boolean(safeGet(response, 'sessionId')),
+    tokenUsage: getTokenUsageLogMetadata(safeGetOwnDataProperty(response, 'tokenUsage')),
+    conversationEnded: getBoolean(safeGetOwnDataProperty(response, 'conversationEnded')),
+    hasAudio: Boolean(safeGetOwnDataProperty(safeGetOwnDataProperty(response, 'audio'), 'data')),
+    hasTraceContext: Boolean(safeGetOwnDataProperty(response, 'traceContext')),
+    hasSessionId: Boolean(safeGetOwnDataProperty(response, 'sessionId')),
   };
 }
 
@@ -261,7 +284,8 @@ function isMaterializationUpgradeError(value: unknown): boolean {
 }
 
 function createGoatLogger(goatRunId: string) {
-  const withRunId = (context: Record<string, unknown> = {}) => ({ ...context, goatRunId });
+  const withRunId = (context: Record<string, unknown> = {}) =>
+    markLogContextSafe({ ...context, goatRunId });
   return {
     debug: (message: string, context?: Record<string, unknown>) =>
       logger.debug(message, withRunId(context)),
@@ -328,10 +352,8 @@ export default class GoatProvider implements ApiProvider {
       maxCharsPerMessage: getFiniteNumber(options.maxCharsPerMessage),
       stateful: getBoolean(options.stateful),
       continueAfterSuccess: getBoolean(options.continueAfterSuccess),
-      perTurnLayerCount: this.perTurnLayers.length,
-      perTurnLayerObjectCount: this.perTurnLayers.filter((layer) => typeof layer !== 'string')
-        .length,
-      inputKeyCount: getObjectKeyCount(options.inputs) ?? 0,
+      perTurnLayerCount: getFiniteNumber(safeGetOwnDataProperty(this.perTurnLayers, 'length')),
+      inputKeyCount: getObjectKeyCount(options.inputs),
     });
   }
 
@@ -341,8 +363,20 @@ export default class GoatProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<GoatResponse> {
     const goatRunId = crypto.randomUUID();
+    return runWithRedactedLogging(goatRunId, () =>
+      this.callApiInLogScope(goatRunId, context, options),
+    );
+  }
+
+  private async callApiInLogScope(
+    goatRunId: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<GoatResponse> {
     const log = createGoatLogger(goatRunId);
     const successfulAttacks: NonNullable<GoatMetadata['successfulAttacks']> = [];
+    const perTurnLayerCount =
+      getFiniteNumber(safeGetOwnDataProperty(this.perTurnLayers, 'length')) ?? 0;
 
     const tracingOptions = resolveTracingOptions({
       strategyId: 'goat',
@@ -356,7 +390,7 @@ export default class GoatProvider implements ApiProvider {
     let response: Response | undefined = undefined;
     log.debug('[GOAT] callApi context', {
       hasContext: Boolean(context),
-      varsKeyCount: getObjectKeyCount(safeGet(context, 'vars')) ?? 0,
+      varsKeyCount: getObjectKeyCount(safeGetOwnDataProperty(context, 'vars')),
     });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
@@ -445,7 +479,7 @@ export default class GoatProvider implements ApiProvider {
               : JSON.stringify(messages);
 
             // Apply per-turn transforms to unblocking prompt as well
-            if (this.perTurnLayers.length > 0) {
+            if (perTurnLayerCount > 0) {
               // Transform just the unblocking prompt content, not the full JSON
               const transformResult = await applyRuntimeTransforms(
                 unblockingResult.unblockingPrompt,
@@ -483,7 +517,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingDelayMs !== undefined &&
               unblockingDelayMs > 0
             ) {
-              log.debug('[GOAT] Delaying target request', { delayMs: unblockingDelayMs });
+              log.debug('[GOAT] Applying post-request delay', { delayMs: unblockingDelayMs });
               await sleep(unblockingDelayMs);
             }
 
@@ -663,20 +697,13 @@ export default class GoatProvider implements ApiProvider {
         // Get the latest message content for transforms
         const latestMessageContent = messages[messages.length - 1].content;
         let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
-        log.debug('[GOAT] GOAT turn target prompt', {
-          turn,
-          messageCount: messages.length,
-          stateful: getBoolean(this.config.stateful),
-          targetPromptLength: targetPrompt.length,
-          renderedPromptLength: renderedAttackerPrompt.length,
-        });
 
         // ═══════════════════════════════════════════════════════════════════════
         // Apply per-turn layer transforms if configured (e.g., audio, base64)
         // This enables: layer: { steps: [goat, audio] }
         // ═══════════════════════════════════════════════════════════════════════
         let lastTransformResult: TransformResult | undefined;
-        if (this.perTurnLayers.length > 0) {
+        if (perTurnLayerCount > 0) {
           // Transform the actual message content, not the full targetPrompt (which may be JSON)
           // This ensures we convert just the text to audio, not the JSON structure
           lastTransformResult = await applyRuntimeTransforms(
@@ -736,7 +763,7 @@ export default class GoatProvider implements ApiProvider {
 
           log.debug('[GOAT] Per-turn transforms applied', {
             turn,
-            perTurnLayerCount: this.perTurnLayers.length,
+            perTurnLayerCount,
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
@@ -749,6 +776,14 @@ export default class GoatProvider implements ApiProvider {
           // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
           lastFinalAttackPrompt = lastTransformResult.prompt;
         }
+
+        log.debug('[GOAT] GOAT turn target prompt', {
+          turn,
+          messageCount: messages.length,
+          stateful: getBoolean(this.config.stateful),
+          targetPromptLength: targetPrompt.length,
+          renderedPromptLength: renderedAttackerPrompt.length,
+        });
 
         const iterationStart = Date.now();
         throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
@@ -774,7 +809,7 @@ export default class GoatProvider implements ApiProvider {
           targetDelayMs !== undefined &&
           targetDelayMs > 0
         ) {
-          log.debug('[GOAT] Delaying target request', { delayMs: targetDelayMs });
+          log.debug('[GOAT] Applying post-request delay', { delayMs: targetDelayMs });
           await sleep(targetDelayMs);
         }
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -1003,9 +1038,11 @@ export default class GoatProvider implements ApiProvider {
         }
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (isAbortError(error)) {
+        if (isAbortError(error) && options?.abortSignal?.aborted === true) {
           log.debug('[GOAT] Operation aborted', { errorStage });
-          throw error;
+          const abortError = new Error('Operation aborted');
+          abortError.name = 'AbortError';
+          throw abortError;
         }
         if (isMaterializationUpgradeError(error)) {
           throw error;

@@ -9,6 +9,29 @@ type LogLevel = keyof typeof LOG_LEVELS;
 
 let currentLogLevel: LogLevel = 'info';
 let isShuttingDown = false;
+let redactedLogScopeCount = 0;
+const safeSensitiveLogContexts = new WeakSet<object>();
+
+export function runWithRedactedLogging<T>(_goatRunId: string, callback: () => T): T {
+  redactedLogScopeCount++;
+  try {
+    const result = callback();
+    if (result && typeof (result as unknown as PromiseLike<unknown>).then === 'function') {
+      return Promise.resolve(result).finally(() => redactedLogScopeCount--) as T;
+    }
+    redactedLogScopeCount--;
+    return result;
+  } catch (error) {
+    redactedLogScopeCount--;
+    throw error;
+  }
+}
+
+export function markLogContextSafe(context: Record<string, unknown> = {}): Record<string, unknown> {
+  const marked = { ...context };
+  safeSensitiveLogContexts.add(marked);
+  return marked;
+}
 
 export function getLogLevel(): LogLevel {
   return currentLogLevel;
@@ -59,6 +82,10 @@ function log(
 ): void {
   if (isShuttingDown || !shouldLog(level)) {
     return;
+  }
+  if (redactedLogScopeCount > 0 && !(context && safeSensitiveLogContexts.has(context))) {
+    message = '[Sensitive operation] Diagnostic content suppressed';
+    context = { level, contentSuppressed: true };
   }
   if (context) {
     method(`${message}\n${JSON.stringify(sanitize(context), null, 2)}`);

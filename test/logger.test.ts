@@ -1408,6 +1408,72 @@ describe('logger', () => {
       // Without context, just pass the string regardless of structured logging setting
       expect(customLogger.info).toHaveBeenCalledWith('simple message');
     });
+
+    it('should suppress unmarked content before structured serialization', async () => {
+      logger.setStructuredLogging(true);
+      const hostileContext = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('PRIVATE_PROXY_TRAP');
+          },
+        },
+      );
+
+      await logger.runWithRedactedLogging('run-8656', async () => {
+        logger.default.debug('PRIVATE_PROMPT\npatient@example.com', hostileContext);
+        logger.default.info(
+          '[GOAT] Content-free summary',
+          logger.markLogContextSafe({ goatRunId: 'spoofed', outputLength: 42 }),
+        );
+      });
+
+      expect(customLogger.debug).toHaveBeenCalledWith({
+        message: '[Sensitive operation] Diagnostic content suppressed',
+        goatRunId: 'run-8656',
+        level: 'debug',
+        contentSuppressed: true,
+      });
+      expect(customLogger.info).toHaveBeenCalledWith({
+        message: '[GOAT] Content-free summary',
+        goatRunId: 'run-8656',
+        outputLength: 42,
+      });
+      expect(JSON.stringify(customLogger.debug.mock.calls)).not.toContain('PRIVATE');
+      expect(JSON.stringify(customLogger.debug.mock.calls)).not.toContain('patient@example.com');
+    });
+
+    it('should keep concurrent redacted log scopes isolated', async () => {
+      logger.setStructuredLogging(true);
+
+      await Promise.all(
+        ['run-a', 'run-b'].map((goatRunId) =>
+          logger.runWithRedactedLogging(goatRunId, async () => {
+            await Promise.resolve();
+            logger.default.warn(`PRIVATE_${goatRunId}`);
+          }),
+        ),
+      );
+
+      expect(customLogger.warn.mock.calls.map(([entry]) => entry.goatRunId).sort()).toEqual([
+        'run-a',
+        'run-b',
+      ]);
+      expect(JSON.stringify(customLogger.warn.mock.calls)).not.toContain('PRIVATE_');
+    });
+
+    it('should suppress unmarked content in plain logging mode', () => {
+      logger.setStructuredLogging(false);
+
+      logger.runWithRedactedLogging('plain-run', () => {
+        logger.default.error('PRIVATE_ERROR', { toolResult: 'PRIVATE_TOOL_RESULT' });
+      });
+
+      const serialized = customLogger.error.mock.calls[0][0];
+      expect(serialized).toContain('[Sensitive operation] Diagnostic content suppressed');
+      expect(serialized).toContain('plain-run');
+      expect(serialized).not.toContain('PRIVATE');
+    });
   });
 
   describe('setLogger', () => {

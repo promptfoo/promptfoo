@@ -192,6 +192,22 @@ describe('RedteamGoatProvider', () => {
     expect(logs).not.toContain(sensitiveLogMarker);
   });
 
+  it('should not invoke or log hostile per-turn layer length getters', () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => ({}) as any);
+    const layers = new Proxy([] as any[], {
+      get(target, property, receiver) {
+        return property === 'length'
+          ? sensitive('layer-length-getter')
+          : Reflect.get(target, property, receiver);
+      },
+    });
+
+    expect(
+      () => new RedteamGoatProvider({ injectVar: 'goal', _perTurnLayers: layers } as any),
+    ).not.toThrow();
+    expect(serializeLogCalls(debugSpy)).not.toContain(sensitiveLogMarker);
+  });
+
   it('should enforce maxCharsPerMessage from provider config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -655,6 +671,8 @@ describe('RedteamGoatProvider', () => {
     expect(logs).toContain('"httpOk":false');
     expect(logs).toContain('"httpStatus":429');
     expect(logs).toContain('"hasError":true');
+    expect(logs).toContain('"hasMessageRole":true');
+    expect(logs).toContain('"messageRoleType":"string"');
     expect(logs).not.toContain(sensitiveLogMarker);
   });
 
@@ -678,6 +696,44 @@ describe('RedteamGoatProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Target ended conversation');
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not consume response accessors while building log metadata', async () => {
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 3 });
+    let conversationEndedReads = 0;
+    const response = {
+      output: 'ended response',
+      tokenUsage: {},
+      get conversationEnded() {
+        conversationEndedReads++;
+        return true;
+      },
+    };
+    const targetProvider = createMockProvider({ response });
+
+    const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(conversationEndedReads).toBe(1);
+  });
+
+  it('should log the length of the transformed target prompt', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      _perTurnLayers: ['base64'],
+    });
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const targetProvider = createMockTargetProvider();
+
+    await provider.callApi('test prompt', createMockContext(targetProvider));
+
+    const targetPrompt = (targetProvider.callApi as Mock).mock.calls[0][0] as string;
+    const promptLog = debugSpy.mock.calls.find(
+      ([message]) => message === '[GOAT] GOAT turn target prompt',
+    );
+    expect(promptLog?.[1]?.targetPromptLength).toBe(targetPrompt.length);
   });
 
   it('should handle grader integration and stop early on failure', async () => {
@@ -1660,10 +1716,33 @@ describe('RedteamGoatProvider', () => {
 
       const targetProvider = createMockTargetProvider();
       const context = createMockContext(targetProvider);
+      const abortController = new AbortController();
+      abortController.abort();
 
-      await expect(provider.callApi('test prompt', context)).rejects.toThrow(
-        'The operation was aborted',
+      await expect(
+        provider.callApi('test prompt', context, { abortSignal: abortController.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'Operation aborted' });
+    });
+
+    it('should not treat a provider-spoofed AbortError as caller cancellation', async () => {
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+      const spoofedAbort = new Error(sensitive('spoofed-abort'));
+      spoofedAbort.name = 'AbortError';
+      mockFetch
+        .mockRejectedValueOnce(spoofedAbort)
+        .mockResolvedValueOnce(createRemoteMessageResponse('second-turn attack'));
+      const abortController = new AbortController();
+
+      const result = await provider.callApi(
+        'test prompt',
+        createMockContext(createMockTargetProvider()),
+        {
+          abortSignal: abortController.signal,
+        },
       );
+
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     it('should pass options with abortSignal to target provider callApi', async () => {
