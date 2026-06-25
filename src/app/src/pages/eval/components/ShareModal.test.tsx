@@ -86,11 +86,15 @@ describe('ShareModal', () => {
     render(<ShareModal {...defaultProps} />);
 
     expect(await screen.findByDisplayValue(url)).toBeInTheDocument();
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Share link ready.');
     expect(
       screen.getByText('This URL is accessible to users with access to your organization.'),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Copy share URL' }));
     expect(document.execCommand).toHaveBeenCalledWith('copy');
+    expect(status).toHaveTextContent('Share URL copied.');
+    expect(screen.getByRole('button', { name: 'Share URL copied' })).toBeInTheDocument();
   });
 
   it('does not share when a fresh auth check is unauthorized', async () => {
@@ -164,6 +168,8 @@ describe('ShareModal', () => {
   it.each([
     ['empty', ''],
     ['whitespace-only', '   '],
+    ['relative', '/eval/shared'],
+    ['non-HTTP', 'javascript:alert(1)'],
   ])('rejects a %s share URL', async (_label, url) => {
     mockOnShare.mockResolvedValue(url);
 

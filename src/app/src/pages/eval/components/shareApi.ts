@@ -32,6 +32,20 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+export function parseShareUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const candidate = value.trim();
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
 function isShareCheckDomainResponse(value: unknown): value is ShareCheckDomainResponse {
   if (value === null || typeof value !== 'object') {
     return false;

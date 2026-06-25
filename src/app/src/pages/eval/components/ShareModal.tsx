@@ -16,6 +16,7 @@ import logger from '../../../../../logger';
 import {
   checkShareAvailability,
   isAbortError,
+  parseShareUrl,
   ShareAvailabilityError,
   ShareRequestError,
 } from './shareApi';
@@ -51,15 +52,15 @@ async function generateShareState(
   }
 
   signal.throwIfAborted();
-  const url = await onShare(evalId, signal);
-  if (typeof url !== 'string' || url.trim().length === 0) {
+  const url = parseShareUrl(await onShare(evalId, signal));
+  if (!url) {
     return {
       status: 'error',
       message: 'The server did not return a valid share URL.',
       retryable: true,
     };
   }
-  return { status: 'ready', url: url.trim() };
+  return { status: 'ready', url };
 }
 
 const ShareModal = ({
@@ -149,6 +150,15 @@ const ShareModal = ({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-[660px]">
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {shareState.status === 'ready'
+            ? copied
+              ? 'Share URL copied.'
+              : 'Share link ready.'
+            : shareState.status === 'loading'
+              ? 'Generating share link...'
+              : ''}
+        </div>
         {shareState.status === 'error' ? (
           <>
             <DialogHeader>
@@ -177,7 +187,7 @@ const ShareModal = ({
                   type="button"
                   onClick={handleCopyClick}
                   className="p-2 rounded hover:bg-muted transition-colors"
-                  aria-label="Copy share URL"
+                  aria-label={copied ? 'Share URL copied' : 'Copy share URL'}
                 >
                   {copied ? <Check className="size-5" /> : <Copy className="size-5" />}
                 </button>
@@ -198,7 +208,7 @@ const ShareModal = ({
               <DialogTitle>Share Evaluation</DialogTitle>
               <DialogDescription>Checking access and generating a share link.</DialogDescription>
             </DialogHeader>
-            <div className="flex items-center gap-3 py-4" role="status" aria-live="polite">
+            <div className="flex items-center gap-3 py-4">
               <Spinner size="sm" />
               <p className="text-muted-foreground">Generating share link...</p>
             </div>

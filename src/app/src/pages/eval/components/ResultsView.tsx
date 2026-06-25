@@ -42,13 +42,12 @@ import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareMenuItem from './ShareMenuItem';
 import ShareModal from './ShareModal';
-import { isRetryableShareStatus, ShareRequestError } from './shareApi';
+import { isRetryableShareStatus, parseShareUrl, ShareRequestError } from './shareApi';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
-import type { ShareResponse } from '@promptfoo/types/api/server';
 import type { VisibilityState } from '@tanstack/table-core';
 
 import type { ActiveView } from './EvalHeader';
@@ -371,7 +370,7 @@ export default function ResultsView({
     setFailureFilter(newFailureFilter);
   };
 
-  const [shareModalOpen, setShareModalOpen] = React.useState(false);
+  const [shareModalEvalId, setShareModalEvalId] = React.useState<string | null>(null);
   const [sharingEvalId, setSharingEvalId] = React.useState<string | null>(null);
 
   // State for compare eval dialog
@@ -382,20 +381,13 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
-  const previousShareEvalIdRef = React.useRef(currentEvalId);
+  const shareModalOpen = shareModalEvalId === currentEvalId;
   const currentDatasetId = recentEvals.find(
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
-  React.useEffect(() => {
-    if (previousShareEvalIdRef.current !== currentEvalId) {
-      previousShareEvalIdRef.current = currentEvalId;
-      setShareModalOpen(false);
-    }
-  }, [currentEvalId]);
-
   const handleShareButtonClick = () => {
-    setShareModalOpen(true);
+    setShareModalEvalId(currentEvalId);
   };
 
   const handleShare = React.useCallback(
@@ -423,16 +415,14 @@ export default function ResultsView({
               : `Failed to generate share URL (HTTP ${response.status})`;
           throw new ShareRequestError(message, isRetryableShareStatus(response.status));
         }
-        if (
-          !data ||
-          typeof data !== 'object' ||
-          !('url' in data) ||
-          typeof data.url !== 'string' ||
-          data.url.trim().length === 0
-        ) {
+        const shareUrl =
+          data !== null && typeof data === 'object' && 'url' in data
+            ? parseShareUrl(data.url)
+            : null;
+        if (!shareUrl) {
           throw new ShareRequestError('The server did not return a valid share URL.', true);
         }
-        return (data as ShareResponse).url;
+        return shareUrl;
       } finally {
         setSharingEvalId((activeEvalId) => (activeEvalId === id ? null : activeEvalId));
       }
@@ -1011,7 +1001,7 @@ export default function ResultsView({
         key={currentEvalId}
         open={shareModalOpen}
         onClose={() => {
-          setShareModalOpen(false);
+          setShareModalEvalId(null);
         }}
         evalId={currentEvalId}
         onShare={handleShare}
