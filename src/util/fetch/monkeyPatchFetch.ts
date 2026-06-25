@@ -126,6 +126,19 @@ function getEffectiveHeaders(
   return headers ?? (url instanceof Request ? url.headers : undefined);
 }
 
+/** Returns whether request-specific diagnostics are disabled by the caller. */
+export function isFetchLoggingSuppressed(
+  url: string | URL | Request,
+  headers?: HeadersInit,
+): boolean {
+  return (
+    new Headers(getEffectiveHeaders(url, headers))
+      .get('x-promptfoo-silent')
+      ?.trim()
+      .toLowerCase() === 'true'
+  );
+}
+
 /** Case-insensitive check for a caller-supplied `Authorization` header (any `HeadersInit` shape). */
 function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
   return new Headers(headers).has('authorization');
@@ -159,7 +172,7 @@ export async function monkeyPatchFetch(
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const urlString = getRequestUrlString(url);
   const callerHeaders = getEffectiveHeaders(url, options?.headers);
-  const isSilent = new Headers(callerHeaders).get('x-promptfoo-silent') === 'true';
+  const isSilent = isFetchLoggingSuppressed(url, callerHeaders);
   const logEnabled = !NO_LOG_URLS.some((logUrl) => matchesNoLogUrl(urlString, logUrl)) && !isSilent;
 
   const opts: RequestInit = {

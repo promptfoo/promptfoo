@@ -91,6 +91,33 @@ describe('monkeyPatchFetch', () => {
     }
   });
 
+  it.each([
+    { headers: { 'X-Promptfoo-Silent': 'TRUE' } },
+    { headers: new Headers({ 'x-promptfoo-silent': 'true' }) },
+    { headers: [['x-promptfoo-silent', 'true']] },
+  ])('should suppress request and response logging for every HeadersInit shape', async (options) => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    await monkeyPatchFetch('https://example.com/task?token=SECRET_SILENT_QUERY', options);
+
+    expect(logRequestResponse).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
+  it('should honor a silent header carried by a Request object', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    const request = new Request('https://example.com/task?token=SECRET_REQUEST_QUERY', {
+      headers: { 'x-promptfoo-silent': 'true' },
+    });
+
+    await monkeyPatchFetch(request);
+
+    expect(logRequestResponse).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
+  });
+
   it('should add Authorization header for cloud API requests when token is available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);

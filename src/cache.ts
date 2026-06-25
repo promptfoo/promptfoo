@@ -17,6 +17,7 @@ import {
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
+  isFetchLoggingSuppressed,
   PROMPTFOO_TEAM_ID_HEADER,
 } from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
@@ -594,6 +595,21 @@ function deserializeFetchResponse<T>(
   };
 }
 
+function logCacheDiagnostic(
+  suppressLogging: boolean,
+  safeMessage: string,
+  safeContext: Record<string, unknown> | undefined,
+  verboseMessage: () => string,
+): void {
+  if (!suppressLogging) {
+    logger.debug(verboseMessage());
+  } else if (safeContext) {
+    logger.debug(safeMessage, safeContext);
+  } else {
+    logger.debug(safeMessage);
+  }
+}
+
 async function fetchAndReadBody(
   url: RequestInfo,
   options: RequestInit,
@@ -654,6 +670,7 @@ async function prepareFetchResponse(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   format: 'json' | 'text',
+  suppressLogging: boolean,
 ): Promise<PreparedFetchResponse> {
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
@@ -688,15 +705,26 @@ async function prepareFetchResponse(
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
+      logCacheDiagnostic(
+        suppressLogging,
+        '[Cache] Not caching response containing an error key',
+        {
+          status: response.status,
+        },
+        () => `Not caching ${url} because it contains an 'error' key: ${parsedData.error}`,
+      );
       return {
         response: serializedResponse,
         cacheable: false,
       };
     }
 
-    logger.debug(
-      `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+    logCacheDiagnostic(
+      suppressLogging,
+      '[Cache] Storing response',
+      { latencyMs: fetchLatencyMs },
+      () =>
+        `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
     return {
       response: serializedResponse,
@@ -757,6 +785,7 @@ export async function fetchWithCache<T = unknown>(
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex } = cacheOptions;
+  const suppressLogging = isFetchLoggingSuppressed(url, options.headers);
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
@@ -801,7 +830,12 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+    logCacheDiagnostic(
+      suppressLogging,
+      '[Cache] Returning cached response',
+      undefined,
+      () => `Returning cached response for ${url}: ${cachedResponse}`,
+    );
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
@@ -816,6 +850,7 @@ export async function fetchWithCache<T = unknown>(
         maxRetries,
         isIdempotent,
         format,
+        suppressLogging,
       );
       if (preparedResponse.cacheable) {
         await cache.set(cacheKey, preparedResponse.response);
