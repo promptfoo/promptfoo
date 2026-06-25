@@ -19,4 +19,15 @@ export const TEMPERATURE = getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE')
  * `OPENAI_MAX_TOKENS` knob (which is often raised for large *generation* outputs), so
  * tuning generation can never silently uncap the attack/grading providers.
  */
-export const REDTEAM_PROVIDER_MAX_TOKENS = getEnvInt('PROMPTFOO_REDTEAM_PROVIDER_MAX_TOKENS', 4096);
+export const DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS = 4096;
+
+/**
+ * Read the cap at provider-construction time so values supplied through the CLI's
+ * `--env-file` flow are honored after startup imports have completed.
+ */
+export function getRedteamProviderMaxTokens(): number {
+  return Math.max(
+    1,
+    getEnvInt('PROMPTFOO_REDTEAM_PROVIDER_MAX_TOKENS', DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS),
+  );
+}

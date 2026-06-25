@@ -275,6 +275,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           provider: this.config.redteamProvider,
           preferSmallModel: false,
           jsonOnly: true,
+          purpose: 'attack',
         });
       }
     }

@@ -84,7 +84,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }`,
         );
 
-        const materializerProvider = await redteamProviderManager.getProvider({ jsonOnly: true });
+        const materializerProvider = await redteamProviderManager.getProvider({
+          jsonOnly: true,
+          purpose: 'attack',
+        });
         materializedPrompt = await materializeMcpValue({
           intentValue,
           provider: materializerProvider,

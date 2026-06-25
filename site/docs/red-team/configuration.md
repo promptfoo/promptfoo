@@ -821,6 +821,13 @@ You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_RE
 Custom plugins and strategies require an OpenAI key or your own provider configuration.
 :::
 
+Local OpenAI-family calls used for iterative attacks and grading have a default output cap of
+4,096 tokens. This prevents a short decision or grading request from inheriting a large
+`OPENAI_MAX_TOKENS` value intended for batch test generation. Set
+`PROMPTFOO_REDTEAM_PROVIDER_MAX_TOKENS` to a positive integer to change the default cap. An
+explicit provider-specific output limit still takes precedence, and normal plugin test-case
+generation keeps the provider's usual output budget.
+
 ### Changing the model
 
 To use the `openai:chat:gpt-5-mini` model, you can override the provider on the command line:

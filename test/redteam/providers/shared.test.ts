@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
+import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
-  REDTEAM_PROVIDER_MAX_TOKENS,
+  DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+  getRedteamProviderMaxTokens,
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
@@ -144,23 +147,23 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: undefined,
-        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
-        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
       });
     });
 
-    it('bounds the default provider output so a runaway generation cannot reach the model ceiling', async () => {
+    it('bounds the default attack provider without capping batch generation', async () => {
       // Regression: without an explicit cap the default redteam provider falls through to
       // OPENAI_MAX_TOKENS (or the model's output ceiling), so a degenerate generation can
-      // run to tens of thousands of tokens. The cap must be set and modest, and applied in
-      // both `max_tokens` (e.g. gpt-4.1) and `max_completion_tokens` (reasoning/gpt-5) forms.
+      // run to tens of thousands of tokens. Apply the cap to short attack calls, but preserve
+      // the provider's normal output budget for batch test-case generation.
       await redteamProviderManager.getProvider({});
+      await redteamProviderManager.getProvider({ purpose: 'attack' });
 
-      const { config } = mockOpenAiInstances[0];
-      expect(config.max_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
-      expect(config.max_completion_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
-      expect(REDTEAM_PROVIDER_MAX_TOKENS).toBeLessThanOrEqual(8192);
-      expect(REDTEAM_PROVIDER_MAX_TOKENS).toBeGreaterThan(0);
+      expect(mockOpenAiInstances[0].config.max_tokens).toBeUndefined();
+      expect(mockOpenAiInstances[0].config.max_completion_tokens).toBeUndefined();
+      expect(mockOpenAiInstances[1].config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(mockOpenAiInstances[1].config.max_completion_tokens).toBe(
+        DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+      );
     });
 
     it('clears cached providers', async () => {
@@ -268,41 +271,104 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
-    it('applies a bounded default output cap to a configured provider with no output bound', async () => {
-      const loaded = {
-        id: () => 'openai:gpt-4.1',
-        callApi: vi.fn(),
-        config: {} as Record<string, unknown>,
-      };
+    it('applies a bounded default output cap to a configured OpenAI chat attack provider', async () => {
+      const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
       mockedLoadApiProviders.mockResolvedValue([loaded]);
       redteamProviderManager.clearProvider();
 
-      await redteamProviderManager.getProvider({ provider: 'openai:gpt-4.1' });
+      await redteamProviderManager.getProvider({
+        provider: 'openai:gpt-4.1',
+        purpose: 'attack',
+      });
 
-      expect(loaded.config.max_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
-      expect(loaded.config.max_completion_tokens).toBe(REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(loaded.config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(loaded.config.max_completion_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
     });
 
-    it('respects an explicit output bound on a configured provider (does not override)', async () => {
-      const loaded = {
-        id: () => 'openai:gpt-4.1',
-        callApi: vi.fn(),
-        config: { max_tokens: 9000 } as Record<string, unknown>,
-      };
+    it('does not cap a configured OpenAI provider used for batch generation', async () => {
+      const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+
+      await redteamProviderManager.getProvider({ provider: 'openai:gpt-4.1' });
+
+      expect(loaded.config.max_tokens).toBeUndefined();
+      expect(loaded.config.max_completion_tokens).toBeUndefined();
+    });
+
+    it('mirrors an explicit OpenAI chat output bound across model-specific aliases', async () => {
+      const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', {
+        config: { max_tokens: 9000 },
+      });
       mockedLoadApiProviders.mockResolvedValue([loaded]);
       redteamProviderManager.clearProvider();
 
       await redteamProviderManager.getProvider({
         provider: { id: 'openai:gpt-4.1', config: { max_tokens: 9000 } },
+        purpose: 'attack',
       });
 
       expect(loaded.config.max_tokens).toBe(9000);
-      // We must not graft a mismatched completion cap on top of the caller's bound.
+      expect(loaded.config.max_completion_tokens).toBe(9000);
+    });
+
+    it('uses max_output_tokens for configured OpenAI Responses attack providers', async () => {
+      const loaded = new OpenAiResponsesProvider('gpt-5.5', { config: {} });
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+
+      await redteamProviderManager.getProvider({
+        provider: 'openai:responses:gpt-5.5',
+        purpose: 'attack',
+      });
+
+      expect(loaded.config.max_output_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(loaded.config.max_tokens).toBeUndefined();
       expect(loaded.config.max_completion_tokens).toBeUndefined();
     });
 
+    it('uses max_tokens for configured OpenAI completion attack providers', async () => {
+      const loaded = new OpenAiCompletionProvider('davinci-002', { config: {} });
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+
+      await redteamProviderManager.getProvider({
+        provider: 'openai:completion:davinci-002',
+        purpose: 'attack',
+      });
+
+      expect(loaded.config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      expect(loaded.config.max_completion_tokens).toBeUndefined();
+    });
+
+    it('does not inject OpenAI-only fields into native providers', async () => {
+      const loaded = createMockProvider({ id: 'cohere:command-a-03-2025' });
+      loaded.config = {};
+      mockedLoadApiProviders.mockResolvedValue([loaded]);
+
+      await redteamProviderManager.getProvider({
+        provider: 'cohere:command-a-03-2025',
+        purpose: 'attack',
+      });
+
+      expect(loaded.config).toEqual({});
+    });
+
+    it('reads and clamps the attack cap when the provider is constructed', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_REDTEAM_PROVIDER_MAX_TOKENS: '8192' });
+      try {
+        await redteamProviderManager.getProvider({ purpose: 'attack' });
+        expect(mockOpenAiInstances[0].config.max_tokens).toBe(8192);
+
+        mockProcessEnv({ PROMPTFOO_REDTEAM_PROVIDER_MAX_TOKENS: '-5' });
+        expect(getRedteamProviderMaxTokens()).toBe(1);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('uses small model when preferSmallModel is true', async () => {
-      const result = await redteamProviderManager.getProvider({ preferSmallModel: true });
+      const result = await redteamProviderManager.getProvider({
+        preferSmallModel: true,
+        purpose: 'attack',
+      });
 
       // Check that an instance was created with the small model
       expect(mockOpenAiInstances.length).toBe(1);
@@ -310,13 +376,16 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: undefined,
-        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
-        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_tokens: DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
       });
     });
 
     it('sets response_format to json_object when jsonOnly is true', async () => {
-      const result = await redteamProviderManager.getProvider({ jsonOnly: true });
+      const result = await redteamProviderManager.getProvider({
+        jsonOnly: true,
+        purpose: 'attack',
+      });
 
       // Check that an instance was created with json_object response_format
       expect(mockOpenAiInstances.length).toBe(1);
@@ -324,8 +393,8 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances[0].config).toEqual({
         temperature: TEMPERATURE,
         response_format: { type: 'json_object' },
-        max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
-        max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
+        max_tokens: DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+        max_completion_tokens: DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
       });
     });
 
@@ -390,6 +459,22 @@ describe('shared redteam provider utilities', () => {
         expect(mockedLoadApiProviders).toHaveBeenCalledWith(['from-defaultTest-provider']);
       });
 
+      it('uses the defaultTest chain for attack providers', async () => {
+        const loaded = new MockOpenAiChatCompletionProvider('gpt-4.1', { config: {} });
+        mockedLoadApiProviders.mockResolvedValue([loaded]);
+        setCliStateConfig({
+          defaultTest: {
+            provider: 'openai:gpt-4.1',
+          },
+        });
+
+        const got = await redteamProviderManager.getProvider({ purpose: 'attack' });
+
+        expect(got).toBe(loaded);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['openai:gpt-4.1']);
+        expect(loaded.config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+      });
+
       it('falls back to redteam provider when grading not set', async () => {
         redteamProviderManager.clearProvider();
         setCliStateConfig({}); // no defaultTest
@@ -397,6 +482,10 @@ describe('shared redteam provider utilities', () => {
         // Expect fallback to default OpenAI redteam provider
         const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
         expect(got.id()).toContain('openai:');
+        expect(mockOpenAiInstances[0].config.max_tokens).toBe(DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS);
+        expect(mockOpenAiInstances[0].config.max_completion_tokens).toBe(
+          DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
+        );
       });
     });
 
@@ -555,8 +644,6 @@ describe('shared redteam provider utilities', () => {
         expect(mockOpenAiInstances[0].config).toEqual({
           temperature: TEMPERATURE,
           response_format: { type: 'json_object' },
-          max_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
-          max_completion_tokens: REDTEAM_PROVIDER_MAX_TOKENS,
         });
       });
     });
