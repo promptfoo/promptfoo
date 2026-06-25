@@ -4,6 +4,7 @@ import { callApi } from '@app/utils/api';
 import {
   FINAL_RUNTIME_NOTICE_PHASE_MS,
   getRuntimeNoticeReminderIntervalDays,
+  parseUtcMidnight,
 } from '@app/utils/runtimeCompatibility';
 
 export interface RuntimeCompatibilityNotice {
@@ -100,8 +101,8 @@ function getRuntimePolicyRefreshDelay(
   noticeDismissed: boolean,
 ): number | null {
   const now = Date.now();
-  const removalTimestamp = Date.parse(`${supportEndDate}T00:00:00.000Z`);
-  if (Number.isNaN(removalTimestamp)) {
+  const removalTimestamp = parseUtcMidnight(supportEndDate);
+  if (removalTimestamp === null) {
     return null;
   }
 

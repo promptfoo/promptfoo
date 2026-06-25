@@ -48,6 +48,30 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
   return latestVersion !== currentVersion;
 }
 
+/**
+ * Build the version-response fields shared by the success and error paths: environment-derived
+ * update commands plus the runtime compatibility notice/policy. All inputs are synchronous and
+ * cannot throw, so this is safe to call from the 500 fallback handler.
+ */
+function buildBaseVersionFields() {
+  const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
+  const isNpx = isRunningUnderNpx();
+  const updateCommands = getUpdateCommands({ selfHosted, isNpx });
+  return {
+    currentVersion: VERSION,
+    selfHosted,
+    isNpx,
+    updateCommands,
+    commandType: updateCommands.commandType,
+    runtimeNotice: getRuntimeNoticeForVersionResponse(
+      process.version,
+      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
+    ),
+    runtimePolicy: getRuntimePolicyForVersionResponse(process.version),
+    updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
+  };
+}
+
 const router = express.Router();
 
 // Cache for the latest version check
@@ -96,59 +120,26 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-
+    const base = buildBaseVersionFields();
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
-    const runtimeNotice = getRuntimeNoticeForVersionResponse(
-      process.version,
-      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
-    );
-    const runtimePolicy = getRuntimePolicyForVersionResponse(process.version);
-    const updateBlockedByRuntime = isUpdateBlockedByRuntime(updateCommands.commandType);
-
     const response = {
-      currentVersion: VERSION,
+      ...base,
       latestVersion: resolvedLatestVersion,
       updateAvailable: isUpdateAvailableForRuntime(
         isUpdateAvailable(resolvedLatestVersion, VERSION),
-        updateBlockedByRuntime,
+        base.updateBlockedByRuntime,
       ),
-      updateBlockedByRuntime,
-      runtimeNotice,
-      runtimePolicy,
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
     };
 
     res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
-    const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
-    const isNpx = isRunningUnderNpx();
-    const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-    const runtimeNotice = getRuntimeNoticeForVersionResponse(
-      process.version,
-      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
-    );
-    const runtimePolicy = getRuntimePolicyForVersionResponse(process.version);
-
     res.status(500).json({
+      ...buildBaseVersionFields(),
       error: 'Failed to check version',
-      currentVersion: VERSION,
       latestVersion: VERSION,
       updateAvailable: false,
-      updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
-      runtimeNotice,
-      runtimePolicy,
-      selfHosted,
-      isNpx,
-      updateCommands,
-      commandType: updateCommands.commandType,
     });
   }
 });

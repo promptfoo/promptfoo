@@ -5,14 +5,18 @@ import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import { getRuntimeNoticeReminderIntervalDays } from '@app/utils/runtimeCompatibility';
+import {
+  getRuntimeNoticeReminderIntervalDays,
+  hasRuntimeSupportEnded,
+  parseUtcMidnight,
+} from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
-  const parsed = new Date(`${removalDate}T00:00:00.000Z`);
+  const timestamp = parseUtcMidnight(removalDate);
   // The Web UI does not validate /version responses; fall back to the raw value rather than
   // letting Intl.DateTimeFormat throw a RangeError on an unexpected/invalid date string.
-  if (Number.isNaN(parsed.getTime())) {
+  if (timestamp === null) {
     return removalDate;
   }
   return new Intl.DateTimeFormat('en-US', {
@@ -20,16 +24,11 @@ function formatRemovalDate(removalDate: string): string {
     month: 'long',
     timeZone: 'UTC',
     year: 'numeric',
-  }).format(parsed);
+  }).format(new Date(timestamp));
 }
 
 function getReminderLabel(reminderIntervalDays: 1 | 7): string {
   return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
-}
-
-function hasRuntimeSupportEnded(removalDate: string, now = Date.now()): boolean {
-  const removalTimestamp = Date.parse(`${removalDate}T00:00:00.000Z`);
-  return !Number.isNaN(removalTimestamp) && now >= removalTimestamp;
 }
 
 export default function UpdateBanner() {
