@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import cliState from '../cliState';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -788,6 +789,17 @@ function createEvaluationOptions(
   return options;
 }
 
+function runOptimizationEvaluation(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: InternalEvaluateOptions,
+): Promise<Eval> {
+  const runEvaluation = () => evaluate(cloneOptimizationTestSuite(testSuite), evalRecord, options);
+  return options.maxConcurrency === undefined
+    ? runEvaluation()
+    : cliState.withMaxConcurrency(options.maxConcurrency, runEvaluation);
+}
+
 function assertFilterRangeSelectedOptimizationTests(
   testSuite: TestSuite,
   filterRangeApplied: boolean,
@@ -842,16 +854,16 @@ export async function optimizePromptTestSuite(
   const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
-  const baselineEval = await evaluate(
-    cloneOptimizationTestSuite(searchTestSuite),
+  const baselineEval = await runOptimizationEvaluation(
+    searchTestSuite,
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
   );
   throwIfOptimizationAborted(abortSignal);
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
-    ? await evaluate(
-        cloneOptimizationTestSuite(validationTestSuite),
+    ? await runOptimizationEvaluation(
+        validationTestSuite,
         new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
       )
@@ -924,21 +936,19 @@ export async function optimizePromptTestSuite(
       currentPromptSource,
       candidates,
     );
-    const candidateEval = await evaluate(
-      cloneOptimizationTestSuite(candidateSearchSuite),
+    const candidateEval = await runOptimizationEvaluation(
+      candidateSearchSuite,
       new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
     );
     throwIfOptimizationAborted(abortSignal);
     const candidateValidationEval = validationTestSuite
-      ? await evaluate(
-          cloneOptimizationTestSuite(
-            createCandidateTestSuite(
-              validationTestSuite,
-              baselineSourcePrompt,
-              currentPromptSource,
-              candidates,
-            ),
+      ? await runOptimizationEvaluation(
+          createCandidateTestSuite(
+            validationTestSuite,
+            baselineSourcePrompt,
+            currentPromptSource,
+            candidates,
           ),
           new Eval(optimizationConfig, { persisted: false }),
           createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),

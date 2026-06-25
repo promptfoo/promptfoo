@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import {
@@ -21,9 +22,11 @@ vi.mock('../../src/providers/defaults', () => ({
 describe('prompt optimizer', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    cliState.maxConcurrency = undefined;
   });
 
   afterEach(() => {
+    cliState.maxConcurrency = undefined;
     vi.resetAllMocks();
   });
 
@@ -569,6 +572,53 @@ describe('prompt optimizer', () => {
       expect(options?.delay).toBeUndefined();
       expect(options?.maxConcurrency).toBe(4);
     }
+  });
+
+  it('reapplies configured concurrency for every internal eval after evaluator cleanup', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const observedConcurrency: Array<number | undefined> = [];
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+    vi.mocked(evaluate).mockImplementation(async () => {
+      observedConcurrency.push(cliState.maxConcurrency);
+      // Mirror Evaluator cleanup, which clears its current async-local scope.
+      cliState.maxConcurrency = undefined;
+      return observedConcurrency.length === 1 ? baselineEval : candidateEval;
+    });
+
+    await optimizePromptTestSuite(
+      { evaluateOptions: { maxConcurrency: 4 } },
+      {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        tests: [{}],
+      },
+    );
+
+    expect(observedConcurrency).toEqual([4, 4, 4, 4]);
+    expect(cliState.maxConcurrency).toBeUndefined();
   });
 
   it('uses the runtime test suite as the redteam source of truth', async () => {
