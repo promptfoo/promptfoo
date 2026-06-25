@@ -1489,54 +1489,44 @@ describe('readTests', () => {
     );
   });
 
-  it('should preserve provider and test option schema refs in external YAML test files', async () => {
+  it.each([
+    ['yaml', (testCase: object) => yaml.dump([testCase])],
+    ['json', (testCase: object) => JSON.stringify([testCase])],
+    ['jsonl', (testCase: object) => JSON.stringify(testCase)],
+  ])('should preserve schema refs in external %s test files', async (extension, serialize) => {
     const mockProvider = createMockProvider({ id: 'openai:chat:gpt-4o' });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
-      - description: External structured output schema
-        provider:
-          id: openai:chat:gpt-4o
-          config:
-            response_format:
-              type: json_schema
-              json_schema:
-                name: status
-                schema:
-                  type: object
-                  $defs:
-                    Status:
-                      type: string
-                  properties:
-                    status:
-                      $ref: '#/$defs/Status'
-        options:
-          response_format:
-            type: json_schema
-            schema:
-              type: object
-              $defs:
-                Status:
-                  type: string
-              properties:
-                status:
-                  $ref: '#/$defs/Status'
-        assert:
-          - type: contains
-            value: ready
-    `);
-    vi.mocked(globSync).mockReturnValue(['test.yaml']);
+    const schema = {
+      type: 'object',
+      $defs: { Status: { type: 'string' } },
+      properties: {
+        status: { $ref: '#/$defs/Status' },
+        relative: { $ref: './missing-schema.json#/$defs/Relative' },
+      },
+    };
+    const testCase = {
+      description: 'External structured output schema',
+      provider: {
+        id: 'openai:chat:gpt-4o',
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'status', schema },
+          },
+        },
+      },
+      options: {
+        response_format: { type: 'json_schema', schema },
+      },
+      assert: [{ type: 'contains', value: 'ready' }],
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(serialize(testCase));
+    vi.mocked(globSync).mockReturnValue([`test.${extension}`]);
 
-    const result = await readTests(['test.yaml']);
+    const result = await readTests([`test.${extension}`]);
 
     expect(result[0].provider).toBe(mockProvider);
-    expect(result[0].options?.response_format).toEqual({
-      type: 'json_schema',
-      schema: {
-        type: 'object',
-        $defs: { Status: { type: 'string' } },
-        properties: { status: { $ref: '#/$defs/Status' } },
-      },
-    });
+    expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
     expect(loadApiProvider).toHaveBeenCalledWith('openai:chat:gpt-4o', {
       basePath: '.',
       options: expect.objectContaining({
@@ -1545,16 +1535,33 @@ describe('readTests', () => {
             type: 'json_schema',
             json_schema: {
               name: 'status',
-              schema: {
-                type: 'object',
-                $defs: { Status: { type: 'string' } },
-                properties: { status: { $ref: '#/$defs/Status' } },
-              },
+              schema,
             },
           },
         },
       }),
     });
+  });
+
+  it.each([
+    'json',
+    'jsonl',
+  ])('should preserve schema refs through the scalar external %s route', async (extension) => {
+    const schema = {
+      type: 'object',
+      properties: { status: { $ref: 'https://example.com/status.json' } },
+    };
+    const testCase = {
+      description: 'Scalar external structured output schema',
+      options: { response_format: { type: 'json_schema', schema } },
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      extension === 'json' ? JSON.stringify([testCase]) : JSON.stringify(testCase),
+    );
+
+    const result = await readTests(`test.${extension}`);
+
+    expect(result[0].options?.response_format).toEqual({ type: 'json_schema', schema });
   });
 
   it('should warn when assert is found in vars', async () => {

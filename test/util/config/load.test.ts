@@ -1326,15 +1326,6 @@ describe('combineConfigs', () => {
 });
 
 describe('dereferenceConfig', () => {
-  function getExcludedPathMatcher(): (refPath: string) => boolean {
-    const options = mockDereference.mock.calls.at(-1)?.[1] as
-      | { dereference?: { excludedPathMatcher?: (refPath: string) => boolean } }
-      | undefined;
-    const matcher = options?.dereference?.excludedPathMatcher;
-    expect(typeof matcher).toBe('function');
-    return matcher!;
-  }
-
   it('should dereference a config with no $refs', async () => {
     const rawConfig = {
       prompts: ['Hello world'],
@@ -1532,7 +1523,7 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(rawConfig);
   });
 
-  it('should configure ref parser to skip supported standalone JSON Schema paths only', async () => {
+  it('should hide standalone JSON Schemas from the ref parser and restore the input', async () => {
     const rawConfig = {
       prompts: [{ $ref: '#/definitions/prompt' }],
       providers: [
@@ -1563,76 +1554,20 @@ describe('dereferenceConfig', () => {
       commandLineOptions: {},
       definitions: { prompt: 'hello world' },
     };
+    const originalConfig = structuredClone(rawConfig);
+    let parserInput: typeof rawConfig | undefined;
+    mockDereference.mockImplementationOnce((config: typeof rawConfig) => {
+      parserInput = structuredClone(config);
+      return Promise.resolve(config);
+    });
 
-    await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    const result = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
 
-    const excludedPathMatcher = getExcludedPathMatcher();
-    expect(
-      excludedPathMatcher(
-        '#/providers/0/config/response_format/json_schema/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher('#/providers/0/config/response_format/schema/properties/status'),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher('#/providers/0/config/tools/0/function/parameters/properties/priority'),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/targets/0/config/response_format/json_schema/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/targets/0/openai:gpt-4/config/tools/0/function/parameters/properties/priority',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/defaultTest/options/provider/config/response_format/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/defaultTest/provider/config/tools/0/function/parameters/properties/priority',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/tests/0/options/provider/config/response_format/json_schema/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher('#/tests/0/provider/config/response_format/schema/properties/status'),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/scenarios/0/tests/0/provider/config/response_format/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/tests/0/assert/0/provider/config/functions/0/parameters/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher(
-        '#/prompts/0/config/response_format/json_schema/schema/properties/status',
-      ),
-    ).toBe(true);
-    expect(
-      excludedPathMatcher('#/defaultTest/options/response_format/schema/properties/status'),
-    ).toBe(true);
-    expect(excludedPathMatcher('#/tests/0/options/response_format/schema/properties/status')).toBe(
-      true,
-    );
-    expect(excludedPathMatcher('#/0/options/response_format/schema/properties/status')).toBe(true);
-    expect(excludedPathMatcher('#/providers/0/config/model')).toBe(false);
-    expect(excludedPathMatcher('#/providers/0/config/response_format/type')).toBe(false);
-    expect(excludedPathMatcher('#/targets/0/config/model')).toBe(false);
-    expect(excludedPathMatcher('#/tests/0/provider/config/model')).toBe(false);
-    expect(excludedPathMatcher('#/definitions/prompt')).toBe(false);
+    expect(parserInput?.prompts).toEqual([{ $ref: '#/definitions/prompt' }]);
+    expect(parserInput?.providers[0].config.response_format.json_schema.schema).toEqual({});
+    expect(parserInput?.providers[0].config.tools[0].function.parameters).toEqual({});
+    expect(result).toEqual(originalConfig);
+    expect(rawConfig).toEqual(originalConfig);
   });
 });
 

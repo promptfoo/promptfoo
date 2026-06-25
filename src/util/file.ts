@@ -278,7 +278,10 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      // `$ref` values are interpreted by the JSON reference parser. Loading file:// values here
+      // would bypass schema-isolation rules and incorrectly treat schema-owned refs as config files.
+      const value =
+        key === '$ref' ? config[key] : maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {

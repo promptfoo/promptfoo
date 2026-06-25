@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
 
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -47,7 +46,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { isStandaloneJsonSchemaPath } from './jsonSchema';
+import { dereferenceWithStandaloneSchemas } from './jsonSchema';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -181,9 +180,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     return rawConfig;
   }
 
-  return (await $RefParser.dereference(rawConfig, {
-    dereference: { excludedPathMatcher: isStandaloneJsonSchemaPath },
-  })) as unknown as UnifiedConfig;
+  return dereferenceWithStandaloneSchemas(rawConfig, 'config');
 }
 
 /**

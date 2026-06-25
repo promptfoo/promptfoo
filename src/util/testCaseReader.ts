@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
 
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -18,7 +17,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
-import { isStandaloneJsonSchemaPath } from './config/jsonSchema';
+import { dereferenceWithStandaloneSchemas } from './config/jsonSchema';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -144,19 +143,19 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     telemetry.record('feature_used', {
       feature: 'json tests file - azure blob',
     });
-    return parseJsonTestCases(fileContent);
+    return dereferenceWithStandaloneSchemas(parseJsonTestCases(fileContent), 'tests');
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file - azure blob',
     });
-    return parseJsonlTestCases(fileContent);
+    return dereferenceWithStandaloneSchemas(parseJsonlTestCases(fileContent), 'tests');
   }
 
   telemetry.record('feature_used', {
     feature: 'yaml tests file - azure blob',
   });
-  return parseYamlTestCases(fileContent);
+  return dereferenceWithStandaloneSchemas(parseYamlTestCases(fileContent), 'tests');
 }
 
 function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExtension | undefined {
@@ -217,13 +216,13 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    return readJsonTestCases(resolvedVarsPath);
+    return dereferenceWithStandaloneSchemas(await readJsonTestCases(resolvedVarsPath), 'tests');
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
-    return readJsonlTestCases(resolvedVarsPath);
+    return dereferenceWithStandaloneSchemas(await readJsonlTestCases(resolvedVarsPath), 'tests');
   }
   if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.record('feature_used', {
@@ -231,7 +230,7 @@ async function readLocalStandaloneTestsFile(
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
-    return csvRowsToTestCases(rows);
+    return dereferenceWithStandaloneSchemas(csvRowsToTestCases(rows), 'tests');
   }
 
   return [];
@@ -407,7 +406,8 @@ export async function readTest(
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
+    const [dereferencedTestCase] = await dereferenceWithStandaloneSchemas([rawTestCase], 'tests');
+    testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
   }
@@ -492,9 +492,7 @@ export async function loadTestsFromGlob(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return (await $RefParser.dereference(testCases, {
-      dereference: { excludedPathMatcher: isStandaloneJsonSchemaPath },
-    })) as TestCase[];
+    return dereferenceWithStandaloneSchemas(testCases, 'tests');
   };
 
   const ret: TestCase[] = [];

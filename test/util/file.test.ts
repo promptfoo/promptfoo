@@ -406,6 +406,17 @@ describe('file utilities', () => {
       expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
     });
 
+    it('should leave $ref file URLs for the JSON reference parser', () => {
+      const config = {
+        schema: {
+          $ref: 'file://schemas/shared.json#/$defs/Shared',
+        },
+      };
+
+      expect(maybeLoadConfigFromExternalFile(config)).toEqual(config);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
     it('should handle arrays and nested structures', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce('test content');
 
