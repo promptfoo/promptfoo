@@ -469,6 +469,12 @@ function looksLikeJsonContainer(value: string): boolean {
     }
     start++;
   }
+
+  const opening = value[start];
+  if (opening !== '{' && opening !== '[') {
+    return false;
+  }
+
   while (end > start && value[end - 1].trim() === '') {
     if (++scanned >= MAX_JSON_BOUNDARY_SCAN) {
       return true;
@@ -476,10 +482,7 @@ function looksLikeJsonContainer(value: string): boolean {
     end--;
   }
 
-  return (
-    (value[start] === '{' && value[end - 1] === '}') ||
-    (value[start] === '[' && value[end - 1] === ']')
-  );
+  return (opening === '{' && value[end - 1] === '}') || (opening === '[' && value[end - 1] === ']');
 }
 
 function prettifyJsonPreservingTokens(value: string): string | undefined {

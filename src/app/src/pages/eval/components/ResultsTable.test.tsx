@@ -3096,6 +3096,25 @@ describe('ResultsTable Variable JSON Formatting', () => {
     splitSpy.mockRestore();
   });
 
+  it('does not classify ordinary Markdown with trailing whitespace as JSON', () => {
+    const markdown = `**ordinary-markdown**${' '.repeat(64)}`;
+    mockTableState(createMockTable({ vars: [markdown] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('[data-testid="literal-json-variable"]')).toBeNull();
+    expect(
+      Array.from(container.querySelectorAll('strong')).some(
+        (element) => element.textContent === 'ordinary-markdown',
+      ),
+    ).toBe(true);
+  });
+
   it.each([
     false,
     true,
