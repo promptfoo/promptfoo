@@ -16,6 +16,7 @@ import type { ProviderOptions } from '../../types';
 const priorityOrder = [
   // Most common ways to test your own application
   'http',
+  'a2a',
   'python',
   'javascript',
   // Most popular AI providers (direct API access)
@@ -42,6 +43,13 @@ const allProviderOptions = [
     label: 'WebSocket',
     description: 'Real-time WebSocket connections',
     tag: 'app',
+  },
+  {
+    value: 'a2a',
+    label: 'A2A Agent',
+    description: 'Connect to Agent2Agent HTTP+JSON agents',
+    tag: 'agents',
+    recommended: true,
   },
   {
     value: 'python',
@@ -525,6 +533,17 @@ export default function ProviderTypeSelector({
           },
         },
         'websocket',
+      );
+    } else if (value === 'a2a') {
+      setProvider(
+        {
+          id: 'a2a',
+          label: currentLabel,
+          config: {
+            url: '',
+          },
+        },
+        'a2a',
       );
     } else if (value === 'browser') {
       setProvider(
@@ -1145,6 +1164,8 @@ export default function ProviderTypeSelector({
         <div className="relative w-full sm:w-64 sm:shrink-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            type="search"
+            aria-label="Search providers"
             placeholder="Search providers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -1153,6 +1174,7 @@ export default function ProviderTypeSelector({
           {searchTerm && (
             <button
               type="button"
+              aria-label="Clear provider search"
               onClick={() => setSearchTerm('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >

@@ -90,6 +90,9 @@ describe('OpenAI Provider', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
           body: JSON.stringify({
             input: 'test text',
             model: 'text-embedding-3-small',

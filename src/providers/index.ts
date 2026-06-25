@@ -273,7 +273,9 @@ export async function resolveProvider(
     const descriptor = normalizeProviderRef(provider);
     return createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id);
   } else {
-    throw new Error('Invalid provider type');
+    throw new Error(
+      `Invalid provider type. Expected a string (provider id), an object with an 'id' field, a ProviderOptionsMap, or a function. Got: ${typeof provider}`,
+    );
   }
 }
 

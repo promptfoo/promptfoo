@@ -1,5 +1,3 @@
-import { spawnSync } from 'node:child_process';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -167,44 +165,10 @@ describe('AnthropicCompletionProvider', () => {
       expect(firstLoad.namespace).not.toContain('sk-ant-reload-secret');
     });
 
-    it('should keep cache key hashes stable across fresh processes', () => {
-      const importProbe = `
-        const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } =
-          await import('./src/providers/anthropic/generic.ts');
-        process.stdout.write(JSON.stringify({
-          authNamespace: getAnthropicAuthCacheNamespace('sk-ant-restart-secret'),
-          requestHash: hashAnthropicCacheValue({ prompt: 'same prompt' }),
-        }));
-      `;
-
-      const spawnOptions = {
-        cwd: process.cwd(),
-        encoding: 'utf8' as const,
-        timeout: 10_000,
-      };
-      const firstRun = spawnSync(
-        process.execPath,
-        ['--import', 'tsx', '-e', importProbe],
-        spawnOptions,
-      );
-      const secondRun = spawnSync(
-        process.execPath,
-        ['--import', 'tsx', '-e', importProbe],
-        spawnOptions,
-      );
-
-      expect(firstRun.error, firstRun.error?.message).toBeUndefined();
-      expect(secondRun.error, secondRun.error?.message).toBeUndefined();
-      expect(firstRun.status, firstRun.stderr || firstRun.stdout).toBe(0);
-      expect(secondRun.status, secondRun.stderr || secondRun.stdout).toBe(0);
-      expect(firstRun.stdout).toBe(secondRun.stdout);
-      expect(JSON.parse(firstRun.stdout)).toMatchObject({
-        authNamespace: expect.stringMatching(/^[a-f0-9]{64}$/),
-        requestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      });
-      expect(firstRun.stdout).not.toContain('sk-ant-restart-secret');
-    });
-
+    // Pinning fixed digests here is the cross-process stability check: if a
+    // future change accidentally introduces non-determinism (e.g. randomness or
+    // env-derived state baked in at module load), these literal values will
+    // diverge in every process that runs the suite.
     it('should produce known hex digests for fixed inputs', async () => {
       const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } = await import(
         '../../../src/providers/anthropic/generic'

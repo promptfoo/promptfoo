@@ -246,6 +246,7 @@ describe('RedteamIterativeMetaProvider', () => {
       mockGetTargetResponse.mockResolvedValue({
         output: 'Target response',
         raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
       });
 
       await runMetaAgentRedteam({
@@ -271,10 +272,16 @@ describe('RedteamIterativeMetaProvider', () => {
 
       expect(mockGrader.getResult).toHaveBeenCalled();
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        imageOutputs?: ProviderResponse['images'];
         providerResponse?: ProviderResponse;
       };
-      const raw = JSON.parse(String(gradingContext.providerResponse?.raw ?? '{}'));
-      expect(raw).toMatchObject({ finalResponse: 'Target response' });
+      expect(gradingContext.imageOutputs).toEqual([
+        { data: 'data:image/png;base64,abc123', mimeType: 'image/png' },
+      ]);
+      expect(gradingContext.providerResponse).toMatchObject({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
     });
 
     it('should handle agent provider errors gracefully', async () => {

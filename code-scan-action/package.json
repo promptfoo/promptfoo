@@ -1,6 +1,6 @@
 {
   "name": "@promptfoo/code-scan-action",
-  "version": "0.1.5",
+  "version": "0.1.8",
   "license": "MIT",
   "description": "GitHub Action for scanning PRs with promptfoo code-scan",
   "private": true,
@@ -31,6 +31,6 @@
     "typescript": "^6.0.2"
   },
   "overrides": {
-    "undici": "^7.25.0"
+    "undici": "^7.28.0"
   }
 }
