@@ -1822,7 +1822,9 @@ describe('RedteamGoatProvider', () => {
         },
       });
 
-      await expect(provider.callApi('test prompt', context)).rejects.toThrow('GOAT evaluation failed');
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+        'GOAT evaluation failed',
+      );
       expect(serializeLogCalls(errorSpy)).not.toContain(sensitiveLogMarker);
     });
 

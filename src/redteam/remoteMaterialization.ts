@@ -124,7 +124,9 @@ export function createRemoteMaterializationUpgradeError(operation: string): Erro
 }
 
 export function isRemoteMaterializationUpgradeError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && remoteMaterializationUpgradeErrors.has(error);
+  return (
+    typeof error === 'object' && error !== null && remoteMaterializationUpgradeErrors.has(error)
+  );
 }
 
 export function assertRemoteMaterializationHandled(
