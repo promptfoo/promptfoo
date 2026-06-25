@@ -1,9 +1,9 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import { getEnvBool } from '../../envars';
 
 type MutableContainer = Record<string, unknown> | unknown[];
 type SchemaSource = 'config' | 'tests';
 type PlaceholderReplacement = { traverse: boolean; value: unknown };
+type DereferenceOptions = { disabled?: boolean };
 
 type ValueLocation = {
   parent: MutableContainer;
@@ -347,8 +347,9 @@ function restorePlaceholders<T>(value: T, replacements: Map<object, PlaceholderR
 export async function dereferenceWithStandaloneSchemas<T extends object>(
   value: T,
   source: SchemaSource,
+  options: DereferenceOptions = {},
 ): Promise<T> {
-  if (getEnvBool('PROMPTFOO_DISABLE_REF_PARSER')) {
+  if (options.disabled) {
     return value;
   }
 

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type UnifiedConfig } from '../../../src/types/index';
 import { dereferenceWithStandaloneSchemas } from '../../../src/util/config/jsonSchema';
 import { dereferenceConfig } from '../../../src/util/config/load';
-import { mockProcessEnv } from '../utils';
 
 function statusSchema() {
   return {
@@ -412,7 +411,6 @@ describe('dereferenceConfig JSON Schema isolation', () => {
   });
 
   it('honors the ref-parser opt-out for direct standalone test callers', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REF_PARSER: '1' });
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify({ type: 'string' })));
@@ -429,14 +427,10 @@ describe('dereferenceConfig JSON Schema isolation', () => {
       },
     ];
 
-    try {
-      const result = await dereferenceWithStandaloneSchemas(tests, 'tests');
+    const result = await dereferenceWithStandaloneSchemas(tests, 'tests', { disabled: true });
 
-      expect(result).toBe(tests);
-      expect(fetchSpy).not.toHaveBeenCalled();
-    } finally {
-      restoreEnv();
-    }
+    expect(result).toBe(tests);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('preserves supported programmatic config instances as opaque values', async () => {

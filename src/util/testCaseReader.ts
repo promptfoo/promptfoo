@@ -46,6 +46,12 @@ function loadExternalFilesBeforeRefParser(value: unknown): unknown {
   return maybeLoadConfigFromExternalFile(value, undefined, { preserveRefs: true });
 }
 
+function dereferenceStandaloneTestCases<T extends object>(value: T): Promise<T> {
+  return dereferenceWithStandaloneSchemas(value, 'tests', {
+    disabled: getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+  });
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -220,13 +226,13 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    return dereferenceWithStandaloneSchemas(await readJsonTestCases(resolvedVarsPath), 'tests');
+    return dereferenceStandaloneTestCases(await readJsonTestCases(resolvedVarsPath));
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
-    return dereferenceWithStandaloneSchemas(await readJsonlTestCases(resolvedVarsPath), 'tests');
+    return dereferenceStandaloneTestCases(await readJsonlTestCases(resolvedVarsPath));
   }
   if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.record('feature_used', {
@@ -234,7 +240,7 @@ async function readLocalStandaloneTestsFile(
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = loadExternalFilesBeforeRefParser(rawContent) as unknown as CsvRow[];
-    return dereferenceWithStandaloneSchemas(csvRowsToTestCases(rows), 'tests');
+    return dereferenceStandaloneTestCases(csvRowsToTestCases(rows));
   }
 
   return [];
@@ -410,7 +416,7 @@ export async function readTest(
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = loadExternalFilesBeforeRefParser(rawContent) as TestCaseWithVarsFile;
-    const [dereferencedTestCase] = await dereferenceWithStandaloneSchemas([rawTestCase], 'tests');
+    const [dereferencedTestCase] = await dereferenceStandaloneTestCases([rawTestCase]);
     testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -496,7 +502,7 @@ export async function loadTestsFromGlob(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return dereferenceWithStandaloneSchemas(testCases, 'tests');
+    return dereferenceStandaloneTestCases(testCases);
   };
 
   const ret: TestCase[] = [];
