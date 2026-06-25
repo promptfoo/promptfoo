@@ -1176,6 +1176,21 @@ describe('readTests', () => {
     expect(String(error)).not.toContain('EMPTY_SECRET_SENTINEL');
   });
 
+  it('readScenarioTests redacts signed URL credentials from wrapped errors', async () => {
+    const signedUrl =
+      'https://example.com/scenario-tests.yaml?api_key=SIGNED_URL_SECRET_SENTINEL&version=1';
+
+    let error: unknown;
+    try {
+      await readScenarioTests(signedUrl);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(String(error)).toContain('https://example.com/scenario-tests.yaml');
+    expect(String(error)).not.toContain('SIGNED_URL_SECRET_SENTINEL');
+  });
+
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',

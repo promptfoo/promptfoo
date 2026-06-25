@@ -352,6 +352,53 @@ function isLiveProvider(value: Record<string, unknown>): boolean {
   );
 }
 
+function containsRuntimeObjectOrCycle(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return true;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.some((item) => containsRuntimeObjectOrCycle(item, seen));
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return true;
+  }
+  const record = value as Record<string, unknown>;
+  if (isLiveProvider(record)) {
+    return true;
+  }
+  return Object.values(record).some((nested) => containsRuntimeObjectOrCycle(nested, seen));
+}
+
+function containsFileRefString(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith(FILE_REF_PREFIX);
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.some((item) => containsFileRefString(item, seen));
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+  return Object.values(value).some((nested) => containsFileRefString(nested, seen));
+}
+
+export function containsScenarioFileRefs(value: unknown): boolean {
+  return containsFileRefString(value);
+}
+
 function renderSourceEnvTemplates<T>(
   value: T,
   envOverrides?: EnvOverrides,
@@ -619,6 +666,9 @@ export function materializeScenarioTestCase<T>(
   testCase: T,
   envOverrides?: EnvOverrides,
 ): T {
+  if (containsRuntimeObjectOrCycle(testCase) || !containsFileRefString(testCase)) {
+    return resolveScenarioConfigRowProviders(basePath, testCase, envOverrides) as T;
+  }
   const resolvedFileRefs = resolveNestedFileRefs(basePath, testCase, envOverrides);
   const loadedFileRefs = maybeLoadConfigFromExternalFile(
     resolvedFileRefs,
@@ -633,6 +683,9 @@ function materializeScenarioConfigRow(
   row: unknown,
   envOverrides?: EnvOverrides,
 ): Scenario['config'][number] {
+  if (containsRuntimeObjectOrCycle(row) || !containsFileRefString(row)) {
+    return resolveScenarioConfigRowProviders(basePath, row, envOverrides);
+  }
   const resolvedFileRefs = resolveNestedFileRefs(basePath, row, envOverrides);
   const loadedFileRefs = maybeLoadConfigFromExternalFile(
     resolvedFileRefs,
@@ -897,7 +950,7 @@ export async function expandScenarioConfigValues(
       !Array.isArray(entry) &&
       ('$values' in entry || '$expand' in entry);
     if (!isRefLike) {
-      expandedConfig.push(resolveScenarioConfigRowProviders(basePath, entry, envOverrides));
+      expandedConfig.push(materializeScenarioConfigRow(basePath, entry, envOverrides));
       continue;
     }
 

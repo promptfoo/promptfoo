@@ -619,6 +619,45 @@ describe('programmatic scenario config expansion', () => {
     expect(persistedTest?.provider).toBe(`file://${path.join(scenarioDir, 'provider.cjs')}`);
   });
 
+  it('loads nested file refs in inline scenario config and test rows', async () => {
+    const tmpDir = makeTmpDir();
+    const scenarioDir = path.join(tmpDir, 'scenarios');
+    fs.mkdirSync(scenarioDir, { recursive: true });
+    fs.writeFileSync(path.join(scenarioDir, 'expected.txt'), 'mock answer');
+    const scenarioPath = path.join(scenarioDir, 'scenario.json');
+    fs.writeFileSync(
+      scenarioPath,
+      JSON.stringify([
+        {
+          config: [{ assert: [{ type: 'contains', value: 'file://expected.txt' }] }],
+          tests: [{ assert: [{ type: 'contains', value: 'file://expected.txt' }] }],
+        },
+      ]),
+    );
+
+    const record = await evaluate({
+      prompts: ['Prompt'],
+      providers: [createMockProvider('suite-provider')],
+      scenarios: [`file://${scenarioPath}`],
+      writeLatestResults: false,
+    });
+
+    const summary = await record.toEvaluateSummary();
+    const scenario = record.config.scenarios?.[0];
+    const row =
+      typeof scenario === 'object' && Array.isArray(scenario.config)
+        ? (scenario.config[0] as TestCase)
+        : undefined;
+    const test =
+      typeof scenario === 'object' && Array.isArray(scenario.tests)
+        ? (scenario.tests[0] as TestCase)
+        : undefined;
+
+    expect(summary.stats.failures).toBe(0);
+    expect((row?.assert?.[0] as { value?: unknown } | undefined)?.value).toBe('mock answer');
+    expect((test?.assert?.[0] as { value?: unknown } | undefined)?.value).toBe('mock answer');
+  });
+
   it('fails before provider execution when a scenario generator returns no tests', async () => {
     const tmpDir = makeTmpDir();
     const generatorPath = path.join(tmpDir, 'empty.cjs');
@@ -667,6 +706,37 @@ describe('programmatic scenario config expansion', () => {
     expect(prompts).toContain('Topic: unit');
     expect(prompts).toContain('Topic: integration');
   });
+
+  it.runIf(process.platform !== 'win32')(
+    'loads matrix vars globs below scenario directories with glob metacharacters',
+    async () => {
+      const tmpDir = makeTmpDir();
+      const scenarioDir = path.join(tmpDir, 'configs [prod]');
+      fs.mkdirSync(path.join(scenarioDir, 'inputs'), { recursive: true });
+      fs.writeFileSync(
+        path.join(scenarioDir, 'scenario.yaml'),
+        '- config:\n    - $values: file://matrix.yaml\n  tests:\n    - {}\n',
+      );
+      fs.writeFileSync(
+        path.join(scenarioDir, 'matrix.yaml'),
+        '- vars:\n    doc: file://inputs/*.txt\n',
+      );
+      fs.writeFileSync(path.join(scenarioDir, 'inputs/a.txt'), 'a');
+      fs.writeFileSync(path.join(scenarioDir, 'inputs/b.txt'), 'b');
+      const provider = createMockProvider('matrix-vars-glob-provider');
+
+      const record = await evaluate({
+        prompts: ['Doc: {{doc}}'],
+        providers: [provider],
+        scenarios: [`file://${path.join(scenarioDir, 'scenario.yaml')}`],
+        writeLatestResults: false,
+      });
+
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(calledPrompts(provider).sort()).toEqual(['Doc: a', 'Doc: b']);
+    },
+  );
 
   it('keeps unknown keys on plain scenario config rows without failing', async () => {
     const provider = createMockProvider('lenient-provider');

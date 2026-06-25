@@ -140,6 +140,7 @@ export class PromptSuggestionsRejectedError extends Error {
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
 const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+const GLOB_OPTIONS = { windowsPathsNoEscape: process.platform === 'win32' };
 const scenarioTargetOverrideTests = new WeakSet<AtomicTestCase>();
 const scenarioTestSourceEnvs = new WeakMap<AtomicTestCase, EnvOverrides | undefined>();
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
@@ -1746,10 +1747,7 @@ export function generateVarCombinations(
       // For glob patterns, we need to resolve the base directory and use relative patterns
       const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(filePath, {
-          cwd: basePath || process.cwd(),
-          windowsPathsNoEscape: true,
-        }) || [];
+        globSync(filePath, { ...GLOB_OPTIONS, cwd: basePath || process.cwd() }) || [];
 
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
