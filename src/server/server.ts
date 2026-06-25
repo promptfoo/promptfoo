@@ -357,26 +357,6 @@ export function createApp() {
     const { id } = bodyResult.data;
     logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-    // `Eval.findById` returns `undefined` only for a missing row and otherwise
-    // throws on real DB errors (lock contention, schema drift, etc.). Branch
-    // on the throw to distinguish 500 from 404 — `readResult` cannot serve
-    // that role because it catches its own exceptions and also returns
-    // `undefined` (`src/util/database.ts`), which would silently classify
-    // every load failure as "not found". A separate preflight via
-    // `readResult` would also double the per-request DB load.
-    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
-    try {
-      eval_ = await Eval.findById(id);
-    } catch (error) {
-      sendError(res, 500, 'Failed to load eval for share', error);
-      return;
-    }
-    if (!eval_) {
-      logger.warn('Eval not found for share request', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-
     const shareController = new AbortController();
     const abortShare = () => {
       if (!res.writableEnded && !shareController.signal.aborted) {
@@ -387,6 +367,34 @@ export function createApp() {
     res.once('close', abortShare);
 
     try {
+      // `Eval.findById` returns `undefined` only for a missing row and otherwise
+      // throws on real DB errors (lock contention, schema drift, etc.). Branch
+      // on the throw to distinguish 500 from 404 — `readResult` cannot serve
+      // that role because it catches its own exceptions and also returns
+      // `undefined` (`src/util/database.ts`), which would silently classify
+      // every load failure as "not found". A separate preflight via
+      // `readResult` would also double the per-request DB load.
+      let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+      try {
+        eval_ = await Eval.findById(id);
+      } catch (error) {
+        if (!shareController.signal.aborted) {
+          sendError(res, 500, 'Failed to load eval for share', error);
+        }
+        return;
+      }
+      if (!eval_) {
+        if (!shareController.signal.aborted) {
+          logger.warn('Eval not found for share request', { id });
+          res.status(404).json({ error: 'Eval not found' });
+        }
+        return;
+      }
+      if (req.aborted || res.destroyed) {
+        abortShare();
+        return;
+      }
+
       // Serialize shares for the same eval so cancellation rollback cannot race a retry.
       const previousShare = shareQueues.get(id) ?? Promise.resolve();
       const shareOperation = previousShare

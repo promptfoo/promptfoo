@@ -521,6 +521,37 @@ describe('inline server API DTO validation', () => {
     expect(mockedCreateShareableUrl).toHaveBeenCalledOnce();
   });
 
+  it('does not start sharing after a disconnect during the eval lookup', async () => {
+    let finishLookup!: (evalRecord: unknown) => void;
+    mockedEval.findById.mockReturnValue(
+      new Promise((resolve) => {
+        finishLookup = resolve;
+      }) as never,
+    );
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected the test server to listen on a TCP port');
+    }
+    const clientRequest = makeHttpRequest({
+      hostname: '127.0.0.1',
+      port: address.port,
+      path: '/api/results/share',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.end(JSON.stringify({ id: 'eval-1' }));
+
+    await vi.waitFor(() => expect(mockedEval.findById).toHaveBeenCalledOnce());
+    clientRequest.destroy();
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    finishLookup({ id: 'eval-1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+  });
+
   it('serializes concurrent share requests for the same eval', async () => {
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
     let finishFirstShare!: (url: string) => void;

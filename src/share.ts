@@ -151,6 +151,7 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
+  signal?.throwIfAborted();
   const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
 
   // Preserve the verified runtime team on server-issued unified configs. For
@@ -188,7 +189,6 @@ async function sendEvalRecord(
     headers,
     body: jsonData,
     compress: true,
-    signal,
   });
 
   if (!response.ok) {
@@ -417,12 +417,17 @@ async function prepareChunkForShare(
   if (remoteBlobUploadCache) {
     await Promise.all(
       chunk.map((result) =>
-        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
-          localEvalId,
-          remoteEvalId,
-          promptIdx: result.promptIdx,
-          testIdx: result.testIdx,
-        }),
+        uploadBlobRefsForShare(
+          result,
+          remoteBlobUploadCache,
+          {
+            localEvalId,
+            remoteEvalId,
+            promptIdx: result.promptIdx,
+            testIdx: result.testIdx,
+          },
+          signal,
+        ),
       ),
     );
   }
@@ -528,6 +533,7 @@ async function sendChunkedResults(
   try {
     // Send initial data and get eval ID
     evalId = await sendEvalRecord(evalRecord, url, headers, signal);
+    signal?.throwIfAborted();
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry

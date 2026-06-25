@@ -779,12 +779,17 @@ describe('createShareableUrl', () => {
       releaseUpload?.();
 
       await expect(sharePromise).resolves.toBe('https://app.example.com/eval/manual-share-id');
-      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(result, expect.any(Map), {
-        localEvalId: mockEval.id,
-        promptIdx: 2,
-        remoteEvalId: 'manual-share-id',
-        testIdx: 1,
-      });
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(
+        result,
+        expect.any(Map),
+        {
+          localEvalId: mockEval.id,
+          promptIdx: 2,
+          remoteEvalId: 'manual-share-id',
+          testIdx: 1,
+        },
+        undefined,
+      );
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
@@ -1308,11 +1313,46 @@ describe('adaptive chunk retry', () => {
 
     await rejection;
     expect(mockFetch).toHaveBeenCalledTimes(3);
-    expect(mockFetch.mock.calls[0][1].signal).toBe(controller.signal);
+    expect(mockFetch.mock.calls[0][1].signal).toBeUndefined();
     expect(mockFetch.mock.calls[1][1].signal).toBe(controller.signal);
     expect(mockFetch.mock.calls[2][0]).toBe('https://api.example.com/api/v1/results/mock-eval-id');
     expect(mockFetch.mock.calls[2][1]).toMatchObject({ method: 'DELETE' });
     expect(mockFetch.mock.calls[2][1].signal).toBeUndefined();
+  });
+
+  it('waits for the initial create ID before rolling back cancellation', async () => {
+    const controller = new AbortController();
+    let finishInitialCreate!: (response: unknown) => void;
+    mockFetch
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishInitialCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    const sharePromise = createShareableUrl(buildMockEval() as Eval, {
+      throwOnError: true,
+      signal: controller.signal,
+    });
+    const rejection = expect(sharePromise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(finishInitialCreate).toBeTypeOf('function'));
+
+    controller.abort();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(mockFetch.mock.calls[0][1].signal).toBeUndefined();
+
+    finishInitialCreate({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+
+    await rejection;
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1][0]).toBe('https://api.example.com/api/v1/results/mock-eval-id');
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
   });
 });
 

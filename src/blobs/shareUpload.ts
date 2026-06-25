@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { isAbortError } from '../util/fetch/errors';
 import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
 import { uploadBlobRemote } from './remoteUpload';
@@ -34,20 +35,28 @@ function getUploadCacheKey(hash: string, context: ShareBlobUploadContext): strin
 async function uploadAuthorizedBlob(
   hash: string,
   context: ShareBlobUploadContext,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
+    signal?.throwIfAborted();
     const blob = await getShareAuthorizedBlob(hash, context.localEvalId);
     if (!blob) {
       return false;
     }
 
-    const result = await uploadBlobRemote(blob.data, blob.metadata.mimeType, {
-      evalId: context.remoteEvalId,
-      promptIdx: context.promptIdx,
-      testIdx: context.testIdx,
-      location: 'share',
-      kind: blob.metadata.mimeType.split('/', 1)[0],
-    });
+    signal?.throwIfAborted();
+    const result = await uploadBlobRemote(
+      blob.data,
+      blob.metadata.mimeType,
+      {
+        evalId: context.remoteEvalId,
+        promptIdx: context.promptIdx,
+        testIdx: context.testIdx,
+        location: 'share',
+        kind: blob.metadata.mimeType.split('/', 1)[0],
+      },
+      signal,
+    );
 
     if (!result) {
       logger.warn('[Share] Failed to upload referenced blob; shared media may be unavailable', {
@@ -59,6 +68,9 @@ async function uploadAuthorizedBlob(
 
     return true;
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     // Fail closed but keep the share alive: an authorization or upload error skips
     // this blob rather than aborting (and rolling back) the whole share.
     logger.warn('[Share] Failed to upload referenced blob; shared media may be unavailable', {
@@ -74,6 +86,7 @@ function uploadBlobForShare(
   hash: string,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const cacheKey = getUploadCacheKey(hash, context);
   let pending = cache.get(cacheKey);
@@ -81,7 +94,7 @@ function uploadBlobForShare(
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
     // repeated references that share a cache key (same blob, same row coordinates)
     // reuse one authorization check and one upload without collapsing row provenance.
-    pending = uploadAuthorizedBlob(hash, context);
+    pending = uploadAuthorizedBlob(hash, context, signal);
     cache.set(cacheKey, pending);
   }
   return pending;
@@ -91,10 +104,12 @@ export async function uploadBlobRefsForShare(
   value: unknown,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   const hashes = collectBlobHashes(value, {
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  await Promise.all(Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context)));
+  await Promise.all(Array.from(hashes, (hash) => uploadBlobForShare(hash, cache, context, signal)));
 }
