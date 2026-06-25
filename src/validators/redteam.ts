@@ -119,11 +119,7 @@ export const RedteamPluginObjectSchema = z.object({
 });
 
 const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
-  numTests: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of tests to generate for this plugin'),
+  numTests: z.int().positive().optional().describe('Number of tests to generate for this plugin'),
 });
 
 /**
@@ -226,6 +222,8 @@ export const RedteamGenerateOptionsSchema = z.object({
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
+  filterProviders: z.string().optional().describe('Regex used to select providers'),
+  filterTargets: z.string().optional().describe('Regex used to select targets'),
   force: z.boolean().describe('Whether to force generation').prefault(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z
