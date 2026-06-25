@@ -533,6 +533,9 @@ describe('inline server API DTO validation', () => {
     if (!address || typeof address === 'string') {
       throw new Error('Expected the test server to listen on a TCP port');
     }
+    const serverSawDisconnect = new Promise<void>((resolve) => {
+      server.once('connection', (socket) => socket.once('close', resolve));
+    });
     const clientRequest = makeHttpRequest({
       hostname: '127.0.0.1',
       port: address.port,
@@ -545,7 +548,7 @@ describe('inline server API DTO validation', () => {
 
     await vi.waitFor(() => expect(mockedEval.findById).toHaveBeenCalledOnce());
     clientRequest.destroy();
-    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    await serverSawDisconnect;
     finishLookup({ id: 'eval-1' });
     await new Promise<void>((resolve) => setImmediate(resolve));
 

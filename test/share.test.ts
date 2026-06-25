@@ -793,6 +793,62 @@ describe('createShareableUrl', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    it('forwards cancellation to blob uploads and rolls back the remote eval', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+      const controller = new AbortController();
+      const result = {
+        id: 'result-1',
+        promptIdx: 2,
+        response: { output: `promptfoo://blob/${'a'.repeat(64)}` },
+        testIdx: 1,
+      } as EvalResult;
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [result];
+      });
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      vi.mocked(uploadBlobRefsForShare).mockImplementation(
+        async (_result, _cache, _context, signal) => {
+          expect(signal).toBe(controller.signal);
+          controller.abort();
+          signal?.throwIfAborted();
+        },
+      );
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: 'manual-share-id' }),
+        })
+        .mockResolvedValueOnce({ ok: true });
+
+      await expect(
+        createShareableUrl(mockEval as Eval, {
+          throwOnError: true,
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+
+      expect(uploadBlobRefsForShare).toHaveBeenCalledWith(
+        result,
+        expect.any(Map),
+        {
+          localEvalId: mockEval.id,
+          promptIdx: 2,
+          remoteEvalId: 'manual-share-id',
+          testIdx: 1,
+        },
+        controller.signal,
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        'https://api.example.com/api/v1/results/manual-share-id',
+      );
+      expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE' });
+    });
+
     it('sends chunked eval when open source self hosted', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
