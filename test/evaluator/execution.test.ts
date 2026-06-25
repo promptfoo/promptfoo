@@ -860,6 +860,7 @@ describeEvaluator('evaluator execution control', () => {
 
   it('leaves an externally aborted in-flight row pending for resume', async () => {
     const abortController = new AbortController();
+    const abortReason = new Error('custom cancellation reason');
     let markStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
@@ -868,10 +869,10 @@ describeEvaluator('evaluator execution control', () => {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi: vi.fn((_prompt, _context, callOptions) => {
         return new Promise<ProviderResponse>((_resolve, reject) => {
-          const rejectAbort = () => {
-            reject(new DOMException('This operation was aborted', 'AbortError'));
-          };
           const signal = callOptions?.abortSignal;
+          const rejectAbort = () => {
+            reject(signal?.reason ?? new DOMException('This operation was aborted', 'AbortError'));
+          };
           if (signal?.aborted) {
             rejectAbort();
             return;
@@ -890,7 +891,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const evaluation = evaluate(testSuite, evalRecord, { abortSignal: abortController.signal });
     await started;
-    abortController.abort();
+    abortController.abort(abortReason);
     await evaluation;
 
     expect(await evalRecord.getResults()).toHaveLength(0);

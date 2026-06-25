@@ -1607,7 +1607,7 @@ async function runEvalInternal({
 
     return [ret];
   } catch (err) {
-    if (abortSignal?.aborted && isAbortError(err)) {
+    if (abortSignal?.aborted && (isAbortError(err) || err === abortSignal.reason)) {
       throw err;
     }
 
