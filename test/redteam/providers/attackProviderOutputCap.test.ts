@@ -53,7 +53,9 @@ describe('redteam attack provider output caps', () => {
   });
 
   it('caps the actual Azure reasoning-chat request body for attack calls', async () => {
-    const provider = new AzureChatCompletionProvider('gpt-5-deployment', { config: {} });
+    const provider = new AzureChatCompletionProvider('gpt-5-deployment', {
+      config: { apiKey: 'test-key' },
+    });
     const restoreLoader = setRedteamProviderLoader(async () => [provider]);
 
     try {

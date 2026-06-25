@@ -302,7 +302,9 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('applies the chat output cap to configured Azure chat attack providers', async () => {
-      const loaded = new AzureChatCompletionProvider('gpt-5-deployment', { config: {} });
+      const loaded = new AzureChatCompletionProvider('gpt-5-deployment', {
+        config: { apiKey: 'test-key' },
+      });
       mockedLoadApiProviders.mockResolvedValue([loaded]);
       redteamProviderManager.clearProvider();
 
@@ -318,7 +320,7 @@ describe('shared redteam provider utilities', () => {
         DEFAULT_REDTEAM_PROVIDER_MAX_TOKENS,
       );
       expect(result).not.toBe(loaded);
-      expect(loaded.config).toEqual({});
+      expect(loaded.config).toEqual({ apiKey: 'test-key' });
     });
 
     it('waits for Azure authentication state before cloning a capped provider', async () => {
