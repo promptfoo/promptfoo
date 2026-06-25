@@ -115,9 +115,24 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       input = prompt;
     }
 
+    const renderedReasoning = renderVarsInObject(config.reasoning, context?.vars);
+    if (
+      renderedReasoning !== undefined &&
+      (renderedReasoning === null ||
+        typeof renderedReasoning !== 'object' ||
+        Array.isArray(renderedReasoning))
+    ) {
+      throw new Error('Azure Responses reasoning config must be an object');
+    }
+    const renderedReasoningEffort = renderVarsInObject(config.reasoning_effort, context?.vars) as
+      | ReasoningEffort
+      | undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasReasoningConfig =
-      config.reasoning !== undefined || config.reasoning_effort !== undefined;
+      renderedReasoning !== undefined || renderedReasoningEffort !== undefined;
     const isReasoningModel = this.isReasoningModel() || hasReasoningConfig;
+    // Compatible GPT-5 models accept sampling controls only when reasoning is explicitly disabled.
+    const omitSamplingParameters = isReasoningModel && effectiveReasoningEffort !== 'none';
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -134,15 +149,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = isReasoningModel ? undefined : (config.temperature ?? temperatureDefault);
-    const renderedReasoning = renderVarsInObject(
-      config.reasoning,
-      context?.vars,
-    ) as typeof config.reasoning;
-    const renderedReasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
-    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const temperature = omitSamplingParameters
+      ? undefined
+      : (config.temperature ?? temperatureDefault);
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
@@ -195,7 +204,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...(!isReasoningModel && (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
+      ...(!omitSamplingParameters && (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
@@ -215,12 +224,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    if (isReasoningModel && (body.reasoning || renderedReasoning || reasoningEffort)) {
-      body.reasoning = {
-        ...(reasoningEffort ? { effort: reasoningEffort } : {}),
-        ...(body.reasoning || {}),
-        ...(renderedReasoning || {}),
-      };
+    // First-class reasoning overrides matching passthrough keys; legacy reasoning_effort does not.
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
     logger.debug('Azure Responses API request body', { body });

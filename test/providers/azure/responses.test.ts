@@ -51,6 +51,7 @@ describe('AzureResponsesProvider', () => {
       mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
     }
     delete (AzureResponsesProvider.prototype as any).authHeaders;
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -336,6 +337,20 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it.each([
+      null,
+      'malformed',
+      [],
+    ])('should reject non-object reasoning config: %j', async (reasoning) => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: { reasoning: reasoning as any },
+      });
+
+      await expect(provider.getAzureResponsesBody('Hello world')).rejects.toThrow(
+        'Azure Responses reasoning config must be an object',
+      );
+    });
+
     it('should omit top_p when reasoning config promotes a custom Responses deployment', async () => {
       const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
         config: {
@@ -352,8 +367,24 @@ describe('AzureResponsesProvider', () => {
       expect('top_p' in body).toBe(false);
     });
 
+    it('should preserve sampling parameters when reasoning effort is none', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: { effort: 'none' },
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+    });
+
     it('should merge reasoning_effort with reasoning summary config', async () => {
-      const provider = new AzureResponsesProvider('o3-mini', {
+      const provider = new AzureResponsesProvider('o4-mini', {
         config: {
           reasoning_effort: 'high',
           reasoning: {
@@ -371,7 +402,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should let reasoning.effort override reasoning_effort', async () => {
-      const provider = new AzureResponsesProvider('o3-mini', {
+      const provider = new AzureResponsesProvider('o4-mini', {
         config: {
           reasoning_effort: 'high',
           reasoning: {
@@ -389,16 +420,13 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
-    it('should preserve reasoning_effort when passthrough also contributes reasoning fields', async () => {
-      const provider = new AzureResponsesProvider('o3-mini', {
+    it('should preserve passthrough reasoning as the legacy reasoning_effort override', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
         config: {
           reasoning_effort: 'high',
-          reasoning: {
-            summary: 'auto',
-          },
           passthrough: {
             reasoning: {
-              encrypted_content: 'opaque',
+              summary: 'auto',
             },
           },
         },
@@ -407,8 +435,29 @@ describe('AzureResponsesProvider', () => {
       const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.reasoning).toEqual({
-        effort: 'high',
-        encrypted_content: 'opaque',
+        summary: 'auto',
+      });
+    });
+
+    it('should let first-class reasoning override matching passthrough fields', async () => {
+      const provider = new AzureResponsesProvider('o4-mini', {
+        config: {
+          reasoning: {
+            effort: 'low',
+          },
+          passthrough: {
+            reasoning: {
+              effort: 'high',
+              summary: 'auto',
+            },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'low',
         summary: 'auto',
       });
     });
