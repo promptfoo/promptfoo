@@ -137,6 +137,42 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
+  it('should pass provider metadata shortcut to a python assert', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+
+    const metadata = { http: { status: 200, statusText: 'OK' }, customField: 5 };
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockResolvedValue(true);
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output, metadata };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+      output,
+      expect.objectContaining({
+        metadata,
+        providerResponse: expect.objectContaining({ metadata }),
+      }),
+    ]);
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should use default function name for Python when none specified', async () => {
     const assertion: Assertion = {
       type: 'python',

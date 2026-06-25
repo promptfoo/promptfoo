@@ -623,6 +623,58 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('applies the cache-read rate to cached prompt tokens', () => {
+      // The model table defines cache_read for grok-4, but it was never applied.
+      const full = calculateXAICost('grok-4-0709', {}, 1000, 500);
+      const discounted = calculateXAICost('grok-4-0709', {}, 1000, 500, 0, 800);
+      expect(full).toBeDefined();
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('bills the cached prompt subset at the cache-read rate (deterministic)', () => {
+      // input $3/M, output $15/M, cache-read $0.75/M; 1000 prompt (800 cached), 500 output.
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+      // (200 uncached * 3e-6) + (800 cached * 0.75e-6) + (500 * 15e-6) = 0.0087
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 800)).toBeCloseTo(0.0087, 10);
+      // Without any cached tokens: (1000 * 3e-6) + (500 * 15e-6) = 0.0105
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
+      // A proxy may make cache hits free; an explicit zero must not fall back to model pricing.
+      expect(
+        calculateXAICost('grok-4-0709', { ...rates, cacheReadCost: 0 }, 1000, 500, 0, 800),
+      ).toBeCloseTo(0.0081, 10);
+    });
+
+    it('clamps cached prompt tokens to valid usage boundaries', () => {
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+
+      // A full cache hit bills every prompt token at the reduced rate.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 1000)).toBeCloseTo(0.00825, 10);
+      // Inconsistent provider usage cannot discount more tokens than the prompt contains.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 2000)).toBeCloseTo(0.00825, 10);
+      // Invalid negative usage falls back to the undiscounted input cost.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Number.NaN)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Infinity)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+    });
+
+    it('falls back to full input pricing when the model has no cache-read rate', () => {
+      // grok-2-1212 has input: 2.0/1e6, output: 10.0/1e6, and no cache_read rate.
+      // Cached tokens reported by the provider must not produce a NaN cost or a
+      // phantom discount; they bill at the full input rate exactly as if no cache
+      // tokens were reported.
+      const withCache = calculateXAICost('grok-2-1212', {}, 1000, 500, 0, 800);
+      const withoutCache = calculateXAICost('grok-2-1212', {}, 1000, 500);
+      // (2.0/1e6 * 1000) + (10.0/1e6 * 500) = 0.002 + 0.005 = 0.007
+      expect(withCache).toBeCloseTo(0.007, 10);
+      expect(withCache).toBe(withoutCache);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
@@ -680,30 +732,40 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
-    it('bills reasoning tokens at the output rate', () => {
+    it('does not mix model cache pricing with custom input cost overrides', () => {
+      expect(calculateXAICost('grok-4-0709', { cost: 0.001 }, 1000, 500, 0, 800)).toBe(1.5);
+      expect(
+        calculateXAICost('grok-4-0709', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500, 0, 800),
+      ).toBe(2.5);
+    });
+
+    it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
       // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004
       expect(baseline).toBeCloseTo(0.0004, 10);
 
+      // completion_tokens already INCLUDES reasoning_tokens (the OpenAI
+      // convention xAI follows), so passing reasoning separately must not add
+      // to the bill — the cost is identical to the baseline.
       const withReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
-      // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
-      expect(withReasoning).toBeCloseTo(0.0005, 10);
+      expect(withReasoning).toBeCloseTo(0.0004, 10);
     });
 
     it('bills a reasoning-only response (no other completion tokens)', () => {
-      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn whose entire
-      // output is reasoning still has a real cost — the reasoning tokens are
-      // billed at the output rate even though completionTokens is 0.
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn that reports
+      // zero completion tokens but non-zero reasoning still has a real cost: we
+      // fall back to billing the reasoning tokens at the output rate.
       const cost = calculateXAICost('grok-3-mini-beta', {}, 500, 0, 200);
       // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
       expect(cost).toBeCloseTo(0.00025, 10);
     });
 
-    it('bills output when input tokens are reported as zero', () => {
+    it('bills only completion tokens (reasoning included) when input tokens are zero', () => {
       const cost = calculateXAICost('grok-3-mini-beta', {}, 0, 200, 50);
-      // 0 input @ 0.30/M + 250 output @ 0.50/M.
-      expect(cost).toBeCloseTo(0.000125, 10);
+      // 0 input @ 0.30/M + 200 completion @ 0.50/M (the 50 reasoning tokens are
+      // already part of the 200 completion tokens, not added on top).
+      expect(cost).toBeCloseTo(0.0001, 10);
     });
   });
 
@@ -890,12 +952,68 @@ describe('xAI Chat Provider', () => {
       expect(typeof result.cost).toBe('number');
     });
 
-    it('includes separately reported reasoning tokens in cost', async () => {
+    it('should apply cache-read pricing from normalized token usage', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Cached response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+            prompt_tokens_details: { cached_tokens: 800 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            inputCost: 3e-6,
+            outputCost: 15e-6,
+            cacheReadCost: 0.75e-6,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(800);
+      expect(result.cost).toBeCloseTo(0.0087, 10);
+    });
+
+    it('should leave cost undefined when usage is missing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Response without usage' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Response without usage');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('does not double-count reasoning tokens already included in completion tokens', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'reasoned answer' } }],
           usage: {
             prompt_tokens: 500,
+            // completion_tokens already includes the 200 reasoning tokens
+            // (prompt 500 + completion 500 = total 1000 confirms reasoning is a
+            // subset of completion, not a separate addend).
             completion_tokens: 500,
             total_tokens: 1000,
             completion_tokens_details: { reasoning_tokens: 200 },
@@ -912,11 +1030,11 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // grok-3-mini-beta: input $0.30/M, output $0.50/M. xAI prices
-      // reasoning separately from completion tokens, so bill 700 output tokens:
-      // 500 input @ 0.30/M + 700 output @ 0.50/M = 0.00015 + 0.00035.
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. Reasoning tokens are
+      // already part of the 500 completion tokens, so bill 500 output tokens:
+      // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004.
       expect(result.tokenUsage?.completionDetails?.reasoning).toBe(200);
-      expect(result.cost).toBeCloseTo(0.0005, 10);
+      expect(result.cost).toBeCloseTo(0.0004, 10);
     });
   });
 });
