@@ -12,8 +12,9 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { parseRubyFileReference } from './fileUrl';
 import { parseFileUrl } from './functions/loadFunction';
-import { safeResolve } from './pathUtils';
+import { safeResolve, toPosixPath } from './pathUtils';
 import { renderVarsInObject } from './render';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
@@ -98,6 +99,26 @@ export function loadConfigFromFilePath(filePath: string): any {
   return contents;
 }
 
+function rebasePreservedAssertionReference(
+  renderedFilePath: string,
+  cleanPath: string,
+  functionName: string | undefined,
+  declaringBasePath: string,
+  resolutionBasePath: string,
+): string {
+  if (path.isAbsolute(cleanPath)) {
+    return renderedFilePath;
+  }
+  const rubyReference = parseRubyFileReference(cleanPath);
+  const executablePath = rubyReference?.filePath ?? cleanPath;
+  const executableFunctionName = functionName ?? rubyReference?.functionName;
+  const absolutePath = path.resolve(declaringBasePath, executablePath);
+  const rebasedPath = path.relative(path.resolve(resolutionBasePath), absolutePath);
+  return `file://${toPosixPath(rebasedPath)}${
+    executableFunctionName ? `:${executableFunctionName}` : ''
+  }`;
+}
+
 /**
  * Loads content from an external file if the input is a file path, otherwise
  * returns the input as-is. Supports Nunjucks templating for file paths.
@@ -106,6 +127,8 @@ export function loadConfigFromFilePath(filePath: string): any {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
+ * @param basePath - Optional declaring-file base path. Defaults to the active config base.
+ * @param resolutionBasePath - Base retained by preserved executable references.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -115,10 +138,12 @@ export function loadConfigFromFilePath(filePath: string): any {
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
+  resolutionBasePath: string = basePath ?? cliState.basePath ?? '',
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context);
+      const content: any = maybeLoadFromExternalFile(path, context, basePath, resolutionBasePath);
       return content;
     });
   }
@@ -144,7 +169,15 @@ export function maybeLoadFromExternalFile(
   const isRubyFile = /\.rb(?::[^/\\]+)?$/i.test(renderedFilePath);
   if (context === 'assertion' && (isJavascriptFile(cleanPath) || isPythonFile || isRubyFile)) {
     logger.debug(`Preserving executable file reference in assertion context: ${renderedFilePath}`);
-    return renderedFilePath;
+    return basePath === undefined
+      ? renderedFilePath
+      : rebasePreservedAssertionReference(
+          renderedFilePath,
+          cleanPath,
+          functionName,
+          basePath,
+          resolutionBasePath,
+        );
   }
 
   // In vars contexts, preserve all file:// references for test case expansion
@@ -169,7 +202,7 @@ export function maybeLoadFromExternalFile(
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
-  const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
+  const resolvedPath = path.resolve(basePath ?? cliState.basePath ?? '', pathToUse);
 
   // Check if the path contains glob patterns
   if (hasMagic(pathToUse)) {
@@ -258,14 +291,20 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
+ * @param basePath - Optional declaring-file base path. Defaults to the active config base.
+ * @param resolutionBasePath - Base retained by preserved executable references.
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
+  basePath?: string,
+  resolutionBasePath: string = basePath ?? cliState.basePath ?? '',
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
+    return config.map((item) =>
+      maybeLoadConfigFromExternalFile(item, context, basePath, resolutionBasePath),
+    );
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
@@ -283,7 +322,12 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(
+        config[key],
+        childContext,
+        basePath,
+        resolutionBasePath,
+      );
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -298,7 +342,7 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context);
+  return maybeLoadFromExternalFile(config, context, basePath, resolutionBasePath);
 }
 
 /**

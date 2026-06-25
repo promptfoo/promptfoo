@@ -1350,6 +1350,47 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
+  it.each([
+    ['generators/cases.py:build_cases', path.resolve('/suite/generators/cases.py')],
+    ['file://generators/cases.js:buildCases', path.resolve('/suite/generators/cases.js')],
+  ])('should watch a scalar resolved test override %s', async (testSource, expectedPath) => {
+    const defaultConfig = {
+      prompts: [],
+      providers: [],
+      tests: 'file://configured-tests.yaml',
+    } as unknown as UnifiedConfig;
+    const config = {
+      prompts: [],
+      providers: [],
+      tests: testSource,
+    } as unknown as UnifiedConfig;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config,
+      testSuite: { prompts: [], providers: [], tests: [] },
+      basePath: path.resolve('/suite'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval(
+      {
+        watch: true,
+        config: ['/suite/promptfooconfig.yaml'],
+        tests: testSource,
+        write: false,
+      },
+      defaultConfig,
+      undefined,
+      {},
+    );
+
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(expect.arrayContaining([expectedPath]), {
+      ignored: /^\./,
+      persistent: true,
+    });
+  });
+
   it('should watch a scalar scenario source from the default config', async () => {
     const defaultConfig = {
       scenarios: 'file://scenarios/scenario.yaml',
@@ -1381,10 +1422,24 @@ describe('evalCommand', () => {
     const defaultConfig = {
       scenarios: [
         {
+          config: [],
           tests: [
             'file://scenarios/cases.yaml',
-            { path: 'file://scenarios/generated.py:build_cases' },
-            { vars: { inline: true } },
+            'scenarios/generated.js:buildCases',
+            { path: 'scenarios/generated.py:build_cases' },
+            { vars: 'file://scenarios/vars.yaml' },
+            { vars: ['file://scenarios/first.yaml', 'file://scenarios/second.json'] },
+            { vars: 'scenarios/bare.yaml' },
+            { vars: ['scenarios/bare-first.yaml', 'scenarios/bare-second.json'] },
+            {
+              vars: {
+                nested: [
+                  'file://scenarios/nested.txt',
+                  'file://scenarios/reports.js:archive/report.txt',
+                ],
+                remote: 'https://example.com/remote.txt',
+              },
+            },
             null,
           ],
         },
@@ -1410,15 +1465,29 @@ describe('evalCommand', () => {
     expect(chokidarMocks.watch).toHaveBeenCalledWith(
       expect.arrayContaining([
         path.resolve('/suite/scenarios/cases.yaml'),
+        path.resolve('/suite/scenarios/generated.js'),
         path.resolve('/suite/scenarios/generated.py'),
+        path.resolve('/suite/scenarios/vars.yaml'),
+        path.resolve('/suite/scenarios/first.yaml'),
+        path.resolve('/suite/scenarios/second.json'),
+        path.resolve('/suite/scenarios/bare.yaml'),
+        path.resolve('/suite/scenarios/bare-first.yaml'),
+        path.resolve('/suite/scenarios/bare-second.json'),
+        path.resolve('/suite/scenarios/nested.txt'),
+        path.resolve('/suite/scenarios/reports.js:archive/report.txt'),
       ]),
       { ignored: /^\./, persistent: true },
     );
+    const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+    expect(watchPaths).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/:(?:buildCases|build_cases)$/)]),
+    );
+    expect(watchPaths).not.toEqual(expect.arrayContaining(['https://example.com/remote.txt']));
   });
 
   it('should use the resolved config base for directory-glob watch sources', async () => {
     const defaultConfig = {
-      scenarios: [{ tests: ['file://scenarios/cases.yaml'] }],
+      scenarios: [{ config: [], tests: ['file://scenarios/cases.yaml'] }],
     } as unknown as UnifiedConfig;
     const config = {
       prompts: ['file://prompts/main.txt'],
@@ -1441,14 +1510,14 @@ describe('evalCommand', () => {
       {},
     );
 
-    const watchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
-    expect(watchPaths).toEqual(
+    const directoryGlobWatchPaths = chokidarMocks.watch.mock.calls.at(-1)?.[0];
+    expect(directoryGlobWatchPaths).toEqual(
       expect.arrayContaining([
         path.resolve('/suite/a/prompts/main.txt'),
         path.resolve('/suite/a/scenarios/cases.yaml'),
       ]),
     );
-    expect(watchPaths).not.toEqual(
+    expect(directoryGlobWatchPaths).not.toEqual(
       expect.arrayContaining([
         path.resolve('/suite/*/prompts/main.txt'),
         path.resolve('/suite/*/scenarios/cases.yaml'),

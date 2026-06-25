@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
+import { parseRubyFileReference } from '../../../src/util/fileUrl';
 import {
   functionCache,
   loadFunction,
@@ -381,5 +382,28 @@ describe('parseFileUrl', () => {
       filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
     });
+  });
+
+  it('should preserve colons before later path separators', () => {
+    expect(parseFileUrl('file://reports.js:archive/report.txt')).toEqual({
+      filePath: 'reports.js:archive/report.txt',
+    });
+    expect(parseFileUrl('file://reports.py:archive\\report.txt')).toEqual({
+      filePath: 'reports.py:archive\\report.txt',
+    });
+  });
+});
+
+describe('parseRubyFileReference', () => {
+  it('preserves namespaced method suffixes', () => {
+    expect(parseRubyFileReference('checks/assert.rb:MyModule::Nested.method')).toEqual({
+      filePath: 'checks/assert.rb',
+      functionName: 'MyModule::Nested.method',
+    });
+  });
+
+  it('does not treat a colon path segment as a method suffix', () => {
+    expect(parseRubyFileReference('reports.rb:archive/expected.txt')).toBeUndefined();
+    expect(parseRubyFileReference('reports.rb:archive\\expected.txt')).toBeUndefined();
   });
 });

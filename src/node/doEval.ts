@@ -208,7 +208,8 @@ function collectVarFilePaths(
 function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: string): string[] {
   const paths: string[] = [];
   const addLocalPath = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
+    const fileUrl = reference.startsWith('file://') ? reference : `file://${reference}`;
+    const rawPath = parseFileUrl(fileUrl).filePath;
     if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       const resolvedPath = path.resolve(basePath, rawPath);
       const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
@@ -217,24 +218,43 @@ function collectConfigSourcePaths(config: Partial<UnifiedConfig>, basePath: stri
       paths.push(...(matches.length > 0 ? matches : [resolvedPath]));
     }
   };
+  const addVarsSources = (vars: unknown): void => {
+    if (typeof vars === 'string') {
+      addLocalPath(vars);
+    } else if (Array.isArray(vars)) {
+      vars
+        .filter((varsPath): varsPath is string => typeof varsPath === 'string')
+        .forEach(addLocalPath);
+    } else {
+      collectVarFilePaths(vars, basePath).forEach(addLocalPath);
+    }
+  };
   const addTestSources = (tests: UnifiedConfig['tests']): void => {
     for (const test of Array.isArray(tests) ? tests : tests ? [tests] : []) {
       if (typeof test === 'string') {
         addLocalPath(test);
-      } else if (
-        typeof test === 'object' &&
-        test !== null &&
-        'path' in test &&
-        typeof test.path === 'string'
-      ) {
-        addLocalPath(test.path);
+        continue;
       }
+      if (typeof test !== 'object' || test === null) {
+        continue;
+      }
+      if ('path' in test && typeof test.path === 'string') {
+        addLocalPath(test.path);
+        continue;
+      }
+      const varsDescriptor = Object.getOwnPropertyDescriptor(test, 'vars');
+      if (!varsDescriptor || !('value' in varsDescriptor)) {
+        continue;
+      }
+      addVarsSources(varsDescriptor.value);
     }
   };
 
   addTestSources(config.tests);
   if (typeof config.defaultTest === 'string') {
     addLocalPath(config.defaultTest);
+  } else if (config.defaultTest && typeof config.defaultTest === 'object') {
+    addTestSources([config.defaultTest] as UnifiedConfig['tests']);
   }
   const scenarios = config.scenarios as UnifiedConfig['scenarios'] | string | undefined;
   for (const scenario of Array.isArray(scenarios) ? scenarios : scenarios ? [scenarios] : []) {
@@ -1199,18 +1219,7 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        const varPaths = Array.isArray(config.tests)
-          ? config.tests
-              .flatMap((t) => {
-                if (typeof t === 'string' && t.startsWith('file://')) {
-                  return collectConfigSourcePaths({ tests: [t] }, basePath);
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return collectVarFilePaths(t.vars, basePath);
-                }
-                return [];
-              })
-              .filter(Boolean)
-          : [];
+        const varPaths = collectConfigSourcePaths({ tests: config.tests }, basePath);
         varPaths.push(
           ...(testSuite?.tests ?? []).flatMap((test) => collectVarFilePaths(test.vars, basePath)),
         );

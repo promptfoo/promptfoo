@@ -18,6 +18,7 @@ import { runPython } from '../../src/python/pythonUtils';
 import { readAzureBlobText } from '../../src/util/azureBlob';
 import { loadConfigFromFilePath, maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
+  getVarFileDependencyPaths,
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
@@ -185,6 +186,9 @@ vi.mock('../../src/esm', () => ({
 }));
 
 vi.mock('../../src/util/file', () => ({
+  getNunjucksEngineForFilePath: vi.fn(() => ({
+    renderString: (value: string) => value,
+  })),
   loadConfigFromFilePath: vi.fn(),
   maybeLoadConfigFromExternalFile: vi.fn(mockMaybeLoadConfigFromExternalFileImpl),
 }));
@@ -578,6 +582,77 @@ describe('readStandaloneTestsFile', () => {
 
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test.js'), undefined);
     expect(result).toEqual(mockTestCases);
+  });
+
+  it('normalizes canonical Windows URLs for named JS and Python generators', async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const resolveSpy = vi
+      .spyOn(path, 'resolve')
+      .mockImplementation((...segments) => path.win32.resolve(...segments));
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    const generatedTests = [{ vars: { marker: 'windows' } }];
+    vi.mocked(importModule).mockResolvedValue(generatedTests);
+    vi.mocked(runPython).mockResolvedValue(generatedTests);
+
+    try {
+      await readStandaloneTestsFile('file:///C:/suite/cases.js:buildCases', 'D:\\decoy');
+      await readStandaloneTestsFile('file:///C:/suite/cases.py:build_cases', 'D:\\decoy');
+
+      expect(importModule).toHaveBeenCalledWith('C:\\suite\\cases.js', 'buildCases');
+      expect(runPython).toHaveBeenCalledWith('C:\\suite\\cases.py', 'build_cases', []);
+    } finally {
+      resolveSpy.mockRestore();
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
+  });
+
+  it('preserves executable-looking colon directories in bare test paths', async () => {
+    const testPath = path.resolve('/suite/reports.js:archive/tests.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ vars: { marker: 'colon' } }]));
+
+    const result = await readStandaloneTestsFile(
+      'reports.js:archive/tests.json',
+      path.resolve('/suite'),
+    );
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(testPath, 'utf-8');
+    expect(importModule).not.toHaveBeenCalled();
+    expect(result).toEqual([expect.objectContaining({ vars: { marker: 'colon' } })]);
+  });
+
+  it('preserves multiple POSIX colon directories in bare test paths', async () => {
+    const testPath = path.resolve('/suite/first:one/second:two/tests.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify([{ vars: { marker: 'colons' } }]));
+
+    const result = await readStandaloneTestsFile(
+      'first:one/second:two/tests.json',
+      path.resolve('/suite'),
+    );
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(testPath, 'utf-8');
+    expect(importModule).not.toHaveBeenCalled();
+    expect(result).toEqual([expect.objectContaining({ vars: { marker: 'colons' } })]);
+  });
+
+  it('preserves multiple colons in a non-executable POSIX filename', async () => {
+    const testPath = path.resolve('/suite/cases:2026:final.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify([{ vars: { marker: 'colon-filename' } }]),
+    );
+
+    const result = await readStandaloneTestsFile('cases:2026:final.json', path.resolve('/suite'));
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(testPath, 'utf-8');
+    expect(importModule).not.toHaveBeenCalled();
+    expect(result).toEqual([expect.objectContaining({ vars: { marker: 'colon-filename' } })]);
+  });
+
+  it.each(['js', 'py'])('rejects multiple function suffixes in file:// %s paths', async (ext) => {
+    await expect(readStandaloneTestsFile(`file://test.${ext}:invalid:extra`)).rejects.toThrow(
+      `Too many colons. Invalid test file script path: file://test.${ext}:invalid:extra`,
+    );
   });
 
   it('should pass config to JS test generator function', async () => {
@@ -1030,6 +1105,53 @@ describe('readTest', () => {
     expect(result.options?.provider).toEqual(defaultTestInput.options.provider);
   });
 
+  it('retains consumed vars-file provenance for an external defaultTest', async () => {
+    const defaultPath = path.resolve('/suite/defaults/default.yaml');
+    const varsPath = path.resolve('/suite/defaults/vars/root.yaml');
+    const contextPath = path.resolve('/suite/defaults/vars/context.yaml');
+    vi.mocked(globSync).mockImplementation((input) =>
+      String(input) === varsPath ? [varsPath] : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === defaultPath) {
+        return 'vars: file://vars/root.yaml';
+      }
+      if (String(filePath) === varsPath) {
+        return 'context: file://context.yaml\nscript: file://script.js';
+      }
+      return '';
+    });
+    vi.mocked(loadConfigFromFilePath).mockImplementation((filePath) =>
+      filePath === contextPath ? { descendant: 'file://sub.yaml' } : undefined,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.vars).toEqual({
+      context: { descendant: 'file://defaults/vars/sub.yaml' },
+      script: 'file://defaults/vars/script.js',
+    });
+    expect(getVarFileDependencyPaths(result.vars)).toEqual([
+      varsPath,
+      contextPath,
+      path.resolve('/suite/defaults/vars/sub.yaml'),
+      path.resolve('/suite/defaults/vars/script.js'),
+    ]);
+    expect(getVarFileDependencyPaths(result)).toEqual([
+      varsPath,
+      contextPath,
+      path.resolve('/suite/defaults/vars/sub.yaml'),
+      path.resolve('/suite/defaults/vars/script.js'),
+    ]);
+    result.vars = {};
+    expect(getVarFileDependencyPaths(result)).toEqual([
+      varsPath,
+      contextPath,
+      path.resolve('/suite/defaults/vars/sub.yaml'),
+      path.resolve('/suite/defaults/vars/script.js'),
+    ]);
+  });
+
   it('loads only the assertion subtree in an external defaultTest', async () => {
     const defaultTestInput = {
       assert: [
@@ -1085,28 +1207,50 @@ describe('readTest', () => {
     const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
 
     expect(result.assert).toEqual(expectedAssertions);
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://raw.txt', 'assertion');
+    const defaultTestBasePath = path.resolve('/suite/defaults');
+    const configBasePath = path.resolve('/suite');
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://raw.txt',
+      'assertion',
+      defaultTestBasePath,
+      configBasePath,
+    );
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       { nested: ['file://nested.txt'] },
       'assertion',
+      defaultTestBasePath,
+      configBasePath,
     );
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       'file://fixtures/*.txt',
       'assertion',
+      defaultTestBasePath,
+      configBasePath,
     );
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       'file://assert.js:check',
       'assertion',
+      defaultTestBasePath,
+      configBasePath,
     );
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       'file://dynamic-value.js',
       'assertion',
+      defaultTestBasePath,
+      configBasePath,
     );
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       'file://assert.rb:check',
       'assertion',
+      defaultTestBasePath,
+      configBasePath,
     );
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://set.txt', 'assertion');
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://set.txt',
+      'assertion',
+      defaultTestBasePath,
+      configBasePath,
+    );
     expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalledWith(
       'file://assert-provider.js',
       expect.anything(),
@@ -1151,6 +1295,62 @@ describe('readTest', () => {
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
       'file://assertion.yaml',
       'assertion',
+      path.resolve('/suite/defaults'),
+      path.resolve('/suite'),
+    );
+    expect(getVarFileDependencyPaths(result)).toContain(
+      path.resolve('/suite/defaults/assertion.yaml'),
+    );
+  });
+
+  it('rebases assertion-file child references without recursively loading them', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({ assert: ['file://assertion.yaml'] }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) =>
+      config === 'file://assertion.yaml'
+        ? {
+            type: 'assert-set',
+            assert: [
+              { type: 'equals', value: 'file://fixtures/expected.txt' },
+              { type: 'ruby', value: 'file://check.rb:MyModule::Nested.method' },
+            ],
+          }
+        : config,
+    );
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(result.assert).toEqual([
+      {
+        type: 'assert-set',
+        assert: [
+          { type: 'equals', value: 'file://defaults/fixtures/expected.txt' },
+          { type: 'ruby', value: 'file://defaults/check.rb:MyModule::Nested.method' },
+        ],
+      },
+    ]);
+    expect(getVarFileDependencyPaths(result)).toEqual([
+      path.resolve('/suite/defaults/assertion.yaml'),
+      path.resolve('/suite/defaults/fixtures/expected.txt'),
+      path.resolve('/suite/defaults/check.rb'),
+    ]);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('records namespaced Ruby assertion dependencies without the method suffix', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({
+        assert: [{ type: 'ruby', value: 'file://assert.rb:MyModule::Nested.method' }],
+      }),
+    );
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) => config);
+
+    const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
+
+    expect(getVarFileDependencyPaths(result)).toContain(path.resolve('/suite/defaults/assert.rb'));
+    expect(getVarFileDependencyPaths(result)).not.toContain(
+      path.resolve('/suite/defaults/assert.rb:MyModule::Nested.method'),
     );
   });
 
@@ -1184,7 +1384,7 @@ describe('readTest', () => {
 
     const result = await readTest('defaults/default.yaml', path.resolve('/suite'), true);
 
-    expect(result.assert).toEqual([{ type: 'assert-set', assert: ['file://cycle.yaml'] }]);
+    expect(result.assert).toEqual([{ type: 'assert-set', assert: ['file://defaults/cycle.yaml'] }]);
     expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledTimes(1);
   });
 
@@ -1365,6 +1565,57 @@ describe('readTests', () => {
         assert: [{ type: 'javascript', value: 'value5' }],
         options: {},
       },
+    ]);
+  });
+
+  it.each(['json', 'jsonl'])('loads vars files from a scalar %s test source', async (extension) => {
+    const basePath = path.resolve('/suite');
+    const testsPath = path.resolve(basePath, `tests.${extension}`);
+    const varsPath = path.resolve(basePath, 'vars.yaml');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any) => config);
+    vi.mocked(globSync).mockImplementation((input) => {
+      const value = String(input);
+      if (value === testsPath) {
+        return [testsPath];
+      }
+      if (value === varsPath) {
+        return [varsPath];
+      }
+      return [];
+    });
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === testsPath) {
+        const testCase = { vars: 'file://vars.yaml' };
+        return extension === 'json' ? JSON.stringify([testCase]) : JSON.stringify(testCase);
+      }
+      if (String(filePath) === varsPath) {
+        return 'marker: loaded';
+      }
+      return '';
+    });
+
+    const [result] = await readTests(`file://tests.${extension}`, basePath);
+
+    expect(result.vars).toEqual({ marker: 'loaded' });
+    expect(result.description).toBe('Row #1');
+    expect(getVarFileDependencyPaths(result)).toEqual([varsPath]);
+  });
+
+  it('keeps remote JSON test sources on their established loader', async () => {
+    const sharepointUrl = 'https://example.sharepoint.com/sites/team/tests.json';
+    vi.mocked(fetchCsvFromSharepoint).mockResolvedValue([
+      { var1: 'value1', __expected: 'expected1' },
+    ]);
+
+    const result = await readTests(sharepointUrl);
+
+    expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(result).toEqual([
+      expect.objectContaining({
+        vars: { var1: 'value1' },
+        assert: [expect.objectContaining({ type: 'equals', value: 'expected1' })],
+      }),
     ]);
   });
 
@@ -2009,6 +2260,23 @@ describe('readVarsFiles', () => {
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
 
+  it('renders a root vars-file source before resolving it', async () => {
+    const varsPath = path.resolve('/suite/data/vars.yaml');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config: any, context) =>
+      config === 'file://{{ env.PR9419_VARS_PATH }}' && context === 'vars'
+        ? 'file://data/vars.yaml'
+        : config,
+    );
+    vi.mocked(globSync).mockReturnValue([varsPath]);
+    vi.mocked(fs.readFileSync).mockReturnValue('marker: rendered');
+
+    const result = await readTestFiles('file://{{ env.PR9419_VARS_PATH }}', path.resolve('/suite'));
+
+    expect(result).toEqual({ marker: 'rendered' });
+    expect(globSync).toHaveBeenCalledWith(varsPath, { windowsPathsNoEscape: true });
+    expect(getVarFileDependencyPaths(result)).toEqual([varsPath]);
+  });
+
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';
@@ -2113,6 +2381,7 @@ describe('readVarsFiles', () => {
             pdf: file://document.pdf
             image: file://image.png
             audio: file://audio.mp3
+            absolute: file:///external/keep.js
             glob: file://data/*.txt
             braceGlob: file://data/{foo,bar}.json
             extglob: file://data/+(foo|bar).json
@@ -2134,15 +2403,16 @@ describe('readVarsFiles', () => {
         context: { foo: 'bar' },
         settings: { enabled: true },
         nested: { report: 'file://fixtures/reports/body.txt' },
-        script: `file://${path.resolve('/suite/fixtures/generator.js').replace(/\\/g, '/')}`,
-        python: `file://${path.resolve('/suite/fixtures/generator.py').replace(/\\/g, '/')}`,
-        pdf: `file://${path.resolve('/suite/fixtures/document.pdf').replace(/\\/g, '/')}`,
-        image: `file://${path.resolve('/suite/fixtures/image.png').replace(/\\/g, '/')}`,
-        audio: `file://${path.resolve('/suite/fixtures/audio.mp3').replace(/\\/g, '/')}`,
-        glob: `file://${path.resolve('/suite/fixtures/data/*.txt').replace(/\\/g, '/')}`,
-        braceGlob: `file://${path.resolve('/suite/fixtures/data/{foo,bar}.json').replace(/\\/g, '/')}`,
+        script: 'file://fixtures/generator.js',
+        python: 'file://fixtures/generator.py',
+        pdf: 'file://fixtures/document.pdf',
+        image: 'file://fixtures/image.png',
+        audio: 'file://fixtures/audio.mp3',
+        absolute: 'file:///external/keep.js',
+        glob: 'file://fixtures/data/*.txt',
+        braceGlob: 'file://fixtures/data/{foo,bar}.json',
         extglob: [{ marker: 'foo' }, { marker: 'bar' }],
-        textExtglob: `file://${path.resolve('/suite/fixtures', textExtglobPath).replace(/\\/g, '/')}`,
+        textExtglob: `file://fixtures/${textExtglobPath}`,
       });
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://context.json', 'vars');
       expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://generator.js', 'vars');
@@ -2198,6 +2468,12 @@ describe('readVarsFiles', () => {
     expect(loadConfigFromFilePath).not.toHaveBeenCalledWith(
       path.resolve('/suite/fixtures/deeper.yaml'),
     );
+    expect(getVarFileDependencyPaths(result)).toEqual([
+      path.resolve('/suite/fixtures/vars.yaml'),
+      path.resolve('/suite/fixtures/nested.yaml'),
+      path.resolve('/suite/fixtures/deeper.yaml'),
+      path.resolve('/suite/fixtures/data/{alpha,beta}.json'),
+    ]);
   });
 
   it('should parse structured globs with provenance from each matched file', async () => {

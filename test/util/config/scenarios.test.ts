@@ -14,7 +14,11 @@ import { type TestCase } from '../../../src/types/index';
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { readFilters } from '../../../src/util/index';
-import { readTests, rebaseTestCaseVarFileReferences } from '../../../src/util/testCaseReader';
+import {
+  getVarFileDependencyPaths,
+  readTests,
+  rebaseTestCaseVarFileReferences,
+} from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
@@ -57,6 +61,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Setup default mocks
     vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Test prompt', label: 'Test prompt' }]);
+    vi.mocked(getVarFileDependencyPaths).mockReturnValue([]);
     vi.mocked(readProviderPromptMap).mockReturnValue({});
     vi.mocked(loadApiProviders).mockResolvedValue([
       createMockProvider({ id: 'openai:gpt-3.5-turbo' }),

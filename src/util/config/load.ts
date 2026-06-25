@@ -47,7 +47,12 @@ import { filterTests } from '../eval/filterTests';
 import { parseFileUrl } from '../functions/loadFunction';
 import { toPosixPath } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
-import { readTest, readTests, rebaseTestCaseVarFileReferences } from '../testCaseReader';
+import {
+  getVarFileDependencyPaths,
+  readTest,
+  readTests,
+  rebaseTestCaseVarFileReferences,
+} from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
@@ -56,6 +61,11 @@ type ConfigResolutionLogLevel = 'error' | 'warn';
 
 const configDependencyPaths = new WeakMap<object, string[]>();
 const combinedConfigBasePaths = new WeakMap<object, string>();
+
+function parseConfigDependencyPath(reference: string): string {
+  const fileUrl = reference.startsWith('file://') ? reference : `file://${reference}`;
+  return parseFileUrl(fileUrl).filePath;
+}
 
 function rebaseConfigFileReferenceToBase(
   reference: string,
@@ -686,7 +696,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     rebaseConfigFileReferenceToBase(reference, sourceBasePath, combinedBasePath);
   const dependencyPaths = new Set(configSourcePaths.map((sourcePath) => path.resolve(sourcePath)));
   const addConfigDependency = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
+    const rawPath = parseConfigDependencyPath(reference);
     if (!/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       const resolvedPath = path.resolve(combinedBasePath, rawPath);
       const matches = hasMagic(rawPath, { magicalBraces: true, windowsPathsNoEscape: true })
@@ -794,11 +804,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
         if (!scenarioTests) {
           continue;
         }
-        if (typeof scenarioTests === 'string' && scenarioTests.startsWith('file://')) {
-          (scenario as { tests: string | TestCase[] }).tests = rebaseConfigFileReference(
-            scenarioTests,
-            sourceBasePath,
-          );
+        if (typeof scenarioTests === 'string') {
+          const rebasedScenarioTests = rebaseConfigFileReference(scenarioTests, sourceBasePath);
+          (scenario as { tests: string | TestCase[] }).tests = rebasedScenarioTests;
+          addConfigDependency(rebasedScenarioTests);
         } else if (Array.isArray(scenarioTests)) {
           rebaseScenarioTestSources(
             scenarioTests,
@@ -1107,10 +1116,9 @@ export async function resolveConfigs(
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
-  configDependencyPaths.set(config, getConfigDependencyPaths(fileConfig));
-  const resolvedConfigDependencies = new Set(getConfigDependencyPaths(config));
+  const resolvedConfigDependencies = new Set(getConfigDependencyPaths(fileConfig));
   const addResolvedConfigDependency = (reference: string): void => {
-    const rawPath = reference.startsWith('file://') ? parseFileUrl(reference).filePath : reference;
+    const rawPath = parseConfigDependencyPath(reference);
     if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(rawPath)) {
       return;
     }
@@ -1122,6 +1130,12 @@ export async function resolveConfigs(
       resolvedConfigDependencies.add(dependencyPath);
     }
   };
+  const addLoadedTestDependencies = (value: unknown): void => {
+    for (const dependencyPath of getVarFileDependencyPaths(value)) {
+      resolvedConfigDependencies.add(dependencyPath);
+    }
+  };
+  addLoadedTestDependencies(processedDefaultTest);
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
   const hasProviders =
@@ -1215,6 +1229,7 @@ export async function resolveConfigs(
     config.tests || [],
     cmdObj.tests ? undefined : basePath,
   );
+  parsedTests.forEach(addLoadedTestDependencies);
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
@@ -1282,7 +1297,6 @@ export async function resolveConfigs(
       ...scenario,
       tests: Array.isArray(scenario.tests) ? [...scenario.tests] : scenario.tests,
     }));
-    configDependencyPaths.set(config, [...resolvedConfigDependencies]);
   }
   if (Array.isArray(config.scenarios)) {
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
@@ -1293,6 +1307,7 @@ export async function resolveConfigs(
           scenario.tests as TestSuiteConfig['tests'],
           cmdObj.tests ? undefined : basePath,
         );
+        scenario.tests.forEach(addLoadedTestDependencies);
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
@@ -1386,6 +1401,7 @@ export async function resolveConfigs(
 
   cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
+  configDependencyPaths.set(config, [...resolvedConfigDependencies]);
 
   // Extract commandLineOptions from either explicit config files or default config
   // Resolve relative envPath(s) against the config file directory
