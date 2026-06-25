@@ -768,6 +768,44 @@ describe('readStandaloneTestsFile', () => {
       },
     ]);
   });
+
+  it('dereferences single-object JSON refs against the file root while preserving schemas', async () => {
+    const schema = {
+      $defs: { Status: { type: 'string' } },
+      properties: { status: { $ref: '#/$defs/Status' } },
+      type: 'object',
+    };
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        $defs: { Status: { const: 'CONFIG' } },
+        definitions: { payload: { status: 'ready' } },
+        options: { response_format: { schema, type: 'json_schema' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = await readStandaloneTestsFile('test.json');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('Row #1');
+    expect(result[0].vars?.payload).toEqual({ status: 'ready' });
+    expect(result[0].options?.response_format).toEqual({ schema, type: 'json_schema' });
+  });
+
+  it('dereferences JSONL refs against each row root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('Row #1');
+    expect(result[0].vars?.payload).toEqual({ status: 'ready' });
+  });
 });
 
 describe('readTest', () => {
@@ -781,6 +819,21 @@ describe('readTest', () => {
 
   afterEach(() => {
     clearAllMocks();
+  });
+
+  it('dereferences a file-backed test against the document root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      yaml.dump({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+
+    const result = (await readTest('test.yaml')) as TestCase & {
+      definitions: { payload: { status: string } };
+    };
+
+    expect(result.vars?.payload).toBe(result.definitions.payload);
   });
 
   it('readTest with string input (path to test config)', async () => {
@@ -1584,6 +1637,22 @@ describe('readTests', () => {
         },
       }),
     });
+  });
+
+  it('dereferences globbed JSONL refs against each row root', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        definitions: { payload: { status: 'ready' } },
+        vars: { payload: { $ref: '#/definitions/payload' } },
+      }),
+    );
+    vi.mocked(globSync).mockReturnValue(['test.jsonl']);
+
+    const result = (await readTests(['test.jsonl'])) as Array<
+      TestCase & { definitions: { payload: { status: string } } }
+    >;
+
+    expect(result[0].vars?.payload).toBe(result[0].definitions.payload);
   });
 
   it.each([

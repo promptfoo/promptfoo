@@ -52,6 +52,10 @@ function dereferenceStandaloneTestCases<T extends object>(value: T): Promise<T> 
   });
 }
 
+function dereferenceStandaloneTestRows(testCases: TestCase[]): Promise<TestCase[]> {
+  return Promise.all(testCases.map((testCase) => dereferenceStandaloneTestCases(testCase)));
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -226,13 +230,13 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    return dereferenceStandaloneTestCases(await readJsonTestCases(resolvedVarsPath));
+    return readJsonTestCases(resolvedVarsPath);
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
-    return dereferenceStandaloneTestCases(await readJsonlTestCases(resolvedVarsPath));
+    return readJsonlTestCases(resolvedVarsPath);
   }
   if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.record('feature_used', {
@@ -349,21 +353,28 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonTestCases(fileContent);
+  const parsed = addDefaultTestDescriptions(yaml.load(fileContent));
+  const dereferenced = await dereferenceStandaloneTestCases(parsed);
+  return Array.isArray(dereferenced) ? dereferenced : [dereferenced];
 }
 
-function parseJsonTestCases(fileContent: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as any;
+function addDefaultTestDescriptions(jsonData: any): TestCase | TestCase[] {
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
+  const described = testCases.map((item, idx) => ({
     ...item,
     description: item.description || `Row #${idx + 1}`,
   }));
+  return Array.isArray(jsonData) ? described : described[0];
+}
+
+function parseJsonTestCases(fileContent: string): TestCase[] {
+  const parsed = addDefaultTestDescriptions(yaml.load(fileContent));
+  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonlTestCases(fileContent);
+  return dereferenceStandaloneTestRows(parseJsonlTestCases(fileContent));
 }
 
 function parseJsonlTestCases(fileContent: string): TestCase[] {
@@ -416,7 +427,7 @@ export async function readTest(
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = loadExternalFilesBeforeRefParser(rawContent) as TestCaseWithVarsFile;
-    const [dereferencedTestCase] = await dereferenceStandaloneTestCases([rawTestCase]);
+    const dereferencedTestCase = await dereferenceStandaloneTestCases(rawTestCase);
     testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -539,7 +550,8 @@ export async function loadTestsFromGlob(
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
       testCases = loadExternalFilesBeforeRefParser(rawCases) as TestCase[];
-      testCases = await _deref(testCases, testFile);
+      logger.debug(`Dereferencing test file rows: ${testFile}`);
+      testCases = await dereferenceStandaloneTestRows(testCases);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];

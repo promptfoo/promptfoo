@@ -8,13 +8,46 @@ type DereferenceOptions = { disabled?: boolean };
 type ValueLocation = {
   parent: MutableContainer;
   key: string;
+  path: string;
   value: unknown;
 };
 
 type TraversalItem = Partial<Pick<ValueLocation, 'key' | 'parent'>> & {
   ancestors?: ReadonlySet<object>;
+  physicalPath: string;
+  refPaths?: ReadonlySet<string>;
   path: string;
   value: unknown;
+};
+
+type SchemaRecord = {
+  detachPath?: string;
+  outputPath: string;
+  source: ValueLocation;
+};
+
+type SchemaState = {
+  detachPath?: string;
+  forceParse?: boolean;
+  outputPath: string;
+  restoreValue: unknown;
+  sources: ValueLocation[];
+};
+
+type PathTrieNode = {
+  children: Map<string, PathTrieNode>;
+  sourceStates?: number[];
+  terminalPath?: string;
+};
+
+type SourcePath = {
+  path: string;
+  state: number;
+};
+
+type DisjointSet = {
+  parents: number[];
+  ranks: number[];
 };
 
 const SCHEMA_PATH_SUFFIX =
@@ -74,6 +107,15 @@ function cloneConfigValue<T>(
     return value;
   }
 
+  // A second clone can encounter an opaque placeholder created by the first clone. Preserve its
+  // replacement metadata instead of treating the empty placeholder as ordinary JSON.
+  const existingReplacement = replacements.get(value);
+  if (existingReplacement) {
+    const placeholder = {};
+    replacements.set(placeholder, existingReplacement);
+    return placeholder as T;
+  }
+
   // Programmatic configs can contain provider and SDK instances. Keep them opaque so cloning or
   // ref-parser traversal cannot strip prototypes, private state, accessors, or symbol properties.
   if (!isJsonContainer(value)) {
@@ -116,19 +158,24 @@ function joinPointer(path: string, key: string): string {
   return `${path}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`;
 }
 
-function resolveLocalPointer(root: unknown, ref: string): ValueLocation | undefined {
-  if (!ref.startsWith('#/') || !isMutableContainer(root)) {
+function getLocalRefTokens(ref: string): string[] | undefined {
+  if (!ref.startsWith('#/')) {
     return undefined;
   }
-
-  let pointer: string;
   try {
-    pointer = decodeURIComponent(ref.slice(2));
+    return decodeURIComponent(ref.slice(2))
+      .split('/')
+      .map((token) => decodeURIComponent(token).replace(/~1/g, '/').replace(/~0/g, '~'));
   } catch {
     return undefined;
   }
+}
 
-  const tokens = pointer.split('/').map((token) => token.replace(/~1/g, '/').replace(/~0/g, '~'));
+function resolveLocalPointer(root: unknown, ref: string): ValueLocation | undefined {
+  const tokens = getLocalRefTokens(ref);
+  if (!tokens || !isMutableContainer(root)) {
+    return undefined;
+  }
   let current: unknown = root;
   let parent: MutableContainer = root;
   let key = '';
@@ -142,7 +189,7 @@ function resolveLocalPointer(root: unknown, ref: string): ValueLocation | undefi
     current = getValue(current, token);
   }
 
-  return { parent, key, value: current };
+  return { parent, key, path: tokens.reduce(joinPointer, '#'), value: current };
 }
 
 function getPureRef(value: unknown): string | undefined {
@@ -200,23 +247,27 @@ function isAssertionSchemaPath(
   return typeof assertionType === 'string' && /^(?:not-)?(?:is|contains)-json$/.test(assertionType);
 }
 
-function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): ValueLocation[] {
-  const locations: ValueLocation[] = [];
-  const seenLocations = new Map<MutableContainer, Set<string>>();
+function collectStandaloneSchemaLocations(
+  root: unknown,
+  source: SchemaSource,
+): { ownerRefPaths: Set<string>; records: Map<string, SchemaRecord> } {
+  const records = new Map<string, SchemaRecord>();
+  const ownerRefPaths = new Set<string>();
   const visited = new WeakMap<object, Set<string>>();
-  const stack: TraversalItem[] = [{ path: '#', value: root }];
+  const stack: TraversalItem[] = [{ path: '#', physicalPath: '#', value: root }];
 
-  const addLocation = (location: ValueLocation) => {
-    const keys = seenLocations.get(location.parent) ?? new Set<string>();
-    if (!keys.has(location.key)) {
-      keys.add(location.key);
-      seenLocations.set(location.parent, keys);
-      locations.push(location);
+  const addRecord = (record: SchemaRecord, refPaths: ReadonlySet<string> | undefined) => {
+    const previous = records.get(record.outputPath);
+    if (!previous || record.source.path === record.outputPath) {
+      records.set(record.outputPath, record);
+    }
+    for (const path of refPaths ?? []) {
+      ownerRefPaths.add(path);
     }
   };
 
   while (stack.length > 0) {
-    const { ancestors, key, parent, path, value } = stack.pop()!;
+    const { ancestors, key, parent, path, physicalPath, refPaths, value } = stack.pop()!;
     if (!isMutableContainer(value)) {
       continue;
     }
@@ -225,7 +276,13 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
       parent &&
       (isStandaloneSchemaPath(path, source) || isAssertionSchemaPath(path, parent, source))
     ) {
-      addLocation({ key, parent, value });
+      const detachPath = [...(refPaths ?? [])].find(
+        (refPath) => refPath !== '#' && path.startsWith(`${refPath}/`),
+      );
+      addRecord(
+        { detachPath, outputPath: path, source: { key, parent, path: physicalPath, value } },
+        refPaths,
+      );
       continue;
     }
     if (ancestors?.has(value)) {
@@ -245,7 +302,15 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
     if (!Array.isArray(value) && typeof value.$ref === 'string') {
       const target = resolveLocalPointer(root, value.$ref);
       if (target && target.value !== value) {
-        stack.push({ ...target, ancestors: childAncestors, path });
+        const nextRefPaths = new Set(refPaths);
+        nextRefPaths.add(physicalPath);
+        stack.push({
+          ...target,
+          ancestors: childAncestors,
+          physicalPath: target.path,
+          refPaths: nextRefPaths,
+          path,
+        });
       }
     }
 
@@ -255,18 +320,20 @@ function collectStandaloneSchemaLocations(root: unknown, source: SchemaSource): 
         parent: value,
         ancestors: childAncestors,
         path: joinPointer(path, childKey),
+        physicalPath: joinPointer(physicalPath, childKey),
+        refPaths,
         value: child,
       });
     }
   }
 
-  return locations;
+  return { ownerRefPaths, records };
 }
 
 function resolveConfigLevelSchemaRef(
   root: unknown,
   schema: unknown,
-): { locations: ValueLocation[]; value: unknown } | undefined {
+): { locations: ValueLocation[]; unresolved: boolean; value: unknown } | undefined {
   let ref = getPureRef(schema);
   if (!ref?.startsWith('#/')) {
     return undefined;
@@ -280,24 +347,342 @@ function resolveConfigLevelSchemaRef(
     seenRefs.add(ref);
     const location = resolveLocalPointer(root, ref);
     if (!location) {
-      break;
+      return { locations, unresolved: true, value };
     }
     locations.push(location);
     value = location.value;
     ref = getPureRef(value) ?? '';
   }
 
-  return locations.length > 0 ? { locations, value } : undefined;
+  return { locations, unresolved: false, value };
+}
+
+async function loadSchemaFileRef(ref: string): Promise<unknown> {
+  const fragmentIndex = ref.indexOf('#');
+  const documentRef = fragmentIndex === -1 ? ref : ref.slice(0, fragmentIndex);
+  const fragment = fragmentIndex === -1 ? undefined : ref.slice(fragmentIndex);
+  const document = await new $RefParser().parse(documentRef);
+  if (!fragment || fragment === '#') {
+    return document;
+  }
+
+  const location = resolveLocalPointer(document, fragment);
+  if (location) {
+    return location.value;
+  }
+
+  // Preserve anchor handling and the reference parser's established error type for invalid file
+  // pointers. Pointer fragments take the raw-document path above so refs below them stay intact.
+  return $RefParser.dereference({ $ref: ref });
+}
+
+function canonicalLocalRefPath(ref: string): string | undefined {
+  if (ref === '#') {
+    return '#';
+  }
+  return getLocalRefTokens(ref)?.reduce(joinPointer, '#');
+}
+
+function createPathTrieNode(): PathTrieNode {
+  return { children: new Map<string, PathTrieNode>() };
+}
+
+function tokenizePath(path: string): string[] {
+  return path === '#' ? [] : path.slice(2).split('/');
+}
+
+function addPathToTrie(root: PathTrieNode, path: string, sourceState?: number): void {
+  let node = root;
+  for (const token of tokenizePath(path)) {
+    let child = node.children.get(token);
+    if (!child) {
+      child = createPathTrieNode();
+      node.children.set(token, child);
+    }
+    node = child;
+  }
+  node.terminalPath ??= path;
+  if (sourceState !== undefined) {
+    (node.sourceStates ??= []).push(sourceState);
+  }
+}
+
+function hasPathAncestor(root: PathTrieNode, path: string): boolean {
+  let node = root;
+  if (node.terminalPath !== undefined) {
+    return true;
+  }
+  for (const token of tokenizePath(path)) {
+    const child = node.children.get(token);
+    if (!child) {
+      return false;
+    }
+    node = child;
+    if (node.terminalPath !== undefined) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pathOverlapsTrie(root: PathTrieNode, path: string): boolean {
+  let node = root;
+  if (node.terminalPath !== undefined) {
+    return true;
+  }
+  for (const token of tokenizePath(path)) {
+    const child = node.children.get(token);
+    if (!child) {
+      return false;
+    }
+    node = child;
+    if (node.terminalPath !== undefined) {
+      return true;
+    }
+  }
+  return node.children.size > 0;
+}
+
+function findShallowestProperAncestor(root: PathTrieNode, path: string): string | undefined {
+  const tokens = tokenizePath(path);
+  let node = root;
+  for (let index = 0; index < tokens.length - 1; index++) {
+    const child = node.children.get(tokens[index]);
+    if (!child) {
+      return undefined;
+    }
+    node = child;
+    if (node.terminalPath !== undefined) {
+      return node.terminalPath;
+    }
+  }
+  return undefined;
+}
+
+function createDisjointSet(size: number): DisjointSet {
+  return {
+    parents: Array.from({ length: size }, (_, index) => index),
+    ranks: Array.from({ length: size }, () => 0),
+  };
+}
+
+function findSet(set: DisjointSet, value: number): number {
+  let root = value;
+  while (set.parents[root] !== root) {
+    root = set.parents[root];
+  }
+  while (set.parents[value] !== value) {
+    const parent = set.parents[value];
+    set.parents[value] = root;
+    value = parent;
+  }
+  return root;
+}
+
+function unionSets(set: DisjointSet, left: number, right: number): void {
+  let leftRoot = findSet(set, left);
+  let rightRoot = findSet(set, right);
+  if (leftRoot === rightRoot) {
+    return;
+  }
+  if (set.ranks[leftRoot] < set.ranks[rightRoot]) {
+    [leftRoot, rightRoot] = [rightRoot, leftRoot];
+  }
+  set.parents[rightRoot] = leftRoot;
+  if (set.ranks[leftRoot] === set.ranks[rightRoot]) {
+    set.ranks[leftRoot]++;
+  }
+}
+
+function connectOverlappingSourceStates(root: PathTrieNode, set: DisjointSet): void {
+  const stack: Array<{ ancestorState?: number; node: PathTrieNode }> = [{ node: root }];
+  while (stack.length > 0) {
+    const { ancestorState, node } = stack.pop()!;
+    let nextAncestor = ancestorState;
+    if (node.sourceStates?.length) {
+      nextAncestor = node.sourceStates[0];
+      if (ancestorState !== undefined) {
+        unionSets(set, nextAncestor, ancestorState);
+      }
+      for (let index = 1; index < node.sourceStates.length; index++) {
+        unionSets(set, nextAncestor, node.sourceStates[index]);
+      }
+    }
+    for (const child of node.children.values()) {
+      stack.push({ ancestorState: nextAncestor, node: child });
+    }
+  }
+}
+
+function collectOrdinaryRefTargets(
+  root: unknown,
+  schemaPaths: PathTrieNode,
+  ownerRefPaths: ReadonlySet<string>,
+): PathTrieNode {
+  const targets = createPathTrieNode();
+  const stack: Array<Pick<TraversalItem, 'ancestors' | 'path' | 'value'>> = [
+    { path: '#', value: root },
+  ];
+
+  while (stack.length > 0) {
+    const { ancestors, path, value } = stack.pop()!;
+    if (!isMutableContainer(value) || hasPathAncestor(schemaPaths, path)) {
+      continue;
+    }
+    if (ancestors?.has(value)) {
+      continue;
+    }
+
+    if (!Array.isArray(value) && typeof value.$ref === 'string' && !ownerRefPaths.has(path)) {
+      const target = canonicalLocalRefPath(value.$ref);
+      if (target) {
+        addPathToTrie(targets, target);
+      }
+    }
+
+    const childAncestors = new Set(ancestors);
+    childAncestors.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      stack.push({
+        ancestors: childAncestors,
+        path: joinPointer(path, key),
+        value: child,
+      });
+    }
+  }
+
+  return targets;
+}
+
+function setPointerValue(root: unknown, path: string, value: unknown): void {
+  const location = resolveLocalPointer(root, path);
+  if (location) {
+    setValue(location.parent, location.key, value);
+  }
+}
+
+async function collectSchemaStates(
+  root: unknown,
+  source: SchemaSource,
+  replacements: Map<object, PlaceholderReplacement>,
+): Promise<{ ownerRefPaths: Set<string>; states: SchemaState[] }> {
+  const { ownerRefPaths, records } = collectStandaloneSchemaLocations(root, source);
+  const states: SchemaState[] = [];
+  for (const record of records.values()) {
+    const resolved = resolveConfigLevelSchemaRef(root, record.source.value);
+    if (resolved) {
+      ownerRefPaths.add(record.source.path);
+    }
+    let restoreValue = resolved?.value ?? record.source.value;
+    const rootRef = getPureRef(restoreValue);
+    if (rootRef?.startsWith('file://')) {
+      restoreValue = await loadSchemaFileRef(rootRef);
+    }
+    states.push({
+      detachPath: record.detachPath,
+      forceParse: resolved?.unresolved,
+      outputPath: record.outputPath,
+      restoreValue: cloneConfigValue(restoreValue, replacements),
+      sources: [record.source, ...(resolved?.locations ?? [])],
+    });
+  }
+  return { ownerRefPaths, states };
+}
+
+function collectOrdinarySourcePaths(
+  root: unknown,
+  states: SchemaState[],
+  ownerRefPaths: ReadonlySet<string>,
+): { ordinarySourcePaths: Set<string>; ordinaryTargets: PathTrieNode } {
+  const schemaPaths = createPathTrieNode();
+  const sourcePaths: SourcePath[] = [];
+  for (let state = 0; state < states.length; state++) {
+    for (const { path } of states[state].sources) {
+      addPathToTrie(schemaPaths, path, state);
+      sourcePaths.push({ path, state });
+    }
+  }
+  const ordinaryTargets = collectOrdinaryRefTargets(root, schemaPaths, ownerRefPaths);
+
+  // A state joins every path in one schema source chain. Trie ancestors add the remaining overlap
+  // edges, so the disjoint sets are the same transitive closure as repeated pairwise path scans.
+  const sourceSets = createDisjointSet(states.length);
+  connectOverlappingSourceStates(schemaPaths, sourceSets);
+
+  const ordinarySets = new Set<number>();
+  for (let state = 0; state < states.length; state++) {
+    if (states[state].forceParse) {
+      ordinarySets.add(findSet(sourceSets, state));
+    }
+  }
+  for (const { path, state } of sourcePaths) {
+    if (pathOverlapsTrie(ordinaryTargets, path)) {
+      ordinarySets.add(findSet(sourceSets, state));
+    }
+  }
+
+  const ordinarySourcePaths = new Set<string>();
+  for (const { path, state } of sourcePaths) {
+    if (ordinarySets.has(findSet(sourceSets, state))) {
+      ordinarySourcePaths.add(path);
+    }
+  }
+  return { ordinarySourcePaths, ordinaryTargets };
+}
+
+function detachPaths<T>(
+  result: T,
+  paths: ReadonlySet<string>,
+  replacements: Map<object, PlaceholderReplacement>,
+): void {
+  const pathTrie = createPathTrieNode();
+  for (const path of paths) {
+    addPathToTrie(pathTrie, path);
+  }
+  const stack = [pathTrie];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.terminalPath !== undefined) {
+      const location = resolveLocalPointer(result, node.terminalPath);
+      if (location) {
+        setValue(
+          location.parent,
+          location.key,
+          restorePlaceholders(cloneConfigValue(location.value, replacements), replacements),
+        );
+      }
+      continue;
+    }
+    stack.push(...node.children.values());
+  }
+}
+
+function detachProviderBranches<T>(
+  result: T,
+  states: SchemaState[],
+  ordinaryTargets: PathTrieNode,
+  replacements: Map<object, PlaceholderReplacement>,
+): void {
+  const paths = new Set<string>();
+  for (const { detachPath, outputPath } of states) {
+    if (detachPath) {
+      paths.add(detachPath);
+    }
+    const ancestor = findShallowestProperAncestor(ordinaryTargets, outputPath);
+    if (ancestor) {
+      paths.add(ancestor);
+    }
+  }
+  detachPaths(result, paths, replacements);
 }
 
 function addMask(
   masks: Map<MutableContainer, Map<string, unknown>>,
   location: ValueLocation,
   restoreValue: unknown,
-  overwrite: boolean = false,
 ): void {
   const parentMasks = masks.get(location.parent) ?? new Map<string, unknown>();
-  if (overwrite || !parentMasks.has(location.key)) {
+  if (!parentMasks.has(location.key)) {
     parentMasks.set(location.key, restoreValue);
   }
   masks.set(location.parent, parentMasks);
@@ -357,17 +742,19 @@ export async function dereferenceWithStandaloneSchemas<T extends object>(
   // Non-cyclic aliases are detached so an unprotected alias cannot expose a masked schema.
   const replacements = new Map<object, PlaceholderReplacement>();
   const workingValue = cloneConfigValue(value, replacements);
-  const schemaLocations = collectStandaloneSchemaLocations(workingValue, source);
-  const masks = new Map<MutableContainer, Map<string, unknown>>();
+  const { ownerRefPaths, states } = await collectSchemaStates(workingValue, source, replacements);
+  const { ordinarySourcePaths, ordinaryTargets } = collectOrdinarySourcePaths(
+    workingValue,
+    states,
+    ownerRefPaths,
+  );
 
-  for (const location of schemaLocations) {
-    const resolved = resolveConfigLevelSchemaRef(workingValue, location.value);
-    if (!resolved) {
-      addMask(masks, location, location.value);
-      continue;
-    }
-    for (const target of resolved.locations) {
-      addMask(masks, target, resolved.value, true);
+  const masks = new Map<MutableContainer, Map<string, unknown>>();
+  for (const state of states) {
+    for (const location of state.sources) {
+      if (!ordinarySourcePaths.has(location.path)) {
+        addMask(masks, location, location.value);
+      }
     }
   }
 
@@ -379,6 +766,17 @@ export async function dereferenceWithStandaloneSchemas<T extends object>(
     }
   }
 
-  const result = (await $RefParser.dereference(workingValue)) as T;
-  return restorePlaceholders(result, replacements);
+  const result = restorePlaceholders(
+    (await $RefParser.dereference(workingValue)) as T,
+    replacements,
+  );
+  detachProviderBranches(result, states, ordinaryTargets, replacements);
+  for (const state of states) {
+    setPointerValue(
+      result,
+      state.outputPath,
+      restorePlaceholders(state.restoreValue, replacements),
+    );
+  }
+  return result;
 }
