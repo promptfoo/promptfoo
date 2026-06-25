@@ -4,11 +4,12 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
-  calculateErrorOpenAICost,
-  calculateOpenAICost,
+  calculateSafeOpenAICost,
   formatOpenAiError,
-  getErrorTokenUsage,
-  getTokenUsage,
+  getChatCompletionRefusal,
+  getTokenUsageWithRequestCount,
+  parseChatCompletionJsonOutput,
+  type ValidatedChatCompletionMessage,
   validateChatCompletionMessage,
 } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
@@ -21,6 +22,58 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+
+function getChoiceErrorMetadata(code: unknown): ProviderResponse['metadata'] | undefined {
+  const status =
+    typeof code === 'number'
+      ? code
+      : typeof code === 'string' && /^\d{3}$/.test(code)
+        ? Number(code)
+        : undefined;
+  if (status === 429) {
+    return {
+      rateLimitKind: 'rate_limit',
+      http: { status, statusText: 'Too Many Requests' },
+    };
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return {
+      retryableErrorKind: 'transient_availability',
+      http: { status, statusText: 'OpenRouter generation error' },
+    };
+  }
+  return undefined;
+}
+
+function getOpenRouterOutput(
+  message: ValidatedChatCompletionMessage,
+  showThinking: boolean,
+): string | object {
+  if (message.functionCall || message.toolCalls) {
+    return message.functionCall ?? message.toolCalls!;
+  }
+  if (typeof message.content === 'string' && message.content.trim()) {
+    return message.reasoning && showThinking
+      ? `Thinking: ${message.reasoning}\n\n${message.content}`
+      : message.content;
+  }
+  if (message.structuredContent?.length) {
+    return message.structuredContent;
+  }
+  return message.reasoning && showThinking ? message.reasoning : '';
+}
+
+function parseJsonSchemaOutput(
+  message: ValidatedChatCompletionMessage,
+  output: string | object,
+): string | object {
+  try {
+    return parseChatCompletionJsonOutput(message, output);
+  } catch (error) {
+    logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+    return output;
+  }
+}
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -198,24 +251,19 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
-    const cost = calculateOpenAICost(
-      this.modelName,
-      config,
-      data?.usage?.prompt_tokens,
-      data?.usage?.completion_tokens,
-    );
+    const tokenUsage = getTokenUsageWithRequestCount(data, cached);
+    const cost = calculateSafeOpenAICost(this.modelName, config, data);
 
-    if (choice?.error) {
+    if (choice?.error || finishReason === 'error') {
       await deleteFromCache?.();
+      const errorMetadata = choice?.error ? getChoiceErrorMetadata(choice.error.code) : undefined;
       return {
         error: 'API error: OpenRouter provider returned a generation error',
-        tokenUsage: getErrorTokenUsage(data, cached),
+        tokenUsage,
         cached,
-        cost: calculateErrorOpenAICost(this.modelName, config, data),
+        cost,
         ...(finishReason && { finishReason }),
-        ...((choice.error.code === 429 || choice.error.code === '429') && {
-          metadata: { rateLimitKind: 'rate_limit' as const },
-        }),
+        ...(errorMetadata && { metadata: errorMetadata }),
       };
     }
 
@@ -228,52 +276,26 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       await deleteFromCache?.();
       return {
         error: 'Malformed response data: expected choices[0].message',
-        tokenUsage: getErrorTokenUsage(data, cached),
+        tokenUsage,
         cached,
-        cost: calculateErrorOpenAICost(this.modelName, config, data),
+        cost,
         ...(finishReason && { finishReason }),
       };
     }
 
-    // Prioritize tool calls over content and reasoning
-    let output: string | object = '';
-    if (message.functionCall || message.toolCalls) {
-      // Tool calls always take priority and never include thinking
-      output = message.functionCall ?? message.toolCalls!;
-    } else if (typeof message.content === 'string' && message.content.trim()) {
-      output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled
-      if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
-      }
-    } else if (message.structuredContent?.length) {
-      output = message.structuredContent;
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content and showThinking is enabled
-      output = message.reasoning;
+    const refusal = getChatCompletionRefusal(message, finishReason);
+    if (refusal) {
+      return { ...refusal, tokenUsage, cached, cost, ...(finishReason && { finishReason }) };
     }
-    // Handle structured output
+
+    let output = getOpenRouterOutput(message, this.config.showThinking ?? true);
     if (config.response_format?.type === 'json_schema') {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
-      const jsonCandidate =
-        typeof message.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
-          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
-        }
-      }
+      output = parseJsonSchemaOutput(message, output);
     }
 
     return {
       output,
-      tokenUsage: getTokenUsage(data, cached),
+      tokenUsage,
       cached,
       cost,
       ...(finishReason && { finishReason }),

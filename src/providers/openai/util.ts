@@ -719,21 +719,48 @@ function isSafeTokenCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+function isSafeCost(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
 /**
- * Calculate cost for an error response without trusting provider-controlled usage counts.
+ * Calculate cost without trusting provider-controlled usage or cost fields.
  */
-export function calculateErrorOpenAICost(
+export function calculateSafeOpenAICost(
   modelName: string,
   config: ProviderConfig,
   data: any,
 ): number | undefined {
   const promptTokens = data?.usage?.prompt_tokens;
   const completionTokens = data?.usage?.completion_tokens;
-  if (!isSafeTokenCount(promptTokens) || !isSafeTokenCount(completionTokens)) {
+  const localCost =
+    isSafeTokenCount(promptTokens) && isSafeTokenCount(completionTokens)
+      ? calculateOpenAICost(modelName, config, promptTokens, completionTokens)
+      : undefined;
+  const hasLocalOverride =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  if (hasLocalOverride) {
+    if (isSafeCost(localCost)) {
+      return localCost;
+    }
+    const inputCost = config.inputCost ?? config.cost;
+    const outputCost = config.outputCost ?? config.cost;
+    if (
+      isSafeTokenCount(promptTokens) &&
+      isSafeTokenCount(completionTokens) &&
+      isSafeCost(inputCost) &&
+      isSafeCost(outputCost)
+    ) {
+      const configuredCost = inputCost * promptTokens + outputCost * completionTokens;
+      return isSafeCost(configuredCost) ? configuredCost : undefined;
+    }
     return undefined;
   }
-  const cost = calculateOpenAICost(modelName, config, promptTokens, completionTokens);
-  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+  return isSafeCost(data?.usage?.cost)
+    ? data.usage.cost
+    : isSafeCost(localCost)
+      ? localCost
+      : undefined;
 }
 
 export function failApiCall(err: any) {
@@ -751,86 +778,58 @@ export function failApiCall(err: any) {
 }
 
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
-  if (data.usage) {
-    if (cached) {
-      // Cached responses don't count as a new request
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      const cachedInputTokens =
-        data.usage.prompt_tokens_details?.cached_tokens ??
-        data.usage.input_tokens_details?.cached_tokens ??
-        0;
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-        numRequests: 1,
-        ...(data.usage.completion_tokens_details
-          ? {
-              completionDetails: {
-                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
-                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
-                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-              },
-            }
-          : cachedInputTokens > 0
-            ? {
-                completionDetails: {
-                  cacheReadInputTokens: cachedInputTokens,
-                },
-              }
-            : {}),
-      };
+  if (!isRecord(data?.usage)) {
+    return {};
+  }
+
+  const usage = data.usage;
+  const total = isSafeTokenCount(usage.total_tokens) ? usage.total_tokens : undefined;
+  if (cached) {
+    return total === undefined ? {} : { cached: total, total };
+  }
+
+  const tokenUsage: Partial<TokenUsage> = { numRequests: 1 };
+  if (total !== undefined) {
+    tokenUsage.total = total;
+  }
+  tokenUsage.prompt = isSafeTokenCount(usage.prompt_tokens) ? usage.prompt_tokens : 0;
+  tokenUsage.completion = isSafeTokenCount(usage.completion_tokens) ? usage.completion_tokens : 0;
+
+  const promptDetails = isRecord(usage.prompt_tokens_details)
+    ? usage.prompt_tokens_details
+    : isRecord(usage.input_tokens_details)
+      ? usage.input_tokens_details
+      : undefined;
+  const completionDetails = isRecord(usage.completion_tokens_details)
+    ? usage.completion_tokens_details
+    : undefined;
+  const details: NonNullable<TokenUsage['completionDetails']> = {};
+  const detailMappings = [
+    ['reasoning', completionDetails?.reasoning_tokens],
+    ['acceptedPrediction', completionDetails?.accepted_prediction_tokens],
+    ['rejectedPrediction', completionDetails?.rejected_prediction_tokens],
+    ['cacheReadInputTokens', promptDetails?.cached_tokens],
+  ] as const;
+  for (const [field, value] of detailMappings) {
+    if (isSafeTokenCount(value)) {
+      details[field] = value;
     }
   }
-  return {};
+  if (Object.keys(details).length > 0) {
+    tokenUsage.completionDetails = details;
+  }
+  return tokenUsage;
 }
 
-/**
- * Preserve request accounting on provider errors without trusting malformed usage metadata.
- */
-export function getErrorTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
-  const sanitized: Partial<TokenUsage> = { numRequests: cached ? 0 : 1 };
-  try {
-    const usage = getTokenUsage(data, cached);
-    const tokenFields = ['total', 'prompt', 'completion', 'cached'] as const;
-    for (const field of tokenFields) {
-      const value = usage[field];
-      if (isSafeTokenCount(value)) {
-        sanitized[field] = value;
-      }
-    }
-
-    if (usage.completionDetails) {
-      const details: NonNullable<TokenUsage['completionDetails']> = {};
-      const detailFields = [
-        'reasoning',
-        'acceptedPrediction',
-        'rejectedPrediction',
-        'cacheReadInputTokens',
-        'cacheCreationInputTokens',
-      ] as const;
-      for (const field of detailFields) {
-        const value = usage.completionDetails[field];
-        if (isSafeTokenCount(value)) {
-          details[field] = value;
-        }
-      }
-      if (Object.keys(details).length > 0) {
-        sanitized.completionDetails = details;
-      }
-    }
-  } catch {
-    // Ignore malformed provider-controlled usage fields.
-  }
-  return sanitized;
+export function getTokenUsageWithRequestCount(data: any, cached: boolean): Partial<TokenUsage> {
+  return { ...getTokenUsage(data, cached), numRequests: cached ? 0 : 1 };
 }
 
 export interface ValidatedChatCompletionMessage {
   content: string | null | undefined;
   functionCall: Record<string, unknown> | undefined;
   reasoning: string | undefined;
+  refusal: string | undefined;
   structuredContent: Record<string, unknown>[] | undefined;
   toolCalls: Record<string, unknown>[] | undefined;
 }
@@ -843,14 +842,38 @@ function hasNamedPayload(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && typeof value.name === 'string' && value.name.trim().length > 0;
 }
 
+function hasFunctionPayload(value: unknown): value is Record<string, unknown> {
+  return hasNamedPayload(value) && typeof value.arguments === 'string';
+}
+
 function isToolCall(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value)) {
+  if (!isRecord(value) || typeof value.id !== 'string') {
     return false;
   }
   return (
-    (value.type === 'function' && hasNamedPayload(value.function)) ||
-    (value.type === 'custom' && hasNamedPayload(value.custom))
+    (value.type === 'function' && hasFunctionPayload(value.function)) ||
+    (value.type === 'custom' &&
+      hasNamedPayload(value.custom) &&
+      typeof value.custom.input === 'string')
   );
+}
+
+function hasUrlPayload(value: unknown): boolean {
+  return isRecord(value) && typeof value.url === 'string' && value.url.trim().length > 0;
+}
+
+function isStructuredContentPart(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  switch (value.type) {
+    case 'text':
+      return typeof value.text === 'string' && value.text.trim().length > 0;
+    case 'image_url':
+      return hasUrlPayload(value.image_url);
+    default:
+      return false;
+  }
 }
 
 /**
@@ -864,7 +887,7 @@ export function validateChatCompletionMessage(
     return undefined;
   }
 
-  const functionCall = hasNamedPayload(value.function_call) ? value.function_call : undefined;
+  const functionCall = hasFunctionPayload(value.function_call) ? value.function_call : undefined;
   if (value.function_call != null && !functionCall) {
     return undefined;
   }
@@ -884,26 +907,74 @@ export function validateChatCompletionMessage(
   const structuredContent =
     options.allowStructuredContent &&
     Array.isArray(value.content) &&
-    value.content.every((item) => isRecord(item) && typeof item.type === 'string')
+    value.content.every(isStructuredContentPart)
       ? value.content
       : undefined;
   if (hasContent && content === undefined && structuredContent === undefined) {
     return undefined;
   }
 
-  const reasoning = typeof value.reasoning === 'string' ? value.reasoning : undefined;
+  const reasoning =
+    typeof value.reasoning === 'string' && value.reasoning.trim() ? value.reasoning : undefined;
+  const hasUsableContent =
+    (typeof content === 'string' && content.trim().length > 0) ||
+    (structuredContent !== undefined && structuredContent.length > 0);
+  const refusal =
+    typeof value.refusal === 'string' && value.refusal.trim().length > 0
+      ? value.refusal
+      : undefined;
   if (
     !functionCall &&
     !toolCalls &&
-    !hasContent &&
+    !hasUsableContent &&
     reasoning === undefined &&
-    typeof value.refusal !== 'string' &&
+    !refusal &&
     options.finishReason !== 'content_filter'
   ) {
     return undefined;
   }
 
-  return { content, functionCall, reasoning, structuredContent, toolCalls };
+  return {
+    content,
+    functionCall,
+    reasoning,
+    refusal,
+    structuredContent,
+    toolCalls,
+  };
+}
+
+export function getChatCompletionRefusal(
+  message: ValidatedChatCompletionMessage,
+  finishReason: string | undefined,
+): { output: string; isRefusal: true; guardrails: { flagged: true } } | undefined {
+  if (message.refusal) {
+    return { output: message.refusal, isRefusal: true, guardrails: { flagged: true } };
+  }
+  if (finishReason === 'content_filter') {
+    return {
+      output:
+        typeof message.content === 'string' && message.content.trim()
+          ? message.content
+          : 'Content filtered by provider',
+      isRefusal: true,
+      guardrails: { flagged: true },
+    };
+  }
+  return undefined;
+}
+
+export function parseChatCompletionJsonOutput(
+  message: ValidatedChatCompletionMessage,
+  output: string | object,
+): string | object {
+  const jsonCandidate =
+    typeof message.content === 'string'
+      ? message.content
+      : typeof output === 'string'
+        ? output
+        : undefined;
+  return jsonCandidate ? JSON.parse(jsonCandidate) : output;
 }
 
 export interface OpenAiFunction {

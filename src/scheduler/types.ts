@@ -17,6 +17,10 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Detect retryable result-level transient failures that are not rate limits. */
+  isRetryableResult?: (result: T) => boolean;
+  /** Merge bounded prior retry results into the terminal result. */
+  finalizeResult?: (result: T, retryResults: readonly T[]) => T;
 }
 
 /**

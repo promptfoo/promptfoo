@@ -1009,9 +1009,7 @@ function updateConversationHistory({
   renderedPrompt: string;
   response: ProviderResponse;
 }) {
-  const hasUsableOutput =
-    response.output !== undefined && response.output !== null && response.output !== '';
-  if (!conversations || (response.error && !hasUsableOutput)) {
+  if (!conversations || response.error) {
     return;
   }
 

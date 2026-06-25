@@ -251,8 +251,43 @@ describe('Snowflake Cortex Provider', () => {
       ['true content', { choices: [{ message: { content: true } }] }],
       ['false content', { choices: [{ message: { content: false } }] }],
       ['zero content', { choices: [{ message: { content: 0 } }] }],
+      ['null content', { choices: [{ message: { content: null } }] }],
+      ['empty content', { choices: [{ message: { content: '' } }] }],
+      ['blank content', { choices: [{ message: { content: '   ' } }] }],
+      [
+        'a malformed first choice even when a later choice is usable',
+        { choices: [{ message: {} }, { message: { content: 'must not bypass first choice' } }] },
+      ],
       ['an invalid function call', { choices: [{ message: { function_call: { name: 42 } } }] }],
+      [
+        'a function call without arguments',
+        { choices: [{ message: { function_call: { name: 'lookup' } } }] },
+      ],
       ['an invalid tool call', { choices: [{ message: { tool_calls: [null] } }] }],
+      [
+        'a tool call without an id',
+        {
+          choices: [
+            {
+              message: {
+                tool_calls: [{ type: 'function', function: { name: 'lookup', arguments: '{}' } }],
+              },
+            },
+          ],
+        },
+      ],
+      [
+        'a custom tool call without input',
+        {
+          choices: [
+            {
+              message: {
+                tool_calls: [{ id: 'call_custom', type: 'custom', custom: { name: 'shell' } }],
+              },
+            },
+          ],
+        },
+      ],
     ])('returns a structured error for %s', async (_description, responseBody) => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {
@@ -312,6 +347,115 @@ describe('Snowflake Cortex Provider', () => {
       });
       expect(JSON.stringify(result)).not.toContain('PRIVATE_SESSION_DIAGNOSTIC');
       expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      [
+        'an explicit refusal',
+        { message: { refusal: 'Cannot comply' }, finish_reason: 'stop' },
+        'Cannot comply',
+        'stop',
+      ],
+      [
+        'a content-filter response',
+        { message: { content: null }, finish_reason: 'content_filter' },
+        'Content filtered by provider',
+        'content_filter',
+      ],
+    ])('preserves %s as a flagged refusal', async (_description, choice, output, finishReason) => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { choices: [choice] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({
+        output,
+        finishReason,
+        isRefusal: true,
+        guardrails: { flagged: true },
+      });
+    });
+
+    it('treats finish_reason=error as a failure', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: { content: 'partial output must not be graded' },
+              finish_reason: 'error',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        latencyMs: 42,
+        deleteFromCache,
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toEqual({
+        error: 'API error: Snowflake provider returned a generation error',
+        tokenUsage: { numRequests: 1 },
+        cached: false,
+        latencyMs: 42,
+        cost: undefined,
+        finishReason: 'error',
+      });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('bounds malformed usage on a successful completion', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Complete' }, finish_reason: 'stop' }],
+          usage: {
+            total_tokens: { private: 'must-not-appear' },
+            prompt_tokens: -1,
+            completion_tokens: 2,
+            cost: 'free',
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({
+        output: 'Complete',
+        tokenUsage: { completion: 2, numRequests: 1 },
+      });
+      expect(result.cost).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('must-not-appear');
     });
 
     it('preserves cached accounting metadata when rejecting a malformed response', async () => {

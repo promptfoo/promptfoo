@@ -3,11 +3,12 @@ import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
-  calculateErrorOpenAICost,
-  calculateOpenAICost,
+  calculateSafeOpenAICost,
   formatOpenAiError,
-  getErrorTokenUsage,
-  getTokenUsage,
+  getChatCompletionRefusal,
+  getTokenUsageWithRequestCount,
+  parseChatCompletionJsonOutput,
+  type ValidatedChatCompletionMessage,
   validateChatCompletionMessage,
 } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
@@ -29,6 +30,25 @@ function getSnowflakeErrorCode(
     /^[A-Za-z0-9_.-]{1,64}$/.test(String(value))
     ? String(value)
     : undefined;
+}
+
+function getSnowflakeOutput(message: ValidatedChatCompletionMessage): string | object {
+  if (message.functionCall || message.toolCalls) {
+    return message.functionCall ?? message.toolCalls!;
+  }
+  return typeof message.content === 'string' && message.content.trim() ? message.content : '';
+}
+
+function parseSnowflakeJsonOutput(
+  message: ValidatedChatCompletionMessage,
+  output: string | object,
+): string | object {
+  try {
+    return parseChatCompletionJsonOutput(message, output);
+  } catch (error) {
+    logger.warn(`[Snowflake Cortex] Failed to parse JSON output: ${String(error)}`);
+    return output;
+  }
 }
 
 /**
@@ -187,22 +207,30 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
 
     const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
     const finishReason = normalizeFinishReason(choice?.finish_reason);
-    const cost = calculateOpenAICost(
-      this.modelName,
-      config,
-      data?.usage?.prompt_tokens,
-      data?.usage?.completion_tokens,
-    );
+    const tokenUsage = getTokenUsageWithRequestCount(data, cached);
+    const cost = calculateSafeOpenAICost(this.modelName, config, data);
+
+    if (finishReason === 'error') {
+      await deleteFromCache?.();
+      return {
+        error: 'API error: Snowflake provider returned a generation error',
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        finishReason,
+      };
+    }
 
     const snowflakeErrorCode = getSnowflakeErrorCode(data);
     if (!choice && typeof data?.message === 'string' && snowflakeErrorCode) {
       await deleteFromCache?.();
       return {
         error: `API error: Snowflake provider returned error code ${snowflakeErrorCode}`,
-        tokenUsage: getErrorTokenUsage(data, cached),
+        tokenUsage,
         cached,
         latencyMs,
-        cost: calculateErrorOpenAICost(this.modelName, config, data),
+        cost,
         metadata: { snowflakeErrorCode },
       };
     }
@@ -213,45 +241,34 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       await deleteFromCache?.();
       return {
         error: 'Malformed response data: expected choices[0].message',
-        tokenUsage: getErrorTokenUsage(data, cached),
+        tokenUsage,
         cached,
         latencyMs,
-        cost: calculateErrorOpenAICost(this.modelName, config, data),
+        cost,
         ...(finishReason && { finishReason }),
       };
     }
 
-    // Handle tool calls and content
-    let output: string | object = '';
-
-    if (message.functionCall || message.toolCalls) {
-      // Tool calls always take priority
-      output = message.functionCall ?? message.toolCalls!;
-    } else if (typeof message.content === 'string' && message.content.trim()) {
-      output = message.content;
+    const refusal = getChatCompletionRefusal(message, finishReason);
+    if (refusal) {
+      return {
+        ...refusal,
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
     }
 
-    // Handle structured output
+    let output = getSnowflakeOutput(message);
     if (config.response_format?.type === 'json_schema') {
-      const jsonCandidate =
-        typeof message.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
-
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          logger.warn(`[Snowflake Cortex] Failed to parse JSON output: ${String(error)}`);
-        }
-      }
+      output = parseSnowflakeJsonOutput(message, output);
     }
 
     return {
       output,
-      tokenUsage: getTokenUsage(data, cached),
+      tokenUsage,
       cached,
       latencyMs,
       cost,
