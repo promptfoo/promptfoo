@@ -92,31 +92,69 @@ export function resetRedteamProviderLoader(): void {
  * provider-specific: native providers use different request schemas, while the Responses API
  * uses `max_output_tokens` and chat/completions use different aliases.
  */
-function applyDefaultOutputCap(provider: ApiProvider): void {
+function isOpenAiOutputCapProvider(provider: ApiProvider): boolean {
+  const providerId = provider.id();
+  const constructorName = provider.constructor?.name ?? '';
+  return (
+    provider instanceof OpenAiChatCompletionProvider ||
+    providerId.includes(':responses:') ||
+    constructorName.includes('ResponsesProvider') ||
+    providerId.includes(':completion:') ||
+    constructorName === 'OpenAiCompletionProvider'
+  );
+}
+
+function cloneProviderConfig(provider: ApiProvider): ApiProvider {
   const config = (provider as { config?: Record<string, unknown> }).config;
   if (!config || typeof config !== 'object') {
-    return;
+    return provider;
+  }
+
+  const descriptors = Object.getOwnPropertyDescriptors(provider);
+  const configDescriptor = Object.getOwnPropertyDescriptor(provider, 'config');
+  descriptors.config = {
+    configurable: configDescriptor?.configurable ?? true,
+    enumerable: configDescriptor?.enumerable ?? true,
+    value: { ...config },
+    writable: true,
+  };
+  return Object.create(Object.getPrototypeOf(provider), descriptors) as ApiProvider;
+}
+
+function withDefaultOutputCap(provider: ApiProvider): ApiProvider {
+  if (!isOpenAiOutputCapProvider(provider)) {
+    return provider;
+  }
+
+  // A caller may reuse an instantiated provider for normal batch generation. Clone the
+  // provider's own state before changing its config so attack/grading limits do not leak into
+  // those uncapped generation calls.
+  const cappedProvider = cloneProviderConfig(provider);
+  const config = (cappedProvider as { config?: Record<string, unknown> }).config;
+  if (!config || typeof config !== 'object') {
+    return cappedProvider;
   }
 
   const defaultCap = getRedteamProviderMaxTokens();
-  const providerId = provider.id();
-  const constructorName = provider.constructor?.name ?? '';
+  const providerId = cappedProvider.id();
+  const constructorName = cappedProvider.constructor?.name ?? '';
 
   if (providerId.includes(':responses:') || constructorName.includes('ResponsesProvider')) {
     config.max_output_tokens ??= defaultCap;
-    return;
+    return cappedProvider;
   }
 
-  if (provider instanceof OpenAiChatCompletionProvider) {
+  if (cappedProvider instanceof OpenAiChatCompletionProvider) {
     const configuredCap = config.max_completion_tokens ?? config.max_tokens ?? defaultCap;
     config.max_tokens ??= configuredCap;
     config.max_completion_tokens ??= configuredCap;
-    return;
+    return cappedProvider;
   }
 
   if (providerId.includes(':completion:') || constructorName === 'OpenAiCompletionProvider') {
     config.max_tokens ??= defaultCap;
   }
+  return cappedProvider;
 }
 
 async function loadRedteamProvider({
@@ -139,9 +177,6 @@ async function loadRedteamProvider({
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
     ret = (await redteamProviderLoader([redteamProvider]))[0];
-    if (shouldCapOutput) {
-      applyDefaultOutputCap(ret);
-    }
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
@@ -160,6 +195,9 @@ async function loadRedteamProvider({
       },
     });
   }
+  if (shouldCapOutput) {
+    ret = withDefaultOutputCap(ret);
+  }
   return ret;
 }
 
@@ -177,6 +215,9 @@ function getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
+  private attackProvider: ApiProvider | undefined;
+  private attackJsonOnlyProvider: ApiProvider | undefined;
+  private configuredProvider: RedteamFileConfig['provider'] | undefined;
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
@@ -204,6 +245,9 @@ class RedteamProviderManager {
   clearProvider() {
     this.provider = undefined;
     this.jsonOnlyProvider = undefined;
+    this.attackProvider = undefined;
+    this.attackJsonOnlyProvider = undefined;
+    this.configuredProvider = undefined;
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
@@ -212,6 +256,9 @@ class RedteamProviderManager {
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
+    this.configuredProvider = provider;
+    this.attackProvider = undefined;
+    this.attackJsonOnlyProvider = undefined;
     this.provider = await loadRedteamProvider({ provider });
     this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
   }
@@ -244,6 +291,29 @@ class RedteamProviderManager {
     if (purpose === 'generation' && this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
       return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
+    }
+
+    if (purpose === 'attack' && this.configuredProvider !== undefined) {
+      const cachedAttackProvider = jsonOnly ? this.attackJsonOnlyProvider : this.attackProvider;
+      if (cachedAttackProvider) {
+        logger.debug(
+          `[RedteamProviderManager] Using cached attack provider: ${cachedAttackProvider.id()}`,
+        );
+        return this.wrapProvider(cachedAttackProvider);
+      }
+
+      const loadedAttackProvider = await loadRedteamProvider({
+        provider: this.configuredProvider,
+        jsonOnly,
+        preferSmallModel,
+        purpose: 'attack',
+      });
+      if (jsonOnly) {
+        this.attackJsonOnlyProvider = loadedAttackProvider;
+      } else {
+        this.attackProvider = loadedAttackProvider;
+      }
+      return this.wrapProvider(loadedAttackProvider);
     }
 
     // Check if we have an explicit provider argument or redteam.provider configured
