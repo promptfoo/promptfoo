@@ -2815,7 +2815,10 @@ describe('ResultsTable Variable JSON Formatting', () => {
     );
   });
 
-  it('preserves malformed JSON-looking strings without marking them as prettified', () => {
+  it.each([
+    false,
+    true,
+  ])('preserves malformed JSON-looking strings when markdown rendering is %s', (renderMarkdown) => {
     const malformedObject = '{"broken": }';
     const malformedArray = '[1,]';
     mockTableState(
@@ -2826,7 +2829,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
     );
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
-      renderMarkdown: false,
+      renderMarkdown,
       prettifyJson: true,
     }));
 
@@ -2835,6 +2838,9 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(container).toHaveTextContent(malformedObject);
     expect(container).toHaveTextContent(malformedArray);
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="literal-json-variable"]')).toHaveLength(
+      renderMarkdown ? 2 : 0,
+    );
   });
 
   it('accepts only JSON whitespace at the boundaries of JSON-looking strings', () => {
@@ -2924,6 +2930,25 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(toString).not.toHaveBeenCalled();
   });
 
+  it('does not count omitted object properties against the display budget', () => {
+    const omittedProperties = Object.fromEntries(
+      Array.from({ length: 30 }, (_, index) => [`omitted_property_${index}`, undefined]),
+    );
+    mockTableState(createMockTable({ vars: [omittedProperties] }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: false,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('[data-testid="prettified-json-variable"]')).toHaveTextContent(
+      '{}',
+    );
+    expect(container).not.toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
+  });
+
   it.each([
     false,
     true,
@@ -2973,7 +2998,8 @@ describe('ResultsTable Variable JSON Formatting', () => {
         throw new Error('cannot coerce');
       },
     };
-    mockTableState(createMockTable({ vars: [unrenderable] }));
+    const undefinedSerialization = { toJSON: () => undefined };
+    mockTableState(createMockTable({ vars: [unrenderable, undefinedSerialization] }));
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
       renderMarkdown: false,
@@ -2982,7 +3008,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
 
     const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    expect(container).toHaveTextContent('[Unserializable value]');
+    expect(container.textContent?.split('[Unserializable value]')).toHaveLength(3);
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
   });
 
@@ -3004,6 +3030,43 @@ describe('ResultsTable Variable JSON Formatting', () => {
     expect(parseSpy.mock.calls.some(([value]) => value === plainText)).toBe(false);
     expect(parseSpy.mock.calls.some(([value]) => value === oversizedJson)).toBe(false);
     expect(container.querySelector('[data-testid="prettified-json-variable"]')).toBeNull();
+    parseSpy.mockRestore();
+  });
+
+  it('keeps oversized JSON-looking strings out of Markdown without parsing them', () => {
+    const oversizedJson = JSON.stringify({
+      label: '**oversized-json**',
+      payload: 'x'.repeat(520),
+    });
+    mockTableState(
+      createMockTable({
+        vars: [oversizedJson],
+        transformedDisplayVars: { __transformed_payload: oversizedJson },
+      }),
+    );
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    }));
+    const parseSpy = vi.spyOn(JSON, 'parse');
+
+    const { container } = renderWithProviders(
+      <ResultsTable {...defaultProps} maxTextLength={1_000} />,
+    );
+
+    expect(parseSpy.mock.calls.some(([value]) => value === oversizedJson)).toBe(false);
+    expect(container.querySelectorAll('[data-testid="literal-json-variable"]')).toHaveLength(2);
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="literal-json-variable"]')).map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual([oversizedJson, oversizedJson]);
+    expect(
+      Array.from(container.querySelectorAll('strong')).some((element) =>
+        element.textContent?.includes('oversized-json'),
+      ),
+    ).toBe(false);
     parseSpy.mockRestore();
   });
 
@@ -3035,7 +3098,9 @@ describe('ResultsTable Variable JSON Formatting', () => {
       ),
     ).toBe(false);
     if (renderMarkdown) {
-      expect(container.querySelector('code')?.textContent?.trimEnd()).toBe(expansiveJson);
+      expect(container.querySelector('[data-testid="literal-json-variable"]')?.textContent).toBe(
+        expansiveJson,
+      );
     }
   });
 
