@@ -8,6 +8,27 @@ export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
+function containsPosteriorStrategy(strategy: unknown): boolean {
+  if (strategy === 'posterior') {
+    return true;
+  }
+  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
+    return false;
+  }
+
+  const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
+  if (id === 'posterior') {
+    return true;
+  }
+  return id === 'layer' && Array.isArray(config?.steps)
+    ? config.steps.some(containsPosteriorStrategy)
+    : false;
+}
+
+export function hasPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
+  return strategies.some(containsPosteriorStrategy);
+}
+
 // Strategies that require configuration before they can be used
 export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 

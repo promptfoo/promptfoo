@@ -4,7 +4,7 @@ import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } fro
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
-import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
@@ -298,8 +298,6 @@ export interface SynthesizeOptions extends CommonOptions {
   targetIds: string[];
   showProgressBar?: boolean;
 }
-
-export type RedteamGenerationContext = RemoteGenerationContext;
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 

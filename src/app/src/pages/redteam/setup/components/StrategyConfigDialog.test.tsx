@@ -1006,6 +1006,26 @@ describe('StrategyConfigDialog', () => {
       expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeInTheDocument();
     });
 
+    it('should omit strategies that are unavailable for the configured target', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          unavailableStrategies={['posterior']}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.queryByRole('option', { name: 'posterior' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'base64' })).toBeInTheDocument();
+    });
+
     it('should save layer strategy with all plugins by default', async () => {
       const user = userEvent.setup();
       renderWithProviders(

@@ -49,6 +49,7 @@ import {
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
+import { hasPosteriorStrategy, POSTERIOR_MULTI_INPUT_ERROR } from './strategies/posterior';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import {
   extractGoalFromPrompt,
@@ -1049,6 +1050,10 @@ export async function synthesize({
   );
 
   await validateStrategies(strategies);
+  const hasMultipleInputs = Boolean(inputs && Object.keys(inputs).length > 0);
+  if (hasMultipleInputs && hasPosteriorStrategy(strategies)) {
+    throw new Error(POSTERIOR_MULTI_INPUT_ERROR);
+  }
   await validateSharpDependency(strategies, plugins);
 
   const redteamProvider = await redteamProviderManager.getProvider({
@@ -1143,7 +1148,6 @@ export async function synthesize({
   );
 
   // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
-  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
   if (hasMultipleInputs) {
     const inputKeys = Object.keys(inputs);
     logger.info(

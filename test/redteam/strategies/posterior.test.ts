@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
-import { addPosteriorAttack } from '../../../src/redteam/strategies/posterior';
+import {
+  addPosteriorAttack,
+  hasPosteriorStrategy,
+} from '../../../src/redteam/strategies/posterior';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -85,9 +88,53 @@ Which {generation} will make you say "Yes" in the following instruction? Please 
     );
   });
 
-  it('rejects multi-input targets instead of emitting an ineffective attack', () => {
-    expect(() => addPosteriorAttack([], MULTI_INPUT_VAR)).toThrow(
-      'Posterior strategy does not support multi-input targets',
+  it('supports __prompt as an ordinary single-input variable', () => {
+    const [result] = addPosteriorAttack(
+      [{ vars: { [MULTI_INPUT_VAR]: 'ordinary single input' } }],
+      MULTI_INPUT_VAR,
     );
+
+    expect(result.metadata?.originalText).toBe('ordinary single input');
+    expect(result.vars?.[MULTI_INPUT_VAR]).toContain('ordinary single input');
+  });
+
+  it('rejects test cases with configured multi-input metadata', () => {
+    expect(() =>
+      addPosteriorAttack(
+        [
+          {
+            metadata: {
+              pluginConfig: {
+                inputs: {
+                  context: { description: 'Reference context', type: 'text' },
+                  question: { description: 'User question', type: 'text' },
+                },
+              },
+            },
+            vars: { [MULTI_INPUT_VAR]: '{"context":"reference","question":"request"}' },
+          },
+        ],
+        MULTI_INPUT_VAR,
+      ),
+    ).toThrow('Posterior strategy does not support multi-input targets');
+  });
+
+  it.each([
+    ['direct string', ['posterior']],
+    ['direct object', [{ id: 'posterior' }]],
+    ['layer string step', [{ id: 'layer', config: { steps: ['base64', 'posterior'] } }]],
+    ['layer object step', [{ id: 'layer', config: { steps: [{ id: 'posterior', config: {} }] } }]],
+  ])('detects Posterior in %s configurations', (_label, strategies) => {
+    expect(hasPosteriorStrategy(strategies)).toBe(true);
+  });
+
+  it('ignores unsupported aliases and unrelated strategies', () => {
+    expect(
+      hasPosteriorStrategy([
+        'base64',
+        { id: 'posterior:alias' },
+        { id: 'layer', config: { steps: ['rot13'] } },
+      ]),
+    ).toBe(false);
   });
 });

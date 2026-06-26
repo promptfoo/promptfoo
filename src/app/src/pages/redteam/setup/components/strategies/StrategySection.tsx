@@ -17,6 +17,7 @@ interface StrategySectionProps {
   isRemoteGenerationDisabled: boolean;
   isStrategyAuthGated?: (strategyId: string) => boolean;
   isStrategyConfigured?: (strategyId: string) => boolean;
+  getTestCaseGenerationDisabledReason?: (strategyId: string) => string | undefined;
 }
 
 export function StrategySection({
@@ -32,6 +33,7 @@ export function StrategySection({
   isRemoteGenerationDisabled,
   isStrategyAuthGated,
   isStrategyConfigured,
+  getTestCaseGenerationDisabledReason,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
     .map((strategy) => strategy.id)
@@ -84,6 +86,7 @@ export function StrategySection({
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
             isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
             isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
+            testCaseGenerationDisabledReason={getTestCaseGenerationDisabledReason?.(strategy.id)}
           />
         ))}
       </div>

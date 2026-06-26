@@ -34,6 +34,7 @@ interface StrategyItemProps {
   isRemoteGenerationDisabled: boolean;
   isAuthGated?: boolean;
   isConfigured?: boolean;
+  testCaseGenerationDisabledReason?: string;
 }
 
 export function StrategyItem({
@@ -45,6 +46,7 @@ export function StrategyItem({
   isRemoteGenerationDisabled,
   isAuthGated = false,
   isConfigured = true,
+  testCaseGenerationDisabledReason,
 }: StrategyItemProps) {
   const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
     strategyId: strategy.id,
@@ -55,10 +57,12 @@ export function StrategyItem({
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
-    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
-    strategy.id as any,
-  );
+  const isTestCaseGenerationDisabled =
+    Boolean(testCaseGenerationDisabledReason) ||
+    STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
+      // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
+      strategy.id as any,
+    );
 
   // Compute tooltip titles - simple derived values, no memoization needed
   const tooltipTitle = useMemo(() => {
@@ -67,11 +71,20 @@ export function StrategyItem({
         strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
       return `Configuration required: ${reason}. Click the settings icon to configure.`;
     }
+    if (testCaseGenerationDisabledReason) {
+      return testCaseGenerationDisabledReason;
+    }
     if (isTestCaseGenerationDisabled) {
       return `Test case generation is not available for ${strategy.name} strategy.`;
     }
     return `Generate an example test case using the ${strategy.name} Strategy.`;
-  }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
+  }, [
+    requiresConfig,
+    strategy.id,
+    strategy.name,
+    isTestCaseGenerationDisabled,
+    testCaseGenerationDisabledReason,
+  ]);
 
   const settingsTooltipTitle = requiresConfig ? tooltipTitle : `Configure ${strategy.name}`;
 

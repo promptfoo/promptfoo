@@ -18,6 +18,10 @@ import {
 } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
+import {
+  hasPosteriorStrategy,
+  POSTERIOR_MULTI_INPUT_ERROR,
+} from '../../redteam/strategies/posterior';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
@@ -67,6 +71,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
     if (hasMultiInput) {
+      if (hasPosteriorStrategy([strategy])) {
+        res.status(400).json({ error: POSTERIOR_MULTI_INPUT_ERROR });
+        return;
+      }
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
       if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
         logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);

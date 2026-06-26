@@ -3,6 +3,7 @@ import {
   getEstimatedDuration,
   getEstimatedProbes,
   getStrategyId,
+  hasPosteriorStrategy,
   isStrategyConfigured,
 } from './utils';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
@@ -35,6 +36,29 @@ describe('getStrategyId', () => {
       config: {},
     };
     expect(getStrategyId(strategy)).toBe('jailbreak');
+  });
+});
+
+describe('hasPosteriorStrategy', () => {
+  it.each([
+    ['directly', [{ id: 'posterior' }]],
+    ['as a layer string step', [{ id: 'layer', config: { steps: ['base64', 'posterior'] } }]],
+    [
+      'as a layer object step',
+      [{ id: 'layer', config: { steps: [{ id: 'posterior', config: {} }] } }],
+    ],
+  ])('detects Posterior %s', (_label, strategies) => {
+    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(true);
+  });
+
+  it('ignores unrelated strategies and unsupported aliases', () => {
+    const strategies = [
+      'base64',
+      { id: 'posterior:alias', config: {} },
+      { id: 'layer', config: { steps: ['rot13'] } },
+    ] as unknown as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
   });
 });
 

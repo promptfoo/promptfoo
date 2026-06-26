@@ -1,5 +1,4 @@
 import logger from '../../logger';
-import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { assertPosteriorTargetSupported } from './posterior';
 import { pluginMatchesStrategyTargets } from './util';
@@ -113,7 +112,7 @@ export async function addLayerTestCases(
             typeof layer === 'string' ? layer === 'posterior' : layer.id === 'posterior',
           )
         ) {
-          assertPosteriorTargetSupported(injectVar);
+          assertPosteriorTargetSupported([testCase]);
         }
 
         const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
@@ -126,9 +125,6 @@ export async function addLayerTestCases(
               injectVar,
               scanId,
               ...stepObj.config,
-              ...remoteGenerationContextPayload(
-                typeof config?.targetId === 'string' ? config.targetId : undefined,
-              ),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },
@@ -149,6 +145,7 @@ export async function addLayerTestCases(
     // ═══════════════════════════════════════════════════════════════════════
     // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
     // ═══════════════════════════════════════════════════════════════════════
+    let resolvedStrategyId = stepObj.id;
     let stepAction: Strategy['action'] | undefined;
 
     try {
@@ -156,12 +153,12 @@ export async function addLayerTestCases(
         const loaded = await loadStrategy(stepObj.id);
         stepAction = loaded.action;
       } else {
-        // Try exact match first, then base id before ':'
+        // Try an exact match, then the supported custom:<variant> form.
         let builtin = strategies.find((s) => s.id === stepObj.id);
-        if (!builtin && stepObj.id.includes(':')) {
-          const baseId = stepObj.id.split(':')[0];
-          builtin = strategies.find((s) => s.id === baseId);
+        if (!builtin && stepObj.id.startsWith('custom:')) {
+          builtin = strategies.find((s) => s.id === 'custom');
         }
+        resolvedStrategyId = builtin?.id ?? stepObj.id;
         stepAction = builtin?.action;
       }
     } catch (e) {
@@ -178,7 +175,7 @@ export async function addLayerTestCases(
     const stepTargets =
       (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
     const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
+      pluginMatchesStrategyTargets(t, resolvedStrategyId, stepTargets as string[] | undefined),
     );
 
     const next = await stepAction(applicable, injectVar, {
