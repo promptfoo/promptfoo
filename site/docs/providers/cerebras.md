@@ -7,7 +7,8 @@ description: Configure Cerebras models through its OpenAI-compatible inference A
 
 This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
 
-Cerebras offers an OpenAI-compatible API for various large language models including Llama models, DeepSeek, and more. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
+Cerebras offers an OpenAI-compatible chat completions API. Use a model ID returned by the
+Cerebras model catalog or `/models` endpoint.
 
 ## Setup
 
@@ -34,11 +35,8 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras model catalog changes as models are added and retired. For example,
-`gpt-oss-120b` and `llama-4-scout-17b-16e-instruct` are available at the time of writing.
-Use the `/models` endpoint as the source of truth before pinning a model in a long-lived config:
-
-To get the current list of available models, use the `/models` endpoint:
+The Cerebras model catalog changes as models are added and retired. Use the `/models` endpoint as
+the source of truth before pinning a model in a long-lived config:
 
 ```bash
 curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer your_api_key_here"
@@ -66,7 +64,7 @@ To use structured outputs, set the `response_format` parameter to include a JSON
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       response_format:
         type: 'json_schema'
@@ -91,7 +89,7 @@ Cerebras models support tool use (function calling), enabling LLMs to programmat
 
 ```yaml
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       tools:
         - type: 'function'
@@ -122,7 +120,7 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:zai-glm-4.7
     config:
       temperature: 0.7
       max_completion_tokens: 1024
