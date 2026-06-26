@@ -7,6 +7,7 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
@@ -64,11 +65,11 @@ async function getLiveConfigCompatibilityError(
   const plugins =
     Array.isArray(commandLineOptions?.plugins) && commandLineOptions.plugins.length > 0
       ? commandLineOptions.plugins
-      : Array.isArray(resolvedConfig.plugins)
+      : Array.isArray(resolvedConfig.plugins) && resolvedConfig.plugins.length > 0
         ? resolvedConfig.plugins
-        : Array.isArray(redteam?.plugins)
+        : Array.isArray(redteam?.plugins) && redteam.plugins.length > 0
           ? redteam.plugins
-          : undefined;
+          : Array.from(REDTEAM_DEFAULT_PLUGINS);
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;

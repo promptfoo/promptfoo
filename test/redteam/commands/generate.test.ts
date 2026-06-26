@@ -1122,6 +1122,56 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 
+  it('uses default plugins when checking a targeted Posterior strategy', async () => {
+    const inputs = { context: 'Reference context', question: 'User question' };
+    mockProvider.inputs = inputs;
+    vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, value, options) => {
+      const includesPolicy = options?.plugins?.some(
+        (plugin) =>
+          (typeof plugin === 'string' ? plugin : (plugin as { id?: string }).id) === 'policy',
+      );
+      return value && typeof value === 'object' && Object.keys(value).length > 0 && includesPolicy
+        ? 'Posterior strategy does not support multi-input targets'
+        : undefined;
+    });
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
+      async (_cmdObj, defaultConfig) => {
+        const redteam = {
+          strategies: [{ id: 'posterior', config: { plugins: ['policy'] } }],
+        };
+        await configModule.getResolveConfigsHooks(defaultConfig)?.beforeProviderLoad?.({
+          providers: [{ id: 'echo', inputs }],
+          redteam,
+          env: undefined,
+          basePath: '/mock/path',
+        });
+        return {
+          basePath: '/mock/path',
+          testSuite: { providers: [mockProvider], prompts: [], tests: [] },
+          config: { redteam },
+        };
+      },
+    );
+
+    await expect(
+      doGenerateRedteam({
+        output: 'test-output.json',
+        inRedteamRun: false,
+        cache: false,
+        defaultConfig: {},
+        write: false,
+        config: 'test-config.yaml',
+      }),
+    ).resolves.toBeUndefined();
+
+    const pluginLists = vi
+      .mocked(getStrategyCompatibilityError)
+      .mock.calls.map((call) => call[2]?.plugins)
+      .filter((plugins) => plugins !== undefined);
+    expect(pluginLists).not.toHaveLength(0);
+    expect(pluginLists.flat()).not.toContain('policy');
+  });
+
   it('should run compatibility preflight before returning a matching cached config', async () => {
     const configPath = 'test-config.yaml';
     const outputPath = 'redteam.yaml';

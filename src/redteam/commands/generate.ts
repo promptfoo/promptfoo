@@ -404,7 +404,9 @@ async function doGenerateRedteamInternal(
       const compatibilityPlugins =
         Array.isArray(options.plugins) && options.plugins.length > 0
           ? options.plugins
-          : redteam?.plugins;
+          : redteam?.plugins && redteam.plugins.length > 0
+            ? redteam.plugins
+            : Array.from(REDTEAM_DEFAULT_PLUGINS);
       const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
       if (strategyConfigError) {
         throw new Error(strategyConfigError);

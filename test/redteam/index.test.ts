@@ -907,6 +907,34 @@ describe('synthesize', () => {
       expect(mockPluginAction).not.toHaveBeenCalled();
     });
 
+    it('rejects Posterior before generating a plugin with local inputs', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig: { inputs }, pluginId: 'cca' },
+          vars: { query: 'request' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'cca' });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cca', numTests: 1, config: { inputs } }],
+          prompts: ['{{query}}'],
+          purpose: 'Answer questions with reference context',
+          strategies: [{ id: 'posterior' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+      expect(mockPluginAction).not.toHaveBeenCalled();
+    });
+
     it('allows a multi-input Layer when its Posterior step is excluded for the plugin', async () => {
       const inputs = {
         context: { description: 'Reference context', type: 'text' },

@@ -2544,6 +2544,20 @@ inputs:
     expect(preflightInputs).toEqual([localInputs]);
   });
 
+  it('renders legacy local inputs before merging a cloud provider', async () => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({ id: 'echo' });
+
+    const provider = await loadApiProvider(providerId, {
+      options: {
+        config: { inputs: { question: '{{ env.INPUT_DESCRIPTION }}' } },
+        env: { INPUT_DESCRIPTION: 'Rendered question' },
+      },
+    });
+
+    expect(provider.inputs).toEqual({ question: 'Rendered question' });
+  });
+
   it('ignores sequence prompt arrays during provider preflight', async () => {
     await expect(
       resolveProviderInputsForValidation([

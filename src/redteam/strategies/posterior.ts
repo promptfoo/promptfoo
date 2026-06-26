@@ -96,7 +96,7 @@ export function hasActivePosteriorStrategy(strategies: readonly unknown[]): bool
 export function hasApplicablePosteriorStrategy(
   strategies: readonly unknown[],
   plugins?: readonly unknown[],
-  options: { includeDisabledStrategies?: boolean } = {},
+  options: { includeDisabledStrategies?: boolean; pluginsUseTargetInputs?: boolean } = {},
 ): boolean {
   const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
     (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
@@ -132,7 +132,9 @@ export function hasApplicablePosteriorStrategy(
     normalizedPlugins.some(
       (plugin) =>
         plugin &&
-        configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
+        configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
+          pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+        }),
     ),
   );
 }

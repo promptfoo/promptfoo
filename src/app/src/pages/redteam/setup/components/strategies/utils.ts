@@ -71,7 +71,7 @@ export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]):
 export function hasPosteriorStrategy(
   strategies: readonly RedteamStrategy[],
   plugins?: readonly RedteamPlugin[],
-  options: { includeDisabledStrategies?: boolean } = {},
+  options: { includeDisabledStrategies?: boolean; pluginsUseTargetInputs?: boolean } = {},
 ): boolean {
   const visited = new Set<object>();
   const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
@@ -86,7 +86,9 @@ export function hasPosteriorStrategy(
   );
   return effectiveStrategies.some((strategy) =>
     normalizedPlugins.some((plugin) =>
-      configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
+      configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
+        pluginsUseTargetInputs: options.pluginsUseTargetInputs,
+      }),
     ),
   );
 }

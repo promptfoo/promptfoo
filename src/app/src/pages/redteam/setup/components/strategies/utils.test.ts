@@ -146,6 +146,13 @@ describe('hasPosteriorStrategy', () => {
         { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
       ]),
     ).toBe(false);
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior' }] as RedteamStrategy[],
+        [{ id: 'cca', config: { inputs: { context: 'Context', question: 'Question' } } }],
+        { pluginsUseTargetInputs: false },
+      ),
+    ).toBe(true);
   });
 });
 

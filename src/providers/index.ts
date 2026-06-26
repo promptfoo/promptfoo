@@ -156,7 +156,9 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
-      inputs: getConfiguredProviderInputs(options) ?? getConfiguredProviderInputs(cloudProvider),
+      inputs:
+        getConfiguredProviderInputs({ inputs: options.inputs, config: renderedConfig }) ??
+        getConfiguredProviderInputs(cloudProvider),
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
