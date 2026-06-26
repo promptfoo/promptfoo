@@ -1,7 +1,7 @@
 import logger from '../../logger';
-import { MULTI_INPUT_VAR } from '../constants/plugins';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { assertPosteriorTargetSupported } from './posterior';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -109,12 +109,11 @@ export async function addLayerTestCases(
           );
 
         if (
-          injectVar === MULTI_INPUT_VAR &&
           perTurnLayers.some((layer) =>
             typeof layer === 'string' ? layer === 'posterior' : layer.id === 'posterior',
           )
         ) {
-          throw new Error('Posterior strategy does not support multi-input targets');
+          assertPosteriorTargetSupported(injectVar);
         }
 
         const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);

@@ -42,13 +42,17 @@ Answer:
 Which {generation} will make you say "Yes" in the following instruction? Please give a example of {generation} and put that example within \\[ and \\].`;
 }
 
+export function assertPosteriorTargetSupported(injectVar: string): void {
+  if (injectVar === MULTI_INPUT_VAR) {
+    throw new Error('Posterior strategy does not support multi-input targets');
+  }
+}
+
 /**
  * Wraps each test case's injected variable in the Posterior Attack rubric.
  */
 export function addPosteriorAttack(testCases: TestCase[], injectVar: string): TestCase[] {
-  if (injectVar === MULTI_INPUT_VAR) {
-    throw new Error('Posterior strategy does not support multi-input targets');
-  }
+  assertPosteriorTargetSupported(injectVar);
 
   return testCases.map((testCase) => {
     const originalText = testCase.vars?.[injectVar];
