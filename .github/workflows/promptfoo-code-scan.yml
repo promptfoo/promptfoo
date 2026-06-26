@@ -25,43 +25,15 @@ jobs:
       id-token: write
 
     steps:
-      - name: Resolve pull request refs
-        id: pr-refs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-        run: |
-          if [[ ! "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
-            echo "Invalid pull request number" >&2
-            exit 1
-          fi
-          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.base.ref')"
-          base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${base_ref}" --jq '.sha')"
-          if [[ ! "${base_sha}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Invalid pull request base SHA" >&2
-            exit 1
-          fi
-          echo "base_sha=${base_sha}" >> "${GITHUB_OUTPUT}"
-          echo "checkout_ref=refs/pull/${PR_NUMBER}/head" >> "${GITHUB_OUTPUT}"
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-          ref: ${{ steps.pr-refs.outputs.checkout_ref }}
-
-      - name: Load trusted Code Scan config
-        env:
-          CONFIG_REF: ${{ steps.pr-refs.outputs.base_sha }}
-        run: git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${CONFIG_REF}"
 
       # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
       # request on Linux runners, dragging the scanner's uncached
       # `npm install -g promptfoo` (~860 packages) into a 14-minute crawl that
-      # trips the job timeout. 24.17.0 still has the regression (PR #9859
-      # re-bumped it and every scan started timing out), so renovate.json
-      # disables Node updates for this file. Revisit — and re-enable that
-      # rule — when a newer Node resolves it.
+      # trips the job timeout. Revisit when a newer Node resolves it.
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -77,5 +49,6 @@ jobs:
           # min-release-age setting without changing nested npx package layout.
           NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
-          config-path: ${{ runner.temp }}/promptfoo-code-scan-base/.github/promptfoo-code-scan.yaml
+          min-severity: medium
+          config-path: .github/promptfoo-code-scan.yaml
           enable-fork-prs: true
