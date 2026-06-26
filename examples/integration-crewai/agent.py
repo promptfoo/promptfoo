@@ -23,7 +23,7 @@ def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
-    This agent's goal: find the best Ruby on Rails + React candidates.
+    This agent's goal: find candidates that match the supplied job requirements.
     """
     llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
@@ -39,7 +39,7 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     )
 
     task = Task(
-        description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
+        description="Find at least 2 candidates based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
             A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
@@ -94,7 +94,9 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
             return {"error": "CrewAI agent returned an empty response."}
 
         # Accept either a JSON object or one complete Markdown JSON fence.
-        json_match = re.fullmatch(r"```json\s*([\s\S]*?)\s*```", output_text)
+        json_match = re.fullmatch(
+            r"```(?:json)?\s*([\s\S]*?)\s*```", output_text, re.IGNORECASE
+        )
         if not json_match and not output_text.startswith("{"):
             return {
                 "error": "No valid JSON block found in the agent's output.",

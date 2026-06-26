@@ -44,7 +44,7 @@ Before starting, make sure you have:
 
 - Python 3.10 through 3.13
 - Node.js `^20.20.0` or `>=22.22.0`
-- OpenAI API access (for GPT-5, GPT-5-mini, or other models)
+- OpenAI API access for the configured model
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -134,7 +134,7 @@ If everything’s installed correctly, you should see:
 ✅ CrewAI ready
 ```
 
-And a version number from the promptfoo command (e.g., `0.97.0` or similar).
+And a version number from the promptfoo command.
 
 With this, you've got a working Python + Node.js environment ready to run CrewAI agents and evaluate them with Promptfoo.
 
@@ -199,10 +199,10 @@ def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
         parsed[key] = value
     return parsed
 
-def get_recruitment_agent(model: str = "openai/gpt-5") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
-    This agent’s goal: find the best Ruby on Rails + React candidates.
+    This agent’s goal: find candidates that match the supplied job requirements.
     """
     llm = LLM(model=model, api_key=OPENAI_API_KEY)
     agent = Agent(
@@ -218,7 +218,7 @@ def get_recruitment_agent(model: str = "openai/gpt-5") -> Crew:
     )
 
     task = Task(
-        description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
+        description="Find at least 2 candidates based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
             A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
@@ -252,7 +252,7 @@ def get_recruitment_agent(model: str = "openai/gpt-5") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model="openai/gpt-5"):
+async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -272,7 +272,9 @@ async def run_recruitment_agent(prompt, model="openai/gpt-5"):
             return {"error": "CrewAI agent returned an empty response."}
 
         # Accept either a JSON object or one complete Markdown JSON fence.
-        json_match = re.fullmatch(r"```json\s*([\s\S]*?)\s*```", output_text)
+        json_match = re.fullmatch(
+            r"```(?:json)?\s*([\s\S]*?)\s*```", output_text, re.IGNORECASE
+        )
         if not json_match and not output_text.startswith("{"):
             return {
                 "error": "No valid JSON block found in the agent's output.",
@@ -305,7 +307,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai/gpt-5")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
@@ -346,7 +348,7 @@ providers:
   - id: file://./agent.py # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
     config:
-      model: openai/gpt-5
+      model: openai/gpt-4.1
 
 # ✅ Define default tests to check the agent output shape and content
 defaultTest:
@@ -420,11 +422,7 @@ Promptfoo kicks off the evaluation job you set up.
 - It checks the results against your Python and YAML assertions (like checking for a `candidates` list and a summary).
 - It shows a clear table: did the agent PASS or FAIL?
 
-In this example, you can see:
-
-- The CrewAI Recruitment Agent ran against the input “List top candidates with RoR and React.”
-- It returned a mock structured JSON with Alex, William, and Stanislav, plus a summary.
-- Pass rate: **100%**
+The results table shows the candidates and summary returned by that run. A row passes only when the output satisfies the configured schema and role-specific assertions; model output and pass rates can vary between runs.
 
 Once done, you can even open the local web viewer to explore the full results:
 
@@ -454,7 +452,7 @@ After you answer `y`, the browser opens the Promptfoo dashboard.
 
 ### What you see in the Promptfoo Web Viewer:
 
-- **Top bar** → Your evaluation ID, author, and project details.
+- **Top bar** → The evaluation name and ID, author, date, provider and test counts, and duration.
 - **Test cases table** →
   - The `job_requirements` input prompt.
   - The CrewAI Recruitment Agent’s response.
@@ -506,7 +504,7 @@ In **Configuration (JSON)**, set the CrewAI model:
 
 ```
 {
-  "model": "openai/gpt-5"
+  "model": "openai/gpt-4.1"
 }
 ```
 
@@ -532,21 +530,6 @@ In the target configuration, leave **Extension Hook** empty unless your evaluati
 ```text
 Recruitment request: {{ prompt }}
 ```
-
-### **Why it matters**
-
-Setting CrewAI as a **custom target** tells Promptfoo:
-
-“I want you to evaluate this custom Python provider.”
-
-Once set, Promptfoo will:
-
-- Generate red team prompts tailored to the application context.
-- Check for issues such as:
-  - Bias or unfair recommendations.
-  - Content filter bypasses.
-  - Unexpected hallucinations.
-  - Non-compliance with business rules.
 
 ## **Step 9: Fill in Red Team Usage and Application Details**
 
