@@ -2076,30 +2076,6 @@ describe('resolveConfigs', () => {
       });
     });
   });
-
-  it('runs provider preflight after filtering and before provider construction', async () => {
-    const beforeProviderLoad = vi.fn(async ({ providers }) => {
-      expect(loadApiProviders).not.toHaveBeenCalled();
-      expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
-    });
-
-    await resolveConfigs(
-      {
-        filterTargets: 'selected',
-        _beforeProviderLoad: beforeProviderLoad,
-      },
-      {
-        prompts: ['{{prompt}}'],
-        providers: [
-          { id: 'echo', label: 'selected' },
-          { id: 'echo', label: 'excluded' },
-        ],
-      },
-    );
-
-    expect(beforeProviderLoad).toHaveBeenCalledOnce();
-    expect(loadApiProviders).toHaveBeenCalledOnce();
-  });
 });
 
 describe('ConfigResolutionError', () => {

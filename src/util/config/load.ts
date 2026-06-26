@@ -29,7 +29,6 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
-  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -66,15 +65,6 @@ export class ConfigResolutionError extends Error {
     this.cliMessage = options.cliMessage ?? message;
     this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
   }
-}
-
-interface ResolveConfigsCommandOptions extends Partial<CommandLineOptions> {
-  _beforeProviderLoad?: (context: {
-    providers: TestSuiteConfig['providers'];
-    redteam: UnifiedConfig['redteam'];
-    env: UnifiedConfig['env'];
-    basePath: string;
-  }) => Promise<void>;
 }
 
 export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
@@ -742,7 +732,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
  *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
  */
 export async function resolveConfigs(
-  cmdObj: ResolveConfigsCommandOptions,
+  cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{
@@ -912,13 +902,6 @@ export async function resolveConfigs(
       `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
     );
   }
-
-  await cmdObj._beforeProviderLoad?.({
-    providers: filteredProviderConfigs,
-    redteam: config.redteam,
-    env: config.env,
-    basePath,
-  });
 
   // Parse prompts, providers, and tests
   // Pass filtered resolved configs to avoid re-reading files
