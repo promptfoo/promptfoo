@@ -1336,6 +1336,34 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.finishReason).toBe('content_filter');
     });
 
+    it('preserves guardrails for filtered completions with null content', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: { role: 'assistant', content: null },
+              finish_reason: 'content_filter',
+            },
+          ],
+          usage: {},
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('filtered prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Azure content filtering blocked the response.');
+      expect(result.finishReason).toBe('content_filter');
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+      });
+    });
+
     it('should detect input content filtering', async () => {
       const mockResponse = {
         error: {

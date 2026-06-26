@@ -162,6 +162,14 @@ describe('writeOutput', () => {
             max_turns: 2,
           },
         },
+        {
+          id: 'azure:chat:test',
+          config: {
+            azureClientId: 'public-client-id',
+            azureClientSecret: 'azure-client-secret-value',
+            azureTenantId: 'public-tenant-id',
+          },
+        },
       ],
     });
 
@@ -175,6 +183,9 @@ describe('writeOutput', () => {
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.providers[1].config.azureClientId).toBe('public-client-id');
+    expect(parsed.config.providers[1].config.azureClientSecret).toBe('[REDACTED]');
+    expect(parsed.config.providers[1].config.azureTenantId).toBe('public-tenant-id');
     expect(parsed.config.description).toBe('Test config');
   });
 

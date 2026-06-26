@@ -49,6 +49,7 @@ const SAFE_AZURE_ERROR_CODES = new Set([
 ]);
 const SAFE_AZURE_ERROR_PARAMS = new Set(['max_completion_tokens', 'max_tokens', 'temperature']);
 const FILTERED_PROMPT_OUTPUT = 'Azure content filtering blocked the prompt.';
+const FILTERED_COMPLETION_OUTPUT = 'Azure content filtering blocked the response.';
 const SAFE_FILTERED_PROMPT_OUTPUTS = new Set([
   "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
   "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
@@ -87,8 +88,19 @@ function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boole
     message &&
       typeof message === 'object' &&
       (typeof message.content === 'string' ||
+        (message.content === null && choice?.finish_reason === FINISH_REASON_MAP.content_filter) ||
         (message.content == null && (message.tool_calls != null || message.function_call != null))),
   );
+}
+
+function hasAzureContentFilterSystemError(response: Record<string, any>): boolean {
+  const choiceError =
+    Array.isArray(response.choices) &&
+    response.choices.some((choice: any) => choice?.content_filter_results?.error);
+  const promptError =
+    Array.isArray(response.prompt_filter_results) &&
+    response.prompt_filter_results.some((result: any) => result?.content_filter_results?.error);
+  return choiceError || promptError;
 }
 
 function isAzureChatResponseCacheable(data: unknown, requireAssistant: boolean): boolean {
@@ -99,7 +111,7 @@ function isAzureChatResponseCacheable(data: unknown, requireAssistant: boolean):
   return Boolean(
     !response.error &&
       Array.isArray(response.choices) &&
-      !response.choices.some((choice: any) => choice?.content_filter_results?.error) &&
+      !hasAzureContentFilterSystemError(response) &&
       isAzureChatChoiceProcessable(getAzureChatChoice(response, requireAssistant)),
   );
 }
@@ -641,7 +653,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
         }
 
-        if (output == null) {
+        if (output == null && finishReason === FINISH_REASON_MAP.content_filter) {
+          output = FILTERED_COMPLETION_OUTPUT;
+        } else if (output == null) {
           // Handle tool_calls and function_call
           const toolCalls = message?.tool_calls;
           const functionCall = message?.function_call;

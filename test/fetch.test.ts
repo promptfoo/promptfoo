@@ -509,6 +509,21 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('redacts custom CA certificate paths and read errors for silent requests', async () => {
+    const certPath = '/path/to/ca-cert-secret-sentinel.pem';
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      return key === 'PROMPTFOO_CA_CERT_PATH' ? certPath : defaultValue;
+    });
+    vi.mocked(fsPromises.readFile).mockRejectedValue(new Error('ca-read-error-secret-sentinel'));
+
+    await fetchWithProxy('https://example.com', {
+      headers: { 'x-promptfoo-silent': 'true' },
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith('[fetch] Failed to read custom CA certificate');
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('secret-sentinel');
+  });
+
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
 
@@ -675,6 +690,26 @@ describe('fetchWithProxy', () => {
       ]);
       expect(diagnostics).not.toContain('proxy-password-secret-sentinel');
       expect(logger.debug).toHaveBeenCalledWith('[fetch] Using proxy');
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
+  it('fails closed when logging malformed authenticated proxy URLs', async () => {
+    const proxyUrl = 'http://proxy-user:proxy-password-secret-sentinel@%';
+    mockProcessEnv({ HTTPS_PROXY: proxyUrl });
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      await fetchWithProxy('https://example.com/api');
+
+      expect(ProxyAgent).toHaveBeenCalledWith(expect.objectContaining({ uri: proxyUrl }));
+      expect(logger.debug).toHaveBeenCalledWith('Using proxy: [invalid proxy URL]');
+      const diagnostics = JSON.stringify([
+        ...vi.mocked(logger.debug).mock.calls,
+        ...consoleWarn.mock.calls,
+      ]);
+      expect(diagnostics).not.toContain('secret-sentinel');
     } finally {
       consoleWarn.mockRestore();
     }
@@ -1468,6 +1503,24 @@ describe('fetchWithRetries', () => {
     }
   });
 
+  it('honors silent diagnostics inherited from Request headers', async () => {
+    const error = new TypeError('request-header-message-secret-sentinel', {
+      cause: new Error('request-header-cause-secret-sentinel'),
+    });
+    (error as any).code = 'ECONNREFUSED';
+    vi.mocked(global.fetch).mockRejectedValue(error);
+    const request = new Request('https://example.com', {
+      headers: { 'x-promptfoo-silent': 'true' },
+    });
+
+    const caught = await fetchWithRetries(request, {}, 1000, 0).catch((reason) => reason);
+
+    expect(caught).toBeInstanceOf(FetchDiagnosticError);
+    expect(caught).toMatchObject({ code: 'ECONNREFUSED', message: 'TypeError (ECONNREFUSED)' });
+    expect(JSON.stringify(caught)).not.toContain('secret-sentinel');
+    expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('secret-sentinel');
+  });
+
   it('preserves body-free HTTP status for silent 5xx failures', async () => {
     vi.mocked(getEnvBool).mockImplementation((key: string) => key === 'PROMPTFOO_RETRY_5XX');
     vi.mocked(global.fetch).mockResolvedValue(
@@ -1691,6 +1744,79 @@ describe('fetchWithRetries', () => {
         expect(rl.code).toBe('rate_limit_exceeded');
         expect(rl.retryAfterMs).toBe(7000);
       }
+    });
+
+    it('redacts hostile rate-limit fields from silent thrown errors and serialization', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'rate-status-secret-sentinel',
+        headers: new Headers({
+          'content-type': 'application/json',
+          'x-secret-header': 'rate-header-secret-sentinel',
+        }),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: {
+                code: 'rate-code-secret-sentinel',
+                message: 'rate-body-secret-sentinel',
+              },
+            }),
+          ),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const error = await fetchWithRetries(
+        'https://example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        0,
+      ).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({
+        status: 429,
+        statusText: 'Too Many Requests',
+        kind: 'rate_limit',
+      });
+      expect((error as HttpRateLimitError).code).toBeUndefined();
+      expect((error as HttpRateLimitError).headers).toBeUndefined();
+      expect((error as HttpRateLimitError).body).toBeUndefined();
+      expect(error.message).toBe('Rate limit exceeded: HTTP 429 Too Many Requests');
+      expect(JSON.stringify(error)).not.toContain('secret-sentinel');
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('secret-sentinel');
+    });
+
+    it('retains safe hard-quota classification without serializing its body', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        rateLimitedJsonResponse({
+          body: {
+            error: {
+              code: 'insufficient_quota',
+              message: 'quota-body-secret-sentinel',
+            },
+          },
+        }),
+      );
+
+      const error = await fetchWithRetries(
+        'https://example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        4,
+      ).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({
+        status: 429,
+        statusText: 'Too Many Requests',
+        kind: 'quota',
+        code: 'insufficient_quota',
+      });
+      expect((error as HttpRateLimitError).headers).toBeUndefined();
+      expect((error as HttpRateLimitError).body).toBeUndefined();
+      expect(JSON.stringify(error)).not.toContain('quota-body-secret-sentinel');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('preserves a structured signal for header-only throttling on HTTP 200', async () => {

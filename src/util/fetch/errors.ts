@@ -147,8 +147,14 @@ export class HttpRateLimitError extends Error {
     const status = init.status;
     const statusText = init.statusText ?? 'Too Many Requests';
     const retryAfterMs =
-      typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
+      typeof init.retryAfterMs === 'number' &&
+      Number.isFinite(init.retryAfterMs) &&
+      init.retryAfterMs >= 0
         ? init.retryAfterMs
+        : undefined;
+    const resetAt =
+      typeof init.resetAt === 'number' && Number.isFinite(init.resetAt) && init.resetAt >= 0
+        ? init.resetAt
         : undefined;
 
     // A hard-quota body code normally implies `kind: 'quota'`. But Azure
@@ -172,7 +178,7 @@ export class HttpRateLimitError extends Error {
     this.status = status;
     this.statusText = statusText;
     this.retryAfterMs = retryAfterMs;
-    this.resetAt = init.resetAt;
+    this.resetAt = resetAt;
     this.code = init.code;
     this.kind = kind;
     // Shallow-copy reference fields so post-construction mutations on the

@@ -36,7 +36,8 @@ export async function monkeyPatchFetch(
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const isSilent = new Headers(options?.headers).get('x-promptfoo-silent') === 'true';
+  const effectiveHeaders = options?.headers ?? (url instanceof Request ? url.headers : undefined);
+  const isSilent = new Headers(effectiveHeaders).get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
   const opts: RequestInit = {
@@ -44,6 +45,14 @@ export async function monkeyPatchFetch(
   };
 
   const originalBody = opts.body;
+
+  // This header controls local diagnostics only. Remove it before the wire so
+  // silent and ordinary requests remain identical upstream and in cache.
+  if (isSilent) {
+    const outboundHeaders = new Headers(effectiveHeaders);
+    outboundHeaders.delete('x-promptfoo-silent');
+    opts.headers = Object.fromEntries(outboundHeaders.entries());
+  }
 
   // Handle compression if requested
   if (options?.compress && opts.body && typeof opts.body === 'string') {
@@ -89,8 +98,9 @@ export async function monkeyPatchFetch(
         response: null,
       });
       if (isConnectionError(e as Error)) {
+        const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
         logger.debug(
-          `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+          `Connection error, please check your network connectivity to the target host${proxyUrl ? ' or configured proxy' : ''}`,
         );
         throw e;
       }

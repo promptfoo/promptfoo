@@ -12,7 +12,6 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
   FetchDiagnosticError,
@@ -171,6 +170,15 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
+function getSafeProxyUrlForLogging(proxyUrl: string): string {
+  try {
+    const parsed = new URL(proxyUrl);
+    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  } catch {
+    return '[invalid proxy URL]';
+  }
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -178,7 +186,7 @@ export async function fetchWithProxy(
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
-  const redactDiagnostics = isFetchLoggingSuppressed(options);
+  const redactDiagnostics = isFetchLoggingSuppressed(url, options);
 
   if (!finalUrlString) {
     throw new Error('Invalid URL');
@@ -244,9 +252,17 @@ export async function fetchWithProxy(
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
       const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+      logger.debug(
+        redactDiagnostics
+          ? '[fetch] Using custom CA certificate'
+          : `Using custom CA certificate from ${resolvedPath}`,
+      );
     } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+      logger.warn(
+        redactDiagnostics
+          ? '[fetch] Failed to read custom CA certificate'
+          : `Failed to read CA certificate from ${caCertPath}: ${e}`,
+      );
     }
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
@@ -256,7 +272,9 @@ export async function fetchWithProxy(
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
       logger.debug(
-        redactDiagnostics ? '[fetch] Using proxy' : `Using proxy: ${sanitizeUrl(proxyUrl)}`,
+        redactDiagnostics
+          ? '[fetch] Using proxy'
+          : `Using proxy: ${getSafeProxyUrlForLogging(proxyUrl)}`,
       );
       finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
@@ -512,17 +530,23 @@ function buildHttpRateLimitError(
   response: Response,
   body: unknown,
   code: string | undefined,
+  redactDiagnostics: boolean,
 ): HttpRateLimitError {
   const headers = Object.fromEntries(response.headers.entries());
   const parsed = parseRateLimitHeaders(headers);
+  const safeCode = isHardQuotaCode(code) || code === 'rate_limit_exceeded' ? code : undefined;
   return new HttpRateLimitError({
     status: response.status,
-    statusText: response.statusText,
+    statusText: redactDiagnostics
+      ? response.status === 429
+        ? 'Too Many Requests'
+        : 'Rate Limited'
+      : response.statusText,
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
-    code,
-    headers,
-    body,
+    code: redactDiagnostics ? safeCode : code,
+    headers: redactDiagnostics ? undefined : headers,
+    body: redactDiagnostics ? undefined : body,
   });
 }
 
@@ -558,10 +582,9 @@ export type { FetchOptions } from './types';
 /**
  * Decide what to do with a rate-limited response inside `fetchWithRetries`.
  *
- * Throws on hard-quota fail-fast or retry exhaustion (with a structured
- * {@link HttpRateLimitError} for status 429, or a plain `Error` for the soft
- * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
- * {@link handleRateLimit} and returns so the caller can `continue` the loop.
+ * Throws a structured {@link HttpRateLimitError} on hard-quota fail-fast or
+ * retry exhaustion. Otherwise sleeps via {@link handleRateLimit} and returns
+ * so the caller can `continue` the loop.
  */
 async function handleRateLimitedResponse(
   response: Response,
@@ -570,11 +593,8 @@ async function handleRateLimitedResponse(
   maxRetries: number,
   redactDiagnostics: boolean,
 ): Promise<void> {
-  // Only the 429 path produces a structured error. A 200 OK with
-  // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
-  // sleep and retry, but constructing a "Rate limit exceeded: HTTP 200 OK"
-  // error on retry exhaustion would be misleading and pointlessly buffers a
-  // 64 KB body peek on every successful call.
+  // Only 429 bodies are inspected for a quota code. Header-only throttles do
+  // not need a body read to preserve their structured scheduler signal.
   const isHardRateLimit = response.status === 429;
   const { body, code } = isHardRateLimit
     ? await peekRateLimitBody(response, redactDiagnostics)
@@ -589,7 +609,7 @@ async function handleRateLimitedResponse(
         ? `Quota exhausted: HTTP ${response.status}, failing fast.`
         : `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
-    throw buildHttpRateLimitError(response, body, code);
+    throw buildHttpRateLimitError(response, body, code, redactDiagnostics);
   }
 
   if (attempt >= maxRetries) {
@@ -600,7 +620,7 @@ async function handleRateLimitedResponse(
         ? `Rate limited: HTTP ${response.status}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`
         : `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
     );
-    throw buildHttpRateLimitError(response, body, code);
+    throw buildHttpRateLimitError(response, body, code, redactDiagnostics);
   }
 
   logger.debug(
@@ -626,8 +646,9 @@ function formatFetchErrorMessage(error: unknown): string {
   return message;
 }
 
-function isFetchLoggingSuppressed(options: FetchOptions): boolean {
-  return new Headers(options.headers).get('x-promptfoo-silent') === 'true';
+function isFetchLoggingSuppressed(url: RequestInfo, options: FetchOptions): boolean {
+  const headers = options.headers ?? (url instanceof Request ? url.headers : undefined);
+  return new Headers(headers).get('x-promptfoo-silent') === 'true';
 }
 
 function toFetchDiagnosticError(error: unknown): FetchDiagnosticError {
@@ -664,7 +685,7 @@ export async function fetchWithRetries(
   let lastErrorMessage: string | undefined;
   let lastDiagnosticError: FetchDiagnosticError | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
-  const redactDiagnostics = isFetchLoggingSuppressed(options);
+  const redactDiagnostics = isFetchLoggingSuppressed(url, options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;

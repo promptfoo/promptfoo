@@ -155,6 +155,20 @@ describe('sanitizeObject', () => {
         expect(sanitizeObject({ clientSecret: 'hidden' })).toEqual({ clientSecret: '[REDACTED]' });
       });
 
+      it('should redact the Azure-prefixed client secret field', () => {
+        expect(
+          sanitizeObject({
+            azureClientId: 'public-client-id',
+            azureClientSecret: 'hidden',
+            azureTenantId: 'public-tenant-id',
+          }),
+        ).toEqual({
+          azureClientId: 'public-client-id',
+          azureClientSecret: '[REDACTED]',
+          azureTenantId: 'public-tenant-id',
+        });
+      });
+
       it('should redact webhook_secret', () => {
         expect(sanitizeObject({ webhook_secret: 'hidden' })).toEqual({
           webhook_secret: '[REDACTED]',

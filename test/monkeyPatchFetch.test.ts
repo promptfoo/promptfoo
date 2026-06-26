@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../src/constants';
 import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
 import logger, { logRequestResponse } from '../src/logger';
-import { createMockResponse } from './util/utils';
+import { createMockResponse, mockProcessEnv } from './util/utils';
 
 vi.mock('../src/logger', () => ({
   __esModule: true,
@@ -81,6 +81,43 @@ describe('monkeyPatchFetch', () => {
       expect(logRequestResponse).not.toHaveBeenCalled();
       vi.mocked(logRequestResponse).mockClear();
     }
+  });
+
+  it('keeps the silent diagnostics header local to the fetch wrapper', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    await monkeyPatchFetch('https://example.com/api', {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Promptfoo-Silent': 'true',
+      },
+    });
+
+    const [, outboundOptions] = mockOriginalFetch.mock.calls[0];
+    const outboundHeaders = new Headers(outboundOptions.headers);
+    expect(outboundHeaders.get('content-type')).toBe('application/json');
+    expect(outboundHeaders.has('x-promptfoo-silent')).toBe(false);
+    expect(logRequestResponse).not.toHaveBeenCalled();
+  });
+
+  it('honors a silent header inherited from a Request object', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+    const request = new Request('https://example.com/api', {
+      headers: {
+        'X-Promptfoo-Silent': 'true',
+        'X-Test': 'preserved',
+      },
+    });
+
+    await monkeyPatchFetch(request);
+
+    const [, outboundOptions] = mockOriginalFetch.mock.calls[0];
+    const outboundHeaders = new Headers(outboundOptions.headers);
+    expect(outboundHeaders.get('x-test')).toBe('preserved');
+    expect(outboundHeaders.has('x-promptfoo-silent')).toBe(false);
+    expect(logRequestResponse).not.toHaveBeenCalled();
   });
 
   it('should add Authorization header for cloud API requests when token is available', async () => {
@@ -186,14 +223,23 @@ describe('monkeyPatchFetch', () => {
     };
 
     mockOriginalFetch.mockRejectedValue(connectionError);
+    const restoreEnv = mockProcessEnv({
+      HTTP_PROXY: 'http://proxy-user:proxy-password-secret-sentinel@proxy.invalid',
+      HTTPS_PROXY: undefined,
+    });
 
     const url = 'https://example.com/api';
 
-    await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
+    try {
+      await expect(monkeyPatchFetch(url)).rejects.toThrow('fetch failed');
 
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Connection error, please check your network connectivity'),
-    );
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Connection error, please check your network connectivity to the target host or configured proxy',
+      );
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('secret-sentinel');
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should not log errors for excluded endpoints', async () => {

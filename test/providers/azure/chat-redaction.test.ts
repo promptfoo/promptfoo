@@ -10,6 +10,7 @@ import { withFetchRetryContext } from '../../../src/util/fetch/retryContext';
 describe('Azure chat redaction integration', () => {
   let apiBaseUrl: string;
   let server: http.Server;
+  let sawSilentHeader = false;
   const requestCounts = new Map<string, number>();
 
   beforeAll(async () => {
@@ -19,6 +20,7 @@ describe('Azure chat redaction integration', () => {
         chunks.push(Buffer.from(chunk));
       }
       const body = Buffer.concat(chunks).toString('utf8');
+      sawSilentHeader ||= request.headers['x-promptfoo-silent'] !== undefined;
       const mode = [
         'success',
         'malformed',
@@ -27,6 +29,7 @@ describe('Azure chat redaction integration', () => {
         'server-error',
         'stream',
         'content-filter',
+        'prompt-filter-error',
         'soft-rate-limit',
         'rate-limit',
       ].find((candidate) => body.includes(`${candidate}-prompt-secret-sentinel`));
@@ -101,6 +104,32 @@ describe('Azure chat redaction integration', () => {
                   error: {
                     code: 'filter-code-secret-sentinel',
                     message: 'filter-message-secret-sentinel',
+                  },
+                },
+              },
+            ],
+            usage: {},
+          }),
+        );
+        return;
+      }
+      if (mode === 'prompt-filter-error') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: { role: 'assistant', content: 'safe prompt-filter output' },
+                finish_reason: 'stop',
+              },
+            ],
+            prompt_filter_results: [
+              {
+                prompt_index: 0,
+                content_filter_results: {
+                  error: {
+                    code: 'prompt-filter-code-secret-sentinel',
+                    message: 'prompt-filter-message-secret-sentinel',
                   },
                 },
               },
@@ -205,6 +234,7 @@ describe('Azure chat redaction integration', () => {
     expect(first).toMatchObject({ output: 'safe success output', cached: false });
     expect(second).toMatchObject({ output: 'safe success output', cached: true });
     expect(requestCounts.get('success')).toBe(previousRequests + 1);
+    expect(sawSilentHeader).toBe(false);
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 
@@ -298,6 +328,28 @@ describe('Azure chat redaction integration', () => {
     ]);
     expect(requestCounts.get('content-filter')).toBe(2);
     expect(JSON.stringify([streamResult, filterResults])).not.toContain('secret-sentinel');
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
+  it('does not cache prompt-filter system errors', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider();
+    const previousRequests = requestCounts.get('prompt-filter-error') ?? 0;
+
+    const results = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-prompt-filter-${Date.now()}`, async () => [
+        await provider.callApi('prompt-filter-error-prompt-secret-sentinel'),
+        await provider.callApi('prompt-filter-error-prompt-secret-sentinel'),
+      ]),
+    );
+
+    expect(results.map((result) => result.output)).toEqual([
+      'safe prompt-filter output',
+      'safe prompt-filter output',
+    ]);
+    expect(results.map((result) => result.cached)).toEqual([false, false]);
+    expect(requestCounts.get('prompt-filter-error')).toBe(previousRequests + 2);
+    expect(JSON.stringify(results)).not.toContain('secret-sentinel');
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 

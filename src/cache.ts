@@ -304,8 +304,9 @@ function passesResponseCacheabilityCheck(
   }
 }
 
-function isFetchLoggingSuppressed(options: RequestInit): boolean {
-  return new Headers(options.headers).get('x-promptfoo-silent') === 'true';
+function isFetchLoggingSuppressed(url: RequestInfo, options: RequestInit): boolean {
+  const headers = options.headers ?? (url instanceof Request ? url.headers : undefined);
+  return new Headers(headers).get('x-promptfoo-silent') === 'true';
 }
 
 function getSafeErrorType(error: unknown): string {
@@ -520,7 +521,7 @@ async function fetchAndReadBody(
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const maxBodyRetries = isIdempotent ? 2 : 0;
-  const redactDiagnostics = isFetchLoggingSuppressed(options);
+  const redactDiagnostics = isFetchLoggingSuppressed(url, options);
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -572,7 +573,7 @@ async function prepareFetchResponse(
   const responseText = result.respText;
   const fetchLatencyMs = result.fetchLatencyMs;
   const headers = Object.fromEntries(response.headers.entries());
-  const redactDiagnostics = isFetchLoggingSuppressed(options);
+  const redactDiagnostics = isFetchLoggingSuppressed(url, options);
 
   let parsedData: unknown;
   try {
@@ -731,7 +732,7 @@ export async function fetchWithCache<T = unknown>(
         },
       };
     } catch {
-      if (isFetchLoggingSuppressed(options)) {
+      if (isFetchLoggingSuppressed(url, options)) {
         throw new FetchResponseParseError(resp.status, respText.length);
       }
       throw new Error(`Error parsing response as JSON: ${respText}`);
@@ -744,7 +745,7 @@ export async function fetchWithCache<T = unknown>(
   if (cachedResponse != null) {
     const cachedResult = deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
     if (passesResponseCacheabilityCheck(cachedResult.data, cacheOptions.isResponseCacheable)) {
-      if (isFetchLoggingSuppressed(options)) {
+      if (isFetchLoggingSuppressed(url, options)) {
         logger.debug('[Cache] Returning cached response', { cacheKey });
       } else {
         logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);

@@ -1169,6 +1169,25 @@ describe('fetchWithCache', () => {
       debugSpy.mockRestore();
     });
 
+    it('should inherit silent diagnostics from Request headers', async () => {
+      const responseSentinel = 'request-header-cache-response-secret-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, responseSentinel),
+      );
+      const request = new Request(url, {
+        headers: { 'x-promptfoo-silent': 'true' },
+      });
+
+      await expect(fetchWithCache(request, {}, 1000, 'json')).rejects.toMatchObject({
+        name: 'FetchResponseParseError',
+        status: 200,
+        responseLength: responseSentinel.length,
+      });
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(responseSentinel);
+      debugSpy.mockRestore();
+    });
+
     it('should respect cache busting', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
