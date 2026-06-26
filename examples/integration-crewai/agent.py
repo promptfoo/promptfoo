@@ -30,9 +30,8 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
         role="Senior Recruiter specializing in technical roles",
         goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
         backstory=textwrap.dedent("""
-            You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
-            You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
-            You never fail to return a valid JSON object as your final answer.
+            You are a technical recruiter who evaluates candidates against supplied role requirements.
+            Return a single valid JSON object as your final answer.
         """).strip(),
         verbose=False,
         llm=llm,

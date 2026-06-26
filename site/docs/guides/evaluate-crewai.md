@@ -32,11 +32,7 @@ cd integration-crewai
 pip install -r requirements.txt
 ```
 
-After setting `OPENAI_API_KEY`, run the evaluation and continue at Step 6:
-
-```bash
-npx promptfoo@latest eval
-```
+After setting `OPENAI_API_KEY`, continue at Step 6. The remaining commands use a global `promptfoo` installation; if you skipped the manual install, replace `promptfoo` with `npx promptfoo@latest` in those commands.
 
 ## Requirements
 
@@ -209,9 +205,8 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
         role="Senior Recruiter specializing in technical roles",
         goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
         backstory=textwrap.dedent("""
-            You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
-            You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
-            You never fail to return a valid JSON object as your final answer.
+            You are a technical recruiter who evaluates candidates against supplied role requirements.
+            Return a single valid JSON object as your final answer.
         """).strip(),
         verbose=False,
         llm=llm,
@@ -381,14 +376,28 @@ defaultTest:
             pattern: '\S'
         required: ['candidates', 'summary'] # Both fields must be present
 
-# 🧪 Specific test case to validate basic output behavior
+# 🧪 Specific test case to validate role-specific skills
 tests:
   - description: 'Basic test for RoR and React candidates'
     vars:
       job_requirements: 'List top candidates with RoR and React'
     assert:
-      - type: python # Custom boundary check
-        value: "len(output['candidates']) >= 2"
+      - type: python # Require both skills without substring matches
+        value: |
+          import re
+
+          def has_skill(candidate, required_skill):
+              return any(
+                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  for skill in candidate.get('skills', [])
+              )
+
+          rails_skills = ['ror', 'ruby on rails']
+          return all(
+              any(has_skill(candidate, skill) for skill in rails_skills)
+              and has_skill(candidate, 'react')
+              for candidate in output.get('candidates', [])
+          )
 ```
 
 **What did we just do?**
@@ -418,7 +427,7 @@ What happens here:
 Promptfoo kicks off the evaluation job you set up.
 
 - It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py).
-- It feeds in the job requirements prompt and collects the structured output.
+- It feeds in the role or job-requirements prompt and collects the structured output.
 - It checks the results against your Python and YAML assertions (like checking for a `candidates` list and a summary).
 - It shows a clear table: did the agent PASS or FAIL?
 
@@ -454,16 +463,11 @@ After you answer `y`, the browser opens the Promptfoo dashboard.
 
 - **Top bar** → The evaluation name and ID, author, date, provider and test counts, and duration.
 - **Test cases table** →
-  - The `job_requirements` input prompt.
+  - The role or job-requirements input.
   - The CrewAI Recruitment Agent’s response.
   - Pass/fail status based on your assertions.
 - **Outputs** →
-  - A pretty JSON display showing candidates like:
-
-  ```
-  [{"name": "Alex", "experience": "7 years RoR + React", "skills": ["Ruby on Rails", "React"]}, ...]
-  ```
-
+  - A formatted JSON display with each candidate’s name, experience, and skills.
   - Summary text.
 
 - **Stats** → Pass rate for the run, latency, and the number of assertions checked.
@@ -541,9 +545,9 @@ Use the application details fields to describe the following:
 
 We describe that it’s an **AI recruitment assistant** built using CrewAI that:
 
-- Identifies and recommends top candidates for specific job roles.
-- Focuses on Ruby on Rails and React developer positions.
-- Returns structured candidate lists with names and experience summaries.
+- Generates example candidate recommendations from supplied technical role requirements.
+- Evaluates the roles configured in the test cases.
+- Returns structured candidate lists with names, experience, skills, and a summary.
 - Is expected to filter irrelevant or unsafe outputs.
 
 **Key features provided:**
@@ -567,7 +571,7 @@ We specify the intended behavior:
 
 - The system should only respond to recruitment-related queries.
 - It should reject non-recruitment prompts and avoid generating personal, sensitive, or confidential data.
-- It should produce mock summaries and job recommendations without access to real user data.
+- This example has no applicant-data source, so it should not claim access to real user data.
 
 **Why this matters:**
 

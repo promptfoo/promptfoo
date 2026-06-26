@@ -96,6 +96,27 @@ print(json.dumps(result))
     return JSON.parse(result.stdout);
   }
 
+  function evaluatePythonAssertion(assertion: string, output: unknown) {
+    const wrapper = [
+      'import json',
+      'import os',
+      'def check(output):',
+      ...assertion.split('\n').map((line) => `    ${line}`),
+      'output = json.loads(os.environ["ASSERTION_OUTPUT"])',
+      'print(json.dumps(bool(check(output))))',
+    ].join('\n');
+    const result = spawnSync(python, ['-c', wrapper], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ASSERTION_OUTPUT: JSON.stringify(output),
+      },
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    return JSON.parse(result.stdout);
+  }
+
   it('parses complete labeled and unlabeled JSON fences through the CrewOutput contract', () => {
     const fence = '```';
     const object = '{"candidates": [], "summary": "No match"}';
@@ -232,28 +253,11 @@ print(json.dumps(result))
         throw new Error(`Missing Python assertion for ${description}`);
       }
 
-      const wrapper = [
-        'import json',
-        'import os',
-        'def check(output):',
-        ...assertion.split('\n').map((line) => `    ${line}`),
-        'output = json.loads(os.environ["ASSERTION_OUTPUT"])',
-        'print(json.dumps(bool(check(output))))',
-      ].join('\n');
       const candidate = { name: 'Ada', experience: '8 years', skills };
-      const result = spawnSync(python, ['-c', wrapper], {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          ASSERTION_OUTPUT: JSON.stringify({
-            candidates: [candidate, candidate],
-            summary: 'Matches',
-          }),
-        },
+      return evaluatePythonAssertion(assertion, {
+        candidates: [candidate, candidate],
+        summary: 'Matches',
       });
-
-      expect(result.status, result.stderr).toBe(0);
-      return JSON.parse(result.stdout);
     };
 
     expect(evaluateSkills('Senior', ['Python', 'Django'])).toBe(false);
@@ -272,5 +276,44 @@ print(json.dumps(result))
     expect(evaluateSkills('Junior UX', ['Adobe Creative Suite'])).toBe(false);
     expect(evaluateSkills('Junior UX', ['Figmaware', 'Adobeish'])).toBe(false);
     expect(evaluateSkills('Junior UX', ['Figma', 'Adobe Creative Suite'])).toBe(true);
+  });
+
+  it('keeps the guide RoR and React assertion role-specific', () => {
+    const guide = fs.readFileSync(
+      path.join(process.cwd(), 'site', 'docs', 'guides', 'evaluate-crewai.md'),
+      'utf8',
+    );
+    const fence = String.fromCharCode(96).repeat(3);
+    const marker = fence + 'yaml title="promptfooconfig.yaml"\n';
+    const start = guide.indexOf(marker);
+    const end = guide.indexOf('\n' + fence, start + marker.length);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+
+    const config = yaml.load(guide.slice(start + marker.length, end)) as {
+      tests: Array<{ assert: Array<{ type: string; value?: string }> }>;
+    };
+    const assertion = config.tests[0].assert.find(
+      (candidate) => candidate.type === 'python',
+    )?.value;
+    if (!assertion) {
+      throw new Error('CrewAI guide is missing its Python role assertion');
+    }
+
+    const outputWithSkills = (skills: string[]) => {
+      const candidate = { name: 'Ada', experience: '8 years', skills };
+      return { candidates: [candidate, candidate], summary: 'Matches' };
+    };
+
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['COBOL', 'Java']))).toBe(false);
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails']))).toBe(false);
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['React']))).toBe(false);
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoRbit', 'ReactNative']))).toBe(
+      false,
+    );
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoR', 'React']))).toBe(true);
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails', 'React']))).toBe(
+      true,
+    );
   });
 });
