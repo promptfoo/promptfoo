@@ -21,6 +21,7 @@ import { ConfigResolutionError } from './config/errors';
 import {
   getScenarioDependencyContext,
   getScenarioTestSourceContext,
+  mergeScenarioSourceContexts,
   restoreScenarioTestSourceContext,
   setScenarioOriginalValue,
   setScenarioTestSourceContext,
@@ -869,11 +870,17 @@ async function normalizeLoadedScenarioTests(
       normalizedTest.provider = providerRef as TestCase['provider'];
     }
     transferScenarioTestSourceContext(resolvedTest, normalizedTest);
-    setScenarioTestSourceContext(normalizedTest, {
-      basePath: sourceBasePath,
-      envOverrides,
-      ...dependencyContext,
-    });
+    const sourceContext = mergeScenarioSourceContexts(
+      getScenarioTestSourceContext(normalizedTest),
+      {
+        basePath: sourceBasePath,
+        envOverrides,
+        ...dependencyContext,
+      },
+    );
+    if (sourceContext) {
+      setScenarioTestSourceContext(normalizedTest, sourceContext);
+    }
     normalizedTests.push(normalizedTest);
   }
   return normalizedTests;

@@ -158,6 +158,7 @@ describe('index.ts exports', () => {
     'PolicyObjectSchema',
     'ProvidersSchema',
     'ResultFailureReason',
+    'ScenarioInputSchema',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
     'StrategyConfigSchema',

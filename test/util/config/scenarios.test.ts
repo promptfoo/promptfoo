@@ -274,4 +274,22 @@ describe('Scenario loading with glob patterns', () => {
     expect(testSuite.scenarios![1]).toEqual(globScenarios[0]);
     expect(testSuite.scenarios![2]).toEqual(globScenarios[1]);
   });
+
+  it('uses one default test when scenario tests are omitted', async () => {
+    const { testSuite } = await resolveConfigs(
+      {},
+      {
+        prompts: ['Test prompt'],
+        providers: ['openai:gpt-3.5-turbo'],
+        scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
+      },
+    );
+
+    expect(testSuite.scenarios).toEqual([
+      {
+        config: [{ vars: { topic: 'billing' } }],
+        tests: [{}],
+      },
+    ]);
+  });
 });

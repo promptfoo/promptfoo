@@ -85,7 +85,7 @@ The full source behind this sample is in [`examples/config-multiple-translations
 The `scenarios` configuration is an array of `Scenario` objects. Each `Scenario` has two main parts:
 
 - `config`: an array of partial test cases or `$values` matrix-file references. Each expanded row is passed to the tests.
-- `tests`: inline `TestCase` objects, an external test file, or a test generator. These tests run for each row in `config`.
+- `tests`: optional inline `TestCase` objects, an external test file, or a test generator. These tests run for each row in `config`; when omitted, each config row runs once with the default test.
 
 Here is the structure of a `Scenario`:
 
@@ -93,7 +93,7 @@ Here is the structure of a `Scenario`:
 | ----------- | ----------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------- |
 | description | `string`                                                                            | No       | Optional description of what you're testing                         |
 | config      | `Array<Partial<TestCase> \| { $values: string }>`                                   | Yes      | Inline rows or matrix-file references expanded before the tests run |
-| tests       | `string \| TestGeneratorConfig \| Array<string \| TestGeneratorConfig \| TestCase>` | Yes      | Inline, generated, or file-backed tests for each expanded row       |
+| tests       | `string \| TestGeneratorConfig \| Array<string \| TestGeneratorConfig \| TestCase>` | No       | Inline, generated, or file-backed tests; defaults to one empty test |
 
 Scenarios can also be loaded from external files. To reference an external file, use the `file://` prefix:
 

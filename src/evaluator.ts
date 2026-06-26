@@ -2446,6 +2446,32 @@ function loadProviderModule() {
   return import('./providers');
 }
 
+function isSensitiveScenarioEnvEntry(key: string, value: string): boolean {
+  return (
+    /(?:secret|token|password|api[_-]?key|credential|authorization|signature|sig)/i.test(key) ||
+    /^(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|key-[A-Za-z0-9]{20,}|Bearer\s+.{20,}|Basic\s+.{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|[A-Za-z0-9+/=_-]{64,})$/i.test(
+      value,
+    )
+  );
+}
+
+function redactScenarioProviderErrorDetail(error: unknown, env?: EnvOverrides): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const processValues = Object.entries(process.env)
+    .filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' && isSensitiveScenarioEnvEntry(entry[0], entry[1]),
+    )
+    .map(([, value]) => value);
+  const sourceValues = Object.values(env ?? {}).filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+  return [...new Set([...processValues, ...sourceValues])]
+    .filter((value) => message.includes(value))
+    .sort((left, right) => right.length - left.length)
+    .reduce((sanitized, value) => sanitized.split(value).join('[REDACTED]'), message);
+}
+
 async function resolveRuntimeTargetProviderReference(
   provider: AtomicTestCase['provider'],
   sourceContext?: ScenarioSourceContext,
@@ -2458,10 +2484,17 @@ async function resolveRuntimeTargetProviderReference(
   // Target overrides follow readTest() semantics: a raw string/options object
   // creates its own provider instead of inheriting options from a suite provider
   // that happens to use the same ID.
-  return resolveProvider(provider, Object.create(null), {
-    env: sourceContext?.envOverrides,
-    basePath: sourceContext?.basePath ?? cliState.basePath ?? process.cwd(),
-  });
+  try {
+    return await resolveProvider(provider, Object.create(null), {
+      env: sourceContext?.envOverrides,
+      basePath: sourceContext?.basePath ?? cliState.basePath ?? process.cwd(),
+    });
+  } catch (error) {
+    const detail = redactScenarioProviderErrorDetail(error, sourceContext?.envOverrides);
+    throw new Error(`Failed to load scenario target provider: ${detail}`, {
+      cause: new Error(detail),
+    });
+  }
 }
 
 async function resolveScenarioProviderRows<T extends { provider?: AtomicTestCase['provider'] }>(

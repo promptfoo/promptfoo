@@ -1451,6 +1451,84 @@ describe('evalCommand', () => {
     expect(chokidarMocks.watcher.add).toHaveBeenNthCalledWith(2, ['/suite/scenarios/final.yaml']);
   });
 
+  it('serializes concurrent watch reruns before reconciling scenario dependencies', async () => {
+    const initialScenario = { config: [{}], tests: [{}] };
+    const intermediateScenario = { config: [{}], tests: [{}] };
+    const finalScenario = { config: [{}], tests: [{}] };
+    setScenarioSourceContext(initialScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/initial.yaml'],
+    });
+    setScenarioSourceContext(intermediateScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/intermediate.yaml'],
+    });
+    setScenarioSourceContext(finalScenario, {
+      basePath: '/suite/scenarios',
+      dependencies: ['/suite/scenarios/final.yaml'],
+    });
+    const config = {} as UnifiedConfig;
+    let releaseIntermediate: (() => void) | undefined;
+    const intermediateBlocked = new Promise<void>((resolve) => {
+      releaseIntermediate = resolve;
+    });
+    let markIntermediateStarted: (() => void) | undefined;
+    const intermediateStarted = new Promise<void>((resolve) => {
+      markIntermediateStarted = resolve;
+    });
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [], scenarios: [initialScenario] },
+        basePath: '/suite',
+      })
+      .mockImplementationOnce(async () => {
+        markIntermediateStarted?.();
+        await intermediateBlocked;
+        return {
+          config,
+          testSuite: { prompts: [], providers: [], scenarios: [intermediateScenario] },
+          basePath: '/suite',
+        };
+      })
+      .mockResolvedValueOnce({
+        config,
+        testSuite: { prompts: [], providers: [], scenarios: [finalScenario] },
+        basePath: '/suite',
+      });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval(
+      { watch: true, config: ['/suite/promptfooconfig.yaml'], write: false },
+      config,
+      undefined,
+      {},
+    );
+
+    const allHandler = chokidarMocks.handlers.get('all');
+    const intermediateRun = allHandler?.(
+      'change',
+      '/suite/scenarios/initial.yaml',
+    ) as Promise<void>;
+    await intermediateStarted;
+    const finalRun = allHandler?.('change', '/suite/scenarios/final.yaml') as Promise<void>;
+
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    releaseIntermediate?.();
+    await Promise.all([intermediateRun, finalRun]);
+
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenNthCalledWith(1, [
+      '/suite/scenarios/initial.yaml',
+    ]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenNthCalledWith(2, [
+      '/suite/scenarios/intermediate.yaml',
+    ]);
+    expect(chokidarMocks.watcher.add).toHaveBeenNthCalledWith(1, [
+      '/suite/scenarios/intermediate.yaml',
+    ]);
+    expect(chokidarMocks.watcher.add).toHaveBeenNthCalledWith(2, ['/suite/scenarios/final.yaml']);
+  });
+
   it('should resume an existing eval with persisted prompts', async () => {
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [

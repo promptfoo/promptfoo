@@ -1416,7 +1416,7 @@
                 ]
               }
             },
-            "required": ["config", "tests"],
+            "required": ["config"],
             "additionalProperties": false
           }
         ]

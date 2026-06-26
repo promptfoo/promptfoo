@@ -289,6 +289,7 @@ export async function doEval(
 
   let watcher: ReturnType<typeof chokidar.watch> | undefined;
   let watchedPaths = new Set<string>();
+  let watchEvaluationQueue = Promise.resolve();
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -1171,22 +1172,26 @@ export async function doEval(
           persistent: true,
         });
         watcher
-          .on('all', async (event, changedPath) => {
+          .on('all', (event, changedPath) => {
             if (event !== 'add' && event !== 'change' && event !== 'unlink') {
               return;
             }
             printBorder();
             logger.info(`File ${event} detected: ${changedPath}`);
             printBorder();
-            clearConfigCache();
-            try {
-              await runEvaluation();
-            } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
+            const evaluation = watchEvaluationQueue.then(async () => {
+              clearConfigCache();
+              try {
+                await runEvaluation();
+              } catch (error) {
+                if (handleRecoverableWatchError(error)) {
+                  return;
+                }
+                throw error;
               }
-              throw error;
-            }
+            });
+            watchEvaluationQueue = evaluation.catch(() => {});
+            return evaluation;
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>

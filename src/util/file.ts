@@ -315,7 +315,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  * @param context - Optional context to control file loading behavior
  * @returns The configuration with external file references resolved
  */
-type ConfigFileContext =
+export type ConfigFileContext =
   | 'assertion'
   | 'general'
   | 'opaque'
@@ -363,7 +363,7 @@ function isScriptAssertionValue(config: Record<string, unknown>, key: string): b
   );
 }
 
-function getConfigFileChildContext(
+export function getConfigFileChildContext(
   config: Record<string, unknown>,
   key: string,
   context?: ConfigFileContext,

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import logger from '../../logger';
 import { isScenarioConfigValuesRef, TestCaseSchema } from '../../types/index';
 import {
+  getConfigFileChildContext,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   renderEnvOnlyInStringForFilePath,
@@ -20,6 +21,7 @@ import {
   getScenarioOriginalValue,
   getScenarioSourceContext,
   getScenarioTestSourceContext,
+  mergeScenarioSourceContexts,
   redactSensitiveEnvValues,
   restoreScenarioSourceContext,
   restoreScenarioTestSourceContext,
@@ -37,6 +39,8 @@ import type {
   TestSuite,
   TestSuiteConfig,
 } from '../../types/index';
+import type { ConfigFileContext } from '../file';
+import type { ScenarioSourceContext } from './scenarioContext';
 
 const FILE_REF_PREFIX = 'file://';
 const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
@@ -362,8 +366,10 @@ export function resolveScenarioConfigValuesRefs(
           sourceContext.envOverrides,
         );
         if (resolved && typeof resolved === 'object') {
-          setScenarioOriginalValue(resolved, getScenarioOriginalValue(entry) ?? entry);
-          setScenarioTestSourceContext(resolved, sourceContext);
+          const contextTarget = Object.isExtensible(resolved) ? resolved : { ...resolved };
+          setScenarioOriginalValue(contextTarget, getScenarioOriginalValue(entry) ?? entry);
+          setScenarioTestSourceContext(contextTarget, sourceContext);
+          return contextTarget;
         }
         return resolved;
       }
@@ -870,6 +876,7 @@ export function materializeScenarioTestCase<T>(
   envOverrides?: EnvOverrides,
 ): T {
   assertSafeScenarioValue(testCase, 'scenario test');
+  const dependencyContext = collectScenarioConfigDependencies(testCase, basePath, envOverrides);
   const rendered = renderSourceEnvTemplates(testCase, envOverrides);
   const materialized = containsFileRefString(rendered)
     ? resolveScenarioConfigRowProviders(
@@ -885,16 +892,24 @@ export function materializeScenarioTestCase<T>(
       )
     : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
   const resolved = resolveScenarioTestVarsFileRefs(basePath, materialized, envOverrides) as T;
-  if (resolved && typeof resolved === 'object') {
-    setScenarioTestSourceContext(resolved, { basePath, envOverrides });
+  const contextTarget =
+    resolved && typeof resolved === 'object' && !Object.isExtensible(resolved)
+      ? ({ ...resolved } as T)
+      : resolved;
+  if (contextTarget && typeof contextTarget === 'object') {
+    setScenarioTestSourceContext(contextTarget, {
+      basePath,
+      envOverrides,
+      ...dependencyContext,
+    });
     setScenarioOriginalValue(
-      resolved,
+      contextTarget,
       testCase && typeof testCase === 'object'
         ? (getScenarioOriginalValue(testCase) ?? testCase)
         : testCase,
     );
   }
-  return resolved;
+  return contextTarget;
 }
 
 export function materializeScenarioTestSource<T>(
@@ -947,6 +962,52 @@ function resolveScenarioTestVarsFileRefs(
   };
 }
 
+function collectScenarioConfigDependencies(
+  value: unknown,
+  basePath: string,
+  envOverrides?: EnvOverrides,
+): Pick<ScenarioSourceContext, 'dependencies' | 'watchRoots'> {
+  const dependencies = new Set<string>();
+  const watchRoots = new Set<string>();
+  const seen = new WeakSet<object>();
+
+  const visit = (nested: unknown, context: ConfigFileContext | undefined): void => {
+    if (typeof nested === 'string') {
+      if (context === 'opaque' || !nested.startsWith(FILE_REF_PREFIX)) {
+        return;
+      }
+      const rendered = renderEnvOnlyInStringForFilePath(nested, envOverrides);
+      const dependencyContext = getScenarioDependencyContext(
+        parseFileUrl(rendered).filePath,
+        basePath,
+      );
+      dependencyContext.dependencies?.forEach((dependency) => dependencies.add(dependency));
+      dependencyContext.watchRoots?.forEach((watchRoot) => watchRoots.add(watchRoot));
+      return;
+    }
+    if (!nested || typeof nested !== 'object' || seen.has(nested)) {
+      return;
+    }
+    seen.add(nested);
+    if (Array.isArray(nested)) {
+      nested.forEach((item) => visit(item, context));
+      return;
+    }
+    if (!isPlainRecord(nested) || isLiveProvider(nested)) {
+      return;
+    }
+    for (const [key, child] of Object.entries(nested)) {
+      visit(child, getConfigFileChildContext(nested, key, context));
+    }
+  };
+
+  visit(value, 'scenario-test');
+  return {
+    ...(dependencies.size > 0 ? { dependencies: [...dependencies] } : {}),
+    ...(watchRoots.size > 0 ? { watchRoots: [...watchRoots] } : {}),
+  };
+}
+
 function materializeScenarioConfigRow(
   basePath: string,
   row: unknown,
@@ -954,8 +1015,9 @@ function materializeScenarioConfigRow(
   sourceDescription = 'inline scenario config row',
 ): Scenario['config'][number] {
   assertSafeScenarioValue(row, sourceDescription);
+  const dependencyContext = collectScenarioConfigDependencies(row, basePath, envOverrides);
   const rendered = renderSourceEnvTemplates(row, envOverrides);
-  const materialized = containsFileRefString(rendered)
+  const resolved = containsFileRefString(rendered)
     ? resolveScenarioConfigRowProviders(
         basePath,
         maybeLoadConfigFromExternalFile(
@@ -968,8 +1030,16 @@ function materializeScenarioConfigRow(
         envOverrides,
       )
     : resolveScenarioConfigRowProviders(basePath, rendered, envOverrides);
+  const materialized =
+    resolved && typeof resolved === 'object' && !Object.isExtensible(resolved)
+      ? { ...resolved }
+      : resolved;
   if (materialized && typeof materialized === 'object') {
-    setScenarioTestSourceContext(materialized, { basePath, envOverrides });
+    setScenarioTestSourceContext(materialized, {
+      basePath,
+      envOverrides,
+      ...dependencyContext,
+    });
     setScenarioOriginalValue(
       materialized,
       row && typeof row === 'object' ? (getScenarioOriginalValue(row) ?? row) : row,
@@ -1367,7 +1437,7 @@ export async function expandScenarioConfigValues(
         }
         validateMatrixRowValues(row, rowIndex, safeConcreteRef);
         if (row && typeof row === 'object') {
-          setScenarioTestSourceContext(row, {
+          const rowContext = mergeScenarioSourceContexts(getScenarioTestSourceContext(row), {
             basePath: path.dirname(valuesFilePath),
             envOverrides: sourceContext.envOverrides,
             dependencies: Array.from(
@@ -1375,6 +1445,9 @@ export async function expandScenarioConfigValues(
             ),
             watchRoots: valuesDependencyContext.watchRoots,
           });
+          if (rowContext) {
+            setScenarioTestSourceContext(row, rowContext);
+          }
         }
         expandedConfig.push(row);
       }

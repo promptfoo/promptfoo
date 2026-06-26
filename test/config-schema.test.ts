@@ -65,6 +65,14 @@ describe('config-schema.json', () => {
       validate({
         prompts: ['hello'],
         providers: ['echo'],
+        scenarios: [{ config: [{ vars: { topic: 'billing' } }] }],
+      }),
+    ).toBe(true);
+
+    expect(
+      validate({
+        prompts: ['hello'],
+        providers: ['echo'],
         scenarios: [
           {
             config: [

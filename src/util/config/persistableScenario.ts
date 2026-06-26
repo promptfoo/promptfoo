@@ -17,6 +17,14 @@ interface ApiProviderRecord extends Record<string, unknown> {
   id: () => string;
 }
 
+const ENV_TEMPLATE_PATTERN =
+  /\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\s*(['"])[A-Za-z_][A-Za-z0-9_.-]*\1\s*\])\s*\}\}/g;
+
+function isSafeEnvTemplate(value: string): boolean {
+  const withoutTemplates = value.replace(ENV_TEMPLATE_PATTERN, '').trim();
+  return withoutTemplates === '' || /^(?:basic|bearer|token)$/i.test(withoutTemplates);
+}
+
 function isApiProvider(provider: unknown): provider is ApiProviderRecord {
   return Boolean(
     isRecord(provider) &&
@@ -83,7 +91,7 @@ function restoreTemplates(
   originalValue: unknown,
   seen = new WeakMap<object, unknown>(),
 ): unknown {
-  if (typeof originalValue === 'string' && originalValue.includes('{{')) {
+  if (typeof originalValue === 'string' && isSafeEnvTemplate(originalValue)) {
     return originalValue;
   }
   if (!runtimeValue || typeof runtimeValue !== 'object') {

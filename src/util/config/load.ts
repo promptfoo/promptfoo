@@ -993,6 +993,7 @@ export async function resolveConfigs(
       const filteredTests = await filterTests(
         {
           ...resolvedScenario,
+          tests: resolvedScenario.tests ?? [{}],
           providers: parsedProviders,
           prompts: parsedPrompts,
         },

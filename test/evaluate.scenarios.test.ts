@@ -92,6 +92,20 @@ describe('programmatic scenario config expansion', () => {
     expect(calledPrompts(provider)).toEqual(['Topic: billing']);
   });
 
+  it('accepts frozen programmatic scenario config rows', async () => {
+    const provider = createMockProvider('frozen-scenario-row-provider');
+    const row = Object.freeze({ vars: { topic: 'billing' } });
+
+    await evaluate({
+      prompts: ['Topic: {{topic}}'],
+      providers: [provider],
+      scenarios: [{ config: [row], tests: [{}] }],
+      writeLatestResults: false,
+    });
+
+    expect(calledPrompts(provider)).toEqual(['Topic: billing']);
+  });
+
   it('resolves scenario config refs relative to programmatic scenario files', async () => {
     const tmpDir = makeTmpDir();
     fs.writeFileSync(
@@ -277,6 +291,33 @@ describe('programmatic scenario config expansion', () => {
     expect(String(error)).not.toContain(secret);
     expect(fs.existsSync(parentCallsPath)).toBe(false);
     expect(suiteProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('redacts source environment values from scenario provider load errors', async () => {
+    const secret = 'literal-secret-canary-providerpath-9695';
+    vi.stubEnv('PROVIDER_PATH_SECRET', secret);
+
+    let error: unknown;
+    try {
+      await evaluate({
+        prompts: ['Prompt'],
+        providers: [createMockProvider('suite-provider')],
+        scenarios: [
+          {
+            config: [{ provider: 'file://{{ env.PROVIDER_PATH_SECRET }}/missing-provider.cjs' }],
+            tests: [{}],
+          },
+        ],
+        writeLatestResults: false,
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeDefined();
+    expect(String(error)).toContain('Failed to load scenario target provider');
+    expect(String(error)).not.toContain(secret);
+    expect(String((error as Error & { cause?: unknown }).cause)).not.toContain(secret);
   });
 
   it('rejects empty programmatic scenario files instead of returning zero results', async () => {

@@ -35,6 +35,9 @@ type ScenarioContextTarget = {
 };
 
 function setHiddenValue(target: object, key: symbol, value: unknown): void {
+  if (!Object.isExtensible(target)) {
+    return;
+  }
   Object.defineProperty(target, key, {
     value,
     configurable: true,
@@ -122,10 +125,7 @@ export function redactSensitiveEnvValues(
   value: string,
   envOverrides: EnvOverrides | undefined,
 ): string {
-  if (!envOverrides) {
-    return value;
-  }
-  return Object.entries(envOverrides)
+  return Object.entries({ ...process.env, ...envOverrides })
     .filter(
       (entry): entry is [string, string] =>
         typeof entry[1] === 'string' &&

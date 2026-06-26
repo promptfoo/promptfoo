@@ -11,6 +11,7 @@ import { toSerializableScenarioTestCase } from '../../../src/util/config/persist
 import {
   getScenarioDependencyContext,
   getScenarioSourceContext,
+  getScenarioTestSourceContext,
   PERSISTED_SCENARIO_SOURCE_KEY,
   setScenarioOriginalValue,
   setScenarioTestSourceContext,
@@ -195,6 +196,29 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(loaded).toBeDefined();
       expect(getScenarioSourceContext(loaded!)?.envOverrides?.PR9695_MARKER_SECRET).toBeUndefined();
     });
+
+    it('tracks nested files consumed by matrix rows but not opaque metadata', async () => {
+      const matrixPath = write(
+        'matrices/rows.yaml',
+        `- vars:
+    body: file://body.txt
+  provider: file://provider.cjs
+  metadata:
+    artifact: file://opaque.txt
+`,
+      );
+      const bodyPath = write('matrices/body.txt', 'body');
+      const providerPath = write('matrices/provider.cjs', 'module.exports = {}');
+      const opaquePath = write('matrices/opaque.txt', 'opaque');
+
+      const [row] = await expandScenarioConfigValues([{ $values: `file://${matrixPath}` }], tmpDir);
+      const context = getScenarioTestSourceContext(row);
+
+      expect(context?.dependencies).toEqual(
+        expect.arrayContaining([matrixPath, bodyPath, providerPath]),
+      );
+      expect(context?.dependencies).not.toContain(opaquePath);
+    });
   });
 
   describe('scenario persistence', () => {
@@ -210,14 +234,39 @@ describe('scenarioMatrix (real filesystem)', () => {
 
     it('preserves credential templates while redacting rendered provider secrets', () => {
       const template = '{{ env.PR9695_PROVIDER_SECRET }}';
+      const bearerTemplate = 'Bearer {{ env.PR9695_PROVIDER_SECRET }}';
+      const literalSecret = 'sk-live-{{literal}}-abcdefghijklmnop';
+      const mixedSecret = 'Bearer literal-secret-canary-9695 {{ env.NONSECRET }}';
+      const fallbackSecret = '{{ env.PR9695_PROVIDER_SECRET or "literal-secret-fallback" }}';
 
       const serialized = toSerializableScenarioTestCase({
-        provider: { id: 'echo', config: { apiKey: template } },
+        provider: {
+          id: 'echo',
+          config: {
+            apiKey: template,
+            authorization: bearerTemplate,
+            password: literalSecret,
+            token: mixedSecret,
+            clientSecret: fallbackSecret,
+          },
+        },
       });
 
       expect(serialized).toEqual({
-        provider: { id: 'echo', config: { apiKey: template } },
+        provider: {
+          id: 'echo',
+          config: {
+            apiKey: template,
+            authorization: bearerTemplate,
+            password: '[REDACTED]',
+            token: '[REDACTED]',
+            clientSecret: '[REDACTED]',
+          },
+        },
       });
+      expect(JSON.stringify(serialized)).not.toContain(literalSecret);
+      expect(JSON.stringify(serialized)).not.toContain(mixedSecret);
+      expect(JSON.stringify(serialized)).not.toContain('literal-secret-fallback');
     });
 
     it('merges persisted source env over replay env after secret values are omitted', async () => {
@@ -245,6 +294,8 @@ describe('scenarioMatrix (real filesystem)', () => {
   describe('expandScenarioConfigValues', () => {
     it('redacts sensitive rendered env values from matrix path errors and causes', async () => {
       const secret = 'super-secret-canary-9695';
+      const processSecret = 'process-secret-canary-9695';
+      vi.stubEnv('PROCESS_PATH_SECRET', processSecret);
 
       let error: unknown;
       try {
@@ -260,6 +311,22 @@ describe('scenarioMatrix (real filesystem)', () => {
       expect(error).toBeInstanceOf(ConfigResolutionError);
       expect(String(error)).not.toContain(secret);
       expect(String((error as Error & { cause?: unknown }).cause)).not.toContain(secret);
+
+      let processError: unknown;
+      try {
+        await expandScenarioConfigValues(
+          [{ $values: 'file://{{ env.PROCESS_PATH_SECRET }}/missing.json' }],
+          tmpDir,
+        );
+      } catch (caught) {
+        processError = caught;
+      }
+
+      expect(processError).toBeInstanceOf(ConfigResolutionError);
+      expect(String(processError)).not.toContain(processSecret);
+      expect(String((processError as Error & { cause?: unknown }).cause)).not.toContain(
+        processSecret,
+      );
     });
 
     it('expands $values rows and keeps inline rows in order', async () => {
