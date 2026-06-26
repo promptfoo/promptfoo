@@ -576,6 +576,15 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 
+  it('exposes legacy config.inputs as provider metadata', async () => {
+    const inputs = { context: 'Reference context', question: 'User question' };
+    const provider = await loadApiProvider('echo', {
+      options: { config: { inputs } },
+    });
+
+    expect(provider.inputs).toEqual(inputs);
+  });
+
   it('loadApiProvider with openai:completion', async () => {
     const provider = await loadApiProvider('openai:completion');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
@@ -2522,6 +2531,38 @@ inputs:
     ).resolves.toEqual([undefined]);
   });
 
+  it('filters ProviderOptionsMap entries by their effective nested id', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          { echo: { id: 'unselected-single' } },
+          {
+            echo: {
+              id: 'selected-multi',
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          },
+        ],
+        { filter: 'selected-multi' },
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+  });
+
+  it('matches runtime filtering for provider-local env-backed ids', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: '{{ env.TARGET_PROVIDER }}',
+            env: { TARGET_PROVIDER: 'echo' },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+        { filter: '^echo$' },
+      ),
+    ).resolves.toEqual([]);
+  });
+
   it('rejects unknown named providers without instantiating them', async () => {
     await expect(
       resolveProviderInputsForValidation(['definitely-not-a-promptfoo-provider']),
@@ -2539,7 +2580,7 @@ inputs:
   it('should not take ownership of already-instantiated providers', async () => {
     const cleanup = vi.fn();
     class ExistingProvider {
-      inputs = { prompt: 'User prompt' };
+      config = { inputs: { prompt: 'User prompt' } };
       cleanup = cleanup;
       id() {
         return 'existing-provider';

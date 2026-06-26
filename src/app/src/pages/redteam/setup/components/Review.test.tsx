@@ -1419,6 +1419,45 @@ Application Details:
       expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
     });
 
+    it('should reconnect when a pending preflight becomes a running job', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? { hasRunningJob: false, hasPendingRun: true, jobId: null }
+                : { hasRunningJob: true, hasPendingRun: false, jobId: 'pending-job-123' },
+          } as Response;
+        }
+        if (url === '/eval/job/pending-job-123') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: ['Started'] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(
+        () => {
+          expect(mockSetJob).toHaveBeenCalledWith('pending-job-123');
+          expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+        },
+        { timeout: 2500 },
+      );
+    });
+
     it('should show completed state when returning to completed job', async () => {
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {
@@ -1709,6 +1748,66 @@ Application Details:
         expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
       });
       expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
+    it('should ignore a stale run response after cancelling and starting a newer job', async () => {
+      const user = userEvent.setup({ delay: null });
+      let resolveFirstRun: ((response: Response) => void) | undefined;
+      let runCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false, hasPendingRun: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          runCalls += 1;
+          if (runCalls === 1) {
+            return new Promise<Response>((resolve) => {
+              resolveFirstRun = resolve;
+            });
+          }
+          return {
+            ok: true,
+            json: async () => ({ id: 'newer-job-id' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: true,
+            json: async () => ({ message: 'Pending run cancelled' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /^cancel$/i }));
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(mockSetJob).toHaveBeenCalledWith('newer-job-id'));
+
+      resolveFirstRun!({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'Run request superseded by a newer request' }),
+      } as Response);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
+      });
     });
 
     it('should call clearJob when cancelling a job', async () => {

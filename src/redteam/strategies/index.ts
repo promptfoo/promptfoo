@@ -26,6 +26,7 @@ import { addOtherEncodings, EncodingType } from './otherEncodings';
 import {
   addPosteriorAttack,
   hasActivePosteriorStrategy,
+  hasPosteriorStrategy,
   POSTERIOR_MULTI_INPUT_ERROR,
 } from './posterior';
 import { addInjections } from './promptInjections/index';
@@ -63,6 +64,7 @@ function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
 export function getStrategyCompatibilityError(
   strategies: readonly unknown[],
   inputs: unknown,
+  options: { includeDisabledStrategies?: boolean } = {},
 ): string | undefined {
   if (strategies.some(hasUserConfiguredPerTurnLayers)) {
     return INTERNAL_PER_TURN_LAYERS_ERROR;
@@ -74,9 +76,11 @@ export function getStrategyCompatibilityError(
     !Array.isArray(inputs) &&
     Object.keys(inputs).length > 0;
 
-  return hasMultiInput && hasActivePosteriorStrategy(strategies)
-    ? POSTERIOR_MULTI_INPUT_ERROR
-    : undefined;
+  const hasPosterior = options.includeDisabledStrategies
+    ? hasPosteriorStrategy(strategies)
+    : hasActivePosteriorStrategy(strategies);
+
+  return hasMultiInput && hasPosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;
 }
 
 export function isStrategyApplicable(

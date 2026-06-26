@@ -11,6 +11,7 @@ import {
   CONFIGURABLE_STRATEGIES_SET,
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
+  STRATEGIES_REQUIRING_REMOTE_SET,
 } from '@promptfoo/redteam/constants';
 import { Lock, Settings } from 'lucide-react';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
@@ -145,20 +146,22 @@ export function StrategyItem({
                   Multi-modal
                 </Badge>
               )}
-              {isDisabled && isRemoteGenerationDisabled && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
-                      Remote generation required
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This strategy requires remote generation. Unset
-                    PROMPTFOO_DISABLE_REMOTE_GENERATION or
-                    PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
-                  </TooltipContent>
-                </Tooltip>
-              )}
+              {isDisabled &&
+                isRemoteGenerationDisabled &&
+                STRATEGIES_REQUIRING_REMOTE_SET.has(strategy.id) && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
+                        Remote generation required
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      This strategy requires remote generation. Unset
+                      PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               {isDisabled && isAuthGated && (
                 <Tooltip>
                   <TooltipTrigger asChild>

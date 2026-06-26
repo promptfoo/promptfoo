@@ -970,6 +970,54 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledOnce();
   });
 
+  it('should preflight incompatible raw targets before provider construction', async () => {
+    vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, inputs) =>
+      inputs && typeof inputs === 'object' && Object.keys(inputs).length > 0
+        ? 'Posterior strategy does not support multi-input targets'
+        : undefined,
+    );
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
+      async (cmdObj, _defaultConfig, _type, hooks) => {
+        expect(cmdObj).toMatchObject({
+          filterProviders: 'selected',
+          filterTargets: 'selected',
+        });
+        await hooks?.beforeProviderLoad?.({
+          providers: [
+            {
+              id: 'echo',
+              config: {
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            },
+          ],
+          redteam: { strategies: ['posterior'] },
+          env: undefined,
+          basePath: '/mock/path',
+        });
+        throw new Error('Expected compatibility preflight to reject');
+      },
+    );
+
+    await expect(
+      doGenerateRedteam({
+        output: 'test-output.json',
+        inRedteamRun: false,
+        cache: false,
+        defaultConfig: {},
+        write: false,
+        config: 'test-config.yaml',
+        filterProviders: 'selected',
+        filterTargets: 'selected',
+      }),
+    ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+    expect(extractA2AAgentCardInfo).not.toHaveBeenCalled();
+    expect(extractMcpToolsInfo).not.toHaveBeenCalled();
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(mockProvider.cleanup).not.toHaveBeenCalled();
+  });
+
   it('should reject incompatible inputs on later targets and clean up every provider', async () => {
     const laterProvider = createMockProvider({
       response: { output: 'test output' },
