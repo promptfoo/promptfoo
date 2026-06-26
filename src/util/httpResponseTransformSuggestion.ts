@@ -99,7 +99,8 @@ export function canonicalizeResponseTransformSuggestion(value: unknown): string 
     return undefined;
   }
 
-  return canonicalizeJsonPath(expression) ?? canonicalizeTextExpression(expression);
+  const canonical = canonicalizeJsonPath(expression) ?? canonicalizeTextExpression(expression);
+  return canonical && canonical.length <= MAX_EXPRESSION_LENGTH ? canonical : undefined;
 }
 
 export function parseConfigurationChangeSuggestion(

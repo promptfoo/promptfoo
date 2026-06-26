@@ -49,6 +49,15 @@ describe('HTTP response transform suggestions', () => {
     expect(canonicalizeResponseTransformSuggestion(input)).toBeUndefined();
   });
 
+  it('rejects quoted properties that expand beyond the API limit when canonicalized', () => {
+    const escapedNull = String.raw`\0`;
+    const input = `json['${escapedNull.repeat(100)}']`;
+
+    expect(input.length).toBeLessThan(512);
+    expect(canonicalizeResponseTransformSuggestion(input)).toBeUndefined();
+    expect(parseConfigurationChangeSuggestion({ transformResponse: input })).toBeUndefined();
+  });
+
   it('projects only a safe transformResponse from the remote object', () => {
     expect(
       parseConfigurationChangeSuggestion({
