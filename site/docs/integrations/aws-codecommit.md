@@ -20,6 +20,7 @@ Use this setup when you want to:
 
 - An AWS CodeCommit repository with a promptfoo config such as `promptfooconfig.yaml`
 - An AWS CodeBuild project connected to that repository
+- A [CodeBuild Ubuntu image that supports Node.js 24](https://docs.aws.amazon.com/codebuild/latest/userguide/available-runtimes.html): Ubuntu 22.04 standard 7.0 or Ubuntu 24.04 standard 8.0
 - LLM provider credentials stored in AWS Systems Manager Parameter Store or AWS Secrets Manager
 - A Promptfoo API key if you want to run `promptfoo code-scans run`
 
