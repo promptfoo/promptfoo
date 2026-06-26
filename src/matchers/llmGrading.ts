@@ -395,7 +395,7 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -407,7 +407,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,
@@ -416,7 +419,7 @@ export async function matchesClosedQa(
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 

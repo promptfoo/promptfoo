@@ -383,8 +383,8 @@ describe('handleTraceSpanDuration inverse (not-trace-span-duration)', () => {
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
-      assertion: { type: 'not-trace-span-duration', value: { max: 1500 } },
-      renderedValue: { max: 1500 },
+      assertion: { type: 'not-trace-span-duration', value: { max: 500 } },
+      renderedValue: { max: 500 },
       assertionValueContext: fastTrace,
     };
 
@@ -392,7 +392,7 @@ describe('handleTraceSpanDuration inverse (not-trace-span-duration)', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
-      'All 3 spans matching pattern "*" completed within 1500ms (max: 500ms)',
+      'All 3 spans matching pattern "*" completed within 500ms (max: 500ms)',
     );
   });
 
@@ -400,14 +400,43 @@ describe('handleTraceSpanDuration inverse (not-trace-span-duration)', () => {
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
-      assertion: { type: 'not-trace-span-duration', value: { max: 50 } },
-      renderedValue: { max: 50 },
+      assertion: { type: 'not-trace-span-duration', value: { max: 499 } },
+      renderedValue: { max: 499 },
       assertionValueContext: fastTrace,
     };
 
     const result = handleTraceSpanDuration(params);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
-    expect(result.reason).toContain('exceed duration threshold 50ms');
+    expect(result.reason).toContain('exceed duration threshold 499ms');
+  });
+
+  it.each([
+    ['no matching spans', [{ spanId: '1', name: 'other', startTime: 0, endTime: 100 }]],
+    ['only incomplete timing data', [{ spanId: '1', name: 'target', startTime: 0 }]],
+  ])('should fail for %s', (_name, spans) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'target', max: 100 },
+      },
+      renderedValue: { pattern: 'target', max: 100 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'no-complete-match',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: {},
+          spans,
+        },
+      },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
   });
 });

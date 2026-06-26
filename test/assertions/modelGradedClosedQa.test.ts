@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
 import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
@@ -20,6 +20,10 @@ describe('handleModelGradedClosedQa', () => {
       score: 1,
       reason: 'test reason',
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should validate string value', async () => {

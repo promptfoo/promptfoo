@@ -357,8 +357,8 @@ describe('handleTraceSpanCount inverse (not-trace-span-count)', () => {
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
-      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 3 } },
-      renderedValue: { pattern: '*llm*', max: 3 },
+      assertion: { type: 'not-trace-span-count', value: { pattern: '*llm*', max: 2 } },
+      renderedValue: { pattern: '*llm*', max: 2 },
       assertionValueContext: traceContext,
     };
 
@@ -366,7 +366,7 @@ describe('handleTraceSpanCount inverse (not-trace-span-count)', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
-      'Found 2 spans matching pattern "*llm*" (expected at most 3). Matched spans: llm.completion, llm.chat',
+      'Found 2 spans matching pattern "*llm*" (expected at most 2). Matched spans: llm.completion, llm.chat',
     );
   });
 

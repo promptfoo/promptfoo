@@ -465,6 +465,37 @@ describe('OpenAI assertions', () => {
         assertion: functionAssertion,
       });
     });
+
+    it('should not invert a function schema compilation error', async () => {
+      const functionOutput = { name: 'broken', arguments: '{"value": 1}' };
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          functions: [
+            {
+              name: 'broken',
+              parameters: {
+                type: 'invalid' as never,
+                properties: { value: { type: 'number' } },
+              },
+            },
+          ],
+        },
+      });
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-function-call' },
+        prompt: 'Some prompt',
+        provider,
+        providerResponse: { output: functionOutput },
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('schema is invalid'),
+      });
+    });
   });
 
   describe('is-valid-openai-tools-call assertion', () => {
@@ -715,15 +746,11 @@ describe('OpenAI assertions', () => {
         },
       ];
 
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: { ...toolsAssertion, type: 'not-is-valid-openai-tools-call' },
-        output: toolsOutput,
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
         provider: mockProvider,
         test: { vars: {} },
-        baseType: 'is-valid-openai-tools-call',
-        assertionValueContext: mockContext,
-        inverse: true,
-        outputString: JSON.stringify(toolsOutput),
         providerResponse: { output: toolsOutput },
       });
 
@@ -735,21 +762,111 @@ describe('OpenAI assertions', () => {
     it('inverse (not-is-valid-openai-tools-call) passes when the call is NOT valid', async () => {
       const toolsOutput: unknown[] = [];
 
-      const result = await handleIsValidOpenAiToolsCall({
-        assertion: { ...toolsAssertion, type: 'not-is-valid-openai-tools-call' },
-        output: toolsOutput as never,
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
         provider: mockProvider,
         test: { vars: {} },
-        baseType: 'is-valid-openai-tools-call',
-        assertionValueContext: mockContext,
-        inverse: true,
-        outputString: JSON.stringify(toolsOutput),
         providerResponse: { output: toolsOutput },
       });
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
       expect(result.reason).toBe('OpenAI did not return a valid-looking tools response: []');
+    });
+
+    it.each([
+      ['missing function', [{}]],
+      ['null entry', [null]],
+      ['null output', null],
+      [
+        'malformed later entry',
+        [
+          {
+            type: 'function',
+            function: { name: 'getCurrentTemperature', arguments: '{}' },
+          },
+          {},
+        ],
+      ],
+    ])('inverse returns an invalid verdict for %s', async (_name, output) => {
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: { output: output as never },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
+    it('does not invert missing tools configuration', async () => {
+      const toolsOutput = [
+        {
+          type: 'function',
+          function: { name: 'getCurrentTemperature', arguments: '{}' },
+        },
+      ];
+      const provider = new OpenAiChatCompletionProvider('test-provider', { config: {} });
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider,
+        test: { vars: {} },
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'No tools configured in provider, but output contains tool calls',
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+      });
+    });
+
+    it('does not invert a tool schema compilation error', async () => {
+      const toolsOutput = [
+        {
+          type: 'function',
+          function: { name: 'broken', arguments: '{"value": 1}' },
+        },
+      ];
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'broken',
+                parameters: {
+                  type: 'invalid' as never,
+                  properties: { value: { type: 'number' } },
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider,
+        test: { vars: {} },
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('schema is invalid'),
+      });
     });
 
     it('should load tools from external file', async () => {

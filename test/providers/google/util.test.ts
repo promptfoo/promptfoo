@@ -228,6 +228,15 @@ describe('util', () => {
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
+    it.each([
+      ['Vertex/AIS output without a function call', [{ text: 'ordinary answer' }]],
+      ['Live output without a function call', { toolCall: { functionCalls: [] } }],
+    ])('should reject %s', (_name, output) => {
+      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+        'Google did not return a valid-looking function call',
+      );
+    });
+
     it('should validate empty function args', () => {
       const output = [
         {

@@ -1,4 +1,5 @@
 import { hasFunctionToolCallValidator } from '../contracts/providers';
+import { FunctionToolCallValidationSetupError } from '../providers/functionToolCallValidation';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -9,16 +10,30 @@ export const handleIsValidFunctionCall = ({
   test,
   inverse,
 }: AssertionParams): GradingResult => {
+  if (!hasFunctionToolCallValidator(provider)) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Provider does not have functionality for checking function call.',
+      assertion,
+    };
+  }
+
   let isValid = false;
   let invalidReason = '';
   try {
-    if (!hasFunctionToolCallValidator(provider)) {
-      throw new Error(`Provider does not have functionality for checking function call.`);
-    }
     provider.validateFunctionToolCall(output, test.vars);
     isValid = true;
   } catch (err) {
     invalidReason = (err as Error).message;
+    if (err instanceof FunctionToolCallValidationSetupError) {
+      return {
+        pass: false,
+        score: 0,
+        reason: invalidReason,
+        assertion,
+      };
+    }
   }
 
   const pass = inverse ? !isValid : isValid;

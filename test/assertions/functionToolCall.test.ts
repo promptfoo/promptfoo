@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
+import { runAssertion } from '../../src/assertions/index';
 
-import type { AssertionParams } from '../../src/types/index';
+import type { ApiProvider, AssertionParams, AssertionType } from '../../src/types/index';
 
 const validProvider = {
   id: () => 'test',
@@ -31,6 +32,16 @@ function params(overrides: Partial<AssertionParams>): AssertionParams {
   } as AssertionParams;
 }
 
+async function runInverse(type: AssertionType, provider: ApiProvider) {
+  return runAssertion({
+    assertion: { type },
+    provider,
+    prompt: 'test prompt',
+    providerResponse: { output: '{"name":"get_weather","arguments":"{}"}' },
+    test: { vars: {} },
+  });
+}
+
 describe('handleIsValidFunctionCall', () => {
   it('passes for a valid function call', () => {
     const r = handleIsValidFunctionCall(params({ provider: validProvider as never }));
@@ -51,28 +62,37 @@ describe('handleIsValidFunctionCall', () => {
   });
 
   describe('inverse (not-is-valid-function-call)', () => {
-    it('fails when the output IS a valid function call', () => {
-      const r = handleIsValidFunctionCall(
-        params({
-          provider: validProvider as never,
-          assertion: { type: 'not-is-valid-function-call' },
-          inverse: true,
-        }),
-      );
+    it.each([
+      'not-is-valid-function-call',
+      'not-is-valid-openai-function-call',
+    ] as const)('%s fails when the output IS a valid function call', async (type) => {
+      const r = await runInverse(type, validProvider as ApiProvider);
+
       expect(r.pass).toBe(false);
+      expect(r.score).toBe(0);
       expect(r.reason).toBe('Expected output to not be a valid function call, but it was');
     });
 
-    it('passes when the output is NOT a valid function call', () => {
-      const r = handleIsValidFunctionCall(
-        params({
-          provider: invalidProvider as never,
-          assertion: { type: 'not-is-valid-function-call' },
-          inverse: true,
-        }),
-      );
+    it.each([
+      'not-is-valid-function-call',
+      'not-is-valid-openai-function-call',
+    ] as const)('%s passes when the output is NOT a valid function call', async (type) => {
+      const r = await runInverse(type, invalidProvider as ApiProvider);
+
       expect(r.pass).toBe(true);
+      expect(r.score).toBe(1);
       expect(r.reason).toBe('Assertion passed');
+    });
+
+    it.each([
+      'not-is-valid-function-call',
+      'not-is-valid-openai-function-call',
+    ] as const)('%s fails when the provider cannot validate function calls', async (type) => {
+      const r = await runInverse(type, noValidatorProvider as ApiProvider);
+
+      expect(r.pass).toBe(false);
+      expect(r.score).toBe(0);
+      expect(r.reason).toBe('Provider does not have functionality for checking function call.');
     });
   });
 });

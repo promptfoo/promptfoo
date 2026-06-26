@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
+import { FunctionToolCallValidationSetupError } from '../functionToolCallValidation';
 import { calculateCost } from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
@@ -801,17 +802,24 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFileWithVars(
-    functions,
-    vars,
-  ) as OpenAiFunction[];
+  let interpolatedFunctions: OpenAiFunction[];
+  try {
+    interpolatedFunctions = maybeLoadFromExternalFileWithVars(functions, vars) as OpenAiFunction[];
+  } catch (error) {
+    throw new FunctionToolCallValidationSetupError((error as Error).message);
+  }
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
   if (!functionSchema) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
-  const validate = ajv.compile(functionSchema);
+  let validate;
+  try {
+    validate = ajv.compile(functionSchema);
+  } catch (error) {
+    throw new FunctionToolCallValidationSetupError((error as Error).message);
+  }
   if (!validate(functionArgs)) {
     throw new Error(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,

@@ -1,11 +1,46 @@
+import { FunctionToolCallValidationSetupError } from '../providers/functionToolCallValidation';
 import { validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
 
-const handleIsValidOpenAiToolsCallInner = async ({
+interface OpenAiToolCall {
+  function: { arguments: string; name: string };
+}
+
+function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'function' in value &&
+    typeof value.function === 'object' &&
+    value.function !== null &&
+    'name' in value.function &&
+    typeof value.function.name === 'string' &&
+    'arguments' in value.function &&
+    typeof value.function.arguments === 'string'
+  );
+}
+
+function applyInverse(result: GradingResult, inverse: boolean): GradingResult {
+  if (!inverse) {
+    return result;
+  }
+  const pass = !result.pass;
+  return {
+    ...result,
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? result.reason
+      : 'Expected output to not be a valid OpenAI tools call, but it was',
+  };
+}
+
+export const handleIsValidOpenAiToolsCall = async ({
   assertion,
+  inverse,
   output,
   provider,
   test,
@@ -20,47 +55,52 @@ const handleIsValidOpenAiToolsCallInner = async ({
       const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
       const toolName = errorMatch ? errorMatch[1] : 'unknown';
       const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
-      return {
-        pass: false,
-        score: 0,
-        reason: `MCP tool call failed for ${toolName}: ${errorMsg}`,
-        assertion,
-      };
+      return applyInverse(
+        {
+          pass: false,
+          score: 0,
+          reason: `MCP tool call failed for ${toolName}: ${errorMsg}`,
+          assertion,
+        },
+        inverse,
+      );
     }
 
     // MCP tool call succeeded
     const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
     const toolName = resultMatch ? resultMatch[1] : 'unknown';
-    return {
-      pass: true,
-      score: 1,
-      reason: `MCP tool call succeeded for ${toolName}`,
-      assertion,
-    };
+    return applyInverse(
+      {
+        pass: true,
+        score: 1,
+        reason: `MCP tool call succeeded for ${toolName}`,
+        assertion,
+      },
+      inverse,
+    );
   }
 
   // Handle traditional OpenAI function/tool calls
-  if (typeof output === 'object' && 'tool_calls' in output) {
-    output = output.tool_calls as string | object;
+  let toolsOutput: unknown = output;
+  if (output !== null && typeof output === 'object' && 'tool_calls' in output) {
+    toolsOutput = output.tool_calls;
   }
-  const toolsOutput = output as {
-    type: 'function';
-    function: { arguments: string; name: string };
-  }[];
   if (
     !Array.isArray(toolsOutput) ||
     toolsOutput.length === 0 ||
-    typeof toolsOutput[0].function.name !== 'string' ||
-    typeof toolsOutput[0].function.arguments !== 'string'
+    !toolsOutput.every(isValidLookingToolCall)
   ) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
-        toolsOutput,
-      )}`,
-      assertion,
-    };
+    return applyInverse(
+      {
+        pass: false,
+        score: 0,
+        reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
+          toolsOutput,
+        )}`,
+        assertion,
+      },
+      inverse,
+    );
   }
 
   let tools = (provider as OpenAiChatCompletionProvider).config.tools;
@@ -80,6 +120,14 @@ const handleIsValidOpenAiToolsCallInner = async ({
       assertion,
     };
   }
+  if (!Array.isArray(tools)) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Provider tools configuration did not resolve to an array',
+      assertion,
+    };
+  }
   try {
     toolsOutput.forEach((toolOutput) => {
       validateFunctionCall(
@@ -90,38 +138,24 @@ const handleIsValidOpenAiToolsCallInner = async ({
         test.vars,
       );
     });
-    return {
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion,
-    };
+    return applyInverse(
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      },
+      inverse,
+    );
   } catch (err) {
-    return {
+    const result: GradingResult = {
       pass: false,
       score: 0,
       reason: (err as Error).message,
       assertion,
     };
+    return err instanceof FunctionToolCallValidationSetupError
+      ? result
+      : applyInverse(result, inverse);
   }
-};
-
-// The core validator above has several exit points, so `not-is-valid-openai-tools-call`
-// negates its verdict here rather than threading `inverse` through every branch.
-export const handleIsValidOpenAiToolsCall = async (
-  params: AssertionParams,
-): Promise<GradingResult> => {
-  const result = await handleIsValidOpenAiToolsCallInner(params);
-  if (!params.inverse) {
-    return result;
-  }
-  const pass = !result.pass;
-  return {
-    ...result,
-    pass,
-    score: pass ? 1 : 0,
-    reason: pass
-      ? result.reason
-      : 'Expected output to not be a valid OpenAI tools call, but it was',
-  };
 };

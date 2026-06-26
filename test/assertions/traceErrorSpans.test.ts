@@ -570,4 +570,25 @@ describe('handleTraceErrorSpans inverse (not-trace-error-spans)', () => {
       'Found 2 error spans, expected at most 0. Errors: api.call (status: 500), api.call (status: 403)',
     );
   });
+
+  it('should fail when no spans match the pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { pattern: 'missing.*', max_count: 0 },
+      },
+      renderedValue: { pattern: 'missing.*', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('No spans found matching pattern "missing.*"');
+  });
 });

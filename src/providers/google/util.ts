@@ -10,6 +10,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { FunctionToolCallValidationSetupError } from '../functionToolCallValidation';
 import {
   calculateCost,
   type ProviderConfig,
@@ -1215,7 +1216,18 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  if (!Array.isArray(functionCalls) || functionCalls.length === 0) {
+    throw new Error(
+      `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
+    );
+  }
+
+  let interpolatedFunctions: Tool[];
+  try {
+    interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  } catch (error) {
+    throw new FunctionToolCallValidationSetupError((error as Error).message);
+  }
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
@@ -1234,7 +1246,7 @@ export function validateFunctionCall(
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
       } catch (err) {
-        throw new Error(
+        throw new FunctionToolCallValidationSetupError(
           `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
         );
       }

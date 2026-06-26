@@ -596,5 +596,63 @@ describe('Google assertions', () => {
         reason: expect.stringContaining('Call to "add":'),
       });
     });
+
+    it('should pass the inverse assertion when no function was called', async () => {
+      const output = JSON.stringify({ toolCall: { functionCalls: [] } });
+      const provider = new GoogleLiveProvider('foo', { config: { tools: [] } });
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: { type: 'not-is-valid-function-call' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should not invert a Google tool schema compilation error', async () => {
+      const output = JSON.stringify({
+        toolCall: {
+          functionCalls: [{ args: '{"value": "test"}', name: 'broken' }],
+        },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'broken',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { value: { type: 'TYPE_UNSPECIFIED' as never } },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: { type: 'not-is-valid-function-call' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining("Tool schema doesn't compile with ajv"),
+      });
+    });
   });
 });
