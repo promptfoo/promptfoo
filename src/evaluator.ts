@@ -28,6 +28,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { AGENTIC_STRATEGIES_SET } from './redteam/constants/strategies';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import {
@@ -820,11 +821,17 @@ async function renderRunEvalPrompt({
   );
   if (isRedteam) {
     const testCharLimits = getTargetPromptCharLimits({ test } as CallApiContextParams);
+    const strategyId =
+      typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : undefined;
+    const isAgenticSeed =
+      (strategyId !== undefined && AGENTIC_STRATEGIES_SET.has(strategyId)) ||
+      [...AGENTIC_STRATEGIES_SET].some((agenticId) => provider.id().endsWith(agenticId));
     throwIfTargetPromptViolatesCharLimits(renderedPrompt, {
       maxCharsPerMessage:
         testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
-      minCharsPerMessage:
-        testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage,
+      minCharsPerMessage: isAgenticSeed
+        ? undefined
+        : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
     });
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);

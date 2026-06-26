@@ -182,10 +182,12 @@ export async function addLayerTestCases(
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = (next as TestCaseWithPlugin[]).filter((testCase) => {
-      const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
-        maxCharsPerMessage,
-        minCharsPerMessage,
-      });
+      const violation = getGeneratedTestCaseLengthViolation(
+        testCase.vars,
+        injectVar,
+        { maxCharsPerMessage, minCharsPerMessage },
+        { useCliStateFallback: false },
+      );
       if (!violation) {
         return true;
       }
@@ -204,10 +206,15 @@ export async function addLayerTestCases(
   const finalMinCharsPerMessage = config.minCharsPerMessage as number | undefined;
   return current.filter(
     (testCase) =>
-      !getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
-        maxCharsPerMessage: finalMaxCharsPerMessage,
-        minCharsPerMessage: finalMinCharsPerMessage,
-      }),
+      !getGeneratedTestCaseLengthViolation(
+        testCase.vars,
+        injectVar,
+        {
+          maxCharsPerMessage: finalMaxCharsPerMessage,
+          minCharsPerMessage: finalMinCharsPerMessage,
+        },
+        { useCliStateFallback: false },
+      ),
   );
 }
 

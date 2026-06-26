@@ -252,7 +252,13 @@ export function getGeneratedTestCaseLengthViolation(
 export function getGeneratedPromptObjectLengthViolation(
   prompt: { __prompt: string } | Record<string, string>,
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
-  { isMultiInput = false }: { isMultiInput?: boolean } = {},
+  {
+    isMultiInput = false,
+    useCliStateFallback = true,
+  }: {
+    isMultiInput?: boolean;
+    useCliStateFallback?: boolean;
+  } = {},
 ): PromptLengthViolation | undefined {
   let generatedPrompts = '__prompt' in prompt ? [prompt.__prompt] : Object.values(prompt);
   if (isMultiInput && '__prompt' in prompt) {
@@ -265,7 +271,9 @@ export function getGeneratedPromptObjectLengthViolation(
       // Preserve the serialized prompt fallback for malformed custom plugin output.
     }
   }
-  return getFirstGeneratedPromptLengthViolation(generatedPrompts, charLimits);
+  return getFirstGeneratedPromptLengthViolation(generatedPrompts, charLimits, {
+    useCliStateFallback,
+  });
 }
 
 export function getGeneratedPromptOverLimit(
@@ -306,9 +314,9 @@ export function getTargetPromptCharLimits(
 } {
   const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
     const configuredLimit =
+      providerCharLimits?.[key] ??
       cliState.config?.redteam?.[key] ??
       (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
-      providerCharLimits?.[key] ??
       (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
     return typeof configuredLimit === 'number' &&
       Number.isInteger(configuredLimit) &&

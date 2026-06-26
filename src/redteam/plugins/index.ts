@@ -347,10 +347,15 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
         }> = [];
 
         for (const testCase of generatedTestCases) {
-          const violation = getGeneratedTestCaseLengthViolation(testCase.vars, params.injectVar, {
-            maxCharsPerMessage,
-            minCharsPerMessage: getMinCharsPerMessageFromConfig(params.config),
-          });
+          const violation = getGeneratedTestCaseLengthViolation(
+            testCase.vars,
+            params.injectVar,
+            {
+              maxCharsPerMessage,
+              minCharsPerMessage: getMinCharsPerMessageFromConfig(params.config),
+            },
+            { useCliStateFallback: false },
+          );
           if (violation) {
             rejectedPromptViolations.push(violation);
             continue;
