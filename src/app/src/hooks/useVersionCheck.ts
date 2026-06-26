@@ -117,8 +117,8 @@ function getRuntimePolicyRefreshDelay(
   supportEndDate: string,
   notice: RuntimeCompatibilityNotice | null | undefined,
   dismissal: RuntimeNoticeDismissal | null,
+  now: number = Date.now(),
 ): number | null {
-  const now = Date.now();
   const removalTimestamp = parseUtcMidnight(supportEndDate);
   const pendingBoundaries: number[] = [];
   if (removalTimestamp !== null) {
@@ -174,10 +174,11 @@ export function useVersionCheck(): UseVersionCheckResult {
             if (!noticeId) {
               return null;
             }
-            return (
-              readRuntimeNoticeDismissal(noticeId) ??
-              (current?.noticeId === noticeId ? current : null)
-            );
+            const stored = readRuntimeNoticeDismissal(noticeId);
+            return current?.noticeId === noticeId &&
+              (!stored || current.dismissedAt > stored.dismissedAt)
+              ? current
+              : stored;
           });
           setUpdateDismissed(safeLocalStorageGet(STORAGE_KEY) === data.latestVersion);
           setError(null);
@@ -200,7 +201,18 @@ export function useVersionCheck(): UseVersionCheckResult {
   useEffect(() => {
     isMountedRef.current = true;
 
-    void checkVersion();
+    const load = async () => {
+      const succeeded = await checkVersion();
+      if (!succeeded && isMountedRef.current) {
+        clearRuntimePolicyRetry();
+        runtimePolicyRetryTimerRef.current = window.setTimeout(() => {
+          runtimePolicyRetryTimerRef.current = undefined;
+          void load();
+        }, REFRESH_RETRY_MS);
+      }
+    };
+
+    void load();
 
     return () => {
       isMountedRef.current = false;
@@ -215,7 +227,12 @@ export function useVersionCheck(): UseVersionCheckResult {
       return;
     }
 
-    const delay = getRuntimePolicyRefreshDelay(supportEndDate, notice, runtimeNoticeDismissal);
+    const delay = getRuntimePolicyRefreshDelay(
+      supportEndDate,
+      notice,
+      runtimeNoticeDismissal,
+      runtimePolicyUpdatedAt,
+    );
     if (delay === null) {
       return;
     }
@@ -246,7 +263,13 @@ export function useVersionCheck(): UseVersionCheckResult {
     return () => {
       window.clearTimeout(refreshTimer);
     };
-  }, [checkVersion, clearRuntimePolicyRetry, runtimeNoticeDismissal, versionInfo]);
+  }, [
+    checkVersion,
+    clearRuntimePolicyRetry,
+    runtimeNoticeDismissal,
+    runtimePolicyUpdatedAt,
+    versionInfo,
+  ]);
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {
@@ -256,6 +279,7 @@ export function useVersionCheck(): UseVersionCheckResult {
         new Date(dismissedAt).toISOString(),
       );
       setRuntimeNoticeDismissal({ noticeId: versionInfo.runtimeNotice.id, dismissedAt });
+      setRuntimePolicyUpdatedAt(dismissedAt);
     }
   };
 

@@ -1,6 +1,9 @@
 import chalk from 'chalk';
 import { getEnvBool, getEnvString, isNonInteractive } from './envars';
-import { readGlobalConfig, writeGlobalConfig } from './globalConfig/globalConfig';
+import {
+  readRuntimeNoticeLastShownAt,
+  writeRuntimeNoticeLastShownAt,
+} from './globalConfig/runtimeNoticeState';
 import {
   getRuntimeCompatibilityNotice,
   hasNode20SupportEnded,
@@ -56,8 +59,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   }
 
   try {
-    const config = readGlobalConfig();
-    if (!shouldShowRuntimeNotice(config.notices?.[notice.id]?.lastShownAt, now)) {
+    if (!shouldShowRuntimeNotice(readRuntimeNoticeLastShownAt(notice.id), now)) {
       return false;
     }
   } catch {
@@ -76,17 +78,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   });
 
   try {
-    // Re-read immediately before writing to preserve unrelated settings changed while the notice
-    // was rendered. Concurrent first-run processes may both show the notice, but must not widen the
-    // read/modify/write window unnecessarily.
-    const latestConfig = readGlobalConfig();
-    writeGlobalConfig({
-      ...latestConfig,
-      notices: {
-        ...latestConfig.notices,
-        [notice.id]: { lastShownAt: now.toISOString() },
-      },
-    });
+    writeRuntimeNoticeLastShownAt(notice.id, now.toISOString());
   } catch {
     // A persistence failure must not prevent the CLI command or duplicate this run's notice.
   }

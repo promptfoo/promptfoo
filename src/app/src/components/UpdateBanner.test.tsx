@@ -103,7 +103,11 @@ describe('UpdateBanner', () => {
 
     renderWithProviders(<UpdateBanner />);
 
+    expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.getByText(/Node.js 20 support ends July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/This Promptfoo server is running/i)).toHaveClass(
+      'dark:text-amber-200',
+    );
     expect(screen.queryByText(/Update available: v2.0.0/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy Update Command/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
@@ -111,7 +115,7 @@ describe('UpdateBanner', () => {
       'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
     );
 
-    await user.click(screen.getByRole('button', { name: 'Remind me in 7 days' }));
+    await user.click(screen.getByRole('button', { name: 'Remind me later' }));
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(mockRecordEvent).toHaveBeenCalledWith(
       'feature_used',
@@ -122,7 +126,7 @@ describe('UpdateBanner', () => {
     );
   });
 
-  it('should show the daily reminder label exactly at the final-phase boundary', () => {
+  it('should keep reminder copy truthful at the final-phase boundary', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-07-16T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
@@ -150,7 +154,7 @@ describe('UpdateBanner', () => {
 
     renderWithProviders(<UpdateBanner />);
 
-    expect(screen.getByRole('button', { name: 'Remind me tomorrow' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remind me later' })).toBeInTheDocument();
   });
 
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
@@ -181,6 +185,7 @@ describe('UpdateBanner', () => {
 
     renderWithProviders(<UpdateBanner />);
 
+    expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });
@@ -500,6 +505,7 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       const checkIcon = copyCommandButton.querySelector('.lucide-check');
       expect(checkIcon).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Copied' })).toBe(copyCommandButton);
     });
   });
 

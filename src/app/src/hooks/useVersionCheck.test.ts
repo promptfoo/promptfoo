@@ -194,13 +194,14 @@ describe('useVersionCheck', () => {
     await act(async () => {});
     expect(result.current.versionInfo).toEqual(mockVersionInfo);
 
+    timers.setSystemTime(new Date('2026-06-22T12:00:00.001Z'));
     act(() => {
       result.current.dismiss();
     });
 
     expect(
       localStorage.getItem('promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30'),
-    ).toBe('2026-06-22T12:00:00.000Z');
+    ).toBe('2026-06-22T12:00:00.001Z');
     expect(result.current.dismissed).toBe(true);
 
     await act(async () => {
@@ -257,6 +258,55 @@ describe('useVersionCheck', () => {
 
     await act(async () => {
       await timers.advanceByAsync(7 * 24 * 60 * 60 * 1000);
+    });
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+  });
+
+  it('keeps a fresher in-memory dismissal when persistence fails and policy refreshes', async () => {
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-15T12:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+    };
+    localStorage.setItem(
+      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
+      '2026-07-01T00:00:00.000Z',
+    );
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    mockCallApiResponse({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: false,
+      runtimeNotice,
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+
+    act(() => {
+      result.current.dismiss();
+    });
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await timers.advanceByAsync(12 * 60 * 60 * 1000);
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.runtimeNoticeDismissed).toBe(true);
+
+    await act(async () => {
+      await timers.advanceByAsync(12 * 60 * 60 * 1000);
     });
     expect(result.current.runtimeNoticeDismissed).toBe(false);
   });
@@ -334,6 +384,33 @@ describe('useVersionCheck', () => {
       'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
       '2099-01-01T00:00:00.000Z',
     );
+    mockCallApiResponse({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: false,
+      runtimeNotice: {
+        id: 'node20-removal-2026-07-30',
+        kind: 'runtime_deprecation',
+        runtime: 'node',
+        currentVersion: 'v20.20.2',
+        currentMajor: 20,
+        removalDate: '2026-07-30',
+        minimumVersion: '22.22.0',
+        recommendedVersion: '24 LTS',
+        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      },
+    });
+
+    const { result } = renderHook(() => useVersionCheck());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.runtimeNoticeDismissed).toBe(false);
+  });
+
+  it('fails open when localStorage reads throw', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
     mockCallApiResponse({
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
@@ -655,5 +732,41 @@ describe('useVersionCheck', () => {
     expect(result.current.error?.message).toBe('Network error');
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(callApi).toHaveBeenCalledWith('/version');
+  });
+
+  it('should retry an initial version-check failure and recover the runtime policy', async () => {
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    const versionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: false,
+      runtimeNotice: {
+        id: 'node20-removal-2026-07-30',
+        kind: 'runtime_deprecation' as const,
+        runtime: 'node' as const,
+        currentVersion: 'v20.20.2',
+        currentMajor: 20,
+        removalDate: '2026-07-30',
+        minimumVersion: '22.22.0',
+        recommendedVersion: '24 LTS',
+        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+      },
+    };
+    rejectCallApiOnce(new Error('Network error'));
+    mockCallApiResponseOnce(versionInfo);
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+    expect(result.current.error?.message).toBe('Network error');
+    expect(callApi).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await timers.advanceByAsync(5 * 60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.versionInfo).toEqual(versionInfo);
+    expect(result.current.error).toBeNull();
   });
 });

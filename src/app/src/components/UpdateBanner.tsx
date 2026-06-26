@@ -5,11 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { type RuntimeCompatibilityNotice, useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import {
-  getRuntimeNoticeReminderIntervalDays,
-  hasRuntimeSupportEnded,
-  parseUtcMidnight,
-} from '@app/utils/runtimeCompatibility';
+import { hasRuntimeSupportEnded, parseUtcMidnight } from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
@@ -27,10 +23,6 @@ function formatRemovalDate(removalDate: string): string {
   }).format(new Date(timestamp));
 }
 
-function getReminderLabel(reminderIntervalDays: 1 | 7): string {
-  return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
-}
-
 function RuntimeUpgradeMessage({
   notice,
   isDocker,
@@ -39,7 +31,12 @@ function RuntimeUpgradeMessage({
   isDocker: boolean;
 }) {
   if (isDocker) {
-    return <>Pull the latest Promptfoo Docker image to upgrade its bundled Node.js runtime.</>;
+    return (
+      <>
+        Pull the latest Promptfoo Docker image, then redeploy the container to upgrade its bundled
+        Node.js runtime.
+      </>
+    );
   }
   return (
     <>
@@ -47,6 +44,19 @@ function RuntimeUpgradeMessage({
       {notice.minimumVersion} or newer; Node.js {notice.recommendedVersion} is recommended.
     </>
   );
+}
+
+function getCopyCommandLabel(commandType: string | null | undefined, copied: boolean): string {
+  if (copied) {
+    return 'Copied';
+  }
+  if (commandType === 'docker') {
+    return 'Copy Docker Command';
+  }
+  if (commandType === 'npx') {
+    return 'Copy npx Command';
+  }
+  return 'Copy Update Command';
 }
 
 export default function UpdateBanner() {
@@ -230,6 +240,7 @@ export default function UpdateBanner() {
   return (
     <Alert
       ref={bannerRef}
+      role={activeRuntimeNotice && runtimeSupportEnded ? 'alert' : 'status'}
       variant={activeRuntimeNotice ? 'warning' : 'info'}
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
@@ -250,7 +261,7 @@ export default function UpdateBanner() {
               Node.js 20 support {runtimeSupportEnded ? 'ended' : 'ends'}{' '}
               {formatRemovalDate(activeRuntimeNotice.removalDate)}
             </span>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground dark:text-amber-200">
               <RuntimeUpgradeMessage
                 notice={activeRuntimeNotice}
                 isDocker={versionInfo.commandType === 'docker'}
@@ -307,21 +318,12 @@ export default function UpdateBanner() {
               ) : (
                 <Copy className="size-3" />
               )}
-              {versionInfo.commandType === 'docker'
-                ? 'Copy Docker Command'
-                : versionInfo.commandType === 'npx'
-                  ? 'Copy npx Command'
-                  : 'Copy Update Command'}
+              {getCopyCommandLabel(versionInfo.commandType, copied)}
             </Button>
           )}
         {activeRuntimeNotice ? (
           <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
-            {getReminderLabel(
-              getRuntimeNoticeReminderIntervalDays(
-                activeRuntimeNotice.removalDate,
-                runtimePolicyUpdatedAt,
-              ),
-            )}
+            Remind me later
           </Button>
         ) : (
           <button

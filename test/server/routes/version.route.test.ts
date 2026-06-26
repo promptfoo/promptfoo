@@ -30,6 +30,7 @@ describe('Version Route', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.resetAllMocks();
   });
 
@@ -64,12 +65,14 @@ describe('Version Route', () => {
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2099-01-01T00:00:00.000Z'));
     mockedGetLatestVersion.mockRejectedValue(new Error('Network error'));
 
     const response = await request(app).get('/api/version');
 
     // Should still return 200, not 500 — schema must match even on fallback path
     expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(1);
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
@@ -112,6 +115,29 @@ describe('Version Route', () => {
     expect(response.body.updateCommands).not.toHaveProperty('global');
     expect(response.body.updateCommands).not.toHaveProperty('npx');
     expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
+  });
+
+  it('should block package updates but preserve Docker updates at the cutoff', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-30T00:00:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    const packageResponse = await request(app).get('/api/version');
+    expect(packageResponse.status).toBe(200);
+    expect(packageResponse.body.updateBlockedByRuntime).toBe(
+      process.versions.node.startsWith('20.'),
+    );
+    expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
+
+    mockedGetUpdateCommands.mockReturnValue({
+      primary: 'docker pull promptfoo/promptfoo:latest',
+      alternative: null,
+      commandType: 'docker',
+    });
+    const dockerResponse = await request(app).get('/api/version');
+    expect(dockerResponse.status).toBe(200);
+    expect(dockerResponse.body.updateBlockedByRuntime).toBe(false);
+    expect(dockerResponse.body.updateAvailable).toBe(true);
   });
 
   it('should return 500 with fallback response when schema parse fails', async () => {

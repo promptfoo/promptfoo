@@ -114,6 +114,18 @@ describe('checkForUpdates', () => {
     restoreEnv();
   });
 
+  it('should skip the CLI update check when PROMPTFOO_DISABLE_UPDATE is set', async () => {
+    const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+    try {
+      expect(await checkForUpdates()).toBe(false);
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(loggerInfoSpy).not.toHaveBeenCalled();
+      expect(loggerWarnSpy).not.toHaveBeenCalled();
+    } finally {
+      restoreDisableUpdate();
+    }
+  });
+
   it('should log an update message if a newer version is available - minor ver', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
