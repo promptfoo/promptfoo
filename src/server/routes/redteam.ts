@@ -42,16 +42,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function getInlineTargetInputs(target: unknown): unknown[] {
+  if (!isRecord(target)) {
+    return [];
+  }
+
+  const targetConfig = isRecord(target.config) ? target.config : undefined;
+  const directInputs = target.inputs ?? targetConfig?.inputs;
+  if (directInputs !== undefined) {
+    return [directInputs];
+  }
+
+  if ('id' in target) {
+    return [];
+  }
+
+  return Object.values(target).flatMap((options) => {
+    if (!isRecord(options)) {
+      return [];
+    }
+    const optionsConfig = isRecord(options.config) ? options.config : undefined;
+    const inputs = options.inputs ?? optionsConfig?.inputs;
+    return inputs === undefined ? [] : [inputs];
+  });
+}
+
 function getLiveConfigCompatibilityError(config: Record<string, unknown>): string | undefined {
   const redteam = isRecord(config.redteam) ? config.redteam : undefined;
   const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
   const configuredTargets = config.targets ?? config.providers;
-  const target = Array.isArray(configuredTargets) ? configuredTargets[0] : configuredTargets;
-  const targetRecord = isRecord(target) ? target : undefined;
-  const targetConfig = isRecord(targetRecord?.config) ? targetRecord.config : undefined;
-  const inputs = targetRecord?.inputs ?? targetConfig?.inputs;
+  const targets = Array.isArray(configuredTargets) ? configuredTargets : [configuredTargets];
 
-  return getStrategyCompatibilityError(strategies, inputs);
+  return targets
+    .flatMap(getInlineTargetInputs)
+    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+    .find((error) => error !== undefined);
 }
 
 /**
@@ -145,7 +170,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         );
 
         if (applicableTestCases.length === 0) {
-          res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+          res.status(400).json({
+            error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+          });
           return;
         }
 
@@ -156,9 +183,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           strategy.id,
         );
 
-        if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
+        if (!strategyTestCases || strategyTestCases.length === 0) {
+          res.status(400).json({
+            error: `Strategy ${strategy.id} is not compatible with plugin ${plugin.id}`,
+          });
+          return;
         }
+        finalTestCases = strategyTestCases;
       } catch (error) {
         logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
+import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
@@ -717,6 +719,64 @@ describe('addLayerTestCases', () => {
           config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
         }),
       );
+    });
+
+    it('should consume nested plugin targeting before applying per-turn layers at runtime', async () => {
+      const [testCase] = await addLayerTestCases(
+        [
+          {
+            vars: { input: 'harmful behavior' },
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        'input',
+        {
+          steps: [
+            'jailbreak:hydra',
+            {
+              id: 'layer',
+              config: {
+                plugins: ['harmful'],
+                steps: [{ id: 'posterior', config: { plugins: ['harmful'] } }],
+              },
+            },
+          ],
+        },
+        Strategies,
+        mockLoadStrategy,
+      );
+      const provider = testCase.provider;
+      expect(provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            _perTurnLayers: [
+              {
+                id: 'layer',
+                config: { steps: [{ id: 'posterior', config: {} }] },
+              },
+            ],
+          }),
+        }),
+      );
+
+      if (!provider || typeof provider === 'string' || typeof provider === 'function') {
+        throw new Error('Expected an attack provider configuration');
+      }
+      const layerConfigs = provider.config?._perTurnLayers;
+      if (!Array.isArray(layerConfigs)) {
+        throw new Error('Expected per-turn layer configuration');
+      }
+
+      const transformed = await applyRuntimeTransforms(
+        'runtime attack',
+        'input',
+        layerConfigs,
+        Strategies,
+      );
+
+      expect(transformed.error).toBeUndefined();
+      expect(transformed.prompt).toContain('You are a classifier for red teaming');
+      expect(transformed.prompt).toContain('runtime attack');
     });
 
     it.each([

@@ -240,18 +240,19 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
-async function cleanupRedteamProvider(testSuite: TestSuite): Promise<void> {
-  try {
-    logger.debug('Cleaning up provider');
-    const provider = testSuite.providers[0] as ApiProvider;
-    if (provider && typeof provider.cleanup === 'function') {
-      const cleanupResult = provider.cleanup();
-      if (cleanupResult instanceof Promise) {
-        await cleanupResult;
+async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
+  for (const provider of testSuite.providers as ApiProvider[]) {
+    try {
+      logger.debug('Cleaning up provider');
+      if (typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
       }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
     }
-  } catch (cleanupErr) {
-    logger.warn(`Error during provider cleanup: ${cleanupErr}`);
   }
 }
 
@@ -560,9 +561,11 @@ async function doGenerateRedteamInternal(
   // Read inputs from the first target/provider
   const targetInputs = testSuite.providers[0]?.inputs;
 
-  const compatibilityError = getStrategyCompatibilityError(strategyObjs, targetInputs);
+  const compatibilityError = testSuite.providers
+    .map((provider) => getStrategyCompatibilityError(strategyObjs, provider.inputs))
+    .find((error) => error !== undefined);
   if (compatibilityError) {
-    await cleanupRedteamProvider(testSuite);
+    await cleanupRedteamProviders(testSuite);
     throw new Error(compatibilityError);
   }
 
@@ -775,7 +778,7 @@ async function doGenerateRedteamInternal(
    * re-initialized when running the red team. Cleanup is particularly
    * important for MCP servers to release resources and prevent memory leaks.
    */
-  const cleanupProvider = () => cleanupRedteamProvider(testSuite);
+  const cleanupProvider = () => cleanupRedteamProviders(testSuite);
 
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)

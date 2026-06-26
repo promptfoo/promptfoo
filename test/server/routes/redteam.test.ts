@@ -197,7 +197,10 @@ describe('Redteam Routes', () => {
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
       });
 
-      it('should not apply posterior previews to plugins that exclude it', async () => {
+      it.each([
+        ['directly', { id: 'posterior', config: {} }],
+        ['inside a layer', { id: 'layer', config: { steps: ['posterior'] } }],
+      ])('should reject posterior previews %s for plugins that exclude it', async (_label, strategy) => {
         const mockPluginFactory = {
           key: 'coding-agent:secret-env-read',
           action: vi.fn().mockResolvedValue([
@@ -219,10 +222,7 @@ describe('Redteam Routes', () => {
               id: 'coding-agent:secret-env-read',
               config: {},
             },
-            strategy: {
-              id: 'posterior',
-              config: {},
-            },
+            strategy,
             config: {
               applicationDefinition: {
                 purpose: 'test assistant',
@@ -230,8 +230,10 @@ describe('Redteam Routes', () => {
             },
           });
 
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual({ testCases: [], count: 0 });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe(
+          `Strategy ${strategy.id} is not compatible with plugin coding-agent:secret-env-read`,
+        );
       });
 
       it('should NOT exclude multi-input excluded plugins when plugin has no multi-input config', async () => {
@@ -688,7 +690,39 @@ describe('Redteam Routes', () => {
       });
     });
 
-    it('should reject incompatible replacements without cancelling the active job', async () => {
+    it.each([
+      {
+        label: 'direct target inputs',
+        targets: [
+          {
+            id: 'http',
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+      },
+      {
+        label: 'provider map inputs',
+        targets: [
+          {
+            echo: {
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          },
+        ],
+      },
+      {
+        label: 'later target inputs',
+        targets: [
+          { id: 'echo' },
+          {
+            id: 'http',
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+      },
+    ])('should reject incompatible replacements with $label without cancelling the active job', async ({
+      targets,
+    }) => {
       let resolveRun: ((value: undefined) => void) | undefined;
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
@@ -705,12 +739,7 @@ describe('Redteam Routes', () => {
         .post('/api/redteam/run')
         .send({
           config: {
-            targets: [
-              {
-                id: 'http',
-                inputs: { context: 'Reference context', question: 'User question' },
-              },
-            ],
+            targets,
             redteam: {
               strategies: [
                 {

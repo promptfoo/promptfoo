@@ -19,8 +19,11 @@ function getApplicablePerTurnLayer(
     return undefined;
   }
 
+  const runtimeConfig = { ...(layerObj.config ?? {}) };
+  delete runtimeConfig.plugins;
+
   if (layerObj.id !== 'layer') {
-    return layer;
+    return typeof layer === 'string' ? layer : { id: layerObj.id, config: runtimeConfig };
   }
 
   const steps = Array.isArray(layerObj.config?.steps)
@@ -33,7 +36,7 @@ function getApplicablePerTurnLayer(
   return applicableSteps.length > 0
     ? {
         id: layerObj.id,
-        config: { ...layerObj.config, steps: applicableSteps },
+        config: { ...runtimeConfig, steps: applicableSteps },
       }
     : undefined;
 }
@@ -162,7 +165,6 @@ export async function addLayerTestCases(
     // ═══════════════════════════════════════════════════════════════════════
     // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
     // ═══════════════════════════════════════════════════════════════════════
-    let resolvedStrategyId = stepObj.id;
     let stepAction: Strategy['action'] | undefined;
 
     try {
@@ -175,7 +177,6 @@ export async function addLayerTestCases(
         if (!builtin && stepObj.id.startsWith('custom:')) {
           builtin = strategies.find((s) => s.id === 'custom');
         }
-        resolvedStrategyId = builtin?.id ?? stepObj.id;
         stepAction = builtin?.action;
       }
     } catch (e) {
@@ -192,7 +193,7 @@ export async function addLayerTestCases(
     const stepTargets =
       (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
     const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, resolvedStrategyId, stepTargets as string[] | undefined),
+      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
     const next = await stepAction(applicable, injectVar, {
