@@ -119,7 +119,7 @@ describe('Version Route', () => {
 
   it('should not classify generic self-hosted mode as Docker', async () => {
     const restoreEnv = mockProcessEnv({
-      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
       PROMPTFOO_SELF_HOSTED: 'true',
     });
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
@@ -129,15 +129,18 @@ describe('Version Route', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.selfHosted).toBe(true);
-      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({ isDocker: false, isNpx: false });
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isOfficialDockerImage: false,
+        isNpx: false,
+      });
     } finally {
       restoreEnv();
     }
   });
 
-  it('should use Docker guidance only when the container signal is set', async () => {
+  it('should use Docker guidance only when the official-image marker is set', async () => {
     const restoreEnv = mockProcessEnv({
-      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
       PROMPTFOO_SELF_HOSTED: 'true',
     });
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
@@ -147,7 +150,10 @@ describe('Version Route', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.selfHosted).toBe(true);
-      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({ isDocker: true, isNpx: false });
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isOfficialDockerImage: true,
+        isNpx: false,
+      });
     } finally {
       restoreEnv();
     }

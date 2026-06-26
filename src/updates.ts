@@ -53,7 +53,7 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     const updateCommands = getUpdateCommands({
-      isDocker: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+      isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
       // Preserve the existing npx-first CLI guidance while sharing Docker command policy.
       isNpx: true,
     });

@@ -192,8 +192,8 @@ describe('checkForUpdates', () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
-  it('should preserve Docker pull guidance before and after the Node.js 20 cutoff', async () => {
-    const restoreDocker = mockProcessEnv({ PROMPTFOO_RUNNING_IN_DOCKER: 'true' });
+  it('should preserve official-image pull guidance before and after the cutoff', async () => {
+    const restoreDocker = mockProcessEnv({ PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true' });
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce({
         ok: true,
@@ -231,7 +231,7 @@ describe('checkForUpdates', () => {
 
   it('should keep package update safeguards in generic self-hosted mode', async () => {
     const restoreSelfHosted = mockProcessEnv({
-      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
       PROMPTFOO_SELF_HOSTED: 'true',
     });
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({

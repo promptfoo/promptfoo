@@ -130,8 +130,8 @@ describe('runtime compatibility CLI notice', () => {
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
   });
 
-  it('uses Docker upgrade guidance only for Docker CLI runs', () => {
-    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_RUNNING_IN_DOCKER');
+  it('uses Docker pull guidance only for official-image CLI runs', () => {
+    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_OFFICIAL_DOCKER_IMAGE');
 
     expect(
       maybeWarnAboutRuntime({

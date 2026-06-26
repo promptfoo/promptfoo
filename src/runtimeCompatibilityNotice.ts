@@ -25,10 +25,10 @@ export function formatRuntimeCompatibilityNotice(
   notice: RuntimeCompatibilityNotice,
   compact: boolean,
   now: Date = new Date(),
-  isDocker: boolean = false,
+  isOfficialDockerImage: boolean = false,
 ): string {
   const supportStatus = hasNode20SupportEnded(now) ? 'ended' : 'ends';
-  const upgradeInstruction = isDocker
+  const upgradeInstruction = isOfficialDockerImage
     ? 'Pull the latest Promptfoo Docker image, then redeploy the container.'
     : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;
   if (compact) {
@@ -76,7 +76,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
       notice,
       compact,
       now,
-      getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+      getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
     ),
   );
 
