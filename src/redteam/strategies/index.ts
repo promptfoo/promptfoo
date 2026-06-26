@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
+import { resolveIntentPluginForCompatibility } from '../plugins/intent';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -72,6 +73,24 @@ function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
   return false;
 }
 
+function isNonEmptyInputRecord(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0
+  );
+}
+
+function pluginHasConfiguredInputs(plugin: unknown): boolean {
+  return Boolean(
+    plugin &&
+      typeof plugin === 'object' &&
+      !Array.isArray(plugin) &&
+      isNonEmptyInputRecord((plugin as { config?: { inputs?: unknown } }).config?.inputs),
+  );
+}
+
 export function getStrategyCompatibilityError(
   strategies: readonly unknown[],
   inputs: unknown,
@@ -81,17 +100,36 @@ export function getStrategyCompatibilityError(
     return INTERNAL_PER_TURN_LAYERS_ERROR;
   }
 
-  const hasMultiInput =
-    inputs !== null &&
-    typeof inputs === 'object' &&
-    !Array.isArray(inputs) &&
-    Object.keys(inputs).length > 0;
+  const hasTargetInputs = isNonEmptyInputRecord(inputs);
+  const hasPluginInputs = options.plugins?.some(pluginHasConfiguredInputs) ?? false;
+  if (!hasTargetInputs && !hasPluginInputs) {
+    return undefined;
+  }
+  if (
+    !hasApplicablePosteriorStrategy(strategies, undefined, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+    })
+  ) {
+    return undefined;
+  }
 
-  const hasPosterior = hasApplicablePosteriorStrategy(strategies, options.plugins, {
-    includeDisabledStrategies: options.includeDisabledStrategies,
-  });
+  const resolvedPlugins = options.plugins?.map(resolveIntentPluginForCompatibility);
+  const hasPosterior =
+    hasTargetInputs &&
+    hasApplicablePosteriorStrategy(strategies, resolvedPlugins, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+    });
+  const pluginsWithConfiguredInputs = hasPluginInputs
+    ? resolvedPlugins?.filter(pluginHasConfiguredInputs)
+    : undefined;
+  const pluginInputsHavePosterior =
+    pluginsWithConfiguredInputs &&
+    pluginsWithConfiguredInputs.length > 0 &&
+    hasApplicablePosteriorStrategy(strategies, pluginsWithConfiguredInputs, {
+      includeDisabledStrategies: options.includeDisabledStrategies,
+    });
 
-  return hasMultiInput && hasPosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;
+  return hasPosterior || pluginInputsHavePosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;
 }
 
 export function isStrategyApplicable(

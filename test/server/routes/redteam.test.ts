@@ -981,6 +981,61 @@ describe('Redteam Routes', () => {
       expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
     });
 
+    it('treats an empty command-line plugin list as no override', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: {
+              plugins: [{ id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } }],
+              strategies: ['posterior'],
+            },
+            commandLineOptions: { plugins: [] },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
+    });
+
+    it('allows multi-input runs with file-backed sequence-only intents', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-posterior-intents-'));
+      const intentPath = path.join(tempDir, 'intents.json');
+      fs.writeFileSync(intentPath, JSON.stringify([['first turn', 'second turn']]));
+
+      try {
+        const response = await request(app)
+          .post('/api/redteam/run')
+          .send({
+            config: {
+              targets: [
+                {
+                  id: 'echo',
+                  inputs: { context: 'Reference context', question: 'User question' },
+                },
+              ],
+              redteam: {
+                plugins: [{ id: 'intent', config: { intent: `file://${intentPath}` } }],
+                strategies: ['posterior'],
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+        expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(tempDir, { force: true, recursive: true });
+      }
+    });
+
     it.each([
       {
         label: 'command-line strategy overrides',
