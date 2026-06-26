@@ -924,6 +924,43 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup!).toHaveBeenCalledWith();
   });
 
+  it('should reject incompatible target inputs before provider inspection and clean up', async () => {
+    mockProvider.inputs = {
+      context: 'Reference context',
+      question: 'User question',
+    };
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: [{ id: 'harmful:hate' }],
+          strategies: ['posterior'],
+        },
+      },
+    });
+
+    await expect(
+      doGenerateRedteam({
+        output: 'test-output.json',
+        inRedteamRun: false,
+        cache: false,
+        defaultConfig: {},
+        write: false,
+        config: 'test-config.yaml',
+      }),
+    ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+    expect(extractA2AAgentCardInfo).not.toHaveBeenCalled();
+    expect(extractMcpToolsInfo).not.toHaveBeenCalled();
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(mockProvider.cleanup).toHaveBeenCalledOnce();
+  });
+
   it('should handle provider cleanup errors gracefully', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [

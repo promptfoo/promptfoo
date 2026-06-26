@@ -23,7 +23,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
-import { addPosteriorAttack } from './posterior';
+import { addPosteriorAttack, hasPosteriorStrategy, POSTERIOR_MULTI_INPUT_ERROR } from './posterior';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -32,11 +32,34 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { pluginMatchesStrategyTargets } from './util';
 
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
+import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
+
+export function getStrategyCompatibilityError(
+  strategies: readonly unknown[],
+  inputs: unknown,
+): string | undefined {
+  const hasMultiInput =
+    inputs !== null &&
+    typeof inputs === 'object' &&
+    !Array.isArray(inputs) &&
+    Object.keys(inputs).length > 0;
+
+  return hasMultiInput && hasPosteriorStrategy(strategies)
+    ? POSTERIOR_MULTI_INPUT_ERROR
+    : undefined;
+}
+
+export function isStrategyApplicable(
+  testCase: TestCaseWithPlugin,
+  strategy: RedteamStrategyObject,
+): boolean {
+  return pluginMatchesStrategyTargets(testCase, strategy.id, strategy.config?.plugins);
+}
 
 export const Strategies: Strategy[] = [
   {

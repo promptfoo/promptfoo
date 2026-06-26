@@ -171,6 +171,9 @@ describe('Redteam Routes', () => {
         ['directly', { id: 'posterior', config: {} }],
         ['inside a layer', { id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
       ])('should reject posterior %s for multi-input previews before generation', async (_label, strategy) => {
+        const pluginFind = vi.fn();
+        mockedPlugins.find = pluginFind;
+
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
@@ -190,8 +193,45 @@ describe('Redteam Routes', () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error).toBe('Posterior strategy does not support multi-input targets');
-        expect(mockedPlugins.find).not.toHaveBeenCalled();
+        expect(pluginFind).not.toHaveBeenCalled();
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
+      it('should not apply posterior previews to plugins that exclude it', async () => {
+        const mockPluginFactory = {
+          key: 'coding-agent:secret-env-read',
+          action: vi.fn().mockResolvedValue([
+            {
+              vars: { query: 'canary-marker' },
+              metadata: {
+                pluginConfig: { excludeStrategies: ['posterior'] },
+                pluginId: 'coding-agent:secret-env-read',
+              },
+            },
+          ]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'coding-agent:secret-env-read',
+              config: {},
+            },
+            strategy: {
+              id: 'posterior',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ testCases: [], count: 0 });
       });
 
       it('should NOT exclude multi-input excluded plugins when plugin has no multi-input config', async () => {
@@ -645,6 +685,62 @@ describe('Redteam Routes', () => {
           hasRunningJob: false,
           jobId: null,
         });
+      });
+    });
+
+    it('should reject incompatible replacements without cancelling the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'http',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: {
+              strategies: [
+                {
+                  id: 'layer',
+                  config: {
+                    steps: ['jailbreak:hydra', 'posterior'],
+                  },
+                },
+              ],
+            },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+      const activeResponse = await request(app).get('/api/redteam/status');
+      expect(activeResponse.body).toMatchObject({
+        hasRunningJob: true,
+        jobId: firstResponse.body.id,
+      });
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
       });
     });
 
