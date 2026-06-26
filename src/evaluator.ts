@@ -1328,12 +1328,12 @@ async function transformRunEvalResponse({
   if (provider.transform) {
     const providerTransformInput = processedResponse.output;
     const clonedInput = cloneTransformInput(providerTransformInput);
-    processedResponse.output = await transform(provider.transform, clonedInput.value, {
+    processedResponse.output = await transform(provider.transform, providerTransformInput, {
       vars,
       prompt,
     });
     providerTransformChanged =
-      !clonedInput.reliable || didTransformChange(providerTransformInput, processedResponse.output);
+      !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output);
   }
   const providerTransformedOutput = processedResponse.output;
 
@@ -1342,13 +1342,13 @@ async function transformRunEvalResponse({
   if (testTransform) {
     const testTransformInput = processedResponse.output;
     const clonedInput = cloneTransformInput(testTransformInput);
-    processedResponse.output = await transform(testTransform, clonedInput.value, {
+    processedResponse.output = await transform(testTransform, testTransformInput, {
       vars,
       prompt,
       ...(response && response.metadata && { metadata: response.metadata }),
     });
     testTransformChanged =
-      !clonedInput.reliable || didTransformChange(testTransformInput, processedResponse.output);
+      !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output);
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');

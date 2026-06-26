@@ -194,16 +194,24 @@ describeEvaluator('evaluator transforms', () => {
     'test',
     'postprocess',
     'assertion',
-  ] as const)('retains structured MCP provenance after an identity %s object transform', async (transformLevel) => {
+  ] as const)('preserves object identity for a %s transform', async (transformLevel) => {
+    let originalOutput: { content: string } | undefined;
+    const identityTransform = (output: unknown) => {
+      expect(output).toBe(originalOutput);
+      return output;
+    };
     const provider: ApiProvider = {
       id: () => 'mcp-provider-identity-object',
-      callApi: async () => ({
-        output: { content: 'rendered MCP result' },
-        raw: {
-          output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
-        },
-      }),
-      ...(transformLevel === 'provider' ? { transform: 'output' } : {}),
+      callApi: async () => {
+        originalOutput = { content: 'rendered MCP result' };
+        return {
+          output: originalOutput,
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+          },
+        };
+      },
+      ...(transformLevel === 'provider' ? { transform: identityTransform } : {}),
     };
     const testSuite: TestSuite = {
       providers: [provider],
@@ -211,12 +219,14 @@ describeEvaluator('evaluator transforms', () => {
       tests: [
         {
           threshold: 0.5,
-          ...(transformLevel === 'test' ? { options: { transform: 'output' } } : {}),
-          ...(transformLevel === 'postprocess' ? { options: { postprocess: 'output' } } : {}),
+          ...(transformLevel === 'test' ? { options: { transform: identityTransform } } : {}),
+          ...(transformLevel === 'postprocess'
+            ? { options: { postprocess: identityTransform } }
+            : {}),
           assert: (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map(
             (type) => ({
               type,
-              ...(transformLevel === 'assertion' ? { transform: 'output' } : {}),
+              ...(transformLevel === 'assertion' ? { transform: identityTransform } : {}),
             }),
           ),
         },

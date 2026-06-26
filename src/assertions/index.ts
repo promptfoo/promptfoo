@@ -39,7 +39,12 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { cloneTransformInput, didTransformChange, transform } from '../util/transform';
+import {
+  cloneTransformInput,
+  didTransformChange,
+  transform,
+  type TransformInputClone,
+} from '../util/transform';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -411,6 +416,7 @@ export async function runAssertion({
   vars,
   latencyMs,
   providerResponse,
+  assertionTransformInputSnapshot,
   traceId,
   traceData,
 }: {
@@ -422,6 +428,8 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  /** Internal baseline shared by concurrent assertions so in-place transforms fail closed. */
+  assertionTransformInputSnapshot?: TransformInputClone<ProviderResponse['output']>;
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
@@ -436,14 +444,15 @@ export async function runAssertion({
   let assertionTransformChanged = false;
   if (assertion.transform) {
     const assertionTransformInput = output;
-    const clonedInput = cloneTransformInput(assertionTransformInput);
-    output = await transform(assertion.transform, clonedInput.value, {
+    const clonedInput =
+      assertionTransformInputSnapshot ?? cloneTransformInput(assertionTransformInput);
+    output = await transform(assertion.transform, assertionTransformInput, {
       vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
     assertionTransformChanged =
-      !clonedInput.reliable || didTransformChange(assertionTransformInput, output);
+      !clonedInput.reliable || didTransformChange(clonedInput.value, output);
   }
 
   const context: AssertionValueFunctionContext = {
@@ -782,6 +791,9 @@ export async function runAssertions({
     })
     .flat();
 
+  const assertionTransformInputSnapshot = asserts.some(({ assertion }) => assertion.transform)
+    ? cloneTransformInput(providerResponse.output)
+    : undefined;
   const shouldPreloadTrace =
     !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
@@ -810,6 +822,7 @@ export async function runAssertions({
       prompt,
       provider,
       providerResponse,
+      assertionTransformInputSnapshot,
       assertion,
       test,
       vars,
