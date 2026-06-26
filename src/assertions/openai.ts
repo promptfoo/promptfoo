@@ -8,8 +8,6 @@ import {
 } from '../types/index';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 
-import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
-
 interface OpenAiToolCall {
   type?: 'function';
   function: { arguments: string; name: string };
@@ -387,7 +385,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
 
-  let tools = (provider as OpenAiChatCompletionProvider).config.tools;
+  let tools = provider?.config?.tools;
   if (tools) {
     try {
       const loadedTools = await maybeLoadToolsFromExternalFile(tools, test.vars);

@@ -5,6 +5,29 @@ import {
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+const VALIDATION_FAILED_REASON = 'Function call validation failed';
+
+function getValidationErrorMessage(error: unknown): string {
+  try {
+    let message: string;
+    if (error instanceof Error) {
+      message = error.message;
+    } else if (
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof error.message === 'string'
+    ) {
+      message = error.message;
+    } else {
+      message = String(error ?? '');
+    }
+    return message.trim() ? message : VALIDATION_FAILED_REASON;
+  } catch {
+    return VALIDATION_FAILED_REASON;
+  }
+}
+
 export const handleIsValidFunctionCall = async ({
   assertion,
   output,
@@ -27,8 +50,7 @@ export const handleIsValidFunctionCall = async ({
     await provider.validateFunctionToolCall(output, test.vars);
     isValid = true;
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err ?? '');
-    invalidReason = errorMessage.trim() ? errorMessage : 'Function call validation failed';
+    invalidReason = getValidationErrorMessage(err);
     if (isFunctionToolCallValidationSetupError(err)) {
       return {
         pass: false,

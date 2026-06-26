@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
+import { fetchWithCache } from '../../../src/cache';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 const mcpMocks = vi.hoisted(() => {
@@ -120,6 +122,82 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
     // Ensure it's not the problematic [object Object] output
     expect(result.output).not.toContain('[object Object]');
+  });
+
+  it('returns structured MCP outcomes for assertion validation', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'list_resources', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    mcpMocks.mockCallTool
+      .mockResolvedValueOnce({ content: 'real MCP success' })
+      .mockResolvedValueOnce({ content: '', error: 'real MCP failure' });
+
+    const successResponse = await provider.callApi('Use the MCP tool');
+    const errorResponse = await provider.callApi('Use the MCP tool');
+
+    expect(successResponse.metadata?.mcpToolCalls).toEqual([
+      { name: 'list_resources', status: 'success' },
+    ]);
+    expect(errorResponse.metadata?.mcpToolCalls).toEqual([
+      { name: 'list_resources', status: 'error', error: 'real MCP failure' },
+    ]);
+
+    const [successPositive, successInverse, errorPositive, errorInverse] = await Promise.all([
+      runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'test',
+        provider,
+        providerResponse: successResponse,
+        test: { vars: {} },
+      }),
+      runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'test',
+        provider,
+        providerResponse: successResponse,
+        test: { vars: {} },
+      }),
+      runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'test',
+        provider,
+        providerResponse: errorResponse,
+        test: { vars: {} },
+      }),
+      runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'test',
+        provider,
+        providerResponse: errorResponse,
+        test: { vars: {} },
+      }),
+    ]);
+
+    expect(successPositive).toMatchObject({ pass: true, score: 1 });
+    expect(successInverse).toMatchObject({ pass: false, score: 0 });
+    expect(errorPositive).toMatchObject({ pass: false, score: 0 });
+    expect(errorInverse).toMatchObject({ pass: true, score: 1 });
   });
 
   it('should handle MCP tool errors gracefully', async () => {

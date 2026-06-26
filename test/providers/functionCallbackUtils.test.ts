@@ -531,6 +531,30 @@ describe('FunctionCallbackHandler', () => {
       });
     });
 
+    it('keeps concurrent MCP outcomes invocation-local', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'successful_tool', description: 'Succeeds' },
+        { name: 'failing_tool', description: 'Fails' },
+      ]);
+      mockMCPClient.callTool.mockImplementation(async (name: string) =>
+        name === 'successful_tool' ? { content: 'ok' } : { content: '', error: 'boom' },
+      );
+
+      const [success, failure] = await Promise.all([
+        handler.processCallsDetailed({ name: 'successful_tool', arguments: '{}' }, {}),
+        handler.processCallsDetailed({ name: 'failing_tool', arguments: '{}' }, {}),
+      ]);
+
+      expect(success).toEqual({
+        output: 'MCP Tool Result (successful_tool): ok',
+        mcpToolCalls: [{ name: 'successful_tool', status: 'success' }],
+      });
+      expect(failure).toEqual({
+        output: 'MCP Tool Error (failing_tool): boom',
+        mcpToolCalls: [{ name: 'failing_tool', status: 'error', error: 'boom' }],
+      });
+    });
+
     it('should handle MCP tool errors gracefully', async () => {
       mockMCPClient.getAllTools.mockReturnValue([
         { name: 'failing_tool', description: 'A tool that fails' },

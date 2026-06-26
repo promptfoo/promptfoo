@@ -1058,6 +1058,37 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      ['no provider', () => undefined],
+      ['a provider without config', () => createMockProvider()],
+    ])('treats %s as a non-invertible setup failure', async (_name, getProvider) => {
+      const output = [
+        {
+          type: 'function',
+          function: { name: 'getCurrentTemperature', arguments: '{}' },
+        },
+      ];
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: getProvider(),
+            test: { vars: {} },
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      const expected = {
+        pass: false,
+        score: 0,
+        reason: 'No tools configured in provider, but output contains tool calls',
+      };
+      expect(positive).toMatchObject(expected);
+      expect(inverse).toMatchObject(expected);
+    });
+
+    it.each([
       ['an empty tools array', [], 'No function tool schemas configured in provider'],
       [
         'only non-function tools',

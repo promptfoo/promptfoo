@@ -145,6 +145,16 @@ describe('handleIsValidFunctionCall', () => {
       () => Promise.reject(Object.assign(new Error('placeholder'), { message: '' })),
       'Function call validation failed',
     ],
+    [
+      'an error-like object',
+      () => Promise.reject({ message: 'object invalid call' }),
+      'object invalid call',
+    ],
+    [
+      'an uncoercible object',
+      () => Promise.reject(Object.create(null)),
+      'Function call validation failed',
+    ],
   ])('keeps %s as a failed aggregate', async (_name, validateFunctionToolCall, reason) => {
     const provider = {
       ...validProvider,
@@ -173,7 +183,11 @@ describe('handleIsValidFunctionCall', () => {
     const provider = {
       ...validProvider,
       validateFunctionToolCall: async () => {
-        throw new FunctionToolCallValidationSetupError('');
+        return Promise.reject({
+          code: 'FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR',
+          name: 'FunctionToolCallValidationSetupError',
+          message: '',
+        });
       },
     } as ApiProvider;
     const result = await runAssertions({

@@ -409,6 +409,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedInput = false;
     let flaggedOutput = false;
     let output = '';
+    let mcpToolCalls: Array<{
+      error?: string;
+      name: string;
+      status: 'error' | 'success';
+    }> = [];
     let logProbs: any;
     let finishReason: string;
 
@@ -474,10 +479,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
-            output = await this.functionCallbackHandler.processCalls(
+            const callbackResult = await this.functionCallbackHandler.processCallsDetailed(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
             );
+            output = callbackResult.output;
+            mcpToolCalls = callbackResult.mcpToolCalls;
           } else {
             // No callbacks configured, return raw tool/function calls
             output = toolCalls ?? functionCall;
@@ -522,6 +529,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         latencyMs,
         logProbs,
         finishReason,
+        ...(mcpToolCalls.length > 0 ? { metadata: { mcpToolCalls } } : {}),
         cost: calculateAzureCost(
           this.deploymentName,
           config,
