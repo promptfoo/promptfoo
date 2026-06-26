@@ -26,7 +26,12 @@ function containsPosteriorStrategy(strategy: unknown): boolean {
 }
 
 export function hasPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
-  return strategies.some(containsPosteriorStrategy);
+  return strategies.some((strategy) => {
+    if (strategy && typeof strategy === 'object' && strategy.config?.numTests === 0) {
+      return false;
+    }
+    return containsPosteriorStrategy(strategy);
+  });
 }
 
 // Strategies that require configuration before they can be used

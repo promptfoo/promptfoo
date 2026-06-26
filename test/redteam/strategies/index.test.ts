@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies/index';
+import {
+  getStrategyCompatibilityError,
+  loadStrategy,
+  validateStrategies,
+} from '../../../src/redteam/strategies/index';
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -89,6 +93,20 @@ describe('validateStrategies', () => {
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
     await expect(validateStrategies(invalidStrategies)).rejects.toThrow('Invalid strategy(s)');
+  });
+});
+
+describe('getStrategyCompatibilityError', () => {
+  it.each([
+    [{ id: 'posterior', config: { numTests: 0 } }],
+    [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],
+  ])('allows multi-input targets when Posterior is disabled', (strategy) => {
+    expect(
+      getStrategyCompatibilityError([strategy], {
+        context: 'Reference context',
+        question: 'User question',
+      }),
+    ).toBeUndefined();
   });
 });
 

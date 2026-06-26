@@ -51,6 +51,15 @@ describe('hasPosteriorStrategy', () => {
     expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(true);
   });
 
+  it('ignores disabled top-level Posterior configurations', () => {
+    expect(
+      hasPosteriorStrategy([
+        { id: 'posterior', config: { numTests: 0 } },
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+      ]),
+    ).toBe(false);
+  });
+
   it('ignores unrelated strategies and unsupported aliases', () => {
     const strategies = [
       'base64',

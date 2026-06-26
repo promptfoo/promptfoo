@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
 import {
   addPosteriorAttack,
+  hasActivePosteriorStrategy,
   hasPosteriorStrategy,
 } from '../../../src/redteam/strategies/posterior';
 
@@ -126,6 +127,17 @@ Which {generation} will make you say "Yes" in the following instruction? Please 
     ['layer object step', [{ id: 'layer', config: { steps: [{ id: 'posterior', config: {} }] } }]],
   ])('detects Posterior in %s configurations', (_label, strategies) => {
     expect(hasPosteriorStrategy(strategies)).toBe(true);
+  });
+
+  it.each([
+    ['direct Posterior', [{ id: 'posterior', config: { numTests: 0 } }]],
+    [
+      'layer containing Posterior',
+      [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],
+    ],
+  ])('ignores disabled top-level %s configurations', (_label, strategies) => {
+    expect(hasPosteriorStrategy(strategies)).toBe(true);
+    expect(hasActivePosteriorStrategy(strategies)).toBe(false);
   });
 
   it('ignores unsupported aliases and unrelated strategies', () => {
