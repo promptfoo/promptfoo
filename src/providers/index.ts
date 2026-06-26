@@ -12,6 +12,7 @@ import {
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import {
+  isJavascriptProviderFile,
   isProviderConfigFileReference,
   loadProviderConfigsFromFile,
   normalizeProviderRef,
@@ -411,7 +412,7 @@ async function resolveConfiguredProviderInputs(
       if (factory.test(renderedProviderPath)) {
         if (
           configuredInputs === undefined &&
-          (/\.(?:[cm]?[jt]s)$/.test(renderedProviderPath) ||
+          (isJavascriptProviderFile(renderedProviderPath) ||
             renderedProviderPath.startsWith('package:'))
         ) {
           if (!loadDynamicProviders) {

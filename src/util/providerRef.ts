@@ -2,10 +2,15 @@ import fs from 'fs';
 import path from 'path';
 
 import { maybeLoadConfigFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 import invariant from './invariant';
 import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
+
+export function isJavascriptProviderFile(providerPath: string): boolean {
+  return isJavascriptFile(providerPath);
+}
 
 // Keys belonging to the ProviderOptions interface (src/types/providers.ts).
 // When an object's first key matches one of these, it is NOT treated as a

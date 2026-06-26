@@ -1,4 +1,4 @@
-import { isExpandablePluginId, pluginConfigHasApplicablePosterior } from '../sharedFrontend';
+import { configuredPluginHasApplicablePosteriorForMultiInput } from '../sharedFrontend';
 import { deduplicateStrategies } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -122,20 +122,16 @@ export function hasApplicablePosteriorStrategy(
     }
     return undefined;
   });
-  if (
-    normalizedPlugins.some(
-      (plugin) =>
-        plugin === undefined ||
-        (isExpandablePluginId(plugin.id) && !plugin.id.startsWith('coding-agent:')),
-    )
-  ) {
+  if (normalizedPlugins.some((plugin) => plugin === undefined)) {
     const visited = new Set<object>();
     return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
   }
 
   return effectiveStrategies.some((strategy) =>
     normalizedPlugins.some(
-      (plugin) => plugin && pluginConfigHasApplicablePosterior(plugin.id, plugin.config, strategy),
+      (plugin) =>
+        plugin &&
+        configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
     ),
   );
 }

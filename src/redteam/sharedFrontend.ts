@@ -1,10 +1,16 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
 import {
+  ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
   COLLECTIONS,
+  DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_TURN_STRATEGIES,
+  PLUGIN_CATEGORIES,
   type Plugin,
   REDTEAM_DEFAULTS,
   riskCategorySeverityMap,
@@ -23,6 +29,57 @@ export function isExpandablePluginId(pluginId: string): boolean {
     COLLECTIONS.includes(pluginId as (typeof COLLECTIONS)[number]) ||
     ALIASED_PLUGINS.includes(pluginId as (typeof ALIASED_PLUGINS)[number])
   );
+}
+
+function getDirectPluginExpansion(pluginId: string): readonly string[] | undefined {
+  const completeMapping = ALIASED_PLUGIN_MAPPINGS[pluginId];
+  if (completeMapping) {
+    return Object.values(completeMapping).flatMap((mapping) => mapping.plugins);
+  }
+  for (const mapping of Object.values(ALIASED_PLUGIN_MAPPINGS)) {
+    if (mapping[pluginId]) {
+      return mapping[pluginId].plugins;
+    }
+  }
+  const category = PLUGIN_CATEGORIES[pluginId as keyof typeof PLUGIN_CATEGORIES];
+  if (category) {
+    return category;
+  }
+  if (pluginId === 'default') {
+    return [...DEFAULT_PLUGINS];
+  }
+  if (pluginId === 'foundation') {
+    return FOUNDATION_PLUGINS;
+  }
+  if (pluginId === 'guardrails-eval') {
+    return GUARDRAILS_EVALUATION_PLUGINS;
+  }
+  return undefined;
+}
+
+function expandConfiguredPlugin(pluginId: string): readonly string[] | undefined {
+  const initialExpansion = getDirectPluginExpansion(pluginId);
+  if (!initialExpansion) {
+    return undefined;
+  }
+
+  const expanded: string[] = [];
+  const pending = [...initialExpansion];
+  const visited = new Set([pluginId]);
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    const nestedExpansion = getDirectPluginExpansion(current);
+    if (nestedExpansion) {
+      pending.push(...nestedExpansion);
+    } else {
+      expanded.push(current);
+    }
+  }
+  return expanded;
 }
 
 export function pluginConfigMatchesStrategyTargets(
@@ -268,6 +325,21 @@ export function pluginConfigHasApplicablePosterior(
     targetPlugins,
     strategy,
   ).posteriorReached;
+}
+
+/** Resolve configured collections before checking Posterior compatibility for multi-input mode. */
+export function configuredPluginHasApplicablePosteriorForMultiInput(
+  pluginId: string,
+  pluginConfig: unknown,
+  strategy: RedteamStrategyObject,
+): boolean {
+  const expandedPluginIds = expandConfiguredPlugin(pluginId) ?? [pluginId];
+  return expandedPluginIds.some(
+    (expandedPluginId) =>
+      !MULTI_INPUT_EXCLUDED_PLUGINS.includes(
+        expandedPluginId as (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number],
+      ) && pluginConfigHasApplicablePosterior(expandedPluginId, pluginConfig, strategy),
+  );
 }
 
 export function getRiskCategorySeverityMap(

@@ -1018,6 +1018,54 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('renders live environment templates before replacing the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
+      );
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            env: { ATTACK_STRATEGY: 'posterior' },
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: {
+              plugins: ['harmful:hate'],
+              strategies: ['{{ env.ATTACK_STRATEGY }}'],
+            },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
     it('should resolve referenced target inputs before replacing the active job', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-redteam-target-'));
       const providerPath = path.join(tempDir, 'providers.yaml');

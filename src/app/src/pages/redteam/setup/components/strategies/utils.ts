@@ -1,6 +1,5 @@
 import {
-  isExpandablePluginId,
-  pluginConfigHasApplicablePosterior,
+  configuredPluginHasApplicablePosteriorForMultiInput,
   pluginConfigMatchesStrategy,
   REDTEAM_DEFAULTS,
 } from '@promptfoo/redteam/sharedFrontend';
@@ -22,6 +21,9 @@ export function isPluginCompatibleWithStrategy(
   strategyId: string,
   strategyConfig?: RedteamStrategyObject['config'],
 ): boolean {
+  if (strategyId === 'basic' || strategyId === 'default') {
+    return true;
+  }
   const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
   return pluginConfigMatchesStrategy(
     pluginId,
@@ -80,16 +82,9 @@ export function hasPosteriorStrategy(
   const normalizedPlugins = plugins.map((plugin) =>
     typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin,
   );
-  if (
-    normalizedPlugins.some(
-      (plugin) => isExpandablePluginId(plugin.id) && !plugin.id.startsWith('coding-agent:'),
-    )
-  ) {
-    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
-  }
   return effectiveStrategies.some((strategy) =>
     normalizedPlugins.some((plugin) =>
-      pluginConfigHasApplicablePosterior(plugin.id, plugin.config, strategy),
+      configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
     ),
   );
 }
