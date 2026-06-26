@@ -503,7 +503,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 
 Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
