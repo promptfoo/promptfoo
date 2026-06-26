@@ -177,7 +177,12 @@ describe('Redteam Routes', () => {
 
       it.each([
         ['directly', { id: 'posterior', config: {} }],
+        ['directly with numTests disabled', { id: 'posterior', config: { numTests: 0 } }],
         ['inside a layer', { id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+        [
+          'inside a layer with numTests disabled',
+          { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+        ],
       ])('should reject posterior %s for multi-input previews before generation', async (_label, strategy) => {
         const pluginFind = vi.fn();
         mockedPlugins.find = pluginFind;
@@ -823,7 +828,22 @@ describe('Redteam Routes', () => {
       });
     });
 
-    it('should preflight command-line strategy overrides before replacing the active job', async () => {
+    it.each([
+      {
+        label: 'command-line strategy overrides',
+        strategyConfig: {
+          redteam: { strategies: ['basic'] },
+          commandLineOptions: { strategies: ['posterior'] },
+        },
+      },
+      {
+        label: 'top-level strategy shorthand',
+        strategyConfig: {
+          redteam: { strategies: ['basic'] },
+          strategies: ['posterior'],
+        },
+      },
+    ])('should preflight $label before replacing the active job', async ({ strategyConfig }) => {
       let resolveRun: ((value: undefined) => void) | undefined;
       mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
         async (providers, basePath, env, filter) => {
@@ -859,8 +879,7 @@ describe('Redteam Routes', () => {
                 inputs: { context: 'Reference context', question: 'User question' },
               },
             ],
-            redteam: { strategies: ['basic'] },
-            commandLineOptions: { strategies: ['posterior'] },
+            ...strategyConfig,
           },
         });
 
@@ -1088,6 +1107,13 @@ describe('Redteam Routes', () => {
         expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledOnce();
       });
 
+      const pendingStatusResponse = await request(app).get('/api/redteam/status');
+      expect(pendingStatusResponse.body).toMatchObject({
+        hasRunningJob: false,
+        hasPendingRun: true,
+        jobId: null,
+      });
+
       const cancelResponse = await request(app).post('/api/redteam/cancel');
       expect(cancelResponse.status).toBe(200);
       expect(cancelResponse.body.message).toBe('Pending run cancelled');
@@ -1096,6 +1122,13 @@ describe('Redteam Routes', () => {
       const runResponse = await runResponsePromise;
       expect(runResponse.status).toBe(409);
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+
+      const finalStatusResponse = await request(app).get('/api/redteam/status');
+      expect(finalStatusResponse.body).toMatchObject({
+        hasRunningJob: false,
+        hasPendingRun: false,
+        jobId: null,
+      });
     });
 
     it('should not expose provider resolution details in validation errors', async () => {
@@ -1401,8 +1434,10 @@ describe('Redteam Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('hasRunningJob');
+      expect(response.body).toHaveProperty('hasPendingRun');
       expect(response.body).toHaveProperty('jobId');
       expect(response.body.hasRunningJob).toBe(false);
+      expect(response.body.hasPendingRun).toBe(false);
       expect(response.body.jobId).toBeNull();
     });
   });

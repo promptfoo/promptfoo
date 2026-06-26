@@ -71,6 +71,15 @@ export class ConfigResolutionError extends Error {
   }
 }
 
+interface ResolveConfigsHooks {
+  beforeProviderLoad?: (context: {
+    providers: TestSuiteConfig['providers'];
+    redteam: UnifiedConfig['redteam'];
+    env: UnifiedConfig['env'];
+    basePath: string;
+  }) => Promise<void>;
+}
+
 export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
   logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
 }
@@ -763,6 +772,7 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  hooks: ResolveConfigsHooks = {},
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -933,6 +943,13 @@ export async function resolveConfigs(
       `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
     );
   }
+
+  await hooks.beforeProviderLoad?.({
+    providers: filteredProviderConfigs,
+    redteam: config.redteam,
+    env: config.env,
+    basePath,
+  });
 
   // Parse prompts, providers, and tests
   // Pass filtered resolved configs to avoid re-reading files

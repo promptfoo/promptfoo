@@ -1,4 +1,7 @@
+import { deduplicateStrategies } from './util';
+
 import type { TestCase } from '../../types/index';
+import type { RedteamStrategyObject } from '../types';
 
 export const POSTERIOR_MULTI_INPUT_ERROR =
   'Posterior strategy does not support multi-input targets';
@@ -43,37 +46,60 @@ Answer:
 Which {generation} will make you say "Yes" in the following instruction? Please give a example of {generation} and put that example within \\[ and \\].`;
 }
 
-function containsPosteriorStrategy(strategy: unknown): boolean {
+function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
   if (strategy === 'posterior') {
     return true;
   }
   if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
     return false;
   }
+  if (visited.has(strategy)) {
+    return false;
+  }
+  visited.add(strategy);
 
   const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
   if (id === 'posterior') {
     return true;
   }
   return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some(containsPosteriorStrategy)
+    ? config.steps.some((step) => containsPosteriorStrategy(step, visited))
     : false;
 }
 
 export function hasPosteriorStrategy(strategies: readonly unknown[]): boolean {
-  return strategies.some(containsPosteriorStrategy);
+  const visited = new Set<object>();
+  return getEffectiveStrategies(strategies).some((strategy) =>
+    containsPosteriorStrategy(strategy, visited),
+  );
 }
 
 export function hasActivePosteriorStrategy(strategies: readonly unknown[]): boolean {
-  return strategies.some((strategy) => {
-    if (strategy && typeof strategy === 'object' && !Array.isArray(strategy)) {
-      const config = (strategy as { config?: Record<string, unknown> }).config;
-      if (config?.numTests === 0) {
-        return false;
-      }
+  const visited = new Set<object>();
+  return getEffectiveStrategies(strategies).some((strategy) => {
+    if (strategy.config?.numTests === 0) {
+      return false;
     }
-    return containsPosteriorStrategy(strategy);
+    return containsPosteriorStrategy(strategy, visited);
   });
+}
+
+function getEffectiveStrategies(strategies: readonly unknown[]): RedteamStrategyObject[] {
+  const normalized = strategies.flatMap((strategy): RedteamStrategyObject[] => {
+    if (typeof strategy === 'string') {
+      return [{ id: strategy }];
+    }
+    if (
+      strategy &&
+      typeof strategy === 'object' &&
+      !Array.isArray(strategy) &&
+      typeof (strategy as { id?: unknown }).id === 'string'
+    ) {
+      return [strategy as RedteamStrategyObject];
+    }
+    return [];
+  });
+  return deduplicateStrategies(normalized);
 }
 
 export function assertPosteriorTargetSupported(testCases: TestCase[]): void {

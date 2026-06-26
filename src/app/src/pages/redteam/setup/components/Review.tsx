@@ -66,6 +66,7 @@ interface PolicyPlugin {
 
 interface JobStatusResponse {
   hasRunningJob: boolean;
+  hasPendingRun?: boolean;
   jobId?: string;
 }
 
@@ -155,6 +156,7 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
+  const runRequestRef = useRef(0);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -276,7 +278,7 @@ export default function Review({
 
     const recoverJob = async () => {
       // Check what the server thinks is running
-      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+      const { hasRunningJob, hasPendingRun, jobId: serverJobId } = await checkForRunningJob();
 
       if (hasRunningJob && serverJobId) {
         // Server has a running job - reconnect to it
@@ -308,6 +310,9 @@ export default function Review({
           showToast('Failed to reconnect to running job.', 'error');
           clearJob();
         }
+      } else if (hasPendingRun) {
+        setIsRunning(true);
+        startPendingRunPolling();
       } else if (savedJobId) {
         // We have a saved job ID but server says nothing running
         // Check if it completed while we were away
@@ -441,7 +446,7 @@ export default function Review({
     }
   }, [isRunning, apiHealthStatus]);
 
-  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+  const checkForRunningJob = useCallback(async (): Promise<JobStatusResponse> => {
     try {
       const response = await callApi('/redteam/status');
       const data = await response.json();
@@ -450,7 +455,7 @@ export default function Review({
       console.error('Error checking job status:', error);
       return { hasRunningJob: false };
     }
-  };
+  }, []);
 
   const startPolling = useCallback(
     (jobId: string) => {
@@ -518,6 +523,27 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
+  const startPendingRunPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      window.clearInterval(pollIntervalRef.current);
+    }
+
+    const interval = window.setInterval(async () => {
+      const { hasRunningJob, hasPendingRun, jobId } = await checkForRunningJob();
+      if (hasRunningJob && jobId) {
+        setJob(jobId);
+        startPolling(jobId);
+      } else if (!hasPendingRun) {
+        window.clearInterval(interval);
+        pollIntervalRef.current = null;
+        setIsRunning(false);
+        clearJob();
+      }
+    }, 1000);
+
+    pollIntervalRef.current = interval;
+  }, [checkForRunningJob, clearJob, setJob, startPolling]);
+
   const reconnectToRunningJob = async (): Promise<boolean> => {
     const { hasRunningJob, jobId } = await checkForRunningJob();
     if (!hasRunningJob || !jobId) {
@@ -530,8 +556,14 @@ export default function Review({
   };
 
   const handleRunWithSettings = async (replaceRunningJob = false) => {
+    const runRequest = ++runRequestRef.current;
+    const isCurrentRequest = () => runRequest === runRequestRef.current;
+
     // Check email verification first
     const emailResult = await checkEmailStatus();
+    if (!isCurrentRequest()) {
+      return;
+    }
 
     if (!emailResult.canProceed) {
       if (emailResult.needsEmail) {
@@ -555,6 +587,9 @@ export default function Review({
 
     if (!replaceRunningJob) {
       const { hasRunningJob } = await checkForRunningJob();
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       if (hasRunningJob) {
         setIsJobStatusDialogOpen(true);
@@ -609,8 +644,14 @@ export default function Review({
           delay: config.target.config.delay,
         }),
       });
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       const data = await response.json();
+      if (!isCurrentRequest()) {
+        return;
+      }
       if (response.ok === false) {
         if (response.status === 409) {
           setIsRunning(false);
@@ -625,9 +666,13 @@ export default function Review({
       }
 
       // Save job ID to persistent store and start polling
+      setIsRunning(true);
       setJob(data.id);
       startPolling(data.id);
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       console.error('Error running redteam:', error);
       const recoveredExistingJob = replaceRunningJob && (await reconnectToRunningJob());
       if (!recoveredExistingJob) {
@@ -646,6 +691,8 @@ export default function Review({
       await callApi('/redteam/cancel', {
         method: 'POST',
       });
+
+      runRequestRef.current += 1;
 
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);

@@ -149,4 +149,12 @@ Which {generation} will make you say "Yes" in the following instruction? Please 
       ]),
     ).toBe(false);
   });
+
+  it('handles cyclic layer configuration from YAML aliases', () => {
+    const layer = { id: 'layer', config: { steps: [] as unknown[] } };
+    layer.config.steps.push(layer);
+
+    expect(hasPosteriorStrategy([layer])).toBe(false);
+    expect(hasActivePosteriorStrategy([layer])).toBe(false);
+  });
 });

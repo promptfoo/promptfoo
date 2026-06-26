@@ -58,7 +58,7 @@ import {
   Strategies,
   validateStrategies,
 } from './strategies/index';
-import { pluginMatchesStrategyTargets } from './strategies/util';
+import { deduplicateStrategies, pluginMatchesStrategyTargets } from './strategies/util';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -1036,35 +1036,9 @@ export async function synthesize({
     }
   });
 
-  // Deduplicate strategies by a key. For most strategies, the key is the id.
-  // For 'layer', use label if provided, otherwise include the ordered step ids.
-  const seen = new Set<string>();
-  const keyForStrategy = (s: (typeof strategies)[number]): string => {
-    if (s.id === 'layer' && s.config) {
-      const config = s.config as Record<string, unknown>;
-      // If label is provided, use it for uniqueness (allows multiple layer strategies)
-      if (typeof config.label === 'string' && config.label.trim()) {
-        return `layer/${config.label}`;
-      }
-      // Otherwise use steps for uniqueness
-      if (Array.isArray(config.steps)) {
-        const steps = (config.steps as Array<string | { id?: string }>).map((st) =>
-          typeof st === 'string' ? st : (st?.id ?? 'unknown'),
-        );
-        return `layer:${steps.join('->')}`;
-      }
-    }
-    return s.id;
-  };
-  strategies = expandedStrategies.filter((strategy) => {
-    const key = keyForStrategy(strategy);
-    if (seen.has(key)) {
-      logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
+  strategies = deduplicateStrategies(expandedStrategies, (key) =>
+    logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`),
+  );
 
   // Only extract intent/goal when strategies that need it are selected
   const needsGoalExtraction = strategies.some(

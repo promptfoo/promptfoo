@@ -54,9 +54,11 @@ async function getLiveConfigCompatibilityError(
     : undefined;
   const strategies = Array.isArray(commandLineOptions?.strategies)
     ? commandLineOptions.strategies
-    : Array.isArray(redteam?.strategies)
-      ? redteam.strategies
-      : [];
+    : Array.isArray(config.strategies)
+      ? config.strategies
+      : Array.isArray(redteam?.strategies)
+        ? redteam.strategies
+        : [];
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;
@@ -118,7 +120,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // In multi-input mode, some plugins don't support dynamic generation
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
-    const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs);
+    const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs, {
+      includeDisabledStrategies: true,
+    });
     if (compatibilityError) {
       res.status(400).json({ error: compatibilityError });
       return;
@@ -502,6 +506,7 @@ redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void>
   res.json(
     RedteamSchemas.Status.Response.parse({
       hasRunningJob: currentJobId !== null,
+      hasPendingRun: pendingRunRequests > 0,
       jobId: currentJobId,
     }),
   );

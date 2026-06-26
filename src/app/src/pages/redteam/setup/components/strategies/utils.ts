@@ -8,29 +8,34 @@ export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
-function containsPosteriorStrategy(strategy: unknown): boolean {
+function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
   if (strategy === 'posterior') {
     return true;
   }
   if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
     return false;
   }
+  if (visited.has(strategy)) {
+    return false;
+  }
+  visited.add(strategy);
 
   const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
   if (id === 'posterior') {
     return true;
   }
   return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some(containsPosteriorStrategy)
+    ? config.steps.some((step) => containsPosteriorStrategy(step, visited))
     : false;
 }
 
 export function hasPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
+  const visited = new Set<object>();
   return strategies.some((strategy) => {
     if (strategy && typeof strategy === 'object' && strategy.config?.numTests === 0) {
       return false;
     }
-    return containsPosteriorStrategy(strategy);
+    return containsPosteriorStrategy(strategy, visited);
   });
 }
 

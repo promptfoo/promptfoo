@@ -108,6 +108,24 @@ describe('getStrategyCompatibilityError', () => {
       }),
     ).toBeUndefined();
   });
+
+  it.each([
+    ['direct Posterior', [{ id: 'posterior', config: { numTests: 0 } }, { id: 'posterior' }]],
+    [
+      'unlabelled layer',
+      [
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+        { id: 'layer', config: { steps: ['posterior'] } },
+      ],
+    ],
+  ])('matches first-wins runtime deduplication for duplicate %s', (_label, strategies) => {
+    expect(
+      getStrategyCompatibilityError(strategies, {
+        context: 'Reference context',
+        question: 'User question',
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe('loadStrategy', () => {

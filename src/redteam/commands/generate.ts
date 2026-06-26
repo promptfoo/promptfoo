@@ -58,6 +58,7 @@ import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { getStrategyCompatibilityError, MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
+import { resolveRedteamTargetProviderInputs } from '../providers/shared';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
@@ -200,6 +201,17 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
 
     Enable Basic to include plugin tests as-is, or review the selected strategies for generation errors.
   `;
+}
+
+function getEffectiveStrategyObjects(
+  redteamConfig: RedteamFileConfig | undefined,
+  strategyOverride: RedteamCliGenerateOptions['strategies'] | undefined,
+): RedteamStrategyObject[] {
+  const strategies =
+    strategyOverride ??
+    redteamConfig?.strategies ??
+    DEFAULT_STRATEGIES.map((strategy) => ({ id: strategy }));
+  return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
 }
 
 async function getConfigHash(
@@ -369,6 +381,30 @@ async function doGenerateRedteamInternal(
         filterTargets: options.filterTargets,
       },
       options.defaultConfig || {},
+      undefined,
+      {
+        beforeProviderLoad: async ({ providers, redteam, env, basePath }) => {
+          const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
+          const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+          if (strategyConfigError) {
+            throw new Error(strategyConfigError);
+          }
+
+          const requiresResolvedInputs =
+            getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+          if (!requiresResolvedInputs) {
+            return;
+          }
+
+          const resolvedInputs = await resolveRedteamTargetProviderInputs(providers, basePath, env);
+          const compatibilityError = resolvedInputs
+            .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+            .find((error) => error !== undefined);
+          if (compatibilityError) {
+            throw new Error(compatibilityError);
+          }
+        },
+      },
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
@@ -576,14 +612,7 @@ async function doGenerateRedteamInternal(
     }
   }
 
-  let strategies: (string | { id: string })[] =
-    redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
-  if (options.strategies) {
-    strategies = options.strategies;
-  }
-  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
-    typeof s === 'string' ? { id: s } : s,
-  );
+  const strategyObjs = getEffectiveStrategyObjects(redteamConfig, options.strategies);
 
   try {
     logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
@@ -594,10 +623,12 @@ async function doGenerateRedteamInternal(
   }
 
   // Read inputs from the first target/provider
-  const targetInputs = testSuite.providers[0]?.inputs;
+  const targetInputs = testSuite.providers[0]?.inputs ?? testSuite.providers[0]?.config?.inputs;
 
   const compatibilityError = testSuite.providers
-    .map((provider) => getStrategyCompatibilityError(strategyObjs, provider.inputs))
+    .map((provider) =>
+      getStrategyCompatibilityError(strategyObjs, provider.inputs ?? provider.config?.inputs),
+    )
     .find((error) => error !== undefined);
   if (compatibilityError) {
     await cleanupRedteamProviders(testSuite);
@@ -1000,7 +1031,7 @@ async function doGenerateRedteamInternal(
       numTestsExisting: (testSuite.tests || []).length,
       numTestsGenerated: redteamTests.length,
       plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+      strategies: strategyObjs.map((strategy) => strategy.id),
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
     });
     telemetry.record('redteam generate', {
@@ -1010,7 +1041,7 @@ async function doGenerateRedteamInternal(
       numTestsExisting: (testSuite.tests || []).length,
       numTestsGenerated: redteamTests.length,
       plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
+      strategies: strategyObjs.map((strategy) => strategy.id),
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
     });
 

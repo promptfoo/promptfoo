@@ -3,6 +3,37 @@ import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
 
+export function getStrategyDeduplicationKey(strategy: RedteamStrategyObject): string {
+  if (strategy.id === 'layer' && strategy.config) {
+    if (typeof strategy.config.label === 'string' && strategy.config.label.trim()) {
+      return `layer/${strategy.config.label}`;
+    }
+    if (Array.isArray(strategy.config.steps)) {
+      const steps = (strategy.config.steps as Array<string | { id?: string }>).map((step) =>
+        typeof step === 'string' ? step : (step?.id ?? 'unknown'),
+      );
+      return `layer:${steps.join('->')}`;
+    }
+  }
+  return strategy.id;
+}
+
+export function deduplicateStrategies<T extends RedteamStrategyObject>(
+  strategies: readonly T[],
+  onDuplicate?: (key: string) => void,
+): T[] {
+  const seen = new Set<string>();
+  return strategies.filter((strategy) => {
+    const key = getStrategyDeduplicationKey(strategy);
+    if (seen.has(key)) {
+      onDuplicate?.(key);
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
  *

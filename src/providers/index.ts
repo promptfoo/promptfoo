@@ -213,7 +213,7 @@ export async function loadApiProvider(
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
       ret.delay = options.delay;
-      ret.inputs = options.inputs;
+      ret.inputs = options.inputs ?? renderedConfig?.inputs ?? ret.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;
     }
@@ -348,7 +348,7 @@ export function resolveProviderConfigs(
   return results;
 }
 
-function getConfiguredProviderInputs(options: ProviderOptions): unknown {
+function getConfiguredProviderInputs(options: Pick<ProviderOptions, 'inputs' | 'config'>): unknown {
   return options.inputs ?? options.config?.inputs;
 }
 
@@ -400,40 +400,21 @@ function renderProviderConfigForValidation(
 function getProviderValidationIdentity(
   provider: ProviderConfig,
   index: number,
-  configEnv?: EnvOverrides,
 ): { id: string; label?: string } {
-  if (isApiProvider(provider)) {
-    return { id: provider.id(), label: provider.label };
-  }
-  if (typeof provider === 'function') {
-    const metadata = provider as ProviderFunctionWithMetadata;
-    return { id: metadata.label ?? `custom-function-${index}`, label: metadata.label };
-  }
-
   const descriptor = normalizeProviderRef(provider, { index });
-  const providerEnv =
-    (descriptor.kind === 'options' || descriptor.kind === 'map') && descriptor.loadOptions.env
-      ? { ...configEnv, ...descriptor.loadOptions.env }
-      : configEnv;
-  const id =
-    'loadProviderPath' in descriptor
-      ? renderEnvOnlyInObject(descriptor.loadProviderPath, providerEnv)
-      : descriptor.id;
-  const label = descriptor.label ? renderEnvOnlyInObject(descriptor.label, providerEnv) : undefined;
-  return { id, label };
+  return { id: descriptor.id, label: descriptor.label };
 }
 
 function filterProviderConfigsForValidation(
   providers: ProviderConfig[],
   filter: string | undefined,
-  configEnv?: EnvOverrides,
 ): ProviderConfig[] {
   if (!filter) {
     return providers;
   }
   const filterRegex = new RegExp(filter);
   return providers.filter((provider, index) => {
-    const { id, label } = getProviderValidationIdentity(provider, index, configEnv);
+    const { id, label } = getProviderValidationIdentity(provider, index);
     return filterRegex.test(id) || (label ? filterRegex.test(label) : false);
   });
 }
@@ -465,16 +446,15 @@ export async function resolveProviderInputsForValidation(
   const providerConfigs = filterProviderConfigsForValidation(
     Array.isArray(resolvedProviderConfigs) ? resolvedProviderConfigs : [resolvedProviderConfigs],
     options.filter,
-    configEnv,
   );
 
   return Promise.all(
     providerConfigs.map(async (provider, index) => {
       if (isApiProvider(provider)) {
-        return provider.inputs;
+        return getConfiguredProviderInputs(provider);
       }
       if (typeof provider === 'function') {
-        return (provider as ProviderFunctionWithMetadata).inputs;
+        return getConfiguredProviderInputs(provider as ProviderFunctionWithMetadata);
       }
 
       const descriptor = normalizeProviderRef(provider, { index });
@@ -495,7 +475,7 @@ export async function resolveProviderInputsForValidation(
             `Invalid provider at index ${index}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${describeInvalidProvider(provider)}`,
           );
         case 'function':
-          return (provider as ProviderFunctionWithMetadata).inputs;
+          return getConfiguredProviderInputs(provider as ProviderFunctionWithMetadata);
         default: {
           const _exhaustive: never = descriptor;
           throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
