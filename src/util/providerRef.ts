@@ -172,7 +172,17 @@ export function loadProviderConfigsFromFile(
   providerPath: string,
   basePath?: string,
 ): ProviderOptions[] {
-  return readProviderConfigFile(providerPath, basePath).configs;
+  const { configs, relativePath } = readProviderConfigFile(providerPath, basePath);
+  for (const config of configs) {
+    invariant(
+      typeof config === 'object' &&
+        config !== null &&
+        !Array.isArray(config) &&
+        isValidProviderId(config.id),
+      `Provider config in ${relativePath} must have an id`,
+    );
+  }
+  return configs;
 }
 
 /**

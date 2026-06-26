@@ -2474,16 +2474,83 @@ inputs:
     expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000000');
   });
 
+  it.each([
+    {
+      label: 'ProviderOptions id',
+      providers: [
+        {
+          id: '{{ env.TARGET_PROVIDER }}',
+          env: {
+            TARGET_PROVIDER: 'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+          },
+        },
+      ],
+      env: undefined,
+    },
+    {
+      label: 'ProviderOptionsMap key',
+      providers: [{ '{{ env.TARGET_PROVIDER }}': {} }],
+      env: {
+        TARGET_PROVIDER: 'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+      },
+    },
+  ])('renders an env-backed cloud $label before reading inputs', async ({ providers, env }) => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'echo',
+      inputs: { context: 'Reference context', question: 'User question' },
+    });
+
+    await expect(resolveProviderInputsForValidation(providers as any, { env })).resolves.toEqual([
+      { context: 'Reference context', question: 'User question' },
+    ]);
+    expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000001');
+  });
+
+  it('filters resolved provider metadata before compatibility validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          { id: 'echo', label: 'selected-single' },
+          {
+            id: 'echo',
+            label: 'excluded-multi',
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+        ],
+        { filter: 'selected-single' },
+      ),
+    ).resolves.toEqual([undefined]);
+  });
+
+  it('rejects unknown named providers without instantiating them', async () => {
+    await expect(
+      resolveProviderInputsForValidation(['definitely-not-a-promptfoo-provider']),
+    ).rejects.toThrow('Could not identify provider');
+  });
+
+  it('rejects malformed scalar provider config files', async () => {
+    mockFsReadFileSync.mockReturnValue('echo');
+
+    await expect(
+      resolveProviderInputsForValidation(['file://path/to/provider.yaml']),
+    ).rejects.toThrow('Provider config in path/to/provider.yaml must have an id');
+  });
+
   it('should not take ownership of already-instantiated providers', async () => {
     const cleanup = vi.fn();
-    const provider = {
-      id: () => 'existing-provider',
-      callApi: vi.fn(),
-      cleanup,
-      inputs: { prompt: 'User prompt' },
-    };
+    class ExistingProvider {
+      inputs = { prompt: 'User prompt' };
+      cleanup = cleanup;
+      id() {
+        return 'existing-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    const provider = new ExistingProvider();
 
-    await expect(resolveProviderInputsForValidation(provider)).resolves.toEqual([
+    await expect(resolveProviderInputsForValidation(provider as any)).resolves.toEqual([
       { prompt: 'User prompt' },
     ]);
     expect(cleanup).not.toHaveBeenCalled();

@@ -78,6 +78,17 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+function getUnknownProviderErrorMessage(providerPath: string): string {
+  return dedent`
+    Could not identify provider: ${chalk.bold(providerPath)}.
+
+    ${chalk.white(dedent`
+      Please check your configuration and ensure the provider is correctly specified.
+
+      For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
+  `;
+}
+
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
@@ -208,14 +219,7 @@ export async function loadApiProvider(
     }
   }
 
-  const errorMessage = dedent`
-    Could not identify provider: ${chalk.bold(providerPath)}.
-
-    ${chalk.white(dedent`
-      Please check your configuration and ensure the provider is correctly specified.
-
-      For more information on supported providers, visit: `)} ${chalk.cyan('https://promptfoo.dev/docs/providers/')}
-  `;
+  const errorMessage = getUnknownProviderErrorMessage(providerPath);
   logger.error(errorMessage);
   throw new Error(errorMessage);
 }
@@ -350,21 +354,101 @@ function getConfiguredProviderInputs(options: ProviderOptions): unknown {
 
 async function resolveConfiguredProviderInputs(
   providerPath: string,
-  options: ProviderOptions = {},
+  providerOptions: ProviderOptions = {},
+  configEnv?: EnvOverrides,
 ): Promise<unknown> {
-  const configuredInputs = getConfiguredProviderInputs(options);
-  if (configuredInputs !== undefined || !isCloudProvider(providerPath)) {
-    return configuredInputs;
+  const mergedEnv =
+    configEnv || providerOptions.env ? { ...configEnv, ...providerOptions.env } : undefined;
+  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
+  const renderedOptions = renderEnvOnlyInObject(providerOptions, mergedEnv);
+  const configuredInputs = getConfiguredProviderInputs(renderedOptions);
+
+  if (!isCloudProvider(renderedProviderPath)) {
+    for (const factory of await getProviderFactories(renderedProviderPath)) {
+      if (factory.test(renderedProviderPath)) {
+        return configuredInputs;
+      }
+    }
+    throw new Error(getUnknownProviderErrorMessage(renderedProviderPath));
   }
 
-  const cloudDatabaseId = getCloudDatabaseId(providerPath);
+  const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
   const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
   if (isCloudProvider(cloudProvider.id)) {
     throw new Error(
       `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
     );
   }
-  return getConfiguredProviderInputs(cloudProvider);
+  for (const factory of await getProviderFactories(cloudProvider.id)) {
+    if (factory.test(cloudProvider.id)) {
+      return configuredInputs ?? getConfiguredProviderInputs(cloudProvider);
+    }
+  }
+  throw new Error(getUnknownProviderErrorMessage(cloudProvider.id));
+}
+
+function renderProviderConfigForValidation(
+  provider: ProviderConfig,
+  env?: EnvOverrides,
+): ProviderConfig {
+  if (isApiProvider(provider) || typeof provider === 'function') {
+    return provider;
+  }
+  return renderEnvOnlyInObject(provider, env);
+}
+
+function getProviderValidationIdentity(
+  provider: ProviderConfig,
+  index: number,
+  configEnv?: EnvOverrides,
+): { id: string; label?: string } {
+  if (isApiProvider(provider)) {
+    return { id: provider.id(), label: provider.label };
+  }
+  if (typeof provider === 'function') {
+    const metadata = provider as ProviderFunctionWithMetadata;
+    return { id: metadata.label ?? `custom-function-${index}`, label: metadata.label };
+  }
+
+  const descriptor = normalizeProviderRef(provider, { index });
+  const providerEnv =
+    (descriptor.kind === 'options' || descriptor.kind === 'map') && descriptor.loadOptions.env
+      ? { ...configEnv, ...descriptor.loadOptions.env }
+      : configEnv;
+  const id =
+    'loadProviderPath' in descriptor
+      ? renderEnvOnlyInObject(descriptor.loadProviderPath, providerEnv)
+      : descriptor.id;
+  const label = descriptor.label ? renderEnvOnlyInObject(descriptor.label, providerEnv) : undefined;
+  return { id, label };
+}
+
+function filterProviderConfigsForValidation(
+  providers: ProviderConfig[],
+  filter: string | undefined,
+  configEnv?: EnvOverrides,
+): ProviderConfig[] {
+  if (!filter) {
+    return providers;
+  }
+  const filterRegex = new RegExp(filter);
+  return providers.filter((provider, index) => {
+    const { id, label } = getProviderValidationIdentity(provider, index, configEnv);
+    return filterRegex.test(id) || (label ? filterRegex.test(label) : false);
+  });
+}
+
+function getRenderedProviderConfigs(
+  providerPaths: ProvidersConfig,
+  env?: EnvOverrides,
+): ProvidersConfig {
+  if (Array.isArray(providerPaths)) {
+    return providerPaths.map((provider) => renderProviderConfigForValidation(provider, env));
+  }
+  if (isApiProvider(providerPaths) || typeof providerPaths === 'function') {
+    return providerPaths;
+  }
+  return renderEnvOnlyInObject(providerPaths, env);
 }
 
 /**
@@ -373,16 +457,16 @@ async function resolveConfiguredProviderInputs(
  */
 export async function resolveProviderInputsForValidation(
   providerPaths: ProvidersConfig,
-  options: { basePath?: string; env?: EnvOverrides } = {},
+  options: { basePath?: string; env?: EnvOverrides; filter?: string } = {},
 ): Promise<unknown[]> {
-  const renderedProviderPaths = renderEnvOnlyInObject(
-    providerPaths,
-    renderEnvOverrides(options.env),
-  );
+  const configEnv = renderEnvOverrides(options.env);
+  const renderedProviderPaths = getRenderedProviderConfigs(providerPaths, configEnv);
   const resolvedProviderConfigs = resolveProviderConfigs(renderedProviderPaths, options);
-  const providerConfigs = Array.isArray(resolvedProviderConfigs)
-    ? resolvedProviderConfigs
-    : [resolvedProviderConfigs];
+  const providerConfigs = filterProviderConfigsForValidation(
+    Array.isArray(resolvedProviderConfigs) ? resolvedProviderConfigs : [resolvedProviderConfigs],
+    options.filter,
+    configEnv,
+  );
 
   return Promise.all(
     providerConfigs.map(async (provider, index) => {
@@ -396,12 +480,13 @@ export async function resolveProviderInputsForValidation(
       const descriptor = normalizeProviderRef(provider, { index });
       switch (descriptor.kind) {
         case 'named':
-          return resolveConfiguredProviderInputs(descriptor.loadProviderPath);
+          return resolveConfiguredProviderInputs(descriptor.loadProviderPath, {}, configEnv);
         case 'options':
         case 'map':
           return resolveConfiguredProviderInputs(
             descriptor.loadProviderPath,
             descriptor.loadOptions,
+            configEnv,
           );
         case 'file':
           throw new Error(`Unresolved provider config file: ${descriptor.loadProviderPath}`);
