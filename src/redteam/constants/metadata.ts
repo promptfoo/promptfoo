@@ -32,7 +32,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   citation: 'Exploits academic authority bias to bypass content filters',
   'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
   'data-structure-injection':
-    'Tests whether models follow instructions embedded inside structured data fields',
+    'Tests whether models copy attacker-controlled values from structured data into tool calls or workflows',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
@@ -1050,7 +1050,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'data-exfil':
     'Tests whether the AI can be tricked into exfiltrating sensitive data via URL parameters, images, or markdown links',
   'data-structure-injection':
-    'Tests whether the AI follows instruction-like content embedded in JSON, YAML, XML, TOML, or Markdown front matter records',
+    'Tests whether the AI copies attacker-controlled values embedded in JSON, YAML, XML, TOML, or Markdown front matter records into its tool calls, schemas, or workflow steps',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',

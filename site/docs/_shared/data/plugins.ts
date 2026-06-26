@@ -606,7 +606,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether structured data fields can override the requested task through embedded instructions',
+      'Tests whether attacker-controlled values in structured data propagate into tool calls, schemas, or workflow steps',
     label: 'technical',
     link: '/docs/red-team/plugins/data-structure-injection/',
     name: 'Data-Structure Injection',

@@ -486,6 +486,7 @@ export const MULTI_INPUT_EXCLUDED_PLUGINS = [
   'special-token-injection',
   'system-prompt-override',
   'ascii-smuggling',
+  'data-structure-injection',
 ] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 

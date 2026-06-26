@@ -55,6 +55,7 @@ const redTeamSidebar = [
           'red-team/plugins/bfla',
           'red-team/plugins/bola',
           'red-team/plugins/cross-session-leak',
+          'red-team/plugins/data-structure-injection',
           'red-team/plugins/debug-access',
           'red-team/plugins/model-identification',
           'red-team/plugins/context-compliance-attack',
