@@ -29,6 +29,13 @@
       "enabled": false
     },
     {
+      "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
+      "matchPackageNames": ["node"],
+      "enabled": false
+    },
+    {
       "description": "Group example directory updates as a fallback so package-specific groups still win",
       "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
@@ -44,6 +51,11 @@
       "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
       "matchUpdateTypes": ["major"],
       "enabled": false
+    },
+    {
+      "description": "Hold tsdown on 0.21.x while Node 20 is supported: tsdown 0.22+ sets engines node ^22.18.0 || >=24.0.0 (drops Node 20.19/20.20), but the repo still builds/tests on Node 20.20 with engine-strict, so 0.22+ aborts npm ci. Revisit when the Node 20 floor is dropped.",
+      "matchPackageNames": ["tsdown"],
+      "allowedVersions": "<0.22.0"
     },
     {
       "description": "Group Anthropic packages together across all dependency types",
