@@ -77,7 +77,23 @@ function getAzureChatRefusal(message: unknown): string | undefined {
   return typeof refusal === 'string' && refusal.length > 0 ? refusal : undefined;
 }
 
-function getAzureChatAudio(message: unknown): ProviderResponse['audio'] | undefined {
+function getSafeAzureAudioFormat(format: unknown): string | undefined {
+  return typeof format === 'string' && SAFE_AUDIO_FORMATS.has(format) ? format : undefined;
+}
+
+function hasAzureChatAudioValue(message: unknown): boolean {
+  return Boolean(
+    message &&
+      typeof message === 'object' &&
+      !Array.isArray(message) &&
+      (message as Record<string, unknown>).audio != null,
+  );
+}
+
+function getAzureChatAudio(
+  message: unknown,
+  requestedFormat?: unknown,
+): ProviderResponse['audio'] | undefined {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     return undefined;
   }
@@ -96,15 +112,58 @@ function getAzureChatAudio(message: unknown): ProviderResponse['audio'] | undefi
   ) {
     return undefined;
   }
+  const format = getSafeAzureAudioFormat(record.format) ?? getSafeAzureAudioFormat(requestedFormat);
   return {
     id: record.id,
     data: record.data,
     transcript: record.transcript,
     expiresAt: record.expires_at,
-    ...(typeof record.format === 'string' && SAFE_AUDIO_FORMATS.has(record.format)
-      ? { format: record.format }
-      : {}),
+    ...(format ? { format } : {}),
   };
+}
+
+function hasNamedStringPayload(
+  value: unknown,
+  payloadKey: 'arguments' | 'input',
+  allowMissing: boolean,
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.name === 'string' &&
+    record.name.trim().length > 0 &&
+    (typeof record[payloadKey] === 'string' || (allowMissing && record[payloadKey] === undefined))
+  );
+}
+
+function getAzureChatCalls(
+  message: unknown,
+): { toolCalls?: Record<string, unknown>[]; functionCall?: Record<string, unknown> } | undefined {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return undefined;
+  }
+  const record = message as Record<string, unknown>;
+  const toolCalls = record.tool_calls;
+  if (
+    Array.isArray(toolCalls) &&
+    toolCalls.length > 0 &&
+    toolCalls.every(
+      (call) =>
+        call != null &&
+        typeof call === 'object' &&
+        !Array.isArray(call) &&
+        (hasNamedStringPayload((call as Record<string, unknown>).function, 'arguments', true) ||
+          hasNamedStringPayload((call as Record<string, unknown>).custom, 'input', false)),
+    )
+  ) {
+    return { toolCalls: toolCalls as Record<string, unknown>[] };
+  }
+  if (hasNamedStringPayload(record.function_call, 'arguments', true)) {
+    return { functionCall: record.function_call as Record<string, unknown> };
+  }
+  return undefined;
 }
 
 function getAzureChatChoice(data: unknown, requireAssistant: boolean): Record<string, any> | null {
@@ -127,10 +186,20 @@ function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boole
     message &&
       typeof message === 'object' &&
       (typeof message.content === 'string' ||
-        (message.content === null && choice?.finish_reason === FINISH_REASON_MAP.content_filter) ||
+        (message.content === null &&
+          normalizeFinishReason(choice?.finish_reason) === FINISH_REASON_MAP.content_filter) ||
         getAzureChatRefusal(message) !== undefined ||
         getAzureChatAudio(message) !== undefined ||
-        (message.content == null && (message.tool_calls != null || message.function_call != null))),
+        (message.content == null && getAzureChatCalls(message) !== undefined)),
+  );
+}
+
+function isAzureChatChoiceCacheable(choice: Record<string, any> | null): boolean {
+  const message = choice?.message;
+  return (
+    normalizeFinishReason(choice?.finish_reason) !== FINISH_REASON_MAP.content_filter &&
+    !(getAzureChatRefusal(message) !== undefined && hasAzureChatAudioValue(message)) &&
+    isAzureChatChoiceProcessable(choice)
   );
 }
 
@@ -149,11 +218,13 @@ function isAzureChatResponseCacheable(data: unknown, requireAssistant: boolean):
     return false;
   }
   const response = data as Record<string, any>;
+  const choice = getAzureChatChoice(response, requireAssistant);
   return Boolean(
     !response.error &&
       Array.isArray(response.choices) &&
       !hasAzureContentFilterSystemError(response) &&
-      isAzureChatChoiceProcessable(getAzureChatChoice(response, requireAssistant)),
+      response.choices.every((candidate: any) => isAzureChatChoiceCacheable(candidate)) &&
+      isAzureChatChoiceProcessable(choice),
   );
 }
 
@@ -641,7 +712,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
     let flaggedInput = false;
     let flaggedOutput = false;
-    let output = '';
+    let output: any = '';
     let logProbs: any;
     let finishReason: string;
     let isRefusal = false;
@@ -682,10 +753,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
         finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-        const refusal = getAzureChatRefusal(message);
-        audio = getAzureChatAudio(message);
+        const isFilteredCompletion = finishReason === FINISH_REASON_MAP.content_filter;
+        const refusal = isFilteredCompletion ? undefined : getAzureChatRefusal(message);
+        const requestedAudioFormat = (body as { audio?: { format?: unknown } }).audio?.format;
+        audio =
+          isFilteredCompletion || refusal
+            ? undefined
+            : getAzureChatAudio(message, requestedAudioFormat);
         isRefusal = refusal !== undefined;
-        output = refusal ?? audio?.transcript ?? message?.content;
+        output = isFilteredCompletion
+          ? message?.content
+          : (refusal ?? audio?.transcript ?? message?.content);
         flaggedOutput = isRefusal;
 
         // Check for errors indicating that the content filters did not run on the completion.
@@ -708,8 +786,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           output = FILTERED_COMPLETION_OUTPUT;
         } else if (!isRefusal && !audio && output == null) {
           // Handle tool_calls and function_call
-          const toolCalls = message?.tool_calls;
-          const functionCall = message?.function_call;
+          const { toolCalls, functionCall } = getAzureChatCalls(message) ?? {};
 
           // Process function/tool calls if callbacks are configured or MCP is available
           if (

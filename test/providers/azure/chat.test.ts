@@ -363,6 +363,46 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toEqual({ test: 'value' });
     });
 
+    it.each([
+      ['mp3', undefined, 'mp3'],
+      ['mp3', 'opus', 'opus'],
+      ['invalid-format-secret-sentinel', undefined, undefined],
+    ])('normalizes audio format from request %s and response %s', async (requestedFormat, responseFormat, expectedFormat) => {
+      provider.config.passthrough = {
+        modalities: ['audio'],
+        audio: { format: requestedFormat, voice: 'alloy' },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: null,
+                audio: {
+                  id: 'audio-id',
+                  data: 'audio-data',
+                  transcript: 'audio transcript',
+                  expires_at: 1_800_000_000,
+                  ...(responseFormat ? { format: responseFormat } : {}),
+                },
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {},
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('audio transcript');
+      expect(result.audio?.format).toBe(expectedFormat);
+    });
+
     it('should redact invalid structured output parse logs', async () => {
       const secretOutput = 'secret-invalid-structured-output-sentinel';
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
@@ -800,6 +840,27 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.error).toContain('"errorCode": "unsupported_parameter"');
       expect(result.error).toContain('"errorParam": "max_tokens"');
       expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
+    it.each([
+      ['empty tool calls', { role: 'assistant', content: null, tool_calls: [] }],
+      ['malformed tool call', { role: 'assistant', content: null, tool_calls: [{}] }],
+      ['wrong tool call type', { role: 'assistant', content: null, tool_calls: 'invalid' }],
+      ['malformed legacy call', { role: 'assistant', content: null, function_call: {} }],
+    ])('rejects a call-only response with %s', async (_description, message) => {
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { choices: [{ message, finish_reason: 'tool_calls' }], usage: {} },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('API response error (status 200)');
+      expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
     it('should handle tool calls in response', async () => {
@@ -1810,6 +1871,7 @@ describe('AzureChatCompletionProvider', () => {
                 name: 'calculateSum',
                 arguments: '{"numbers": [1, 2, 3, 4, 5]}',
               },
+              tool_calls: [{}],
             },
             finish_reason: 'function_call',
           },

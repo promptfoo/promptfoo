@@ -473,7 +473,8 @@ function getInflightFetchCacheKey(
   const validationSuffix = isResponseCacheable
     ? `:validation:${getResponseCacheabilityCheckId(isResponseCacheable)}`
     : '';
-  return `${cacheKey}${signalSuffix}${validationSuffix}`;
+  const diagnosticsSuffix = isFetchLoggingSuppressed(url, options) ? ':diagnostics:silent' : '';
+  return `${cacheKey}${signalSuffix}${validationSuffix}${diagnosticsSuffix}`;
 }
 
 function serializeFetchResponse(

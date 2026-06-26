@@ -1104,6 +1104,46 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
 
+    it('should isolate in-flight silent diagnostics from ordinary callers', async () => {
+      const responseSentinel = 'mixed-policy-response-secret-sentinel';
+      const sharedValidation = vi.fn(() => true);
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, responseSentinel));
+
+      const runPair = async (suffix: string, silentFirst: boolean) => {
+        const pairUrl = `${url}?pair=${suffix}`;
+        const ordinary = () =>
+          fetchWithCache(pairUrl, {}, 1000, 'json', {
+            isResponseCacheable: sharedValidation,
+          });
+        const silent = () =>
+          fetchWithCache(pairUrl, { headers: { 'x-promptfoo-silent': 'true' } }, 1000, 'json', {
+            isResponseCacheable: sharedValidation,
+          });
+        const settled = await Promise.allSettled(
+          silentFirst ? [silent(), ordinary()] : [ordinary(), silent()],
+        );
+        const [ordinaryResult, silentResult] = silentFirst ? [settled[1], settled[0]] : settled;
+
+        expect(ordinaryResult.status).toBe('rejected');
+        expect(silentResult.status).toBe('rejected');
+        if (ordinaryResult.status !== 'rejected' || silentResult.status !== 'rejected') {
+          throw new Error('Expected both requests to reject');
+        }
+        expect(ordinaryResult.reason.message).toContain(responseSentinel);
+        expect(silentResult.reason).toMatchObject({
+          name: 'FetchResponseParseError',
+          status: 200,
+          responseLength: responseSentinel.length,
+        });
+        expect(silentResult.reason.message).not.toContain(responseSentinel);
+      };
+
+      await runPair('ordinary-first', false);
+      await runPair('silent-first', true);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(4);
+    });
+
     it('should evict cached responses that fail caller validation', async () => {
       const poison = { unexpected: 'secret-cached-response-sentinel' };
       const validResponse = {
