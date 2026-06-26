@@ -2458,10 +2458,11 @@ inputs:
         },
       );
 
-      expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      const [resolvedPath, encoding] = mockFsReadFileSync.mock.calls[0];
+      expect(path.normalize(resolvedPath)).toBe(
         path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
-        'utf8',
       );
+      expect(encoding).toBe('utf8');
       expect(result).toEqual([{ context: 'Reference context', question: 'User question' }]);
     } finally {
       mockProcessEnv({ POSTERIOR_PROVIDER_ROOT: undefined });
