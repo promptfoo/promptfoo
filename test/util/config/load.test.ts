@@ -2812,7 +2812,11 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
       prompts: ['hello'],
       outptPath: '/tmp/results.json',
     };
-    actualFs.writeFileSync(strictEnvPath, 'PROMPTFOO_STRICT_CONFIG=true');
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    actualFs.writeFileSync(
+      strictEnvPath,
+      'PROMPTFOO_STRICT_CONFIG=true\nPR9449_SENTINEL=from-config',
+    );
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
     vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
@@ -2820,12 +2824,41 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     try {
       const config = await maybeReadConfig('config.json', true);
 
-      expect(() => enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json')).toThrow(
-        /Unknown top-level config key\(s\) "outptPath"/,
-      );
+      expect(() =>
+        enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json', undefined, true),
+      ).toThrow(/Unknown top-level config key\(s\) "outptPath"/);
       expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+      expect(process.env.PR9449_SENTINEL).toBe('ambient');
     } finally {
       actualFs.rmSync(strictEnvDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a config-selected env active for callers that use it after diagnostics', async () => {
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const envDir = actualFs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-config-env-'));
+    const envPath = path.join(envDir, '.env');
+    const mockConfig = {
+      commandLineOptions: { envPath },
+      providers: ['echo'],
+      prompts: ['hello'],
+      outptPath: '/tmp/results.json',
+    };
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    actualFs.writeFileSync(envPath, 'PROMPTFOO_STRICT_CONFIG=false\nPR9449_SENTINEL=from-config');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    try {
+      const config = await maybeReadConfig('config.json', true);
+
+      expect(() =>
+        enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json'),
+      ).not.toThrow();
+      expect(process.env.PR9449_SENTINEL).toBe('from-config');
+    } finally {
+      actualFs.rmSync(envDir, { recursive: true, force: true });
     }
   });
 

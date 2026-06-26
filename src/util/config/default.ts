@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { getExplicitCliEnvPath } from '../env';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { enforceUnknownConfigKeyDiagnosticsForConfig, maybeReadConfig } from './load';
 
@@ -36,7 +37,12 @@ export async function loadDefaultConfig(
   if (configCache.has(cacheKey)) {
     const cached = configCache.get(cacheKey)!;
     if (!options.deferUnknownKeyValidation) {
-      enforceUnknownConfigKeyDiagnosticsForConfig(cached.defaultConfig);
+      enforceUnknownConfigKeyDiagnosticsForConfig(
+        cached.defaultConfig,
+        cached.defaultConfigPath,
+        getExplicitCliEnvPath(),
+        true,
+      );
     }
     return cached;
   }
@@ -51,7 +57,12 @@ export async function loadDefaultConfig(
       defaultConfig = maybeConfig;
       defaultConfigPath = configPath;
       if (!options.deferUnknownKeyValidation) {
-        enforceUnknownConfigKeyDiagnosticsForConfig(defaultConfig);
+        enforceUnknownConfigKeyDiagnosticsForConfig(
+          defaultConfig,
+          defaultConfigPath,
+          getExplicitCliEnvPath(),
+          true,
+        );
       }
       break;
     }

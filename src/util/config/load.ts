@@ -35,9 +35,10 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
+import { restoreProcessEnv, setupEnv } from '../../util/env';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { readFilters, renderEnvOnlyInObject, setupEnv } from '../../util/index';
+import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
@@ -187,6 +188,7 @@ export function enforceUnknownConfigKeyDiagnosticsForConfig(
   config: Partial<UnifiedConfig> | undefined,
   configPath?: string,
   explicitEnvPath?: string | string[],
+  shouldRestoreProcessEnv = false,
 ): void {
   const diagnostics = getUnknownConfigKeyDiagnostics(config);
   if (!diagnostics?.length) {
@@ -206,6 +208,7 @@ export function enforceUnknownConfigKeyDiagnosticsForConfig(
     path.dirname(configPath),
     explicitEnvPath,
     config?.env,
+    shouldRestoreProcessEnv,
   );
   reportUnknownConfigKeyDiagnostics(diagnostics, strictConfigEnabled);
 }
@@ -968,6 +971,7 @@ function resolveConfiguredEnvStrictness(
   basePath: string,
   explicitEnvPath: string | string[] | undefined,
   configEnv: UnifiedConfig['env'] | undefined,
+  shouldRestoreProcessEnv = false,
 ): {
   commandLineOptions: ReturnType<typeof normalizeConfiguredCommandLineOptions>;
   strictConfigEnabled: boolean;
@@ -988,6 +992,7 @@ function resolveConfiguredEnvStrictness(
   const hasExplicitEnvPath = Array.isArray(explicitEnvPath)
     ? explicitEnvPath.length > 0
     : Boolean(explicitEnvPath);
+  const previousProcessEnv = shouldRestoreProcessEnv ? { ...process.env } : undefined;
   const previousProcessStrictConfig = process.env.PROMPTFOO_STRICT_CONFIG;
   let strictConfigEnabled: boolean;
   if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
@@ -996,7 +1001,9 @@ function resolveConfiguredEnvStrictness(
       setupEnv(commandLineOptions.envPath);
       strictConfigEnabled = resolveStrictConfigEnabled(configEnv);
     } finally {
-      if (previousProcessStrictConfig === undefined) {
+      if (previousProcessEnv) {
+        restoreProcessEnv(previousProcessEnv);
+      } else if (previousProcessStrictConfig === undefined) {
         Reflect.deleteProperty(process.env, 'PROMPTFOO_STRICT_CONFIG');
       } else {
         Reflect.set(process.env, 'PROMPTFOO_STRICT_CONFIG', previousProcessStrictConfig);
@@ -1032,6 +1039,7 @@ export async function validateUnknownConfigKeysForConfigPaths(
     path.dirname(configPaths[0]),
     explicitEnvPath,
     configEnv,
+    true,
   );
   reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
 }

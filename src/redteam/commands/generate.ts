@@ -268,10 +268,21 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
+function getExplicitEnvPath(
+  envFile: string | string[] | undefined,
+  envPath: string | string[] | undefined,
+): string | string[] | undefined {
+  const envFiles = Array.isArray(envFile) ? envFile : envFile ? [envFile] : [];
+  const hasEnvFile = envFiles.some((value) =>
+    value.split(',').some((path) => path.trim().length > 0),
+  );
+  return hasEnvFile ? envFile : envPath;
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
-  const explicitEnvPath = options.envFile ?? options.envPath;
+  const explicitEnvPath = getExplicitEnvPath(options.envFile, options.envPath);
   setupEnv(explicitEnvPath);
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
@@ -284,7 +295,7 @@ export async function doGenerateRedteam(
 async function doGenerateRedteamInternal(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
-  const explicitEnvPath = options.envFile ?? options.envPath;
+  const explicitEnvPath = getExplicitEnvPath(options.envFile, options.envPath);
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = await checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -1158,7 +1169,7 @@ export function redteamGenerateCommand(
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           ...overrides,
-          envFile: opts.envFile ?? opts.envPath,
+          envFile: getExplicitEnvPath(opts.envFile, opts.envPath),
           defaultConfig,
           defaultConfigPath,
         });

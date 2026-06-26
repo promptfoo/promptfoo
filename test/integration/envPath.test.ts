@@ -16,7 +16,7 @@ import {
 import { doEval } from '../../src/node/doEval';
 import { clearConfigCache, loadDefaultConfig } from '../../src/util/config/default';
 import { resolveConfigs } from '../../src/util/config/load';
-import { setupEnv } from '../../src/util/index';
+import { setExplicitCliEnvPath, setupEnv } from '../../src/util/env';
 
 vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
@@ -53,8 +53,8 @@ vi.mock('../../src/util/cloud', () => ({
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
-vi.mock('../../src/util', async () => {
-  const actual = await vi.importActual('../../src/util');
+vi.mock('../../src/util/env', async () => {
+  const actual = await vi.importActual('../../src/util/env');
   return {
     ...(actual as any),
     setupEnv: vi.fn(),
@@ -82,10 +82,13 @@ describe('Integration: commandLineOptions.envPath', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSetupEnv.mockReset();
+    setExplicitCliEnvPath(undefined);
     clearConfigCache();
   });
 
   afterEach(() => {
+    mockSetupEnv.mockReset();
+    setExplicitCliEnvPath(undefined);
     vi.unstubAllEnvs();
     clearConfigCache();
   });
@@ -203,6 +206,85 @@ tests:
     );
     expect(mockSetupEnv).toHaveBeenCalledWith(tempEnvFile);
     expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+  });
+
+  it('should honor config-specified strictness on fresh and cached default-config reads', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.stubEnv('PR9449_SENTINEL', 'ambient');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: default-config-env-path
+      `,
+    );
+    mockSetupEnv.mockImplementation((envPath) => {
+      if (envPath === tempEnvFile) {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+        vi.stubEnv('PR9449_SENTINEL', 'from-config');
+      }
+    });
+
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+
+    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, tempEnvFile);
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+    expect(process.env.PR9449_SENTINEL).toBe('ambient');
+  });
+
+  it('should preserve explicit CLI env precedence on fresh and cached default-config reads', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    vi.stubEnv('PR9449_SENTINEL', 'from-cli');
+    setExplicitCliEnvPath(['cli.env']);
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=true\nPR9449_SENTINEL=from-config');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        outptPath: ignored.json
+        tests:
+          - vars:
+              case: explicit-cli-precedence
+      `,
+    );
+    mockSetupEnv.mockImplementation(() => {
+      vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+      vi.stubEnv('PR9449_SENTINEL', 'from-config');
+    });
+
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+    await expect(loadDefaultConfig(tempDir)).resolves.toMatchObject({
+      defaultConfigPath: tempConfigFile,
+    });
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+    expect(process.env.PR9449_SENTINEL).toBe('from-cli');
   });
 
   it('should not leak config-specified strictness into later resolutions', async () => {

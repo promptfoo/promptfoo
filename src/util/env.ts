@@ -3,6 +3,25 @@ import * as fs from 'fs';
 import dotenv from 'dotenv';
 import logger from '../logger';
 
+let explicitCliEnvPath: string | string[] | undefined;
+
+export function getExplicitCliEnvPath(): string | string[] | undefined {
+  return explicitCliEnvPath;
+}
+
+export function setExplicitCliEnvPath(envPath: string | string[] | undefined): void {
+  explicitCliEnvPath = envPath;
+}
+
+export function restoreProcessEnv(snapshot: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(process.env)) {
+    if (!Object.hasOwn(snapshot, key)) {
+      Reflect.deleteProperty(process.env, key);
+    }
+  }
+  Object.assign(process.env, snapshot);
+}
+
 /**
  * Load environment variables from .env file(s).
  * @param envPath - Single path, array of paths, or undefined for default .env loading.
@@ -40,7 +59,16 @@ export function setupEnv(envPath: string | string[] | undefined) {
     // Files are loaded in order, later files override earlier values with override:true
     // Pass single string when only one path for backward compatibility
     const pathArg = paths.length === 1 ? paths[0] : paths;
-    dotenv.config({ path: pathArg, override: true, quiet: true });
+    const previousProcessEnv = { ...process.env };
+    try {
+      const result = dotenv.config({ path: pathArg, override: true, quiet: true });
+      if (result.error) {
+        throw result.error;
+      }
+    } catch (error) {
+      restoreProcessEnv(previousProcessEnv);
+      throw error;
+    }
   } else {
     dotenv.config({ quiet: true });
   }
