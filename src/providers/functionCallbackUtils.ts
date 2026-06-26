@@ -22,10 +22,12 @@ interface McpToolCallOutcome {
 }
 
 interface DetailedFunctionCallResult extends FunctionCallResult {
+  processed: boolean;
   mcpToolCall?: McpToolCallOutcome;
 }
 
 interface DetailedFunctionCallsResult {
+  hasProcessedCalls: boolean;
   mcpToolCalls: McpToolCallOutcome[];
   mcpToolCallsComplete: boolean;
   output: any;
@@ -53,11 +55,11 @@ export class FunctionCallbackHandler {
     callbacks?: FunctionCallbackConfig,
     context?: any,
   ): Promise<FunctionCallResult> {
-    const { mcpToolCall: _mcpToolCall, ...result } = await this.processCallDetailed(
-      call,
-      callbacks,
-      context,
-    );
+    const {
+      mcpToolCall: _mcpToolCall,
+      processed: _processed,
+      ...result
+    } = await this.processCallDetailed(call, callbacks, context);
     return result;
   }
 
@@ -87,6 +89,7 @@ export class FunctionCallbackHandler {
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
         isError: false,
+        processed: false,
       };
     }
 
@@ -101,6 +104,7 @@ export class FunctionCallbackHandler {
       return {
         output: result,
         isError: false,
+        processed: true,
       };
     } catch (error) {
       logger.debug(`Function callback failed for ${functionInfo.name}: ${error}`);
@@ -108,6 +112,8 @@ export class FunctionCallbackHandler {
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
         isError: true,
+        // Preserve the established fallback for a matched callback that failed.
+        processed: true,
       };
     }
   }
@@ -139,7 +145,12 @@ export class FunctionCallbackHandler {
     _options?: { returnRawOnError?: boolean },
   ): Promise<DetailedFunctionCallsResult> {
     if (!calls) {
-      return { mcpToolCallsComplete: true, output: calls, mcpToolCalls: [] };
+      return {
+        hasProcessedCalls: false,
+        mcpToolCallsComplete: true,
+        output: calls,
+        mcpToolCalls: [],
+      };
     }
 
     const isArray = Array.isArray(calls);
@@ -173,6 +184,7 @@ export class FunctionCallbackHandler {
     }
 
     return {
+      hasProcessedCalls: results.some((result) => result.processed),
       output,
       mcpToolCalls: results.flatMap((result) => (result.mcpToolCall ? [result.mcpToolCall] : [])),
       mcpToolCallsComplete: results.every((result) => result.mcpToolCall !== undefined),
@@ -293,6 +305,7 @@ export class FunctionCallbackHandler {
         return {
           output: `MCP Tool Error (${toolName}): ${error}`,
           isError: true,
+          processed: true,
           mcpToolCall: { name: toolName, status: 'error', error },
         };
       }
@@ -334,6 +347,7 @@ export class FunctionCallbackHandler {
       return {
         output: `MCP Tool Result (${toolName}): ${content}`,
         isError: false,
+        processed: true,
         mcpToolCall: { name: toolName, status: 'success' },
       };
     } catch (error) {
@@ -342,6 +356,7 @@ export class FunctionCallbackHandler {
       return {
         output: `MCP Tool Error (${toolName}): ${errorMessage}`,
         isError: true,
+        processed: true,
         mcpToolCall: { name: toolName, status: 'error', error: errorMessage },
       };
     }

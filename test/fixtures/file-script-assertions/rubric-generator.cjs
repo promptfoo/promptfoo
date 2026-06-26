@@ -78,3 +78,8 @@ module.exports.deleteAssertionTransform = (_output, context) => {
   delete context.test.assert[0].transform;
   return 'unused';
 };
+
+module.exports.invertAssertionType = (_output, context) => {
+  context.test.assert[0].type = 'not-is-valid-openai-tools-call';
+  return 'unused';
+};

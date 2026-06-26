@@ -109,12 +109,17 @@ tests:
             return false;
           });
           const pass = interactions.length > 0 && wellFormed && matchesPolicy;
+          const observed = interactions.slice(0, 10).map(({ type, name, server_label }) => ({
+            type,
+            name,
+            server_label,
+          }));
           return {
             pass,
             score: pass ? 1 : 0,
             reason: pass
               ? `Observed approval behavior for ${label}.`
-              : `Expected approval behavior for ${label}; observed ${JSON.stringify(interactions)}.`,
+              : `Expected approval behavior for ${label}; observed ${interactions.length} interaction(s): ${JSON.stringify(observed)}.`,
           };
       # Response relevance across approval configurations
       - type: contains-any

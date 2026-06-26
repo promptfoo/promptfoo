@@ -481,9 +481,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             allCalls.length === 1 ? allCalls[0] : allCalls,
             config.functionToolCallbacks,
           );
-          output = callbackResult.output;
-          mcpToolCalls = callbackResult.mcpToolCalls;
-          mcpToolCallsComplete = callbackResult.mcpToolCallsComplete;
+          if (callbackResult.hasProcessedCalls) {
+            output = callbackResult.output;
+            mcpToolCalls = callbackResult.mcpToolCalls;
+            mcpToolCallsComplete = callbackResult.mcpToolCallsComplete;
+          } else {
+            output = output ?? toolCalls ?? functionCall;
+          }
         } else if (output == null) {
           // No callbacks configured, return raw tool/function calls.
           output = toolCalls ?? functionCall;

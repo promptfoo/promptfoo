@@ -106,6 +106,36 @@ describe('util', () => {
       expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
     });
 
+    it('does not invoke traps on a Proxy in the prototype chain', () => {
+      const getPrototypeOf = vi.fn(() => Object.prototype);
+      const ownKeys = vi.fn<() => (string | symbol)[]>(() => []);
+      const prototype = new Proxy(
+        {},
+        {
+          getPrototypeOf,
+          ownKeys,
+        },
+      );
+      const output = Object.create(prototype) as Record<string, unknown>;
+      output.content = 'value';
+
+      const snapshot = cloneTransformInput(output);
+      expect(snapshot.reliable).toBe(false);
+      expect(snapshot.value).toBe(output);
+      expect(getPrototypeOf).not.toHaveBeenCalled();
+      expect(ownKeys).not.toHaveBeenCalled();
+    });
+
+    it('fails closed for custom prototypes that structuredClone would discard', () => {
+      const prototype = { state: 'before' };
+      const output = Object.create(prototype) as Record<string, unknown>;
+      output.content = 'value';
+
+      expect(cloneTransformInput(output)).toEqual({ reliable: false, value: output });
+      prototype.state = 'after';
+      expect(didTransformChange(output, output)).toBe(true);
+    });
+
     it('fails closed before enumerating binary transform inputs', () => {
       const output = new Uint8Array(100_000);
 

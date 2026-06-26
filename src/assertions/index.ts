@@ -109,7 +109,13 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  loadFromJavaScriptFile,
+  processFileReference,
+  serializeAssertionOutput,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -196,6 +202,22 @@ function assertionUsesOpenAiToolsCall(assertion: AssertionOrSet): boolean {
   return getAssertionBaseType(assertion) === 'is-valid-openai-tools-call';
 }
 
+const INVERSE_DISPATCH_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'model-graded-closedqa',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+]);
+
+function captureAssertionForDispatch(assertion: Assertion): Assertion {
+  return INVERSE_DISPATCH_ASSERTION_TYPES.has(getAssertionBaseType(assertion))
+    ? { ...assertion }
+    : assertion;
+}
+
 export function hasOpenAiToolsCallAssertions(assertions?: AssertionOrSet[]): boolean {
   return Boolean(assertions?.some(assertionUsesOpenAiToolsCall));
 }
@@ -226,7 +248,7 @@ function readOwnDataProperty(value: unknown, key: PropertyKey): OwnDataProperty 
 }
 
 function readOwnArrayValues(value: unknown): { ok: true; values: unknown[] } | { ok: false } {
-  if (!Array.isArray(value) || isProxyValue(value)) {
+  if (isProxyValue(value) || !Array.isArray(value)) {
     return { ok: false };
   }
   const values: unknown[] = [];
@@ -277,6 +299,9 @@ function normalizeMetadataMcpCalls(value: unknown): { ok: true; value: unknown }
 }
 
 function normalizeRawMcpOutput(value: unknown): { ok: true; value: unknown } | { ok: false } {
+  if (isProxyValue(value)) {
+    return { ok: false };
+  }
   if (!Array.isArray(value)) {
     return { ok: true, value: undefined };
   }
@@ -286,15 +311,18 @@ function normalizeRawMcpOutput(value: unknown): { ok: true; value: unknown } | {
   }
   const relevant: Record<string, unknown>[] = [];
   for (const entry of entries.values) {
-    if (typeof entry !== 'object' || entry === null || isProxyValue(entry)) {
+    if (typeof entry !== 'object' || entry === null) {
       continue;
+    }
+    if (isProxyValue(entry)) {
+      return { ok: false };
     }
     const type = readOwnDataProperty(entry, 'type');
     if (!type.ok) {
-      // Opaque, unrelated response items are not MCP provenance. Ignore them
-      // without invoking accessors; relevant entries must expose an own data
-      // discriminator before any other field is trusted.
-      continue;
+      return { ok: false };
+    }
+    if (!type.exists || typeof type.value !== 'string') {
+      return { ok: false };
     }
     if (
       type.value !== 'mcp_call' &&
@@ -633,15 +661,21 @@ export async function runAssertion({
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+
+  // Direct callers do not pass through runAssertions' batch snapshot. Preserve
+  // affected inverse assertion polarity before any assertion value script can
+  // mutate the live test definition.
+  assertion = captureAssertionForDispatch(assertion);
+
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
-  invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
-
   const baseType = getAssertionBaseType(assertion);
+  const inverse = isAssertionInverse(assertion);
   const tracksMcpProvenance = baseType === 'is-valid-openai-tools-call';
   const capturedMcpToolCalls = tracksMcpProvenance
     ? mcpToolCallProvenance === undefined
@@ -862,15 +896,15 @@ export async function runAssertion({
   const assertionParams: AssertionParams = {
     assertion,
     assertionTransformChanged,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
-    inverse: isAssertionInverse(assertion),
+    inverse,
     latencyMs,
     logProbs,
     output,
-    outputString: coerceString(output),
+    outputString: tracksMcpProvenance ? serializeAssertionOutput(output) : coerceString(output),
     prompt,
     provider,
     providerResponse,
@@ -1015,18 +1049,20 @@ export async function runAssertions({
         subAssertResults.push(subAssertResult);
 
         return assertion.assert.map((subAssert, j) => {
+          const capturedAssertion = captureAssertionForDispatch(subAssert);
           return {
-            assertion: subAssert,
-            assertionTransform: subAssert.transform ?? null,
+            assertion: capturedAssertion,
+            assertionTransform: capturedAssertion.transform ?? null,
             assertResult: subAssertResult,
             index: j,
           };
         });
       }
 
+      const capturedAssertion = captureAssertionForDispatch(assertion);
       return {
-        assertion,
-        assertionTransform: assertion.transform ?? null,
+        assertion: capturedAssertion,
+        assertionTransform: capturedAssertion.transform ?? null,
         assertResult: mainAssertResult,
         index: i,
       };

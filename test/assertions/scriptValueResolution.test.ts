@@ -286,6 +286,27 @@ describe('Script value resolution', () => {
     expect(result).toMatchObject({ pass: false, score: 0 });
   });
 
+  it('keeps direct-dispatch polarity when its file script mutates the live assertion type', async () => {
+    const assertion = {
+      type: 'is-valid-openai-tools-call',
+      value: 'file://rubric-generator.cjs:invertAssertionType',
+    } as const;
+    const test = { vars: {}, assert: [assertion] };
+
+    const result = await runAssertion({
+      assertion,
+      test,
+      providerResponse: { output: 'ordinary model text' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      assertion: { type: 'is-valid-openai-tools-call' },
+    });
+    expect(test.assert[0].type).toBe('not-is-valid-openai-tools-call');
+  });
+
   describe.each([
     'concurrent',
     'serial',
@@ -293,8 +314,10 @@ describe('Script value resolution', () => {
     const runBatch = (
       test: Parameters<typeof runAssertions>[0]['test'],
       providerResponse: ProviderResponse,
+      provider?: Parameters<typeof runAssertions>[0]['provider'],
+      prompt?: string,
     ) => {
-      const run = () => runAssertions({ providerResponse, test });
+      const run = () => runAssertions({ prompt, provider, providerResponse, test });
       return dispatchMode === 'serial'
         ? withProviderCallExecutionContext(
             { providerCallQueue: new ProviderGroupedCallQueue() },
@@ -384,6 +407,99 @@ describe('Script value resolution', () => {
 
       expect(result.componentResults?.[1]).toMatchObject({ pass: false, score: 0 });
       expect(result.componentResults?.[2]).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('retains sibling assertion polarity captured before mutation', async () => {
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                context.test.assert[1].type = 'not-is-valid-openai-tools-call';
+                return true;
+              },
+            },
+            { type: 'is-valid-openai-tools-call' },
+          ],
+        },
+        { output: 'ordinary model text' },
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: false,
+        score: 0,
+        assertion: { type: 'is-valid-openai-tools-call' },
+      });
+    });
+
+    it.each([
+      'is-valid-function-call',
+      'is-valid-openai-function-call',
+    ] as const)('retains %s polarity captured before mutation', async (targetType) => {
+      const provider = {
+        id: () => 'function-validator',
+        callApi: async () => ({}),
+        validateFunctionToolCall: () => {
+          throw new Error('invalid call');
+        },
+      };
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                context.test.assert[1].type = `not-${targetType}`;
+                return true;
+              },
+            },
+            { type: targetType },
+          ],
+        },
+        { output: '{}' },
+        provider,
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: false,
+        score: 0,
+        assertion: { type: targetType },
+      });
+    });
+
+    it('retains model-graded ClosedQA polarity captured before mutation', async () => {
+      vi.mocked(llmGradingMatchers.matchesClosedQa).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'criterion satisfied',
+      });
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                context.test.assert[1].type = 'not-model-graded-closedqa';
+                return true;
+              },
+            },
+            { type: 'model-graded-closedqa', value: 'criterion' },
+          ],
+        },
+        { output: 'answer' },
+        undefined,
+        'question',
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: true,
+        score: 1,
+        assertion: { type: 'model-graded-closedqa' },
+      });
     });
   });
 

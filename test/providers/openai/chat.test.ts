@@ -976,6 +976,60 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       }
     });
 
+    it('fails closed when legacy and modern tool-call fields are both emitted', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                function_call: { name: 'legacy_tool', arguments: '{}' },
+                tool_calls: [{ function: { name: 'unselected_tool', arguments: '{}' } }],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const callTool = vi.fn().mockResolvedValue({ content: 'ok' });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      (provider as any).mcpClient = {
+        getAllTools: vi
+          .fn()
+          .mockReturnValue([{ name: 'legacy_tool' }, { name: 'unselected_tool' }]),
+        callTool,
+      };
+
+      const response = await provider.callApi('Use both call fields');
+
+      expect(callTool).toHaveBeenCalledOnce();
+      expect(callTool).toHaveBeenCalledWith('legacy_tool', {});
+      expect(response.metadata).toMatchObject({
+        mcpToolCalls: [{ name: 'legacy_tool', status: 'success' }],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            provider,
+            providerResponse: response,
+            test: { vars: {} },
+          }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'MCP tool call provenance does not cover every tool call in the response',
+        });
+      }
+    });
+
     it('preserves an MCP failure when a later function callback falls back', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

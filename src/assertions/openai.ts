@@ -17,18 +17,25 @@ interface OpenAiToolCall {
 const PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT = Symbol.for('promptfoo.trustedMcpRenderedOutput');
 
 function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
+  const type = readOwnDataProperty(value, 'type');
+  const fn = readOwnDataProperty(value, 'function');
+  if (
+    !type.ok ||
+    (type.value !== undefined && type.value !== 'function') ||
+    !fn.ok ||
+    typeof fn.value !== 'object' ||
+    fn.value === null
+  ) {
+    return false;
+  }
+  const name = readOwnDataProperty(fn.value, 'name');
+  const args = readOwnDataProperty(fn.value, 'arguments');
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    (!('type' in value) || value.type === 'function') &&
-    'function' in value &&
-    typeof value.function === 'object' &&
-    value.function !== null &&
-    'name' in value.function &&
-    typeof value.function.name === 'string' &&
-    value.function.name.trim().length > 0 &&
-    'arguments' in value.function &&
-    typeof value.function.arguments === 'string'
+    name.ok &&
+    typeof name.value === 'string' &&
+    name.value.trim().length > 0 &&
+    args.ok &&
+    typeof args.value === 'string'
   );
 }
 
@@ -217,8 +224,12 @@ export function parseStructuredMcpToolCalls(
     return rawResult;
   }
   const calls = [...(metadataResult?.calls ?? []), ...(rawResult?.calls ?? [])];
-  const incomplete = Boolean(metadataResult?.incomplete || rawResult?.incomplete);
-  return calls.length > 0 ? { calls, ...(incomplete ? { incomplete: true } : {}) } : undefined;
+  const incomplete = Boolean(
+    metadataComplete === false || metadataResult?.incomplete || rawResult?.incomplete,
+  );
+  return calls.length > 0 || incomplete
+    ? { calls, ...(incomplete ? { incomplete: true } : {}) }
+    : undefined;
 }
 
 export function getStructuredMcpToolCalls(
@@ -308,35 +319,61 @@ function gradeMcpToolCalls(
   );
 }
 
+function getTraditionalToolCalls(
+  output: unknown,
+): { hasCalls: boolean; ok: true; output: unknown } | { error: string; ok: false } {
+  try {
+    if (Array.isArray(output)) {
+      return { hasCalls: true, ok: true, output };
+    }
+    if (typeof output !== 'object' || output === null) {
+      return { hasCalls: false, ok: true, output };
+    }
+    const toolCalls = readOwnDataProperty(output, 'tool_calls');
+    if (!toolCalls.ok) {
+      return { error: 'OpenAI tools response is malformed', ok: false };
+    }
+    return toolCalls.value === undefined
+      ? { hasCalls: false, ok: true, output }
+      : { hasCalls: true, ok: true, output: toolCalls.value };
+  } catch {
+    return { error: 'OpenAI tools response is malformed', ok: false };
+  }
+}
+
 function getFunctionToolDefinitions(
   tools: unknown[],
 ): { definitions: OpenAiFunction[]; ok: true } | { error: string; ok: false } {
-  const definitions: OpenAiFunction[] = [];
-  for (const tool of tools) {
-    if (
-      typeof tool !== 'object' ||
-      tool === null ||
-      !('type' in tool) ||
-      typeof tool.type !== 'string'
-    ) {
-      return { ok: false, error: 'Invalid tool schema configured in provider' };
+  try {
+    const definitions: OpenAiFunction[] = [];
+    for (const tool of tools) {
+      if (
+        typeof tool !== 'object' ||
+        tool === null ||
+        !('type' in tool) ||
+        typeof tool.type !== 'string'
+      ) {
+        return { ok: false, error: 'Invalid tool schema configured in provider' };
+      }
+      if (tool.type !== 'function') {
+        continue;
+      }
+      if (
+        !('function' in tool) ||
+        typeof tool.function !== 'object' ||
+        tool.function === null ||
+        !('name' in tool.function) ||
+        typeof tool.function.name !== 'string' ||
+        tool.function.name.trim().length === 0
+      ) {
+        return { ok: false, error: 'Invalid function tool schema configured in provider' };
+      }
+      definitions.push(tool.function as OpenAiFunction);
     }
-    if (tool.type !== 'function') {
-      continue;
-    }
-    if (
-      !('function' in tool) ||
-      typeof tool.function !== 'object' ||
-      tool.function === null ||
-      !('name' in tool.function) ||
-      typeof tool.function.name !== 'string' ||
-      tool.function.name.trim().length === 0
-    ) {
-      return { ok: false, error: 'Invalid function tool schema configured in provider' };
-    }
-    definitions.push(tool.function as OpenAiFunction);
+    return { ok: true, definitions };
+  } catch (error) {
+    return { ok: false, error: getValidationErrorMessage(error) };
   }
-  return { ok: true, definitions };
 }
 
 export function wasMcpProviderOrTestOutputTransformed({
@@ -416,17 +453,6 @@ export const handleIsValidOpenAiToolsCall = async (
     !outputWasTransformed && capturedState?.trustedRenderedOutput !== undefined
       ? capturedState.trustedRenderedOutput
       : output;
-  // Traditional tool calls take precedence so model-controlled arguments cannot
-  // be misclassified merely by containing an MCP result/error marker.
-  let toolsOutput: unknown = effectiveOutput;
-  const hasTraditionalToolCalls =
-    Array.isArray(effectiveOutput) ||
-    (effectiveOutput !== null &&
-      typeof effectiveOutput === 'object' &&
-      'tool_calls' in effectiveOutput);
-  if (!Array.isArray(effectiveOutput) && hasTraditionalToolCalls) {
-    toolsOutput = (effectiveOutput as { tool_calls: unknown }).tool_calls;
-  }
   const structuredMcpResult = outputWasTransformed
     ? undefined
     : capturedMcpToolCalls === undefined
@@ -461,6 +487,21 @@ export const handleIsValidOpenAiToolsCall = async (
       assertion,
     };
   }
+  // Traditional tool calls take precedence so model-controlled arguments cannot
+  // be misclassified merely by containing an MCP result/error marker.
+  const traditionalToolCalls = getTraditionalToolCalls(effectiveOutput);
+  if (!traditionalToolCalls.ok) {
+    return applyInverse(
+      {
+        pass: false,
+        score: 0,
+        reason: traditionalToolCalls.error,
+        assertion,
+      },
+      inverse,
+    );
+  }
+  const { hasCalls: hasTraditionalToolCalls, output: toolsOutput } = traditionalToolCalls;
   if (structuredMcpGrade && !hasTraditionalToolCalls) {
     return structuredMcpGrade;
   }

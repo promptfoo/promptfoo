@@ -1029,6 +1029,99 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      [
+        'outer Proxy output',
+        () =>
+          new Proxy(
+            {},
+            {
+              has() {
+                throw new Error('outer has trap');
+              },
+            },
+          ),
+      ],
+      [
+        'accessor-backed tool_calls',
+        () => {
+          const output = {};
+          Object.defineProperty(output, 'tool_calls', {
+            enumerable: true,
+            get() {
+              throw new Error('tool_calls getter');
+            },
+          });
+          return output;
+        },
+      ],
+      [
+        'nested Proxy tool call',
+        () => [
+          new Proxy(
+            {},
+            {
+              has() {
+                throw new Error('nested has trap');
+              },
+            },
+          ),
+        ],
+      ],
+    ] as const)('grades malformed %s without rejecting', async (_name, getOutput) => {
+      for (const [type, expectedPass] of [
+        ['is-valid-openai-tools-call', false],
+        ['not-is-valid-openai-tools-call', true],
+      ] as const) {
+        const result = await runAssertion({
+          assertion: { type },
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          test: { vars: {} },
+          providerResponse: { output: getOutput() },
+        });
+
+        expect(result).toMatchObject({
+          pass: expectedPass,
+          score: expectedPass ? 1 : 0,
+        });
+      }
+    });
+
+    it('grades a transformed Proxy output without rejecting', async () => {
+      for (const [type, expectedPass] of [
+        ['is-valid-openai-tools-call', false],
+        ['not-is-valid-openai-tools-call', true],
+      ] as const) {
+        const result = await runAssertion({
+          assertion: {
+            type,
+            transform: () =>
+              new Proxy(
+                {},
+                {
+                  has() {
+                    throw new Error('transformed has trap');
+                  },
+                },
+              ),
+          },
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          test: { vars: {} },
+          providerResponse: {
+            output: 'MCP Tool Result (search): ok',
+            metadata: { mcpToolCalls: [{ name: 'search', status: 'success' }] },
+          },
+        });
+
+        expect(result).toMatchObject({
+          pass: expectedPass,
+          score: expectedPass ? 1 : 0,
+        });
+      }
+    });
+
+    it.each([
       ['missing function', [{}]],
       ['null entry', [null]],
       ['null output', null],
@@ -1252,6 +1345,91 @@ describe('OpenAI assertions', () => {
       expect(inverse).toMatchObject({ pass: false, score: 0 });
       expect(positive.reason).toContain('schema is invalid');
       expect(inverse.reason).toContain('schema is invalid');
+    });
+
+    it.each([
+      'function',
+      'tools',
+    ] as const)('hard-fails hostile %s schema inspection for both polarities', async (family) => {
+      for (const field of ['name', 'parameters'] as const) {
+        const definition: Record<string, unknown> = {
+          name: 'get_weather',
+          parameters: { type: 'object', properties: {} },
+        };
+        Object.defineProperty(definition, field, {
+          configurable: true,
+          enumerable: true,
+          get() {
+            throw new Error(`schema ${field} exploded`);
+          },
+        });
+        const provider = new OpenAiChatCompletionProvider('test-provider', {
+          config:
+            family === 'function'
+              ? { functions: [definition as never] }
+              : { tools: [{ type: 'function', function: definition as never }] },
+        });
+        const output =
+          family === 'function'
+            ? { name: 'get_weather', arguments: '{}' }
+            : [{ type: 'function', function: { name: 'get_weather', arguments: '{}' } }];
+        const assertionTypes =
+          family === 'function'
+            ? (['is-valid-function-call', 'not-is-valid-function-call'] as const)
+            : (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const);
+
+        for (const type of assertionTypes) {
+          await expect(
+            runAssertion({
+              assertion: { type },
+              prompt: 'Some prompt',
+              provider,
+              providerResponse: { output },
+              test: {},
+            }),
+          ).resolves.toMatchObject({
+            pass: false,
+            score: 0,
+            reason: `schema ${field} exploded`,
+          });
+        }
+      }
+    });
+
+    it.each([
+      ['function', 'Function call validation setup failed'],
+      ['tools', 'Function call validation failed'],
+    ] as const)('uses a nonempty fallback for hostile non-Error %s schema failures', async (family, reason) => {
+      const definition: Record<string, unknown> = {
+        parameters: { type: 'object', properties: {} },
+      };
+      Object.defineProperty(definition, 'name', {
+        enumerable: true,
+        get() {
+          throw Object.create(null);
+        },
+      });
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config:
+          family === 'function'
+            ? { functions: [definition as never] }
+            : { tools: [{ type: 'function', function: definition as never }] },
+      });
+      const output =
+        family === 'function'
+          ? { name: 'get_weather', arguments: '{}' }
+          : [{ type: 'function', function: { name: 'get_weather', arguments: '{}' } }];
+      const type =
+        family === 'function' ? 'not-is-valid-function-call' : 'not-is-valid-openai-tools-call';
+
+      const result = await runAssertions({
+        provider,
+        providerResponse: { output },
+        test: { assert: [{ type }] },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0, reason });
+      expect(result.componentResults?.[0]).toMatchObject({ pass: false, score: 0, reason });
     });
 
     it('does not execute async tool schemas', async () => {
@@ -1977,29 +2155,7 @@ describe('OpenAI assertions', () => {
       expect(reads).toBe(0);
     });
 
-    it('ignores opaque unrelated raw items without invoking accessors or proxy traps', async () => {
-      let reads = 0;
-      let traps = 0;
-      const accessorItem = {};
-      Object.defineProperty(accessorItem, 'type', {
-        get() {
-          reads += 1;
-          return 'message';
-        },
-      });
-      const proxyItem = new Proxy(
-        {},
-        {
-          get() {
-            traps += 1;
-            throw new Error('hostile unrelated raw item');
-          },
-          getOwnPropertyDescriptor() {
-            traps += 1;
-            throw new Error('hostile unrelated raw item');
-          },
-        },
-      );
+    it('ignores safely classified unrelated raw items', async () => {
       const hiddenItem = {};
       Object.defineProperty(hiddenItem, 'type', { value: 'message', enumerable: false });
       const providerResponse = {
@@ -2007,10 +2163,9 @@ describe('OpenAI assertions', () => {
         raw: {
           output: [
             { type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' },
-            accessorItem,
-            proxyItem,
+            { type: 'reasoning', summary: [] },
+            { type: 'future_response_item', payload: 'unknown but classified' },
             hiddenItem,
-            new Uint8Array([1, 2, 3]),
           ],
         },
       };
@@ -2029,6 +2184,71 @@ describe('OpenAI assertions', () => {
 
       expect(positive).toMatchObject({ pass: true, score: 1 });
       expect(inverse).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it.each([
+      'accessor',
+      'proxy',
+    ] as const)('fails closed for an unclassifiable %s raw item without invoking it', async (kind) => {
+      let reads = 0;
+      let traps = 0;
+      const opaqueItem =
+        kind === 'accessor'
+          ? (() => {
+              const item = {};
+              Object.defineProperty(item, 'type', {
+                get() {
+                  reads += 1;
+                  return 'mcp_call';
+                },
+              });
+              return item;
+            })()
+          : new Proxy(
+              {},
+              {
+                get() {
+                  traps += 1;
+                  throw new Error('hostile raw item');
+                },
+                getOwnPropertyDescriptor() {
+                  traps += 1;
+                  throw new Error('hostile raw item');
+                },
+              },
+            );
+      const providerResponse = {
+        output: 'MCP Tool Result (search): ok',
+        raw: {
+          output: [
+            { type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' },
+            opaqueItem,
+          ],
+        },
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call response is malformed',
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'MCP tool call response is malformed',
+      });
       expect(reads).toBe(0);
       expect(traps).toBe(0);
     });
@@ -2107,6 +2327,35 @@ describe('OpenAI assertions', () => {
         expect(result.reason).toContain('malformed');
       }
       expect(traps).toBe(0);
+    });
+
+    it.each([
+      'metadata',
+      'raw',
+    ] as const)('handles a revoked Proxy %s provenance array without rejecting', async (source) => {
+      const { proxy, revoke } = Proxy.revocable([], {});
+      revoke();
+      const provenance =
+        source === 'metadata' ? { metadata: { mcpToolCalls: proxy } } : { raw: { output: proxy } };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: { output: 'MCP Tool Result (search): ok', ...provenance },
+          }),
+        ),
+      );
+
+      const reason =
+        source === 'metadata'
+          ? 'MCP tool call metadata is malformed'
+          : 'MCP tool call response is malformed';
+      expect(positive).toMatchObject({ pass: false, score: 0, reason });
+      expect(inverse).toMatchObject({ pass: true, score: 1, reason });
     });
 
     it('fails closed for a sparse structured provenance array', async () => {
@@ -2198,6 +2447,34 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('fails closed when a transform mutates custom-prototype state for %s', async (type, expectedPass) => {
+      const prototype = { state: 'before' };
+      const output = Object.create(prototype) as Record<string, unknown>;
+
+      const result = await runAssertion({
+        assertion: {
+          type,
+          transform: (value) => {
+            Object.getPrototypeOf(value as object).state = 'after';
+            return value;
+          },
+        },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          metadata: { mcpToolCalls: [{ name: 'search', status: 'success' }] },
+        },
+      });
+
+      expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+      expect(prototype.state).toBe('after');
+    });
+
+    it.each([
       'is-valid-openai-tools-call',
       'not-is-valid-openai-tools-call',
     ] as const)('%s hard-fails incomplete MCP provenance', async (type) => {
@@ -2220,6 +2497,71 @@ describe('OpenAI assertions', () => {
         score: 0,
         reason: 'MCP tool call provenance does not cover every tool call in the response',
       });
+    });
+
+    it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('keeps a known MCP failure decisive despite incomplete provenance for %s', async (type, expectedPass) => {
+      const result = await runAssertion({
+        assertion: { type },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'MCP Tool Error (search): denied',
+          metadata: {
+            mcpToolCalls: [{ name: 'search', status: 'error', error: 'denied' }],
+            mcpToolCallsComplete: false,
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        score: expectedPass ? 1 : 0,
+        reason: 'MCP tool call failed for search: denied',
+      });
+    });
+
+    it.each([
+      ['absent calls', undefined],
+      ['empty calls', []],
+    ] as const)('hard-fails explicit incomplete MCP provenance with %s', async (_name, calls) => {
+      const providerResponse = {
+        output: [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location":"Paris","unit":"Celsius"}',
+            },
+          },
+        ],
+        metadata: {
+          ...(calls === undefined ? {} : { mcpToolCalls: calls }),
+          mcpToolCallsComplete: false,
+        },
+      };
+
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse,
+          }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'MCP tool call provenance does not cover every tool call in the response',
+        });
+      }
     });
 
     it.each([

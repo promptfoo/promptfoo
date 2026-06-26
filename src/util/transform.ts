@@ -61,6 +61,25 @@ export function isProxyValue(value: unknown): boolean {
   );
 }
 
+function hasExpectedTransformPrototype(value: object, prototype: object | null): boolean {
+  if (Array.isArray(value)) {
+    return prototype === Array.prototype;
+  }
+  if (nodeUtilTypes.isMap(value)) {
+    return prototype === Map.prototype;
+  }
+  if (nodeUtilTypes.isSet(value)) {
+    return prototype === Set.prototype;
+  }
+  if (nodeUtilTypes.isDate(value)) {
+    return prototype === Date.prototype;
+  }
+  if (nodeUtilTypes.isRegExp(value)) {
+    return prototype === RegExp.prototype;
+  }
+  return prototype === null || prototype === Object.prototype;
+}
+
 function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>()): boolean {
   if (value === null || typeof value !== 'object' || seen.has(value)) {
     return false;
@@ -70,20 +89,21 @@ function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>())
   }
   seen.add(value);
 
-  if (
-    (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) ||
-    value instanceof ArrayBuffer ||
-    ArrayBuffer.isView(value)
-  ) {
+  if (nodeUtilTypes.isAnyArrayBuffer(value) || nodeUtilTypes.isArrayBufferView(value)) {
     return true;
   }
-  if (value instanceof Map) {
+
+  const prototype = Object.getPrototypeOf(value);
+  if (isProxyValue(prototype) || !hasExpectedTransformPrototype(value, prototype)) {
+    return true;
+  }
+  if (nodeUtilTypes.isMap(value)) {
     for (const [key, entryValue] of Map.prototype.entries.call(value)) {
       if (hasUnclonedTransformState(key, seen) || hasUnclonedTransformState(entryValue, seen)) {
         return true;
       }
     }
-  } else if (value instanceof Set) {
+  } else if (nodeUtilTypes.isSet(value)) {
     for (const entryValue of Set.prototype.values.call(value)) {
       if (hasUnclonedTransformState(entryValue, seen)) {
         return true;

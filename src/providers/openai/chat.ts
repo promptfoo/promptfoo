@@ -647,7 +647,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         name: string;
         status: 'error' | 'success';
       }> = [];
-      let mcpToolCallsComplete = true;
+      const emittedCallCount = (message.function_call ? 1 : 0) + (message.tool_calls?.length ?? 0);
+      let mcpToolCallsComplete = (functionCalls?.length ?? 0) === emittedCallCount;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;

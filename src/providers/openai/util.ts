@@ -807,7 +807,7 @@ function parseFunctionCall(output: string | object): OpenAiFunctionCall {
   return functionCall;
 }
 
-export function createFunctionCallValidator(
+function buildFunctionCallValidator(
   functions?: OpenAiFunction[],
   vars?: Record<string, VarValue>,
 ): (output: string | object) => void {
@@ -886,6 +886,32 @@ export function createFunctionCallValidator(
       );
     }
   };
+}
+
+function asFunctionToolCallValidationSetupError(
+  error: unknown,
+): FunctionToolCallValidationSetupError {
+  let message = 'Function call validation setup failed';
+  try {
+    const candidate = error instanceof Error ? error.message : String(error ?? '');
+    if (candidate.trim()) {
+      message = candidate;
+    }
+  } catch {
+    // Keep the stable fallback for hostile thrown values.
+  }
+  return new FunctionToolCallValidationSetupError(message);
+}
+
+export function createFunctionCallValidator(
+  functions?: OpenAiFunction[],
+  vars?: Record<string, VarValue>,
+): (output: string | object) => void {
+  try {
+    return buildFunctionCallValidator(functions, vars);
+  } catch (error) {
+    throw asFunctionToolCallValidationSetupError(error);
+  }
 }
 
 export function validateFunctionCall(

@@ -3,6 +3,8 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -129,6 +131,62 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  describe.each([
+    'concurrent',
+    'serial',
+  ] as const)('inverse trace assertion snapshot (%s dispatch)', (dispatchMode) => {
+    it.each([
+      ['trace-span-count', { pattern: '*', min: 2 }],
+      ['trace-span-duration', { pattern: '*', max: 50 }],
+      ['trace-error-spans', { pattern: '*', max_count: 0 }],
+    ] as const)('retains %s polarity before a sibling script mutates it', async (targetType, value) => {
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'failing-span',
+            name: 'api.call',
+            startTime: 0,
+            endTime: 100,
+            statusCode: 500,
+          },
+        ],
+      });
+      const run = () =>
+        runAssertions({
+          test: {
+            ...mockTest,
+            assert: [
+              {
+                type: 'javascript',
+                value: (_output: string, context: any) => {
+                  context.test.assert[1].type = `not-${targetType}`;
+                  return true;
+                },
+              },
+              { type: targetType, value },
+            ],
+          },
+          providerResponse: mockProviderResponse,
+          traceId: 'test-trace-id',
+        });
+
+      const result =
+        dispatchMode === 'serial'
+          ? await withProviderCallExecutionContext(
+              { providerCallQueue: new ProviderGroupedCallQueue() },
+              run,
+            )
+          : await run();
+
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: false,
+        score: 0,
+        assertion: { type: targetType },
+      });
+    });
+  });
 
   describe('javascript assertions with trace', () => {
     it('should treat ruby assertions as trace-aware', () => {

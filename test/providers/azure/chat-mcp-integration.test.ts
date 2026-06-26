@@ -342,6 +342,98 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     });
   });
 
+  it('preserves assistant content when MCP does not handle the emitted call', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'assistant summary',
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'ordinary_tool', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const response = await provider.callApi('Use a tool');
+
+    expect(response.output).toBe('assistant summary');
+    expect(response.metadata?.mcpToolCalls).toBeUndefined();
+    expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+  });
+
+  it('preserves unmatched raw tool calls for assertion validation', async () => {
+    (provider as any).config.tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'ordinary_tool',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ];
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'ordinary_tool', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const response = await provider.callApi('Use a tool');
+
+    expect(response.output).toEqual([
+      {
+        id: 'call_123',
+        type: 'function',
+        function: { name: 'ordinary_tool', arguments: '{}' },
+      },
+    ]);
+    const [positive, inverse] = await Promise.all(
+      (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+        runAssertion({
+          assertion: { type },
+          provider,
+          providerResponse: response,
+          test: { vars: {} },
+        }),
+      ),
+    );
+    expect(positive).toMatchObject({ pass: true, score: 1 });
+    expect(inverse).toMatchObject({ pass: false, score: 0 });
+    expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+  });
+
   it('preserves assistant content when the MCP response has an empty tool-call array', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
