@@ -52,23 +52,32 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                      | `false`                     |
 | `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning                                                                      | None                        |
 
-[1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
+[1]: /docs/code-scanning/cli#custom-guidance
 
 When `config-path` is omitted, the Action generates a temporary config from its severity, diff-scope, and guidance inputs. When `config-path` is set, that file supplies those settings and any corresponding Action inputs are ignored with a warning. The `api-host` input remains workflow-controlled in both modes.
 
 Only select config content from a trusted workflow or base revision. A config read from the pull request checkout can let the pull request weaken its own scan policy. For example, a workflow can materialize the file from the trusted base SHA before invoking the Action:
 
 ```yaml
+- name: Checkout code
+  uses: actions/checkout@v6
+  with:
+    fetch-depth: 0
+
 - name: Load trusted Code Scan config
   env:
-    CONFIG_REF: ${{ github.event.pull_request.base.sha || github.sha }}
-  run: git show "${CONFIG_REF}:.github/promptfoo-code-scan.yaml" > "${RUNNER_TEMP}/promptfoo-code-scan.yaml"
+    BASE_REF: ${{ github.base_ref }}
+  run: |
+    config_ref="$(git rev-parse "origin/${BASE_REF}")"
+    git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${config_ref}"
 
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v0
   with:
-    config-path: ${{ runner.temp }}/promptfoo-code-scan.yaml
+    config-path: ${{ runner.temp }}/promptfoo-code-scan-base/.github/promptfoo-code-scan.yaml
 ```
+
+The detached base worktree preserves relative `guidanceFile` paths. For `workflow_dispatch`, resolve the requested pull request's base SHA through the GitHub API rather than using the user-selected dispatch ref.
 
 ### Triggering Additional Scans
 

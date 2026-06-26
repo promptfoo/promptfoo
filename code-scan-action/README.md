@@ -12,7 +12,7 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
-Without `config-path`, the action generates scan policy from `min-severity`, `diffs-only`, and guidance inputs. With `config-path`, that explicit file supplies scan policy and those individual inputs are ignored with a warning. Keep the selected file workflow-controlled (for example, materialize it from the pull request's base SHA). The workflow-controlled `api-host` input remains pinned to `https://api.promptfoo.app` unless explicitly overridden.
+Without `config-path`, the action generates scan policy from `min-severity`, `diffs-only`, and guidance inputs. With `config-path`, that explicit file supplies scan policy and those individual inputs are ignored with a warning. Keep the selected file workflow-controlled (for example, use a detached worktree at the pull request's base SHA so relative files remain available). The workflow-controlled `api-host` input remains pinned to `https://api.promptfoo.app` unless explicitly overridden.
 
 ## Quick Start
 
