@@ -564,13 +564,14 @@ describe('cloud utils', () => {
       expect(result.commandLineOptions?.delay).toBeUndefined();
     });
 
-    it('should preserve schema-valid scalar prompt and test sources', async () => {
+    it('should canonicalize scalar providers and preserve scalar prompt and test sources', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
             config: {
-              providers: 'echo',
+              providers: providerId,
               prompts: 'file://prompt.txt',
               tests: 'file://tests.yaml',
             },
@@ -579,7 +580,7 @@ describe('cloud utils', () => {
 
       const result = await getEvalConfigFromCloud('eval-config-id');
 
-      expect(result.providers).toBe('echo');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
       expect(result.prompts).toBe('file://prompt.txt');
       expect(result.tests).toBe('file://tests.yaml');
     });

@@ -182,10 +182,9 @@ function normalizeCloudEvalProvider(provider: unknown): unknown {
   return `${CLOUD_PROVIDER_PREFIX}${provider}`;
 }
 
-function normalizeCloudEvalProviders(providers: unknown): unknown {
-  return Array.isArray(providers)
-    ? providers.map(normalizeCloudEvalProvider)
-    : normalizeCloudEvalProvider(providers);
+function normalizeCloudEvalProviders(providers: unknown): unknown[] {
+  const providerList = Array.isArray(providers) ? providers : [providers];
+  return providerList.map(normalizeCloudEvalProvider);
 }
 
 function normalizeCloudEvalPrompt(prompt: unknown): unknown {
