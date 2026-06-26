@@ -3,23 +3,18 @@ import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } f
 import { getShareAuthorizedBlob } from './index';
 import { type RemoteBlobUploadTarget, uploadBlobRemote } from './remoteUpload';
 
-export type RemoteBlobUploadCache = Map<string, Promise<boolean>>;
-
+export class RemoteBlobUploadCache extends Map<string, Promise<boolean>> {
+  readonly resultContexts = new Map<string, ShareBlobUploadContext[]>();
+}
 interface ShareBlobUploadContext {
   localEvalId: string;
   remoteEvalId: string;
   promptIdx?: number;
   testIdx?: number;
-  target?: RemoteBlobUploadTarget;
 }
 
-const resultContextsByCache = new WeakMap<
-  RemoteBlobUploadCache,
-  Map<string, ShareBlobUploadContext[]>
->();
-
 export function createRemoteBlobUploadCache(): RemoteBlobUploadCache {
-  return new Map();
+  return new RemoteBlobUploadCache();
 }
 
 // Key uploads by result-row coordinates, not just by hash: the remote records the
@@ -37,25 +32,10 @@ function getUploadCacheKey(hash: string, context: ShareBlobUploadContext): strin
   });
 }
 
-function getResultContexts(cache: RemoteBlobUploadCache): Map<string, ShareBlobUploadContext[]> {
-  let resultContexts = resultContextsByCache.get(cache);
-  if (!resultContexts) {
-    resultContexts = new Map();
-    resultContextsByCache.set(cache, resultContexts);
-  }
-  return resultContexts;
-}
-
-function withUploadTarget(
-  context: ShareBlobUploadContext,
-  target?: RemoteBlobUploadTarget,
-): ShareBlobUploadContext {
-  return target ? { ...context, target } : context;
-}
-
 async function uploadAuthorizedBlob(
   hash: string,
   context: ShareBlobUploadContext,
+  target?: RemoteBlobUploadTarget,
 ): Promise<boolean> {
   try {
     const blob = await getShareAuthorizedBlob(hash, context.localEvalId);
@@ -70,8 +50,8 @@ async function uploadAuthorizedBlob(
       location: 'share',
       kind: blob.metadata.mimeType.split('/', 1)[0],
     };
-    const result = context.target
-      ? await uploadBlobRemote(blob.data, blob.metadata.mimeType, remoteContext, context.target)
+    const result = target
+      ? await uploadBlobRemote(blob.data, blob.metadata.mimeType, remoteContext, target)
       : await uploadBlobRemote(blob.data, blob.metadata.mimeType, remoteContext);
 
     if (!result) {
@@ -99,6 +79,7 @@ function uploadBlobForShare(
   hash: string,
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
+  target?: RemoteBlobUploadTarget,
 ): Promise<boolean> {
   const cacheKey = getUploadCacheKey(hash, context);
   let pending = cache.get(cacheKey);
@@ -106,7 +87,7 @@ function uploadBlobForShare(
     // Cache the whole authorize-and-upload flow synchronously so concurrent and
     // repeated references that share a cache key (same blob, same row coordinates)
     // reuse one authorization check and one upload without collapsing row provenance.
-    pending = uploadAuthorizedBlob(hash, context);
+    pending = uploadAuthorizedBlob(hash, context, target);
     cache.set(cacheKey, pending);
   }
   return pending;
@@ -123,7 +104,7 @@ export async function uploadBlobRefsForShare(
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
   for (const hash of hashes) {
-    await uploadBlobForShare(hash, cache, withUploadTarget(context, target));
+    await uploadBlobForShare(hash, cache, context, target);
   }
 }
 
@@ -136,13 +117,12 @@ export function recordResultBlobRefsForShare(
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  const resultContexts = getResultContexts(cache);
   for (const hash of hashes) {
-    const contexts = resultContexts.get(hash) ?? [];
+    const contexts = cache.resultContexts.get(hash) ?? [];
     const key = getUploadCacheKey(hash, context);
     if (!contexts.some((candidate) => getUploadCacheKey(hash, candidate) === key)) {
       contexts.push(context);
-      resultContexts.set(hash, contexts);
+      cache.resultContexts.set(hash, contexts);
     }
   }
 }
@@ -151,9 +131,9 @@ export async function uploadRecordedResultBlobRefsForShare(
   cache: RemoteBlobUploadCache,
   target?: RemoteBlobUploadTarget,
 ): Promise<void> {
-  for (const [hash, contexts] of getResultContexts(cache)) {
+  for (const [hash, contexts] of cache.resultContexts) {
     for (const context of contexts) {
-      await uploadBlobForShare(hash, cache, withUploadTarget(context, target));
+      await uploadBlobForShare(hash, cache, context, target);
     }
   }
 }
@@ -168,11 +148,10 @@ export async function uploadTraceBlobRefsForShare(
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  const resultContexts = getResultContexts(cache);
   for (const hash of hashes) {
-    const contexts = resultContexts.get(hash);
+    const contexts = cache.resultContexts.get(hash);
     for (const uploadContext of contexts?.length ? contexts : [context]) {
-      await uploadBlobForShare(hash, cache, withUploadTarget(uploadContext, target));
+      await uploadBlobForShare(hash, cache, uploadContext, target);
     }
   }
 }
