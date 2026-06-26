@@ -31,10 +31,13 @@ describe('Azure chat redaction integration', () => {
         'server-error',
         'stream',
         'refusal-audio',
+        'refusal-content',
+        'refusal-calls',
         'filtered-refusal',
         'refusal',
         'filtered-audio',
         'audio',
+        'untrusted-metadata',
         'content-filter',
         'prompt-filter-error',
         'soft-rate-limit',
@@ -142,6 +145,33 @@ describe('Azure chat redaction integration', () => {
         );
         return;
       }
+      if (mode === 'untrusted-metadata') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: { role: 'assistant', content: 'safe metadata output' },
+                finish_reason: 'stop',
+                logprobs: {
+                  content: [{ token: 'safe', logprob: 'logprob-body-secret-sentinel' }],
+                },
+              },
+            ],
+            usage: {
+              total_tokens: 0.5,
+              prompt_tokens: Number.MAX_SAFE_INTEGER + 1,
+              completion_tokens: 'completion-usage-body-secret-sentinel',
+              completion_tokens_details: {
+                reasoning_tokens: 0.25,
+                accepted_prediction_tokens: 'accepted-usage-body-secret-sentinel',
+                rejected_prediction_tokens: -1,
+              },
+            },
+          }),
+        );
+        return;
+      }
       if (mode === 'refusal') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(
@@ -177,6 +207,52 @@ describe('Azure chat redaction integration', () => {
                     data: 'refusal-audio-data-secret-sentinel',
                     transcript: 'refusal-audio-transcript-secret-sentinel',
                   },
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: {},
+          }),
+        );
+        return;
+      }
+      if (mode === 'refusal-content') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'refusal-content-body-secret-sentinel',
+                  refusal: 'safe refusal output',
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: {},
+          }),
+        );
+        return;
+      }
+      if (mode === 'refusal-calls') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  refusal: 'safe refusal output',
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'hidden_refusal_call',
+                        arguments: 'refusal-call-body-secret-sentinel',
+                      },
+                    },
+                  ],
                 },
                 finish_reason: 'stop',
               },
@@ -343,9 +419,19 @@ describe('Azure chat redaction integration', () => {
             {
               message: { content: 'safe success output', tool_calls: [] },
               finish_reason: 'stop',
+              logprobs: { content: [{ token: 'safe', logprob: -1.25 }] },
             },
           ],
-          usage: { total_tokens: 3, prompt_tokens: 2, completion_tokens: 1 },
+          usage: {
+            total_tokens: 3,
+            prompt_tokens: 2,
+            completion_tokens: 1,
+            completion_tokens_details: {
+              reasoning_tokens: 4,
+              accepted_prediction_tokens: 5,
+              rejected_prediction_tokens: 6,
+            },
+          },
         }),
       );
     });
@@ -398,10 +484,47 @@ describe('Azure chat redaction integration', () => {
       }),
     );
 
-    expect(first).toMatchObject({ output: 'safe success output', cached: false });
-    expect(second).toMatchObject({ output: 'safe success output', cached: true });
+    expect(first).toMatchObject({
+      output: 'safe success output',
+      cached: false,
+      logProbs: [-1.25],
+      tokenUsage: {
+        total: 3,
+        prompt: 2,
+        completion: 1,
+        completionDetails: { reasoning: 4, acceptedPrediction: 5, rejectedPrediction: 6 },
+      },
+    });
+    expect(second).toMatchObject({
+      output: 'safe success output',
+      cached: true,
+      logProbs: [-1.25],
+      tokenUsage: { total: 3, cached: 3 },
+    });
     expect(requestCounts.get('success')).toBe(previousRequests + 1);
     expect(sawSilentHeader).toBe(false);
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
+  it('omits malformed numeric metadata and never publishes it to cache', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider();
+    const previousRequests = requestCounts.get('untrusted-metadata') ?? 0;
+
+    const results = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-untrusted-metadata-${Date.now()}`, async () => [
+        await provider.callApi('untrusted-metadata-prompt-secret-sentinel'),
+        await provider.callApi('untrusted-metadata-prompt-secret-sentinel'),
+      ]),
+    );
+
+    for (const result of results) {
+      expect(result).toMatchObject({ output: 'safe metadata output', cached: false });
+      expect(result.tokenUsage).toEqual({});
+      expect(result.logProbs).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('secret-sentinel');
+    }
+    expect(requestCounts.get('untrusted-metadata')).toBe(previousRequests + 2);
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 
@@ -466,6 +589,8 @@ describe('Azure chat redaction integration', () => {
     const previousAudioRequests = requestCounts.get('filtered-audio') ?? 0;
     const previousRefusalRequests = requestCounts.get('filtered-refusal') ?? 0;
     const previousRefusalAudioRequests = requestCounts.get('refusal-audio') ?? 0;
+    const previousRefusalContentRequests = requestCounts.get('refusal-content') ?? 0;
+    const previousRefusalCallRequests = requestCounts.get('refusal-calls') ?? 0;
     const previousHiddenChoiceRequests = requestCounts.get('hidden-choice') ?? 0;
 
     const audioResults = await withCacheEnabled(true, () =>
@@ -484,6 +609,18 @@ describe('Azure chat redaction integration', () => {
       withCacheNamespace(`azure-redaction-refusal-audio-${Date.now()}`, async () => [
         await provider.callApi('refusal-audio-prompt-secret-sentinel'),
         await provider.callApi('refusal-audio-prompt-secret-sentinel'),
+      ]),
+    );
+    const refusalContentResults = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-refusal-content-${Date.now()}`, async () => [
+        await provider.callApi('refusal-content-prompt-secret-sentinel'),
+        await provider.callApi('refusal-content-prompt-secret-sentinel'),
+      ]),
+    );
+    const refusalCallResults = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-refusal-calls-${Date.now()}`, async () => [
+        await provider.callApi('refusal-calls-prompt-secret-sentinel'),
+        await provider.callApi('refusal-calls-prompt-secret-sentinel'),
       ]),
     );
     const hiddenChoiceResults = await withCacheEnabled(true, () =>
@@ -506,7 +643,11 @@ describe('Azure chat redaction integration', () => {
     }
     expect(requestCounts.get('filtered-audio')).toBe(previousAudioRequests + 2);
     expect(requestCounts.get('filtered-refusal')).toBe(previousRefusalRequests + 2);
-    for (const result of refusalAudioResults) {
+    for (const result of [
+      ...refusalAudioResults,
+      ...refusalContentResults,
+      ...refusalCallResults,
+    ]) {
       expect(result).toMatchObject({
         output: 'safe refusal output',
         cached: false,
@@ -517,6 +658,8 @@ describe('Azure chat redaction integration', () => {
       expect(JSON.stringify(result)).not.toContain('secret-sentinel');
     }
     expect(requestCounts.get('refusal-audio')).toBe(previousRefusalAudioRequests + 2);
+    expect(requestCounts.get('refusal-content')).toBe(previousRefusalContentRequests + 2);
+    expect(requestCounts.get('refusal-calls')).toBe(previousRefusalCallRequests + 2);
     for (const result of hiddenChoiceResults) {
       expect(result).toMatchObject({ output: 'safe first choice', cached: false });
       expect(JSON.stringify(result)).not.toContain('secret-sentinel');

@@ -81,12 +81,81 @@ function getSafeAzureAudioFormat(format: unknown): string | undefined {
   return typeof format === 'string' && SAFE_AUDIO_FORMATS.has(format) ? format : undefined;
 }
 
-function hasAzureChatAudioValue(message: unknown): boolean {
-  return Boolean(
-    message &&
-      typeof message === 'object' &&
-      !Array.isArray(message) &&
-      (message as Record<string, unknown>).audio != null,
+function getSafeAzureTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function getAzureChatTokenUsage(usage: unknown, cached: boolean): ProviderResponse['tokenUsage'] {
+  const record =
+    usage && typeof usage === 'object' && !Array.isArray(usage)
+      ? (usage as Record<string, unknown>)
+      : {};
+  const total = getSafeAzureTokenCount(record.total_tokens);
+  if (cached) {
+    return {
+      ...(total === undefined ? {} : { cached: total, total }),
+    };
+  }
+
+  const prompt = getSafeAzureTokenCount(record.prompt_tokens);
+  const completion = getSafeAzureTokenCount(record.completion_tokens);
+  const details =
+    record.completion_tokens_details &&
+    typeof record.completion_tokens_details === 'object' &&
+    !Array.isArray(record.completion_tokens_details)
+      ? (record.completion_tokens_details as Record<string, unknown>)
+      : undefined;
+  const reasoning = getSafeAzureTokenCount(details?.reasoning_tokens);
+  const acceptedPrediction = getSafeAzureTokenCount(details?.accepted_prediction_tokens);
+  const rejectedPrediction = getSafeAzureTokenCount(details?.rejected_prediction_tokens);
+  const completionDetails = {
+    ...(reasoning === undefined ? {} : { reasoning }),
+    ...(acceptedPrediction === undefined ? {} : { acceptedPrediction }),
+    ...(rejectedPrediction === undefined ? {} : { rejectedPrediction }),
+  };
+
+  return {
+    ...(total === undefined ? {} : { total }),
+    ...(prompt === undefined ? {} : { prompt }),
+    ...(completion === undefined ? {} : { completion }),
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
+  };
+}
+
+function isAzureChatUsageCacheable(usage: unknown): boolean {
+  if (usage == null) {
+    return true;
+  }
+  if (typeof usage !== 'object' || Array.isArray(usage)) {
+    return false;
+  }
+
+  const record = usage as Record<string, unknown>;
+  const tokenFields = ['total_tokens', 'prompt_tokens', 'completion_tokens'] as const;
+  if (
+    tokenFields.some(
+      (field) => field in record && getSafeAzureTokenCount(record[field]) === undefined,
+    )
+  ) {
+    return false;
+  }
+
+  const details = record.completion_tokens_details;
+  if (details == null) {
+    return true;
+  }
+  if (typeof details !== 'object' || Array.isArray(details)) {
+    return false;
+  }
+  const detailRecord = details as Record<string, unknown>;
+  const detailFields = [
+    'reasoning_tokens',
+    'accepted_prediction_tokens',
+    'rejected_prediction_tokens',
+  ] as const;
+  return detailFields.every(
+    (field) =>
+      !(field in detailRecord) || getSafeAzureTokenCount(detailRecord[field]) !== undefined,
   );
 }
 
@@ -166,6 +235,57 @@ function getAzureChatCalls(
   return undefined;
 }
 
+function getAzureChatLogProbs(choice: Record<string, any> | null): number[] | undefined {
+  const content = choice?.logprobs?.content;
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+  const logProbs = content.map((entry) =>
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? (entry as Record<string, unknown>).logprob
+      : undefined,
+  );
+  return logProbs.every(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  )
+    ? logProbs
+    : undefined;
+}
+
+function isAzureChatLogProbsCacheable(choice: Record<string, any> | null): boolean {
+  const logProbs = choice?.logprobs;
+  if (logProbs == null) {
+    return true;
+  }
+  if (typeof logProbs !== 'object' || Array.isArray(logProbs)) {
+    return false;
+  }
+  const content = logProbs.content;
+  return content == null || getAzureChatLogProbs(choice) !== undefined;
+}
+
+function isAzureChatRefusalCacheable(message: unknown): boolean {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return true;
+  }
+  const record = message as Record<string, unknown>;
+  if (record.refusal == null || record.refusal === '') {
+    return true;
+  }
+  if (getAzureChatRefusal(message) === undefined) {
+    return false;
+  }
+
+  const toolCalls = record.tool_calls;
+  const hasToolCalls = toolCalls != null && (!Array.isArray(toolCalls) || toolCalls.length > 0);
+  return (
+    (record.content == null || record.content === '') &&
+    record.audio == null &&
+    !hasToolCalls &&
+    record.function_call == null
+  );
+}
+
 function getAzureChatChoice(data: unknown, requireAssistant: boolean): Record<string, any> | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return null;
@@ -198,7 +318,8 @@ function isAzureChatChoiceCacheable(choice: Record<string, any> | null): boolean
   const message = choice?.message;
   return (
     normalizeFinishReason(choice?.finish_reason) !== FINISH_REASON_MAP.content_filter &&
-    !(getAzureChatRefusal(message) !== undefined && hasAzureChatAudioValue(message)) &&
+    isAzureChatRefusalCacheable(message) &&
+    isAzureChatLogProbsCacheable(choice) &&
     isAzureChatChoiceProcessable(choice)
   );
 }
@@ -223,6 +344,7 @@ function isAzureChatResponseCacheable(data: unknown, requireAssistant: boolean):
     !response.error &&
       Array.isArray(response.choices) &&
       !hasAzureContentFilterSystemError(response) &&
+      isAzureChatUsageCacheable(response.usage) &&
       response.choices.every((candidate: any) => isAzureChatChoiceCacheable(candidate)) &&
       isAzureChatChoiceProcessable(choice),
   );
@@ -827,33 +949,16 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         }
 
-        logProbs = choice?.logprobs?.content?.map(
-          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-        );
+        logProbs = getAzureChatLogProbs(choice);
       }
+
+      const tokenUsage = data?.error
+        ? undefined
+        : getAzureChatTokenUsage(data?.usage, fetchResult.cached);
 
       return {
         output,
-        tokenUsage: data?.error
-          ? undefined
-          : fetchResult.cached
-            ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-            : {
-                total: data.usage?.total_tokens,
-                prompt: data.usage?.prompt_tokens,
-                completion: data.usage?.completion_tokens,
-                ...(data.usage?.completion_tokens_details
-                  ? {
-                      completionDetails: {
-                        reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                        acceptedPrediction:
-                          data.usage.completion_tokens_details.accepted_prediction_tokens,
-                        rejectedPrediction:
-                          data.usage.completion_tokens_details.rejected_prediction_tokens,
-                      },
-                    }
-                  : {}),
-              },
+        tokenUsage,
         cached: fetchResult.cached,
         latencyMs: fetchResult.latencyMs,
         logProbs,
@@ -863,8 +968,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           : calculateAzureCost(
               this.deploymentName,
               config,
-              data.usage?.prompt_tokens,
-              data.usage?.completion_tokens,
+              getSafeAzureTokenCount(data?.usage?.prompt_tokens),
+              getSafeAzureTokenCount(data?.usage?.completion_tokens),
             ),
         ...(isRefusal ? { isRefusal: true } : {}),
         ...(audio ? { audio } : {}),
