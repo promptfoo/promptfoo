@@ -5,11 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import {
-  getRuntimeNoticeReminderIntervalDays,
-  hasRuntimeSupportEnded,
-  parseUtcMidnight,
-} from '@app/utils/runtimeCompatibility';
+import { hasRuntimeSupportEnded, parseUtcMidnight } from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
@@ -25,10 +21,6 @@ function formatRemovalDate(removalDate: string): string {
     timeZone: 'UTC',
     year: 'numeric',
   }).format(new Date(timestamp));
-}
-
-function getReminderLabel(reminderIntervalDays: 1 | 7): string {
-  return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
 }
 
 export default function UpdateBanner() {
@@ -67,7 +59,9 @@ export default function UpdateBanner() {
     !!versionInfo?.updateAvailable &&
     !updateBlockedByRuntime;
   const shouldShowBanner = !loading && !error && (shouldShowRuntimeNotice || shouldShowUpdate);
-  const dismissLabel = "Don't remind me of this version";
+  const dismissLabel = activeRuntimeNotice
+    ? 'Dismiss Node.js runtime notice'
+    : "Don't remind me of this version";
 
   useEffect(() => {
     if (!shouldShowBanner) {
@@ -173,7 +167,7 @@ export default function UpdateBanner() {
   const handleDismiss = () => {
     if (activeRuntimeNotice) {
       recordEvent('feature_used', {
-        action: 'remind_later',
+        action: 'dismissed',
         feature: 'runtime_compatibility_notice',
         noticeId: activeRuntimeNotice.id,
         runtimeMajor: activeRuntimeNotice.currentMajor,
@@ -198,7 +192,7 @@ export default function UpdateBanner() {
     });
   };
 
-  // Render only the highest-priority active notice. A snoozed runtime notice may
+  // Render only the highest-priority active notice. A dismissed runtime notice may
   // yield to an ordinary update while that update is still compatible.
   if (!shouldShowBanner || !versionInfo) {
     return null;
@@ -230,8 +224,7 @@ export default function UpdateBanner() {
             <span className="text-sm text-muted-foreground">
               This Promptfoo server is running {activeRuntimeNotice.currentVersion}. Upgrade to
               Node.js {activeRuntimeNotice.minimumVersion} or newer; Node.js{' '}
-              {activeRuntimeNotice.recommendedVersion} is recommended. Upgrading also lets promptfoo
-              move to Node&apos;s built-in SQLite, removing a platform-specific database binding.
+              {activeRuntimeNotice.recommendedVersion} is recommended.
             </span>
           </div>
         ) : (
@@ -290,31 +283,20 @@ export default function UpdateBanner() {
                 : 'Copy Update Command'}
           </Button>
         )}
-        {activeRuntimeNotice ? (
-          <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
-            {getReminderLabel(
-              getRuntimeNoticeReminderIntervalDays(
-                activeRuntimeNotice.removalDate,
-                runtimePolicyUpdatedAt,
-              ),
-            )}
-          </Button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleDismiss}
-            aria-label={dismissLabel}
-            title={dismissLabel}
-            className={cn(
-              'inline-flex size-6 items-center justify-center rounded-md',
-              'text-current opacity-70 hover:opacity-100',
-              'hover:bg-black/10 dark:hover:bg-white/10',
-              'cursor-pointer transition-colors',
-            )}
-          >
-            <X className="size-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleDismiss}
+          aria-label={dismissLabel}
+          title={dismissLabel}
+          className={cn(
+            'inline-flex size-6 items-center justify-center rounded-md',
+            'text-current opacity-70 hover:opacity-100',
+            'hover:bg-black/10 dark:hover:bg-white/10',
+            'cursor-pointer transition-colors',
+          )}
+        >
+          <X className="size-4" />
+        </button>
       </div>
     </Alert>
   );

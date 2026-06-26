@@ -1,7 +1,6 @@
 export interface GlobalConfig {
   id?: string;
   hasHarmfulRedteamConsent?: boolean;
-  notices?: Record<string, { lastShownAt?: string }>;
   account?: {
     email?: string;
     emailNeedsValidation?: boolean;

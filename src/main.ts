@@ -61,8 +61,7 @@ async function main() {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  // Keep startup messaging focused: runtime reminders take priority, while compatible update
-  // checks resume without duplicating post-cutoff runtime guidance.
+  // Avoid duplicating post-cutoff runtime guidance in the ordinary update check.
   await runStartupRuntimeAndUpdateChecks({ checkForUpdates });
   await runDbMigrations({ suppressBindingErrorLogging: true });
 

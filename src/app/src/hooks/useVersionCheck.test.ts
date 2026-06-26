@@ -168,8 +168,7 @@ describe('useVersionCheck', () => {
     expect(result.current.dismissed).toBe(true);
   });
 
-  it('should snooze a runtime notice for seven days before the final notice phase', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-22T12:00:00.000Z'));
+  it('should persist a runtime notice dismissal by notice id', async () => {
     const mockVersionInfo = {
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
@@ -199,9 +198,9 @@ describe('useVersionCheck', () => {
       result.current.dismiss();
     });
 
-    expect(
-      localStorage.getItem('promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30'),
-    ).toBe('2026-06-22T12:00:00.000Z');
+    expect(localStorage.getItem('promptfoo:runtime-notice:dismissed')).toBe(
+      'node20-removal-2026-07-30',
+    );
     expect(result.current.dismissed).toBe(true);
   });
 
@@ -247,113 +246,6 @@ describe('useVersionCheck', () => {
     expect(result.current.runtimeNoticeDismissed).toBe(true);
   });
 
-  it('should apply the shorter reminder cadence when the final notice phase begins', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-17T12:00:00.000Z'));
-    localStorage.setItem(
-      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
-      '2026-07-15T12:00:00.000Z',
-    );
-    mockCallApiResponse({
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      updateBlockedByRuntime: false,
-      runtimeNotice: {
-        id: 'node20-removal-2026-07-30',
-        kind: 'runtime_deprecation',
-        runtime: 'node',
-        currentVersion: 'v20.20.2',
-        currentMajor: 20,
-        removalDate: '2026-07-30',
-        minimumVersion: '22.22.0',
-        recommendedVersion: '24 LTS',
-        documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-      },
-    });
-
-    const { result } = renderHook(() => useVersionCheck());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-    expect(result.current.dismissed).toBe(false);
-  });
-
-  it('should shorten a stale snooze at the final notice boundary when refresh fails', async () => {
-    const timers = useTestTimers();
-    timers.setSystemTime(new Date('2026-07-15T12:00:00.000Z'));
-    const runtimeNotice = {
-      id: 'node20-removal-2026-07-30',
-      kind: 'runtime_deprecation' as const,
-      runtime: 'node' as const,
-      currentVersion: 'v20.20.2',
-      currentMajor: 20,
-      removalDate: '2026-07-30',
-      minimumVersion: '22.22.0',
-      recommendedVersion: '24 LTS',
-      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-    };
-    localStorage.setItem(
-      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
-      '2026-07-15T00:00:00.000Z',
-    );
-    mockCallApiResponseOnce({
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      updateBlockedByRuntime: false,
-      runtimeNotice,
-    });
-    rejectCallApiOnce(new Error('Policy refresh failed'));
-
-    const { result, unmount } = renderHook(() => useVersionCheck());
-    await act(async () => {});
-    expect(result.current.runtimeNoticeDismissed).toBe(true);
-
-    await act(async () => {
-      await timers.advanceByAsync(12 * 60 * 60 * 1000);
-    });
-
-    expect(callApi).toHaveBeenCalledTimes(2);
-    expect(result.current.runtimeNoticeDismissed).toBe(false);
-    unmount();
-  });
-
-  it('should re-enable a snoozed runtime notice without reloading the page', async () => {
-    const timers = useTestTimers();
-    timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
-    const runtimeNotice = {
-      id: 'node20-removal-2026-07-30',
-      kind: 'runtime_deprecation' as const,
-      runtime: 'node' as const,
-      currentVersion: 'v20.20.2',
-      currentMajor: 20,
-      removalDate: '2026-07-30',
-      minimumVersion: '22.22.0',
-      recommendedVersion: '24 LTS',
-      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-    };
-    mockCallApiResponse({
-      currentVersion: '1.0.0',
-      latestVersion: '1.1.0',
-      updateAvailable: true,
-      updateBlockedByRuntime: false,
-      runtimeNotice,
-    });
-
-    const { result } = renderHook(() => useVersionCheck());
-    await act(async () => {});
-    act(() => result.current.dismissRuntimeNotice?.());
-    expect(result.current.runtimeNoticeDismissed).toBe(true);
-
-    await act(async () => {
-      await timers.advanceByAsync(7 * 24 * 60 * 60 * 1000);
-    });
-
-    expect(callApi).toHaveBeenCalledTimes(2);
-    expect(result.current.runtimeNoticeDismissed).toBe(false);
-  });
-
   it('should refetch runtime policy when the support cutoff is reached', async () => {
     const timers = useTestTimers();
     timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
@@ -395,7 +287,7 @@ describe('useVersionCheck', () => {
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
-  it('should schedule the cutoff refresh from the current time after a later dismissal', async () => {
+  it('should keep the cutoff refresh scheduled after a dismissal', async () => {
     const timers = useTestTimers();
     timers.setSystemTime(new Date('2026-07-29T00:00:00.000Z'));
     const runtimeNotice = {
@@ -535,10 +427,7 @@ describe('useVersionCheck', () => {
       recommendedVersion: '24 LTS',
       documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
     };
-    localStorage.setItem(
-      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
-      '2026-07-29T12:00:00.000Z',
-    );
+    localStorage.setItem('promptfoo:runtime-notice:dismissed', 'node20-removal-2026-07-30');
     mockCallApiResponseOnce({
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
@@ -569,64 +458,42 @@ describe('useVersionCheck', () => {
     expect(callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('should preserve a retry after the refresh effect is replaced', async () => {
+  it('should retry a failed cutoff refresh', async () => {
     const timers = useTestTimers();
-    timers.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
-    const runtimeNotice = {
-      id: 'node20-removal-2026-07-30',
-      kind: 'runtime_deprecation' as const,
-      runtime: 'node' as const,
-      currentVersion: 'v20.20.2',
-      currentMajor: 20,
-      removalDate: '2026-07-30',
-      minimumVersion: '22.22.0',
-      recommendedVersion: '24 LTS',
-      documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-    };
-    localStorage.setItem(
-      'promptfoo:runtime-notice:lastDismissedAt:node20-removal-2026-07-30',
-      '2026-06-15T12:01:00.000Z',
-    );
+    timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    const runtimePolicy = { supportEndDate: '2026-07-30' };
     mockCallApiResponseOnce({
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
       updateAvailable: true,
       updateBlockedByRuntime: false,
-      runtimeNotice,
+      runtimeNotice: null,
+      runtimePolicy,
     });
-    let rejectRefresh!: (reason?: unknown) => void;
-    getCallApiMock().mockImplementationOnce(
-      () =>
-        new Promise<Response>((_resolve, reject) => {
-          rejectRefresh = reject;
-        }),
-    );
+    rejectCallApiOnce(new Error('Policy refresh failed'));
     mockCallApiResponseOnce({
       currentVersion: '1.0.0',
       latestVersion: '1.1.0',
-      updateAvailable: true,
-      updateBlockedByRuntime: false,
-      runtimeNotice,
+      updateAvailable: false,
+      updateBlockedByRuntime: true,
+      runtimeNotice: null,
+      runtimePolicy,
     });
 
     const { result } = renderHook(() => useVersionCheck());
     await act(async () => {});
-    expect(result.current.runtimeNoticeDismissed).toBe(true);
 
     await act(async () => {
       await timers.advanceByAsync(60 * 1000);
     });
     expect(callApi).toHaveBeenCalledTimes(2);
-    expect(result.current.runtimeNoticeDismissed).toBe(false);
 
-    await act(async () => {
-      rejectRefresh(new Error('Policy refresh failed'));
-    });
     await act(async () => {
       await timers.advanceByAsync(5 * 60 * 1000);
     });
 
     expect(callApi).toHaveBeenCalledTimes(3);
+    expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
   });
 
   it('should only call the API once on mount and not refresh', async () => {

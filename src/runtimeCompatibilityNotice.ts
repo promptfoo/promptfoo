@@ -1,12 +1,6 @@
 import chalk from 'chalk';
 import { getEnvBool, getEnvString, isNonInteractive } from './envars';
-import { readGlobalConfig, writeGlobalConfig } from './globalConfig/globalConfig';
-import logger from './logger';
-import {
-  getRuntimeCompatibilityNotice,
-  hasNode20SupportEnded,
-  shouldShowRuntimeNotice,
-} from './runtimeCompatibility';
+import { getRuntimeCompatibilityNotice, hasNode20SupportEnded } from './runtimeCompatibility';
 import telemetry from './telemetry';
 import {
   NODE_20_SUPPORT_END_DATE_LABEL,
@@ -40,8 +34,6 @@ export function formatRuntimeCompatibilityNotice(
     `Detected: ${notice.currentVersion}`,
     `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`,
     '',
-    "Upgrading also lets promptfoo move to Node's built-in SQLite, removing a platform-specific database binding.",
-    '',
     `Upgrade guide: ${notice.documentationUrl}`,
   ].join('\n');
 }
@@ -53,20 +45,9 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
 
   const currentVersion = options.currentVersion ?? process.version;
   const now = options.now ?? new Date();
-  const notice = getRuntimeCompatibilityNotice(currentVersion, { now });
+  const notice = getRuntimeCompatibilityNotice(currentVersion);
   if (!notice) {
     return false;
-  }
-
-  try {
-    const config = readGlobalConfig();
-    if (!shouldShowRuntimeNotice(config.notices?.[notice.id]?.lastShownAt, now)) {
-      return false;
-    }
-  } catch (error) {
-    logger.debug('Unable to read runtime notice state; showing the notice without persistence', {
-      error,
-    });
   }
 
   const compact = options.nonInteractive ?? isNonInteractive();
@@ -79,25 +60,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
     surface: 'cli_startup',
     variant: compact ? 'compact' : 'full',
   });
-
-  try {
-    // Re-read immediately before writing so startup output and telemetry do not widen the
-    // lost-update window for unrelated account, cloud, or consent settings.
-    const latestConfig = readGlobalConfig();
-    writeGlobalConfig({
-      ...latestConfig,
-      notices: {
-        ...latestConfig.notices,
-        [notice.id]: { lastShownAt: now.toISOString() },
-      },
-    });
-    return true;
-  } catch (error) {
-    logger.debug('Unable to persist runtime notice state', { error });
-    // The warning was displayed, but it will recur because no reminder state was saved. Let the
-    // caller continue compatible update checks instead of suppressing them indefinitely.
-    return false;
-  }
+  return true;
 }
 
 interface StartupCheckDependencies {
@@ -107,11 +70,9 @@ interface StartupCheckDependencies {
 }
 
 /**
- * Startup precedence for the CLI entry point: show the Node.js runtime reminder first, and only
- * fall back to the ordinary update check when the reminder was not shown this run (disabled,
- * throttled, or persistence failed). Whether a runtime notice applies is passed through so
- * checkForUpdates can suppress a duplicate post-cutoff "update blocked" warning while still running
- * the check. Collaborators are injectable for testing; production passes only checkForUpdates.
+ * Show the Node.js runtime notice, then run the ordinary update check. When the notice was shown,
+ * checkForUpdates can suppress a duplicate post-cutoff "update blocked" warning. Collaborators are
+ * injectable for testing; production passes only checkForUpdates.
  */
 export async function runStartupRuntimeAndUpdateChecks({
   checkForUpdates,
@@ -119,8 +80,6 @@ export async function runStartupRuntimeAndUpdateChecks({
   runtimeNoticeApplies = () => getRuntimeCompatibilityNotice() !== null,
 }: StartupCheckDependencies): Promise<void> {
   const noticeApplies = runtimeNoticeApplies();
-  if (warnAboutRuntime()) {
-    return;
-  }
-  await checkForUpdates({ suppressRuntimeBlockedWarning: noticeApplies });
+  const noticeShown = warnAboutRuntime();
+  await checkForUpdates({ suppressRuntimeBlockedWarning: noticeApplies && noticeShown });
 }

@@ -5,16 +5,6 @@ vi.mock('../src/envars', () => ({
   getEnvString: vi.fn(),
   isNonInteractive: vi.fn(),
 }));
-vi.mock('../src/globalConfig/globalConfig', () => ({
-  readGlobalConfig: vi.fn(),
-  writeGlobalConfig: vi.fn(),
-}));
-vi.mock('../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
 vi.mock('../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -22,7 +12,6 @@ vi.mock('../src/telemetry', () => ({
 }));
 
 import { getEnvBool, getEnvString, isNonInteractive } from '../src/envars';
-import { readGlobalConfig, writeGlobalConfig } from '../src/globalConfig/globalConfig';
 import { getRuntimeCompatibilityNotice } from '../src/runtimeCompatibility';
 import {
   formatRuntimeCompatibilityNotice,
@@ -39,7 +28,6 @@ describe('runtime compatibility CLI notice', () => {
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(isNonInteractive).mockReturnValue(false);
-    vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-installation' });
   });
 
   afterEach(() => {
@@ -47,7 +35,7 @@ describe('runtime compatibility CLI notice', () => {
     vi.resetAllMocks();
   });
 
-  it('shows and persists the full notice for an interactive Node.js 20 run', () => {
+  it('shows the full notice for an interactive Node.js 20 run', () => {
     const now = new Date('2026-06-22T12:00:00.000Z');
 
     expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2', now, nonInteractive: false })).toBe(
@@ -56,14 +44,6 @@ describe('runtime compatibility CLI notice', () => {
 
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('support ends July 30, 2026'),
-    );
-    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Node's built-in SQLite"));
-    expect(writeGlobalConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        notices: {
-          'node20-removal-2026-07-30': { lastShownAt: now.toISOString() },
-        },
-      }),
     );
     expect(telemetry.record).toHaveBeenCalledWith(
       'feature_used',
@@ -90,63 +70,6 @@ describe('runtime compatibility CLI notice', () => {
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
   });
 
-  it('merges notice state into a fresh global config snapshot', () => {
-    const now = new Date('2026-06-22T12:00:00.000Z');
-    vi.mocked(readGlobalConfig)
-      .mockReturnValueOnce({ id: 'initial-installation' })
-      .mockReturnValueOnce({
-        id: 'current-installation',
-        account: { email: 'current@example.com' },
-        notices: {
-          'another-notice': { lastShownAt: '2026-06-20T12:00:00.000Z' },
-        },
-      });
-
-    expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2', now })).toBe(true);
-
-    expect(readGlobalConfig).toHaveBeenCalledTimes(2);
-    expect(writeGlobalConfig).toHaveBeenCalledWith({
-      id: 'current-installation',
-      account: { email: 'current@example.com' },
-      notices: {
-        'another-notice': { lastShownAt: '2026-06-20T12:00:00.000Z' },
-        'node20-removal-2026-07-30': { lastShownAt: now.toISOString() },
-      },
-    });
-  });
-
-  it('allows compatible update checks to continue when notice persistence fails', () => {
-    vi.mocked(writeGlobalConfig).mockImplementation(() => {
-      throw new Error('Read-only config');
-    });
-
-    expect(
-      maybeWarnAboutRuntime({
-        currentVersion: 'v20.20.2',
-        now: new Date('2026-06-22T12:00:00.000Z'),
-      }),
-    ).toBe(false);
-    expect(console.warn).toHaveBeenCalled();
-    expect(telemetry.record).toHaveBeenCalled();
-  });
-
-  it('does not repeat the notice before the reminder interval', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      id: 'test-installation',
-      notices: {
-        'node20-removal-2026-07-30': { lastShownAt: '2026-06-20T12:00:00.000Z' },
-      },
-    });
-
-    expect(
-      maybeWarnAboutRuntime({
-        currentVersion: 'v20.20.2',
-        now: new Date('2026-06-22T12:00:00.000Z'),
-      }),
-    ).toBe(false);
-    expect(console.warn).not.toHaveBeenCalled();
-  });
-
   it('can be disabled explicitly and stays silent on newer Node.js versions', () => {
     vi.mocked(getEnvBool).mockReturnValue(true);
     expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2' })).toBe(false);
@@ -168,7 +91,6 @@ describe('runtime compatibility CLI notice', () => {
     const notice = getRuntimeCompatibilityNotice('v20.20.2', {
       isBun: false,
       isDeno: false,
-      now: new Date('2026-06-22T12:00:00.000Z'),
     });
     expect(notice).not.toBeNull();
     expect(formatRuntimeCompatibilityNotice(notice!, false)).toContain(
@@ -181,19 +103,21 @@ describe('runtime compatibility CLI notice', () => {
 });
 
 describe('runStartupRuntimeAndUpdateChecks', () => {
-  it('skips the update check when the runtime reminder was shown', async () => {
+  it('runs the update check after showing the runtime notice', async () => {
     const checkForUpdates = vi.fn().mockResolvedValue(true);
+    const warnAboutRuntime = vi.fn(() => true);
 
     await runStartupRuntimeAndUpdateChecks({
       checkForUpdates,
-      warnAboutRuntime: () => true,
+      warnAboutRuntime,
       runtimeNoticeApplies: () => true,
     });
 
-    expect(checkForUpdates).not.toHaveBeenCalled();
+    expect(warnAboutRuntime).toHaveBeenCalledTimes(1);
+    expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: true });
   });
 
-  it('runs the update check and suppresses the duplicate runtime warning when a notice applies', async () => {
+  it('allows update guidance when runtime notice output is disabled', async () => {
     const checkForUpdates = vi.fn().mockResolvedValue(true);
 
     await runStartupRuntimeAndUpdateChecks({
@@ -203,7 +127,7 @@ describe('runStartupRuntimeAndUpdateChecks', () => {
     });
 
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
-    expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: true });
+    expect(checkForUpdates).toHaveBeenCalledWith({ suppressRuntimeBlockedWarning: false });
   });
 
   it('runs the update check without suppression when no runtime notice applies', async () => {
@@ -221,10 +145,10 @@ describe('runStartupRuntimeAndUpdateChecks', () => {
   it('defaults to the real runtime-notice check when runtimeNoticeApplies is not injected', async () => {
     const checkForUpdates = vi.fn().mockResolvedValue(true);
 
-    // Exercise the default runtimeNoticeApplies (getRuntimeCompatibilityNotice). warnAboutRuntime
-    // is injected so the outcome is deterministic regardless of the host Node.js version.
+    // Exercise the default runtimeNoticeApplies (getRuntimeCompatibilityNotice). The exact
+    // suppression value depends on the Node.js version running this test.
     await runStartupRuntimeAndUpdateChecks({ checkForUpdates, warnAboutRuntime: () => true });
 
-    expect(checkForUpdates).not.toHaveBeenCalled();
+    expect(checkForUpdates).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   getRuntimeCompatibilityNotice,
-  getRuntimeNoticeReminderIntervalMs,
   isLatestUpdateBlockedByRuntime,
   isUpdateBlockedByRuntime,
   parseNodeMajor,
-  shouldShowRuntimeNotice,
 } from '../src/runtimeCompatibility';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('runtime compatibility policy', () => {
   it('detects Node.js 20 and returns the dated compatibility notice', () => {
@@ -16,7 +12,6 @@ describe('runtime compatibility policy', () => {
       getRuntimeCompatibilityNotice('v20.20.2', {
         isBun: false,
         isDeno: false,
-        now: new Date('2026-06-22T12:00:00.000Z'),
       }),
     ).toEqual(
       expect.objectContaining({
@@ -61,41 +56,5 @@ describe('runtime compatibility policy', () => {
     expect(isUpdateBlockedByRuntime('docker', 'v20.20.2', cutoff)).toBe(false);
     expect(isUpdateBlockedByRuntime('npm', 'v20.20.2', cutoff)).toBe(true);
     expect(isUpdateBlockedByRuntime('npx', 'v20.20.2', cutoff)).toBe(true);
-  });
-
-  it('reminds weekly before the final phase and daily during it', () => {
-    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-01T00:00:00.000Z'))).toBe(
-      7 * DAY_MS,
-    );
-    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-20T00:00:00.000Z'))).toBe(DAY_MS);
-  });
-
-  it('switches to the daily cadence exactly 14 days before the cutoff', () => {
-    // The final phase starts 14 days before 2026-07-30T00:00:00Z, i.e. 2026-07-16T00:00:00Z.
-    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-15T23:59:59.999Z'))).toBe(
-      7 * DAY_MS,
-    );
-    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-16T00:00:00.000Z'))).toBe(DAY_MS);
-  });
-
-  it('shows again only after the current reminder interval', () => {
-    expect(
-      shouldShowRuntimeNotice('2026-06-25T00:00:00.000Z', new Date('2026-07-01T23:59:59.999Z')),
-    ).toBe(false);
-    expect(
-      shouldShowRuntimeNotice('2026-06-25T00:00:00.000Z', new Date('2026-07-02T00:00:00.000Z')),
-    ).toBe(true);
-    expect(shouldShowRuntimeNotice('invalid', new Date('2026-07-02T00:00:00.000Z'))).toBe(true);
-  });
-
-  it('lets the daily final-phase cadence shorten an in-flight snooze', () => {
-    // A 2-day-old snooze stays suppressed under the weekly cadence before the final phase...
-    expect(
-      shouldShowRuntimeNotice('2026-07-01T00:00:00.000Z', new Date('2026-07-03T00:00:00.000Z')),
-    ).toBe(false);
-    // ...but inside the final 14 days the daily cadence governs, so the same gap shows again.
-    expect(
-      shouldShowRuntimeNotice('2026-07-18T00:00:00.000Z', new Date('2026-07-20T00:00:00.000Z')),
-    ).toBe(true);
   });
 });
