@@ -140,7 +140,7 @@ Self-hosted sharing doesn't require `promptfoo auth login` when these environmen
 
 :::note
 
-Trace data is transferred to self-hosted servers out-of-band after the eval is uploaded. A self-hosted server older than the client may not support the trace and blob endpoints; in that case the eval is shared successfully **without** its traces or trace-only media, and the client prints a warning advising you to upgrade the server. Eval results, result-linked media, and other non-trace data are unaffected.
+Trace data is transferred to self-hosted servers out-of-band after the eval is uploaded. Older servers may not support the trace or blob endpoints. The eval and result rows still share, but unsupported traces and media that depend on those endpoints are omitted and the client prints warnings. With the default self-hosted setting, result-linked blobs are inlined and remain available; if `PROMPTFOO_SHARE_INLINE_BLOBS=false`, result-linked media also requires the blob endpoint.
 
 :::
 
