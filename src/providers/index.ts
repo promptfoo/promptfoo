@@ -425,7 +425,11 @@ async function resolveConfiguredProviderInputs(
           try {
             return getConfiguredProviderInputs(provider);
           } finally {
-            await provider.cleanup?.();
+            try {
+              await provider.cleanup?.();
+            } catch (error) {
+              logger.warn('[Provider Validation] Error cleaning up provider', { error });
+            }
           }
         }
         return configuredInputs;

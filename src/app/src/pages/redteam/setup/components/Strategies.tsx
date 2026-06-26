@@ -100,8 +100,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     !Array.isArray(targetInputs) &&
     Object.keys(targetInputs).length > 0;
   const hasSelectedPosterior = useMemo(
-    () => hasPosteriorStrategy(config.strategies),
-    [config.strategies],
+    () => hasPosteriorStrategy(config.strategies, config.plugins),
+    [config.plugins, config.strategies],
   );
 
   const isStrategyDisabled = useCallback(

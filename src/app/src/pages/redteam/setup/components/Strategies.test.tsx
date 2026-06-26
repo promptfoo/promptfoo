@@ -335,6 +335,28 @@ describe('Strategies', () => {
       expect(screen.getByText(/Remove Posterior Attack from.*Layer steps/)).toBeVisible();
     });
 
+    it('allows progression when every plugin excludes the layered Posterior step', async () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: { stateful: false },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+          strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+          plugins: ['coding-agent:secret-env-read'],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      expect(
+        screen.queryByText('Posterior Attack requires a single-input target'),
+      ).not.toBeInTheDocument();
+    });
+
     it('allows progression but disables preview for a disabled layer containing Posterior', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({

@@ -893,6 +893,59 @@ describe('synthesize', () => {
       expect(mockPluginAction).not.toHaveBeenCalled();
     });
 
+    it('allows a multi-input Layer when its Posterior step is excluded for the plugin', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            pluginConfig: { inputs, excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
+            context: 'reference',
+            question: 'request',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'coding-agent:secret-env-read',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'coding-agent:secret-env-read',
+            numTests: 1,
+            config: { excludeStrategies: ['posterior'] },
+          },
+        ],
+        prompts: ['{{context}} {{question}}'],
+        purpose: 'Answer questions with reference context',
+        strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledOnce();
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({ strategyId: 'jailbreak:hydra' }),
+            provider: expect.objectContaining({
+              config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+            }),
+          }),
+        ]),
+      );
+    });
+
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
       const inputs = {
         document: {

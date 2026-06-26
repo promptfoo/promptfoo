@@ -9,7 +9,10 @@ import { createApp } from '../../../src/server/server';
 // Mock dependencies
 vi.mock('../../../src/redteam/plugins/index');
 vi.mock('../../../src/redteam/providers/shared');
-vi.mock('../../../src/redteam/shared');
+vi.mock('../../../src/redteam/shared', async () => ({
+  ...(await vi.importActual('../../../src/redteam/shared')),
+  doRedteamRun: vi.fn(),
+}));
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
@@ -678,6 +681,69 @@ describe('Redteam Routes', () => {
           result: summary,
         });
       });
+
+      const statusResponse = await request(app).get('/api/redteam/status');
+      expect(statusResponse.body).toMatchObject({
+        hasRunningJob: false,
+        latestRunId: runResponse.body.id,
+      });
+    });
+
+    it('publishes a pending run ID and reuses it for the eventual job', async () => {
+      let resolvePreflight:
+        | ((value: { inputs: unknown[]; hasUnresolved: boolean }) => void)
+        | undefined;
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePreflight = resolve;
+          }),
+      );
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const runResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [{ id: 'echo' }],
+            redteam: { strategies: ['posterior'] },
+          },
+        })
+        .then((response) => response);
+      await vi.waitFor(() => {
+        expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
+      });
+
+      const pendingStatus = await request(app).get('/api/redteam/status');
+      expect(pendingStatus.body).toMatchObject({
+        hasRunningJob: false,
+        hasPendingRun: true,
+        jobId: null,
+      });
+      expect(pendingStatus.body.latestRunId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+
+      resolvePreflight!({ inputs: [], hasUnresolved: false });
+      const runResponse = await runResponsePromise;
+      expect(runResponse.status).toBe(200);
+      expect(runResponse.body.id).toBe(pendingStatus.body.latestRunId);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const settledStatus = await request(app).get('/api/redteam/status');
+        expect(settledStatus.body).toMatchObject({
+          hasRunningJob: false,
+          hasPendingRun: false,
+          jobId: null,
+          latestRunId: runResponse.body.id,
+        });
+      });
     });
 
     it('should publish logs and cancellation through the eval job endpoint', async () => {
@@ -861,6 +927,33 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('allows multi-input runs when Posterior is excluded for every configured plugin', async () => {
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
+      );
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: {
+              plugins: ['coding-agent:secret-env-read'],
+              strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
+    });
+
     it.each([
       {
         label: 'command-line strategy overrides',
@@ -1011,7 +1104,7 @@ describe('Redteam Routes', () => {
         undefined,
         undefined,
         undefined,
-        { loadDynamicProviders: true },
+        { loadDynamicProviders: false },
       );
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
       expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
@@ -1030,10 +1123,12 @@ describe('Redteam Routes', () => {
           resolveRun = resolve;
         }),
       );
-      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
-        inputs: [{ context: 'Reference context', question: 'User question' }],
-        hasUnresolved: false,
-      });
+      mockedResolveRedteamTargetProviderInputMetadata
+        .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+        .mockResolvedValueOnce({
+          inputs: [{ context: 'Reference context', question: 'User question' }],
+          hasUnresolved: false,
+        });
 
       const firstResponse = await request(app)
         .post('/api/redteam/run')
@@ -1050,12 +1145,131 @@ describe('Redteam Routes', () => {
         });
 
       expect(replacementResponse.status).toBe(400);
-      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenNthCalledWith(
+        1,
+        ['file:///workspace/dynamic-provider.mjs'],
+        undefined,
+        undefined,
+        undefined,
+        { loadDynamicProviders: false },
+      );
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenNthCalledWith(
+        2,
         ['file:///workspace/dynamic-provider.mjs'],
         undefined,
         undefined,
         undefined,
         { loadDynamicProviders: true },
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it('rejects known incompatibilities before hydrating unresolved dynamic targets', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [{ context: 'Reference context', question: 'User question' }, undefined],
+        hasUnresolved: true,
+      });
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const replacementResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              { id: 'echo', inputs: { context: 'context', question: 'question' } },
+              'file:///workspace/dynamic-provider.mjs',
+            ],
+            redteam: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(replacementResponse.status).toBe(400);
+      expect(replacementResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
+        expect.any(Array),
+        undefined,
+        undefined,
+        undefined,
+        { loadDynamicProviders: false },
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it.each([
+      {
+        label: 'target reference',
+        config: {
+          targets: [{ $ref: '#/definitions/target' }],
+          redteam: { strategies: ['posterior'] },
+          definitions: {
+            target: {
+              id: 'echo',
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          },
+        },
+      },
+      {
+        label: 'redteam reference',
+        config: {
+          targets: [
+            {
+              id: 'echo',
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          ],
+          redteam: { $ref: '#/definitions/redteam' },
+          definitions: { redteam: { strategies: ['posterior'] } },
+        },
+      },
+    ])('dereferences a live $label before replacing the active job', async ({ config }) => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const replacementResponse = await request(app).post('/api/redteam/run').send({ config });
+
+      expect(replacementResponse.status).toBe(400);
+      expect(replacementResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
       );
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
       expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
@@ -1141,6 +1355,7 @@ describe('Redteam Routes', () => {
       expect(statusWhileOlderPreflightIsPending.body).toMatchObject({
         hasRunningJob: true,
         hasPendingRun: false,
+        latestRunId: newerResponse.body.id,
       });
 
       resolveFirstPreflight!({ inputs: [], hasUnresolved: false });

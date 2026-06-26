@@ -1,6 +1,15 @@
-import { pluginConfigMatchesStrategy, REDTEAM_DEFAULTS } from '@promptfoo/redteam/sharedFrontend';
+import {
+  isExpandablePluginId,
+  pluginConfigHasApplicablePosterior,
+  pluginConfigMatchesStrategy,
+  REDTEAM_DEFAULTS,
+} from '@promptfoo/redteam/sharedFrontend';
 import type { Strategy } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy, RedteamStrategyObject } from '@promptfoo/redteam/types';
+import type {
+  RedteamPlugin,
+  RedteamStrategy,
+  RedteamStrategyObject,
+} from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
@@ -56,14 +65,33 @@ export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]):
   );
 }
 
-export function hasPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
+export function hasPosteriorStrategy(
+  strategies: readonly RedteamStrategy[],
+  plugins?: readonly RedteamPlugin[],
+): boolean {
   const visited = new Set<object>();
-  return getEffectiveStrategies(strategies).some((strategy) => {
-    if (strategy.config?.numTests === 0) {
-      return false;
-    }
-    return containsPosteriorStrategy(strategy, visited);
-  });
+  const effectiveStrategies = getEffectiveStrategies(strategies).filter(
+    (strategy) => strategy.config?.numTests !== 0,
+  );
+  if (!plugins || plugins.length === 0) {
+    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
+  }
+
+  const normalizedPlugins = plugins.map((plugin) =>
+    typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin,
+  );
+  if (
+    normalizedPlugins.some(
+      (plugin) => isExpandablePluginId(plugin.id) && !plugin.id.startsWith('coding-agent:'),
+    )
+  ) {
+    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
+  }
+  return effectiveStrategies.some((strategy) =>
+    normalizedPlugins.some((plugin) =>
+      pluginConfigHasApplicablePosterior(plugin.id, plugin.config, strategy),
+    ),
+  );
 }
 
 function getEffectiveStrategies(strategies: readonly RedteamStrategy[]): RedteamStrategyObject[] {

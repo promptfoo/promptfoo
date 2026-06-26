@@ -2557,6 +2557,37 @@ inputs:
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it('preserves dynamic provider inputs when validation cleanup fails', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const cleanup = vi.fn().mockRejectedValue(cleanupError);
+    class DynamicProvider {
+      inputs = { prompt: 'User prompt' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await expect(
+        resolveProviderInputsForValidation(['file:///workspace/dynamic-provider.mjs'], {
+          loadDynamicProviders: true,
+        }),
+      ).resolves.toEqual([{ prompt: 'User prompt' }]);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(warnSpy).toHaveBeenCalledWith('[Provider Validation] Error cleaning up provider', {
+        error: cleanupError,
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it.each([
     {
       label: 'ProviderOptions id',

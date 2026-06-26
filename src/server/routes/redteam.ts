@@ -19,7 +19,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
-import { doRedteamRun } from '../../redteam/shared';
+import { dereferenceLiveRedteamConfig, doRedteamRun } from '../../redteam/shared';
 import {
   getStrategyCompatibilityError,
   isStrategyApplicable,
@@ -49,45 +49,69 @@ async function getLiveConfigCompatibilityError(
   config: Record<string, unknown>,
   options: { loadDynamicProviders?: boolean } = {},
 ): Promise<string | undefined> {
-  const redteam = isRecord(config.redteam) ? config.redteam : undefined;
-  const commandLineOptions = isRecord(config.commandLineOptions)
-    ? config.commandLineOptions
+  const resolvedConfig = await dereferenceLiveRedteamConfig(config);
+  const redteam = isRecord(resolvedConfig.redteam) ? resolvedConfig.redteam : undefined;
+  const commandLineOptions = isRecord(resolvedConfig.commandLineOptions)
+    ? resolvedConfig.commandLineOptions
     : undefined;
   const strategies = Array.isArray(commandLineOptions?.strategies)
     ? commandLineOptions.strategies
-    : Array.isArray(config.strategies)
-      ? config.strategies
+    : Array.isArray(resolvedConfig.strategies)
+      ? resolvedConfig.strategies
       : Array.isArray(redteam?.strategies)
         ? redteam.strategies
         : [];
+  const plugins = Array.isArray(commandLineOptions?.plugins)
+    ? commandLineOptions.plugins
+    : Array.isArray(resolvedConfig.plugins)
+      ? resolvedConfig.plugins
+      : Array.isArray(redteam?.plugins)
+        ? redteam.plugins
+        : undefined;
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;
   }
-  const configuredTargets = config.targets ?? config.providers;
+  const configuredTargets = resolvedConfig.targets ?? resolvedConfig.providers;
   if (configuredTargets === undefined) {
     return undefined;
   }
 
   const requiresResolvedInputs =
-    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }, { plugins }) !==
+    undefined;
   if (!requiresResolvedInputs) {
     return undefined;
   }
 
-  const env = isRecord(config.env) ? (config.env as Record<string, string>) : undefined;
+  const env = isRecord(resolvedConfig.env)
+    ? (resolvedConfig.env as Record<string, string>)
+    : undefined;
   const configuredFilter = commandLineOptions?.filterProviders || commandLineOptions?.filterTargets;
   const filter = typeof configuredFilter === 'string' ? configuredFilter : undefined;
-  const resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+  let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
     configuredTargets,
     cliState.basePath,
     env,
     filter,
-    options,
+    { loadDynamicProviders: false },
   );
-  return resolvedInputs.inputs
-    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+  let compatibilityError = resolvedInputs.inputs
+    .map((inputs) => getStrategyCompatibilityError(strategies, inputs, { plugins }))
     .find((error) => error !== undefined);
+  if (!compatibilityError && options.loadDynamicProviders && resolvedInputs.hasUnresolved) {
+    resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+      configuredTargets,
+      cliState.basePath,
+      env,
+      filter,
+      { loadDynamicProviders: true },
+    );
+    compatibilityError = resolvedInputs.inputs
+      .map((inputs) => getStrategyCompatibilityError(strategies, inputs, { plugins }))
+      .find((error) => error !== undefined);
+  }
+  return compatibilityError;
 }
 
 /**
@@ -124,6 +148,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
     const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs, {
       includeDisabledStrategies: true,
+      plugins: [plugin],
     });
     if (compatibilityError) {
       res.status(400).json({ error: compatibilityError });
@@ -326,6 +351,7 @@ let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 let latestRunRequest = 0;
 let pendingRunRequest: number | null = null;
+let latestRunId: string | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
@@ -336,6 +362,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
   const runRequest = ++latestRunRequest;
+  const id = crypto.randomUUID();
+  latestRunId = id;
   pendingRunRequest = runRequest;
   let compatibilityError: string | undefined;
   let preflightError: unknown;
@@ -375,7 +403,6 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     });
   }
 
-  const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
 
@@ -529,6 +556,7 @@ redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void>
       hasRunningJob: currentJobId !== null,
       hasPendingRun: pendingRunRequest !== null,
       jobId: currentJobId,
+      latestRunId,
     }),
   );
 });

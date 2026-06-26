@@ -1031,7 +1031,7 @@ export async function synthesize({
 
   await validateStrategies(strategies);
   const hasMultipleInputs = Boolean(inputs && Object.keys(inputs).length > 0);
-  const compatibilityError = getStrategyCompatibilityError(strategies, inputs);
+  const compatibilityError = getStrategyCompatibilityError(strategies, inputs, { plugins });
   if (compatibilityError) {
     throw new Error(compatibilityError);
   }

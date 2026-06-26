@@ -103,6 +103,21 @@ describe('hasPosteriorStrategy', () => {
     expect(hasPosteriorStrategy([nested as RedteamStrategy])).toBe(true);
     expect(hasPosteriorStrategy([wide as RedteamStrategy])).toBe(false);
   });
+
+  it('only detects Posterior when it applies to a configured plugin', () => {
+    const strategies = [
+      { id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies, ['harmful:hate'])).toBe(true);
+    expect(hasPosteriorStrategy(strategies, ['coding-agent:secret-env-read'])).toBe(false);
+    expect(hasPosteriorStrategy(strategies, ['coding-agent:core'])).toBe(false);
+    expect(
+      hasPosteriorStrategy(strategies, [
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe('isPluginCompatibleWithStrategy', () => {

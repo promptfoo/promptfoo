@@ -5,6 +5,8 @@ import { maybeReadConfig } from './load';
 
 import type { UnifiedConfig } from '../../types/index';
 
+export { dereferenceConfig } from './load';
+
 /**
  * Cache to store loaded configurations for different directories.
  */
