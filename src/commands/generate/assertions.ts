@@ -40,6 +40,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        envPath: options.envFile,
       },
       options.defaultConfig,
       'AssertionGeneration',

@@ -35,12 +35,8 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
-  enforceUnknownConfigKeyDiagnostics,
-  getUnknownConfigKeyDiagnostics,
   logConfigResolutionError,
   resolveConfigs,
-  resolveStrictConfigEnabled,
-  type UnknownConfigKeyDiagnostic,
 } from '../util/config/load';
 import {
   filterProviders,
@@ -239,7 +235,7 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
-  let unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] | undefined = undefined;
+  let strictConfigEnabled: boolean | undefined;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -292,7 +288,9 @@ export async function doEval(
     if (defaultConfigPath) {
       const configDir = path.dirname(defaultConfigPath);
       const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName, {
+        deferUnknownKeyValidation: true,
+      });
       defaultConfig = newDefaultConfig;
     }
 
@@ -314,7 +312,9 @@ export async function doEval(
           continue;
         }
         const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-          await loadDefaultConfig(configPath);
+          await loadDefaultConfig(configPath, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
         if (newConfigPath) {
           resolvedConfigPaths.push(newConfigPath);
           defaultConfig = { ...defaultConfig, ...dirConfig };
@@ -387,6 +387,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -444,7 +445,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-        unknownConfigKeyDiagnostics,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -464,14 +465,8 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-        unknownConfigKeyDiagnostics,
+        strictConfigEnabled,
       } = await resolveConfigs(cmdObj, defaultConfig));
-      if (cmdObj.config === undefined) {
-        unknownConfigKeyDiagnostics = [
-          ...(getUnknownConfigKeyDiagnostics(defaultConfig) ?? []),
-          ...(unknownConfigKeyDiagnostics ?? []),
-        ];
-      }
     }
 
     const persistedProviderFilterOptions = resumeEval
@@ -497,13 +492,6 @@ export async function doEval(
         cliState._retryErrorResultIds = retryErrorResultIds;
       }
     }
-
-    // Phase 2: Load environment from config files if not already set via CLI
-    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
-      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
-    }
-    enforceUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, config.env);
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
 
@@ -726,7 +714,7 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
-      strictConfigEnabled: resolveStrictConfigEnabled(config.env),
+      strictConfigEnabled,
     };
 
     if (!resumeEval && cmdObj.grader) {

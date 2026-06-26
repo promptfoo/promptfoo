@@ -40,6 +40,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        envPath: options.envFile,
       },
       options.defaultConfig,
       'DatasetGeneration',

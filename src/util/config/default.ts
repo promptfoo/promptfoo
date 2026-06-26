@@ -1,7 +1,7 @@
 import path from 'path';
 
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { maybeReadConfig } from './load';
+import { enforceUnknownConfigKeyDiagnosticsForConfig, maybeReadConfig } from './load';
 
 import type { UnifiedConfig } from '../../types/index';
 
@@ -24,6 +24,7 @@ export const configCache = new Map<
 export async function loadDefaultConfig(
   dir?: string,
   configName: string = 'promptfooconfig',
+  options: { deferUnknownKeyValidation?: boolean } = {},
 ): Promise<{
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
@@ -33,7 +34,11 @@ export async function loadDefaultConfig(
   // Check if the result is already cached
   const cacheKey = `${dir}:${configName}`;
   if (configCache.has(cacheKey)) {
-    return configCache.get(cacheKey)!;
+    const cached = configCache.get(cacheKey)!;
+    if (!options.deferUnknownKeyValidation) {
+      enforceUnknownConfigKeyDiagnosticsForConfig(cached.defaultConfig);
+    }
+    return cached;
   }
 
   let defaultConfig: Partial<UnifiedConfig> = {};
@@ -41,10 +46,13 @@ export async function loadDefaultConfig(
 
   for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
-    const maybeConfig = await maybeReadConfig(configPath);
+    const maybeConfig = await maybeReadConfig(configPath, true);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
       defaultConfigPath = configPath;
+      if (!options.deferUnknownKeyValidation) {
+        enforceUnknownConfigKeyDiagnosticsForConfig(defaultConfig);
+      }
       break;
     }
   }

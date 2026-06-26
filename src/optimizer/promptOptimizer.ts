@@ -71,6 +71,7 @@ export interface PromptOptimizationRound {
 export interface PromptOptimizationOptions {
   promptIndex?: number;
   providerIndex?: number;
+  strictConfigEnabled?: boolean;
   validationSplit?: number;
 }
 
@@ -719,7 +720,10 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   return explicitTests + scenarioTests;
 }
 
-function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
+function createEvaluationOptions(
+  config: Partial<UnifiedConfig>,
+  strictConfigEnabled?: boolean,
+): InternalEvaluateOptions {
   const {
     skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
     strictConfigEnabled: _ignoredStrictConfigEnabled,
@@ -734,8 +738,9 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
     showProgressBar: false,
     silent: true,
     strictConfigEnabled:
-      strictConfigValue !== undefined &&
-      TRUE_ENV_VALUES.has(String(strictConfigValue).toLowerCase()),
+      strictConfigEnabled ??
+      (strictConfigValue !== undefined &&
+        TRUE_ENV_VALUES.has(String(strictConfigValue).toLowerCase())),
   };
 }
 
@@ -776,14 +781,14 @@ export async function optimizePromptTestSuite(
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(optimizationConfig, { persisted: false }),
-    createEvaluationOptions(config),
+    createEvaluationOptions(config, options.strictConfigEnabled),
   );
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(optimizationConfig, { persisted: false }),
-        createEvaluationOptions(config),
+        createEvaluationOptions(config, options.strictConfigEnabled),
       )
     : undefined;
   assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
@@ -854,7 +859,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(optimizationConfig, { persisted: false }),
-      createEvaluationOptions(config),
+      createEvaluationOptions(config, options.strictConfigEnabled),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
@@ -867,7 +872,7 @@ export async function optimizePromptTestSuite(
             ),
           ),
           new Eval(optimizationConfig, { persisted: false }),
-          createEvaluationOptions(config),
+          createEvaluationOptions(config, options.strictConfigEnabled),
         )
       : undefined;
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =

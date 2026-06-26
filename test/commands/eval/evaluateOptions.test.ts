@@ -208,6 +208,45 @@ describe('evaluateOptions behavior', () => {
       expect(options.skipStrictAssertionValidation).toBeUndefined();
       expect(options.strictConfigEnabled).toBe(true);
     });
+
+    it('should snapshot strictness before asynchronous provider resolution', async () => {
+      const envPath = path.join(tmpDir, '.env.strict-snapshot');
+      const providerPath = path.join(tmpDir, 'slow-provider.mjs');
+      const snapshotConfig = path.join(tmpDir, 'strict-snapshot.yaml');
+      fs.writeFileSync(envPath, 'PROMPTFOO_STRICT_CONFIG=true');
+      fs.writeFileSync(
+        providerPath,
+        `
+          process.env.PROMPTFOO_STRICT_CONFIG = 'false';
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          export default class SlowProvider {
+            id() { return 'slow-provider'; }
+            async callApi(prompt) { return { output: prompt }; }
+          }
+        `,
+      );
+      fs.writeFileSync(
+        snapshotConfig,
+        yaml.dump({
+          commandLineOptions: { envPath },
+          providers: [`file://${providerPath}`],
+          prompts: ['test prompt'],
+          tests: [{ vars: { input: 'test input' } }],
+        }),
+      );
+      vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+
+      try {
+        const options = (await runEvalAndGetOptions({
+          config: [snapshotConfig],
+        })) as EvaluateOptions & {
+          strictConfigEnabled?: boolean;
+        };
+        expect(options.strictConfigEnabled).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 
   describe('Prioritization of CLI options over config file options', () => {

@@ -348,6 +348,7 @@ async function doGenerateRedteamInternal(
     const resolved = await resolveConfigs(
       {
         config: [configPath],
+        envPath: options.envFile,
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },

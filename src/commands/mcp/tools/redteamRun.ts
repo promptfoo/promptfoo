@@ -110,7 +110,9 @@ export function registerRedteamRunTool(server: McpServer) {
 
         // Load default config
         try {
-          await loadDefaultConfig();
+          await loadDefaultConfig(undefined, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
         } catch (error) {
           return createToolResponse(
             'redteam_run',

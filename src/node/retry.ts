@@ -354,7 +354,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
+  const { testSuite, commandLineOptions, config, strictConfigEnabled } = await resolveRetryConfigs(
+    originalEval,
+    cmdObj,
+  );
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -401,6 +404,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     delay: effectiveDelay,
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
+    strictConfigEnabled,
   };
 
   try {

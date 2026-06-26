@@ -160,6 +160,50 @@ tests:
     );
   });
 
+  it('should let a config-specified envPath disable ambient strict key validation', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: env-path-opt-out
+      `,
+    );
+    mockSetupEnv.mockImplementation((envPath) => {
+      if (envPath === tempEnvFile) {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+      }
+    });
+
+    let thrown: unknown;
+    try {
+      await doEval({ config: [tempConfigFile] }, {}, undefined, {});
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown instanceof Error ? thrown.message : '').not.toMatch(
+      /Unknown top-level config key/,
+    );
+    expect(mockSetupEnv).toHaveBeenCalledWith(tempEnvFile);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+  });
+
   it('should retain diagnostics for an auto-discovered cached default config', async () => {
     vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
     fs.writeFileSync(

@@ -41,7 +41,9 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         // Load default configuration
         let defaultConfig;
         try {
-          const result = await loadDefaultConfig();
+          const result = await loadDefaultConfig(undefined, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
           defaultConfig = result.defaultConfig;
         } catch (error) {
           return createToolResponse(

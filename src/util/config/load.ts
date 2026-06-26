@@ -177,10 +177,16 @@ export interface UnknownConfigKeyDiagnostic {
 
 const unknownConfigKeyDiagnosticsByConfig = new WeakMap<object, UnknownConfigKeyDiagnostic[]>();
 
-export function getUnknownConfigKeyDiagnostics(
+function getUnknownConfigKeyDiagnostics(
   config: Partial<UnifiedConfig> | undefined,
 ): UnknownConfigKeyDiagnostic[] | undefined {
   return config ? unknownConfigKeyDiagnosticsByConfig.get(config) : undefined;
+}
+
+export function enforceUnknownConfigKeyDiagnosticsForConfig(
+  config: Partial<UnifiedConfig> | undefined,
+): void {
+  enforceUnknownConfigKeyDiagnostics(getUnknownConfigKeyDiagnostics(config), config?.env);
 }
 
 /**
@@ -257,19 +263,9 @@ export function enforceUnknownConfigKeyDiagnostics(
   diagnostics: readonly UnknownConfigKeyDiagnostic[] | undefined,
   env: UnifiedConfig['env'] | undefined,
 ): void {
-  if (diagnostics?.length && resolveStrictConfigEnabled(env)) {
-    failConfigResolution(diagnostics.map(formatUnknownConfigKeyDiagnostic).join('\n'));
+  if (diagnostics?.length) {
+    reportUnknownConfigKeyDiagnostics(diagnostics, resolveStrictConfigEnabled(env));
   }
-}
-
-/** Load a configured env file before enforcing diagnostics whose strictness depends on it. */
-export function setupEnvAndEnforceUnknownConfigKeyDiagnostics(
-  envPath: string | string[] | undefined,
-  diagnostics: readonly UnknownConfigKeyDiagnostic[] | undefined,
-  env: UnifiedConfig['env'] | undefined,
-): void {
-  setupEnv(envPath);
-  enforceUnknownConfigKeyDiagnostics(diagnostics, env);
 }
 
 /**
@@ -623,9 +619,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   return (await readConfigWithDiagnostics(configPath)).config;
 }
 
-export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
+export async function maybeReadConfig(
+  configPath: string,
+  deferUnknownKeyValidation = false,
+): Promise<UnifiedConfig | undefined> {
   try {
-    return await readConfig(configPath);
+    return (await readConfigWithDiagnostics(configPath, deferUnknownKeyValidation)).config;
   } catch (error) {
     // If file doesn't exist, return undefined
     // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
@@ -680,7 +679,10 @@ interface CombineConfigsResult {
   unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[];
 }
 
-async function combineConfigsWithDiagnostics(configPaths: string[]): Promise<CombineConfigsResult> {
+async function combineConfigsWithDiagnostics(
+  configPaths: string[],
+  deferUnknownKeyValidation = false,
+): Promise<CombineConfigsResult> {
   const configs: UnifiedConfig[] = [];
   const unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   for (const configPath of configPaths) {
@@ -917,10 +919,12 @@ async function combineConfigsWithDiagnostics(configPaths: string[]): Promise<Com
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  reportUnknownConfigKeyDiagnostics(
-    unknownConfigKeyDiagnostics,
-    resolveStrictConfigEnabled(combinedConfig.env),
-  );
+  if (!deferUnknownKeyValidation) {
+    reportUnknownConfigKeyDiagnostics(
+      unknownConfigKeyDiagnostics,
+      resolveStrictConfigEnabled(combinedConfig.env),
+    );
+  }
 
   unknownConfigKeyDiagnosticsByConfig.set(combinedConfig, unknownConfigKeyDiagnostics);
   return { config: combinedConfig, unknownConfigKeyDiagnostics };
@@ -944,6 +948,7 @@ export async function resolveConfigs(
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
+  strictConfigEnabled?: boolean;
   unknownConfigKeyDiagnostics?: UnknownConfigKeyDiagnostic[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
@@ -951,11 +956,13 @@ export async function resolveConfigs(
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   if (configPaths) {
-    const combined = await combineConfigsWithDiagnostics(configPaths);
+    const combined = await combineConfigsWithDiagnostics(configPaths, true);
     fileConfig = combined.config;
     unknownConfigKeyDiagnostics = combined.unknownConfigKeyDiagnostics;
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
+  } else {
+    unknownConfigKeyDiagnostics = getUnknownConfigKeyDiagnostics(defaultConfig) ?? [];
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
@@ -996,6 +1003,32 @@ export async function resolveConfigs(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
   );
+
+  // Resolve and load config-selected env files before diagnostics or provider/test resolution.
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+    const resolvedPaths = envPaths.map((envPath) =>
+      path.isAbsolute(envPath) ? envPath : path.resolve(basePath, envPath),
+    );
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
+    };
+  }
+
+  const hasExplicitEnvPath = Array.isArray(cmdObj.envPath)
+    ? cmdObj.envPath.length > 0
+    : Boolean(cmdObj.envPath);
+  if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
+    logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+    setupEnv(commandLineOptions.envPath);
+  }
+  const strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
+  if (unknownConfigKeyDiagnostics.length > 0) {
+    reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
+  }
 
   cliState.basePath = basePath;
 
@@ -1254,28 +1287,13 @@ export async function resolveConfigs(
   cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
 
-  // Extract commandLineOptions from either explicit config files or default config
-  // Resolve relative envPath(s) against the config file directory
-  if (commandLineOptions?.envPath && basePath) {
-    const envPaths = Array.isArray(commandLineOptions.envPath)
-      ? commandLineOptions.envPath
-      : [commandLineOptions.envPath];
-
-    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
-
-    commandLineOptions = {
-      ...commandLineOptions,
-      // Keep as single string if only one path, array otherwise
-      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
-    };
-  }
-
   return {
     config,
     testSuite,
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
+    strictConfigEnabled,
     unknownConfigKeyDiagnostics,
   };
 }

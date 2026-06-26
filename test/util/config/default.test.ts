@@ -2,9 +2,13 @@ import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
-import { maybeReadConfig } from '../../../src/util/config/load';
+import {
+  enforceUnknownConfigKeyDiagnosticsForConfig,
+  maybeReadConfig,
+} from '../../../src/util/config/load';
 
 vi.mock('../../../src/util/config/load', () => ({
+  enforceUnknownConfigKeyDiagnosticsForConfig: vi.fn(),
   maybeReadConfig: vi.fn(),
 }));
 
@@ -27,6 +31,7 @@ describe('loadDefaultConfig', () => {
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       1,
       path.normalize('/test/path/promptfooconfig.yaml'),
+      true,
     );
   });
 
@@ -55,10 +60,12 @@ describe('loadDefaultConfig', () => {
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       1,
       path.normalize('/test/path/promptfooconfig.yaml'),
+      true,
     );
     expect(maybeReadConfig).toHaveBeenNthCalledWith(
       2,
       path.normalize('/test/path/promptfooconfig.yml'),
+      true,
     );
   });
 
@@ -72,7 +79,10 @@ describe('loadDefaultConfig', () => {
       defaultConfig: mockConfig,
       defaultConfigPath: path.join(customDir, 'promptfooconfig.yaml'),
     });
-    expect(maybeReadConfig).toHaveBeenCalledWith(path.join(customDir, 'promptfooconfig.yaml'));
+    expect(maybeReadConfig).toHaveBeenCalledWith(
+      path.join(customDir, 'promptfooconfig.yaml'),
+      true,
+    );
   });
 
   it('should use custom config name when provided', async () => {
@@ -84,7 +94,7 @@ describe('loadDefaultConfig', () => {
       defaultConfig: mockConfig,
       defaultConfigPath: path.normalize('/test/path/redteam.yaml'),
     });
-    expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'));
+    expect(maybeReadConfig).toHaveBeenCalledWith(path.normalize('/test/path/redteam.yaml'), true);
   });
 
   it('should use different caches for different config names', async () => {
@@ -145,6 +155,30 @@ describe('loadDefaultConfig', () => {
 
     expect(result1).toEqual(result2);
     expect(maybeReadConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('should enforce diagnostics on fresh and cached direct reads', async () => {
+    const mockConfig = { prompts: ['Cached config'], providers: [], tests: [] };
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    await loadDefaultConfig();
+    await loadDefaultConfig();
+
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenCalledTimes(2);
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenCalledWith(mockConfig);
+  });
+
+  it('should preserve diagnostics while deferring enforcement to config resolution', async () => {
+    const mockConfig = { prompts: ['Deferred config'], providers: [], tests: [] };
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+
+    await loadDefaultConfig(undefined, 'promptfooconfig', {
+      deferUnknownKeyValidation: true,
+    });
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).not.toHaveBeenCalled();
+
+    await loadDefaultConfig();
+    expect(enforceUnknownConfigKeyDiagnosticsForConfig).toHaveBeenCalledWith(mockConfig);
   });
 
   it('should handle errors when reading config files', async () => {
