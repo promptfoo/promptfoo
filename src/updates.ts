@@ -53,6 +53,7 @@ export async function checkForUpdates(options: CheckForUpdatesOptions = {}): Pro
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     const updateCommands = getUpdateCommands({
+      isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
       isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
       // Preserve the existing npx-first CLI guidance while sharing Docker command policy.
       isNpx: true,
@@ -78,15 +79,19 @@ ${border}\n`,
       return true;
     }
 
+    const updateInstruction =
+      updateCommands.commandType === 'container'
+        ? `Rebuild the container image with Node.js ${NODE_RECOMMENDED_VERSION}, then redeploy it.`
+        : `Please run ${chalk.green(updateCommands.primary!)}${
+            updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
+          } to update.`;
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
         VERSION,
       )} is lower than the latest available version ${chalk.green(latestVersion)}.
 
-Please run ${chalk.green(updateCommands.primary)}${
-        updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
-      } to update.
+${updateInstruction}
 ${border}\n`,
     );
     return true;

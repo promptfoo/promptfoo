@@ -3,24 +3,34 @@
  */
 
 export interface UpdateCommandOptions {
+  isContainer: boolean;
   isOfficialDockerImage: boolean;
   isNpx: boolean;
 }
 
 export interface UpdateCommandResult {
-  primary: string;
+  primary: string | null;
   alternative: string | null;
-  commandType: 'docker' | 'npx' | 'npm';
+  commandType: 'container' | 'docker' | 'npx' | 'npm';
 }
 
 export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandResult {
-  const { isOfficialDockerImage, isNpx } = options;
+  const { isContainer, isOfficialDockerImage, isNpx } = options;
 
+  // Preserve compatibility with existing official images, where the official marker is sufficient.
   if (isOfficialDockerImage) {
     return {
       primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
+    };
+  }
+
+  if (isContainer) {
+    return {
+      primary: null,
+      alternative: null,
+      commandType: 'container',
     };
   }
 

@@ -25,16 +25,24 @@ function formatRemovalDate(removalDate: string): string {
 
 function RuntimeUpgradeMessage({
   notice,
-  isDocker,
+  commandType,
 }: {
   notice: RuntimeCompatibilityNotice;
-  isDocker: boolean;
+  commandType: string | null | undefined;
 }) {
-  if (isDocker) {
+  if (commandType === 'docker') {
     return (
       <>
         Pull the latest Promptfoo Docker image, then redeploy the container to upgrade its bundled
         Node.js runtime.
+      </>
+    );
+  }
+  if (commandType === 'container') {
+    return (
+      <>
+        Rebuild this custom Promptfoo image with Node.js {notice.recommendedVersion}, then redeploy
+        the container.
       </>
     );
   }
@@ -80,6 +88,17 @@ function getCopyStatus(copied: boolean): string {
   return copied ? 'Command copied' : '';
 }
 
+function ContainerUpdateMessage({ commandType }: { commandType: string | null | undefined }) {
+  if (commandType !== 'container') {
+    return null;
+  }
+  return (
+    <span className="text-sm text-muted-foreground">
+      Rebuild and redeploy the container to update.
+    </span>
+  );
+}
+
 export default function UpdateBanner() {
   const {
     versionInfo,
@@ -108,7 +127,9 @@ export default function UpdateBanner() {
     : false;
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||
-    (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
+    (runtimeSupportEnded &&
+      versionInfo?.commandType !== 'container' &&
+      versionInfo?.commandType !== 'docker');
   const shouldShowRuntimeNotice = !!activeRuntimeNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
@@ -281,7 +302,7 @@ export default function UpdateBanner() {
             <span className="text-sm text-muted-foreground dark:text-amber-200">
               <RuntimeUpgradeMessage
                 notice={activeRuntimeNotice}
-                isDocker={versionInfo.commandType === 'docker'}
+                commandType={versionInfo.commandType}
               />
             </span>
           </div>
@@ -293,6 +314,7 @@ export default function UpdateBanner() {
             <span className="text-sm text-muted-foreground">
               (current: v{versionInfo.currentVersion})
             </span>
+            <ContainerUpdateMessage commandType={versionInfo.commandType} />
           </div>
         )}
       </div>

@@ -58,6 +58,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import { getUpdateCommands } from '../src/updates/updateCommands';
 import { fetchWithTimeout } from '../src/util/fetch/index';
 import { VERSION } from '../src/version';
 
@@ -67,6 +68,28 @@ beforeEach(() => {
   mockExecAsync.mockResolvedValue({
     stdout: 'modelaudit, version 0.0.0',
     stderr: '',
+  });
+});
+
+describe('getUpdateCommands', () => {
+  it('separates official images, custom containers, and package installs', () => {
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: true, isNpx: false }),
+    ).toEqual({
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
+      alternative: null,
+      commandType: 'docker',
+    });
+    expect(
+      getUpdateCommands({ isContainer: true, isOfficialDockerImage: false, isNpx: false }),
+    ).toEqual({ primary: null, alternative: null, commandType: 'container' });
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: false, isNpx: true }),
+    ).toEqual({
+      primary: 'npx promptfoo@latest',
+      alternative: 'npm install -g promptfoo@latest',
+      commandType: 'npx',
+    });
   });
 });
 
@@ -193,7 +216,10 @@ describe('checkForUpdates', () => {
   });
 
   it('should preserve official-image pull guidance before and after the cutoff', async () => {
-    const restoreDocker = mockProcessEnv({ PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true' });
+    const restoreDocker = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce({
         ok: true,
@@ -232,6 +258,7 @@ describe('checkForUpdates', () => {
   it('should keep package update safeguards in generic self-hosted mode', async () => {
     const restoreSelfHosted = mockProcessEnv({
       PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
       PROMPTFOO_SELF_HOSTED: 'true',
     });
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
@@ -252,6 +279,48 @@ describe('checkForUpdates', () => {
       expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
     );
     expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
+  it('should preserve custom-container rebuild guidance before and after the cutoff', async () => {
+    const restoreContainer = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latestVersion: '1.1.0' }),
+      } as never)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latestVersion: '1.1.0' }),
+      } as never);
+
+    try {
+      await checkForUpdates({
+        currentNodeVersion: 'v20.20.2',
+        now: new Date('2026-07-29T23:59:59.999Z'),
+      });
+      await checkForUpdates({
+        currentNodeVersion: 'v20.20.2',
+        now: new Date('2026-07-30T00:00:00.000Z'),
+      });
+    } finally {
+      restoreContainer();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
+    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('Rebuild the container image with Node.js 24 LTS'),
+    );
+    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Rebuild the container image with Node.js 24 LTS'),
+    );
+    expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('npx promptfoo'));
+    expect(loggerInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('ghcr.io/promptfoo'));
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should let the runtime campaign suppress duplicate post-cutoff guidance', async () => {

@@ -55,11 +55,15 @@ export function isLatestUpdateBlockedByRuntime(
 }
 
 export function isUpdateBlockedByRuntime(
-  commandType: 'docker' | 'npm' | 'npx',
+  commandType: 'container' | 'docker' | 'npm' | 'npx',
   currentVersion: string = process.version,
   now: Date = new Date(),
 ): boolean {
-  return commandType !== 'docker' && isLatestUpdateBlockedByRuntime(currentVersion, now);
+  return (
+    commandType !== 'container' &&
+    commandType !== 'docker' &&
+    isLatestUpdateBlockedByRuntime(currentVersion, now)
+  );
 }
 
 export function hasNode20SupportEnded(now: Date = new Date()): boolean {

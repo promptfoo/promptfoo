@@ -114,7 +114,7 @@ describe('Version Route', () => {
     expect(response.body.updateCommands).toHaveProperty('commandType');
     expect(response.body.updateCommands).not.toHaveProperty('global');
     expect(response.body.updateCommands).not.toHaveProperty('npx');
-    expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
+    expect(['container', 'docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
 
   it('should not classify generic self-hosted mode as Docker', async () => {
@@ -130,6 +130,7 @@ describe('Version Route', () => {
       expect(response.status).toBe(200);
       expect(response.body.selfHosted).toBe(true);
       expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: false,
         isOfficialDockerImage: false,
         isNpx: false,
       });
@@ -141,6 +142,7 @@ describe('Version Route', () => {
   it('should use Docker guidance only when the official-image marker is set', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
       PROMPTFOO_SELF_HOSTED: 'true',
     });
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
@@ -151,7 +153,39 @@ describe('Version Route', () => {
       expect(response.status).toBe(200);
       expect(response.body.selfHosted).toBe(true);
       expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: true,
         isOfficialDockerImage: true,
+        isNpx: false,
+      });
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should distinguish custom containers from official images', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+    mockedGetUpdateCommands.mockReturnValue({
+      primary: null,
+      alternative: null,
+      commandType: 'container',
+    });
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        commandType: 'container',
+        updateCommands: { primary: null, alternative: null, commandType: 'container' },
+      });
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: true,
+        isOfficialDockerImage: false,
         isNpx: false,
       });
     } finally {

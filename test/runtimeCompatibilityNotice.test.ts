@@ -7,6 +7,7 @@ vi.mock('../src/envars', () => ({
 }));
 vi.mock('../src/globalConfig/runtimeNoticeState', () => ({
   readRuntimeNoticeLastShownAt: vi.fn(),
+  withRuntimeNoticeStateLock: vi.fn(),
   writeRuntimeNoticeLastShownAt: vi.fn(),
 }));
 vi.mock('../src/telemetry', () => ({
@@ -18,6 +19,7 @@ vi.mock('../src/telemetry', () => ({
 import { getEnvBool, getEnvString, isNonInteractive } from '../src/envars';
 import {
   readRuntimeNoticeLastShownAt,
+  withRuntimeNoticeStateLock,
   writeRuntimeNoticeLastShownAt,
 } from '../src/globalConfig/runtimeNoticeState';
 import { getRuntimeCompatibilityNotice } from '../src/runtimeCompatibility';
@@ -37,6 +39,7 @@ describe('runtime compatibility CLI notice', () => {
     vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(isNonInteractive).mockReturnValue(false);
     vi.mocked(readRuntimeNoticeLastShownAt).mockReturnValue(undefined);
+    vi.mocked(withRuntimeNoticeStateLock).mockImplementation((_noticeId, callback) => callback());
   });
 
   afterEach(() => {
@@ -78,6 +81,14 @@ describe('runtime compatibility CLI notice', () => {
         now: new Date('2026-06-22T12:00:00.000Z'),
       }),
     ).toBe(false);
+    expect(console.warn).not.toHaveBeenCalled();
+    expect(writeRuntimeNoticeLastShownAt).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate a reminder claimed by another process', () => {
+    vi.mocked(withRuntimeNoticeStateLock).mockReturnValue(undefined);
+
+    expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2' })).toBe(false);
     expect(console.warn).not.toHaveBeenCalled();
     expect(writeRuntimeNoticeLastShownAt).not.toHaveBeenCalled();
   });
@@ -162,6 +173,23 @@ describe('runtime compatibility CLI notice', () => {
     const message = vi.mocked(console.warn).mock.calls[0][0] as string;
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
     expect(message).not.toContain('Docker image');
+  });
+
+  it('uses rebuild guidance for a custom-container CLI run', () => {
+    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_RUNNING_IN_DOCKER');
+
+    expect(
+      maybeWarnAboutRuntime({
+        currentVersion: 'v20.20.2',
+        now: new Date('2026-06-22T12:00:00.000Z'),
+        nonInteractive: true,
+      }),
+    ).toBe(true);
+
+    const message = vi.mocked(console.warn).mock.calls[0][0] as string;
+    expect(message).toContain('Rebuild this custom Promptfoo image with Node.js 24 LTS');
+    expect(message).not.toContain('docker pull');
+    expect(message).not.toContain('npx promptfoo');
   });
 
   it('can be disabled explicitly and stays silent on newer Node.js versions', () => {

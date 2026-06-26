@@ -37,11 +37,11 @@ export const VersionResponseSchema = z.object({
   selfHosted: z.boolean(),
   isNpx: z.boolean(),
   updateCommands: z.object({
-    primary: z.string(),
+    primary: z.string().nullable(),
     alternative: z.string().nullable(),
-    commandType: z.enum(['docker', 'npx', 'npm']),
+    commandType: z.enum(['container', 'docker', 'npx', 'npm']),
   }),
-  commandType: z.enum(['docker', 'npx', 'npm']),
+  commandType: z.enum(['container', 'docker', 'npx', 'npm']),
 });
 
 export type VersionResponse = z.infer<typeof VersionResponseSchema>;

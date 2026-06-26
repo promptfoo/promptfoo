@@ -45,6 +45,23 @@ describe('VersionSchemas.Response', () => {
     });
   });
 
+  it('accepts custom-container guidance without a package-manager command', () => {
+    expect(
+      VersionSchemas.Response.parse({
+        ...baseResponse,
+        commandType: 'container',
+        updateCommands: {
+          primary: null,
+          alternative: null,
+          commandType: 'container',
+        },
+      }),
+    ).toMatchObject({
+      commandType: 'container',
+      updateCommands: { primary: null, commandType: 'container' },
+    });
+  });
+
   it('accepts the Node.js 20 compatibility notice', () => {
     expect(
       VersionSchemas.Response.parse({

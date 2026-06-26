@@ -275,6 +275,19 @@ docker build -t promptfoo:custom .
 # docker build --platform linux/amd64 -t promptfoo:custom .
 ```
 
+Images built from this Dockerfile are marked as custom containers. Promptfoo will recommend
+rebuilding with a supported Node.js base image and redeploying, rather than suggesting an `npm` or
+`npx` command that cannot replace the application baked into the image.
+
+If your Dockerfile derives from the official Promptfoo image, reset the upstream-image marker while
+keeping container detection enabled. This prevents update notices from suggesting that users replace
+your customized image with the upstream image:
+
+```dockerfile
+FROM ghcr.io/promptfoo/promptfoo:latest
+ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+```
+
 ### 3. Run the Custom Docker Container
 
 Use the same `docker run` command as in Method 1, but replace the image name:

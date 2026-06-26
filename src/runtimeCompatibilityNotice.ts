@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { getEnvBool, getEnvString, isNonInteractive } from './envars';
 import {
   readRuntimeNoticeLastShownAt,
+  withRuntimeNoticeStateLock,
   writeRuntimeNoticeLastShownAt,
 } from './globalConfig/runtimeNoticeState';
 import {
@@ -26,11 +27,14 @@ export function formatRuntimeCompatibilityNotice(
   compact: boolean,
   now: Date = new Date(),
   isOfficialDockerImage: boolean = false,
+  isContainer: boolean = false,
 ): string {
   const supportStatus = hasNode20SupportEnded(now) ? 'ended' : 'ends';
   const upgradeInstruction = isOfficialDockerImage
     ? 'Pull the latest Promptfoo Docker image, then redeploy the container.'
-    : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;
+    : isContainer
+      ? `Rebuild this custom Promptfoo image with Node.js ${notice.recommendedVersion}, then redeploy the container.`
+      : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;
   if (compact) {
     return [
       `Node.js 20 support in promptfoo ${supportStatus} ${NODE_20_SUPPORT_END_DATE_LABEL}.`,
@@ -63,11 +67,22 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   }
 
   try {
-    if (!shouldShowRuntimeNotice(readRuntimeNoticeLastShownAt(notice.id), now)) {
+    const claimedReminder = withRuntimeNoticeStateLock(notice.id, () => {
+      if (!shouldShowRuntimeNotice(readRuntimeNoticeLastShownAt(notice.id), now)) {
+        return false;
+      }
+      try {
+        writeRuntimeNoticeLastShownAt(notice.id, now.toISOString());
+      } catch {
+        // Persistence is best-effort. Fail open so a read-only config never hides the warning.
+      }
+      return true;
+    });
+    if (!claimedReminder) {
       return false;
     }
   } catch {
-    // State is best-effort. If it cannot be read, fail open and show the notice.
+    // State and locking are best-effort. If either fails, fail open and show the notice.
   }
 
   const compact = options.nonInteractive ?? isNonInteractive();
@@ -77,6 +92,7 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
       compact,
       now,
       getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
+      getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
     ),
   );
 
@@ -88,11 +104,6 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
     variant: compact ? 'compact' : 'full',
   });
 
-  try {
-    writeRuntimeNoticeLastShownAt(notice.id, now.toISOString());
-  } catch {
-    // A persistence failure must not prevent the CLI command or duplicate this run's notice.
-  }
   return true;
 }
 
