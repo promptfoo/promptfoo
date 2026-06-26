@@ -3206,7 +3206,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (tokensUsed) {
         updateAssertionMetrics(metrics, tokensUsed);
       }
-      if (!passed && result.score !== wasScore) {
+      if (result.score !== wasScore) {
         metrics.score += result.score - wasScore;
       }
     }

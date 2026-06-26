@@ -515,6 +515,8 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(results[0]).toMatchObject({ success: true, score: 1 });
     expect(results[0].gradingResult).toMatchObject({ pass: true, score: 1 });
     expect(results[1]).toMatchObject({ success: false, score: 0 });
+    expect(evalRecord.prompts[0]?.metrics.score).toBe(1);
+    expect(evalRecord.prompts[1]?.metrics.score).toBe(0);
     expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
   });
 
