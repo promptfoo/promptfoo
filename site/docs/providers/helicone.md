@@ -187,8 +187,9 @@ tests:
 
 ### Caching and Performance Optimization
 
-Configure a cache store and cache layer on the gateway first. The request header below opts this
-provider into that existing cache layer; it does not create a cache store.
+Configure a cache store and cache layer on the gateway first. The request headers below opt this
+provider into that existing cache layer and set a one-hour freshness lifetime; they do not create a
+cache store.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -197,6 +198,7 @@ providers:
     config:
       headers:
         Helicone-Cache-Enabled: 'true'
+        Cache-Control: 'max-age=3600'
 
 prompts:
   - 'Summarize: {{text}}'

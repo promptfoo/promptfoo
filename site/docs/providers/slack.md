@@ -238,7 +238,10 @@ tests:
 
 ### Thread-based Conversations
 
-```yaml title="promptfooconfig.yaml"
+`threadTs` posts into an existing thread, but the provider does not poll that thread for replies.
+Treat this as a configuration reference rather than a complete response-collection example.
+
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Continue conversation in thread
 
