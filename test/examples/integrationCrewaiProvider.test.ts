@@ -319,6 +319,29 @@ print(json.dumps(result))
         summary: 'Matches',
       }),
     ).toBe(false);
+    for (const invisible of ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']) {
+      expect(
+        validate({
+          candidates: [{ ...validCandidate, name: invisible }, otherValidCandidate],
+          summary: 'Matches',
+        }),
+      ).toBe(false);
+      expect(
+        validate({
+          candidates: [{ ...validCandidate, experience: invisible }, otherValidCandidate],
+          summary: 'Matches',
+        }),
+      ).toBe(false);
+      expect(
+        validate({
+          candidates: [{ ...validCandidate, skills: [invisible] }, otherValidCandidate],
+          summary: 'Matches',
+        }),
+      ).toBe(false);
+      expect(
+        validate({ candidates: [validCandidate, otherValidCandidate], summary: invisible }),
+      ).toBe(false);
+    }
   });
 
   it('checks conjunctive role skills without substring false positives', () => {
@@ -355,6 +378,8 @@ print(json.dumps(result))
     expect(evaluateSkills('Full-Stack', ['CPython', 'Djangology', 'ReactNative'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['αpythonβ', 'Django', 'React'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Python', '東京django東京', 'React'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Python\u200bista', 'Django', 'React'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React\u200dNative'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React'])).toBe(true);
     expect(evaluateSkills('Data Scientist', ['Python', 'AWS'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning'])).toBe(false);
@@ -363,11 +388,15 @@ print(json.dumps(result))
       false,
     );
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'αawsβ'])).toBe(false);
+    expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'AWS\ufeffome'])).toBe(
+      false,
+    );
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'AWS'])).toBe(true);
     expect(evaluateSkills('UX/UI', ['Figma'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Adobe Creative Suite'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Figmaware', 'Adobeish'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['αfigmaβ', 'Adobe Acrobat'])).toBe(false);
+    expect(evaluateSkills('UX/UI', ['Figma\u200cware', 'Adobe Acrobat'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Creative Suite'])).toBe(true);
     expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Acrobat'])).toBe(true);
   });
@@ -410,6 +439,7 @@ print(json.dumps(result))
         candidates: [validOutput.candidates[0], validOutput.candidates[0]],
       }),
     ).toBe(false);
+    expect(validate({ ...validOutput, summary: '\u200b\u2060' })).toBe(false);
 
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['COBOL', 'Java']))).toBe(false);
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails']))).toBe(false);
@@ -422,6 +452,12 @@ print(json.dumps(result))
     );
     expect(
       evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails', '東京react東京'])),
+    ).toBe(false);
+    expect(
+      evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails\u2060beta', 'React'])),
+    ).toBe(false);
+    expect(
+      evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails', 'React\u200dNative'])),
     ).toBe(false);
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoR', 'React']))).toBe(true);
     expect(evaluatePythonAssertion(assertion, validOutput)).toBe(true);

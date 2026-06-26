@@ -414,20 +414,20 @@ defaultTest:
               properties:
                 name:
                   type: string
-                  pattern: '\S'
+                  pattern: '[^\s\p{C}\p{M}]'
                 experience:
                   type: string
-                  pattern: '\S'
+                  pattern: '[^\s\p{C}\p{M}]'
                 skills:
                   type: array
                   minItems: 1
                   items:
                     type: string
-                    pattern: '\S'
+                    pattern: '[^\s\p{C}\p{M}]'
               required: ['name', 'experience', 'skills']
           summary:
             type: string
-            pattern: '\S'
+            pattern: '[^\s\p{C}\p{M}]'
         required: ['candidates', 'summary'] # Both fields must be present
 
 # 🧪 Specific test case to validate role-specific skills
@@ -439,12 +439,24 @@ tests:
       - type: python # Require both skills without substring matches
         value: |
           import re
+          import unicodedata
+
+          def is_token_character(character):
+              if not character:
+                  return False
+              category = unicodedata.category(character)
+              return character.isalnum() or category[0] in {'M', 'C'} or category == 'Pc'
 
           def has_skill(candidate, required_skill):
-              return any(
-                  re.search(rf'(?<![^\W_]){re.escape(required_skill)}(?![^\W_])', skill.lower())
-                  for skill in candidate.get('skills', [])
-              )
+              needle = required_skill.casefold()
+              for candidate_skill in candidate.get('skills', []):
+                  skill = candidate_skill.casefold()
+                  for match in re.finditer(re.escape(needle), skill):
+                      before = skill[match.start() - 1:match.start()]
+                      after = skill[match.end():match.end() + 1]
+                      if not is_token_character(before) and not is_token_character(after):
+                          return True
+              return False
 
           rails_skills = ['ror', 'ruby on rails']
           return all(
@@ -663,7 +675,7 @@ Once it starts, Promptfoo will:
 promptfoo redteam report
 ```
 
-When complete, you’ll get a summary for the selected plugins and strategies, token usage, pass rate, and detailed results.
+When complete, you’ll get a summary for the selected plugins and strategies, pass rate, and detailed results.
 
 ## Step 12: Check and summarize your results
 
