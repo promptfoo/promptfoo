@@ -413,6 +413,86 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(summary.stats.errors).toBe(0);
   });
 
+  it('should select the lowest-cost output that passed the regular assertions', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cost-selection-provider'),
+      callApi: vi.fn(async (prompt: string) =>
+        prompt.includes('Cheap')
+          ? { output: 'incorrect', cost: 0.001 }
+          : { output: 'hello world', cost: 0.01 },
+      ),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Cheap prompt'), toPrompt('Valid prompt')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'select-lowest-cost', value: { onlyPassing: true } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ success: false, cost: 0.001 });
+    expect(results[1]).toMatchObject({ success: true, cost: 0.01 });
+    expect(results[1].gradingResult?.componentResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pass: true,
+          assertion: expect.objectContaining({ type: 'select-lowest-cost' }),
+        }),
+      ]),
+    );
+    expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+  });
+
+  it('should apply select-lowest-latency to overall pass/fail and stats', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('latency-selection-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: 'hello world',
+        latencyMs: prompt.includes('Slow') ? 200 : 50,
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Slow prompt'), toPrompt('Fast prompt')],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'select-lowest-latency' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ success: false, latencyMs: 200 });
+    expect(results[1]).toMatchObject({ success: true, latencyMs: 50 });
+    expect(results[1].gradingResult?.componentResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pass: true,
+          assertion: expect.objectContaining({ type: 'select-lowest-latency' }),
+        }),
+      ]),
+    );
+    expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+  });
+
   it('should apply select-best to overall pass/fail and stats', async () => {
     // Mock matchesSelectBest to return deterministic results (first wins, second loses)
     const matchers = await import('../../src/matchers/comparison');

@@ -73,6 +73,8 @@ const assertTypes: AssertionType[] = [
   'cost',
   'finish-reason',
   'latency',
+  'select-lowest-cost',
+  'select-lowest-latency',
   'perplexity',
   'perplexity-score',
   'rouge-n',

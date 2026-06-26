@@ -13,6 +13,123 @@ import type {
   VarValue,
 } from '../types/index';
 
+export const METRIC_SELECTOR_ASSERTION_TYPES = [
+  'select-lowest-cost',
+  'select-lowest-latency',
+] as const;
+
+export type MetricSelectorAssertionType = (typeof METRIC_SELECTOR_ASSERTION_TYPES)[number];
+
+type MetricSelectorCandidate = {
+  latencyMs?: number;
+  promptIdx: number;
+  response?: { cached?: boolean; cost?: number };
+  success: boolean;
+};
+
+const selectorDefinitions = {
+  'select-lowest-cost': {
+    direction: 'min',
+    label: 'cost',
+    value: (result: MetricSelectorCandidate) => result.response?.cost,
+  },
+  'select-lowest-latency': {
+    direction: 'min',
+    label: 'latency',
+    value: (result: MetricSelectorCandidate) => result.latencyMs,
+  },
+} as const;
+
+export function isMetricSelectorAssertionType(
+  type: string | undefined,
+): type is MetricSelectorAssertionType {
+  return METRIC_SELECTOR_ASSERTION_TYPES.some((candidate) => candidate === type);
+}
+
+const isValidMetric = (value: number | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+export async function selectMetric(
+  results: MetricSelectorCandidate[],
+  assertion: Assertion,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    isMetricSelectorAssertionType(assertion.type),
+    `Unsupported selector: ${assertion.type}`,
+  );
+  invariant(
+    results.length >= 2,
+    `${assertion.type} assertion must have at least two outputs to compare between`,
+  );
+
+  const definition = selectorDefinitions[assertion.type];
+  const values = results.map(definition.value);
+  const onlyPassing =
+    assertion.type === 'select-lowest-latency' ||
+    (assertion.value !== null &&
+      typeof assertion.value === 'object' &&
+      'onlyPassing' in assertion.value &&
+      assertion.value.onlyPassing === true);
+  const failAll = (reason: string) =>
+    results.map(() => ({
+      pass: false,
+      score: 0,
+      reason,
+    }));
+  const eligible = results.flatMap((result, index) =>
+    !onlyPassing || result.success ? [index] : [],
+  );
+
+  if (eligible.length === 0) {
+    return failAll(
+      `${assertion.type} requires at least one eligible output; all outputs failed other assertions`,
+    );
+  }
+
+  const cached = eligible.filter((index) => results[index].response?.cached);
+  if (cached.length > 0) {
+    return failAll(
+      `${assertion.type} does not support cached eligible outputs (prompt indexes: ${cached.map((index) => results[index].promptIdx).join(', ')}). Rerun the eval with --no-cache`,
+    );
+  }
+
+  const invalid = eligible.filter((index) => !isValidMetric(values[index]));
+  if (invalid.length > 0) {
+    return failAll(
+      `${assertion.type} requires every eligible output to report a finite, non-negative ${definition.label}; missing or invalid ${definition.label} for prompt indexes: ${invalid.map((index) => results[index].promptIdx).join(', ')}`,
+    );
+  }
+
+  let winner = eligible[0];
+  for (const index of eligible.slice(1)) {
+    const value = values[index]!;
+    const winnerValue = values[winner]!;
+    const better = definition.direction === 'min' ? value < winnerValue : value > winnerValue;
+    if (better || (value === winnerValue && results[index].promptIdx < results[winner].promptIdx)) {
+      winner = index;
+    }
+  }
+
+  const objective = definition.direction === 'min' ? 'lowest' : 'highest';
+  return results.map((_result, index) => {
+    if (onlyPassing && !results[index].success) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Not eligible for ${assertion.type} because the output failed another assertion`,
+      };
+    }
+    const selected = index === winner;
+    return {
+      pass: selected,
+      score: selected ? 1 : 0,
+      reason: selected
+        ? `Selected as ${objective} ${definition.label} output (${definition.label}: ${values[index]})`
+        : `Not selected (${definition.label}: ${values[index]}, ${objective}: ${values[winner]})`,
+    };
+  });
+}
+
 export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
@@ -117,15 +234,15 @@ export async function selectMaxScore(
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
-    // Filter out max-score and select-best assertions
+    // Selection assertions are evaluated separately and must not contribute to max-score.
     const relevantResults = componentResults.filter(
       (r: GradingResult) =>
-        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+        r.assertion && r.assertion.type !== 'max-score' && !r.assertion.type.startsWith('select-'),
     );
 
     if (relevantResults.length === 0) {
       throw new Error(
-        'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+        'max-score requires at least one other assertion (besides max-score or select-* assertions) to aggregate scores from',
       );
     }
 
