@@ -510,6 +510,8 @@ describe('Plugins', () => {
     });
 
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
+      expect(CANARY_BREAKING_STRATEGY_IDS).toContain('posterior');
+
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });

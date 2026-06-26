@@ -295,9 +295,9 @@ export const strategies: Strategy[] = [
     displayName: 'Posterior Attack',
     description: 'Safety-classifier reframing',
     longDescription:
-      "Reframes a harmful request as a safety-classification task, asking the target to author the example a red-team classifier would label unsafe, recruiting the model's own safety judgement to produce the unsafe content",
+      'Reframes a harmful request as a safety-classification task, asking the target to author an example that a red-team classifier would label unsafe',
     cost: 'Low',
-    asrIncrease: '40-60%',
+    asrIncrease: 'Variable',
     link: '/docs/red-team/strategies/posterior/',
   },
   {
