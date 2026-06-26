@@ -127,6 +127,7 @@ export function getStrategyCompatibilityError(
     pluginsWithConfiguredInputs.length > 0 &&
     hasApplicablePosteriorStrategy(strategies, pluginsWithConfiguredInputs, {
       includeDisabledStrategies: options.includeDisabledStrategies,
+      pluginsUseTargetInputs: false,
     });
 
   return hasPosterior || pluginInputsHavePosterior ? POSTERIOR_MULTI_INPUT_ERROR : undefined;

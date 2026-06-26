@@ -253,6 +253,109 @@ describe('Strategies', () => {
       expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
     });
 
+    it('disables Posterior Attack for plugin-level inputs', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [],
+          plugins: [
+            {
+              id: 'policy',
+              config: { inputs: { context: 'Reference context', question: 'User question' } },
+            },
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
+      expect(
+        screen.getByText(
+          'Posterior Attack is unavailable while target or plugin inputs are configured.',
+        ),
+      ).toBeVisible();
+    });
+
+    it('blocks progression for selected Posterior with plugin-level inputs', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [{ id: 'posterior' }],
+          plugins: [
+            {
+              id: 'policy',
+              config: { inputs: { context: 'Reference context', question: 'User question' } },
+            },
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+      expect(
+        screen.getByText(
+          'Remove Posterior Attack from the selected strategies or Layer steps, or clear the configured target or plugin inputs.',
+        ),
+      ).toBeVisible();
+    });
+
+    it('allows Posterior when plugin-level inputs belong only to an exempt plugin', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [{ id: 'posterior' }],
+          plugins: [
+            {
+              id: 'coding-agent:secret-env-read',
+              config: { inputs: { query: 'Task' } },
+            },
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeEnabled();
+      expect(
+        screen.queryByText('Posterior Attack requires a single-input target'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('uses default plugins for Posterior target applicability', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: { stateful: false },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+          strategies: [{ id: 'posterior', config: { plugins: ['policy'] } }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      expect(
+        screen.queryByText('Posterior Attack requires a single-input target'),
+      ).not.toBeInTheDocument();
+    });
+
     it('allows Posterior Attack for sequence provider input arrays', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({

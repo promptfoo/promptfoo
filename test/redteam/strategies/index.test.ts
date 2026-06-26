@@ -307,6 +307,14 @@ describe('getStrategyCompatibilityError', () => {
     ).toBe('Posterior strategy does not support multi-input targets');
   });
 
+  it('does not apply target-wide plugin exclusions to plugin-level inputs', () => {
+    expect(
+      getStrategyCompatibilityError(['posterior'], undefined, {
+        plugins: [{ id: 'cca', config: { inputs } }],
+      }),
+    ).toBe('Posterior strategy does not support multi-input targets');
+  });
+
   it('resolves file-backed sequence-only intents for compatibility checks', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-posterior-intents-'));
     const intentPath = path.join(tempDir, 'intents.json');

@@ -400,6 +400,7 @@ export function configuredPluginHasApplicablePosteriorForMultiInput(
   pluginId: string,
   pluginConfig: unknown,
   strategy: RedteamStrategyObject,
+  options: { pluginsUseTargetInputs?: boolean } = {},
 ): boolean {
   const normalizedPluginId = normalizePluginId(pluginId);
   if (
@@ -416,9 +417,11 @@ export function configuredPluginHasApplicablePosteriorForMultiInput(
   const expandedPluginIds = expansion ?? [normalizedPluginId];
   return expandedPluginIds.some(
     (expandedPluginId) =>
-      !MULTI_INPUT_EXCLUDED_PLUGINS.includes(
-        expandedPluginId as (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number],
-      ) && pluginConfigHasApplicablePosterior(expandedPluginId, pluginConfig, strategy),
+      (options.pluginsUseTargetInputs === false ||
+        !MULTI_INPUT_EXCLUDED_PLUGINS.includes(
+          expandedPluginId as (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number],
+        )) &&
+      pluginConfigHasApplicablePosterior(expandedPluginId, pluginConfig, strategy),
   );
 }
 

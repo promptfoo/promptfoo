@@ -981,6 +981,28 @@ describe('Redteam Routes', () => {
       expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
     });
 
+    it('uses default plugins when preflighting a targeted Posterior strategy', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: {
+              strategies: [{ id: 'posterior', config: { plugins: ['policy'] } }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedResolveRedteamTargetProviderInputMetadata).not.toHaveBeenCalled();
+    });
+
     it('treats an empty command-line plugin list as no override', async () => {
       const response = await request(app)
         .post('/api/redteam/run')

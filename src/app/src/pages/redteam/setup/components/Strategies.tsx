@@ -12,6 +12,7 @@ import { useToast } from '@app/hooks/useToast';
 import {
   AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
+  DEFAULT_PLUGINS,
   MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
   MULTI_TURN_STRATEGY_SET,
@@ -93,15 +94,41 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
   const targetInputs = config.target?.inputs ?? config.target?.config?.inputs;
-  const isPosteriorUnavailable =
+  const targetHasInputs =
     targetInputs !== null &&
     typeof targetInputs === 'object' &&
     !Array.isArray(targetInputs) &&
     Object.keys(targetInputs).length > 0;
-  const hasSelectedPosterior = useMemo(
-    () => hasPosteriorStrategy(config.strategies, config.plugins),
-    [config.plugins, config.strategies],
+  const pluginsWithInputs = useMemo(
+    () =>
+      config.plugins.filter(
+        (plugin) =>
+          typeof plugin === 'object' &&
+          plugin.config?.inputs !== null &&
+          typeof plugin.config?.inputs === 'object' &&
+          !Array.isArray(plugin.config.inputs) &&
+          Object.keys(plugin.config.inputs).length > 0,
+      ),
+    [config.plugins],
   );
+  const effectivePlugins = useMemo(
+    () => (config.plugins.length > 0 ? config.plugins : Array.from(DEFAULT_PLUGINS)),
+    [config.plugins],
+  );
+  const isPosteriorUnavailable = targetHasInputs || pluginsWithInputs.length > 0;
+  const compatibilityPlugins = targetHasInputs ? effectivePlugins : pluginsWithInputs;
+  const hasSelectedPosterior = useMemo(
+    () =>
+      hasPosteriorStrategy(config.strategies, compatibilityPlugins, {
+        pluginsUseTargetInputs: targetHasInputs,
+      }),
+    [compatibilityPlugins, config.strategies, targetHasInputs],
+  );
+  const isDirectPosteriorUnavailable =
+    isPosteriorUnavailable &&
+    hasPosteriorStrategy([{ id: 'posterior' }], compatibilityPlugins, {
+      pluginsUseTargetInputs: targetHasInputs,
+    });
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
@@ -113,14 +140,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
       if (
         strategyId === 'posterior' &&
-        isPosteriorUnavailable &&
+        isDirectPosteriorUnavailable &&
         !config.strategies.some((strategy) => getStrategyId(strategy) === strategyId)
       ) {
         return true;
       }
       return false;
     },
-    [config.strategies, isRemoteGenerationDisabled, isPosteriorUnavailable],
+    [config.strategies, isDirectPosteriorUnavailable, isRemoteGenerationDisabled],
   );
 
   /** Whether a strategy is disabled specifically because it's enterprise only */
@@ -391,7 +418,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const getNextButtonTooltip = useCallback(() => {
     if (isPosteriorUnavailable && hasSelectedPosterior) {
-      return 'Posterior Attack supports single-input targets only. Remove it or clear the configured target inputs.';
+      return 'Posterior Attack supports single-input targets only. Remove it or clear the configured target or plugin inputs.';
     }
     if (!isStrategyConfigValid()) {
       const unconfiguredStrategies = config.strategies
@@ -418,11 +445,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
       const strategy = config.strategies.find((item) => getStrategyId(item) === strategyId);
       return strategy &&
-        hasPosteriorStrategy([strategy], config.plugins, { includeDisabledStrategies: true })
+        hasPosteriorStrategy([strategy], compatibilityPlugins, {
+          includeDisabledStrategies: true,
+          pluginsUseTargetInputs: targetHasInputs,
+        })
         ? POSTERIOR_UNAVAILABLE_MESSAGE
         : undefined;
     },
-    [config.plugins, config.strategies, isPosteriorUnavailable],
+    [compatibilityPlugins, config.strategies, isPosteriorUnavailable, targetHasInputs],
   );
 
   // ----------------------------------------------
@@ -500,19 +530,20 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      {isPosteriorUnavailable && (hasSelectedPosterior || isAdvancedOpen) && (
-        <Alert variant="warning" className="-mx-3 mb-3 rounded-none shadow-sm">
-          <AlertTriangle className="size-4" />
-          <AlertContent>
-            <AlertTitle>Posterior Attack requires a single-input target</AlertTitle>
-            <AlertDescription>
-              {hasSelectedPosterior
-                ? 'Remove Posterior Attack from the selected strategies or Layer steps, or return to Targets and clear the configured inputs.'
-                : 'Posterior Attack is unavailable while target inputs are configured.'}
-            </AlertDescription>
-          </AlertContent>
-        </Alert>
-      )}
+      {isPosteriorUnavailable &&
+        (hasSelectedPosterior || (isAdvancedOpen && isDirectPosteriorUnavailable)) && (
+          <Alert variant="warning" className="-mx-3 mb-3 rounded-none shadow-sm">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertTitle>Posterior Attack requires a single-input target</AlertTitle>
+              <AlertDescription>
+                {hasSelectedPosterior
+                  ? 'Remove Posterior Attack from the selected strategies or Layer steps, or clear the configured target or plugin inputs.'
+                  : 'Posterior Attack is unavailable while target or plugin inputs are configured.'}
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
 
       {/* Warning banner when all/most strategies are selected - full width sticky */}
       {hasSelectedMostStrategies && (
@@ -644,7 +675,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             }
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
-            unavailableStrategies={isPosteriorUnavailable ? ['posterior'] : undefined}
+            unavailableStrategies={isDirectPosteriorUnavailable ? ['posterior'] : undefined}
           />
         </div>
       </TestCaseGenerationProvider>
