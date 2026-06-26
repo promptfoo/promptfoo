@@ -114,7 +114,7 @@ You can also browse the [AI/ML API Models page](https://aimlapi.com/models?utm_s
 providers:
   - aimlapi:chat:deepseek/deepseek-r1
   - aimlapi:chat:openai/gpt-5-mini-2025-08-07
-  - aimlapi:chat:anthropic/claude-sonnet-4
+  - aimlapi:chat:anthropic/claude-sonnet-4-6
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -133,7 +133,7 @@ tests:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   # Reasoning model with low temperature
-  - id: aimlapi:chat:deepseek-r1
+  - id: aimlapi:chat:deepseek/deepseek-r1
     label: 'DeepSeek R1 (Reasoning)'
     config:
       temperature: 0.1
