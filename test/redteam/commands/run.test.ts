@@ -275,6 +275,7 @@ describe('redteamRunCommand', () => {
     it('should override cloud message length limits when CLI flags are provided', async () => {
       const mockConfig = {
         redteam: { maxCharsPerMessage: 250 },
+        commandLineOptions: { maxCharsPerMessage: 250, minCharsPerMessage: 150 } as any,
         prompts: ['Test prompt'],
         vars: {},
         providers: [{ id: 'test-provider' }],
@@ -307,6 +308,7 @@ describe('redteamRunCommand', () => {
               maxCharsPerMessage: 180,
               minCharsPerMessage: 120,
             }),
+            commandLineOptions: {},
           }),
           maxCharsPerMessage: 180,
           minCharsPerMessage: 120,

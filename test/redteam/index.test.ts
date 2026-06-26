@@ -374,6 +374,29 @@ describe('synthesize', () => {
       }
     });
 
+    it('preserves a short agentic wrapper seed for runtime generation', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockImplementation((testCases) => testCases),
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat', config: { minCharsPerMessage: 10 } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+      );
+    });
+
     it('preserves effective limits when a plugin intentionally omits pluginConfig', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: vi

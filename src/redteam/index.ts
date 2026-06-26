@@ -720,12 +720,18 @@ async function applyStrategies(
       maxCharsPerMessage ?? (strategy.config?.maxCharsPerMessage as number | undefined);
     const strategyMinCharsPerMessage =
       minCharsPerMessage ?? (strategy.config?.minCharsPerMessage as number | undefined);
+    // Agentic strategies keep the seed in vars while their provider generates the
+    // actual attack at runtime. Preserve short seeds so the runtime output can
+    // satisfy the final minimum.
+    const generatedMinCharsPerMessage = AGENTIC_STRATEGIES_SET.has(strategy.id as any)
+      ? undefined
+      : strategyMinCharsPerMessage;
     resultTestCases = filterGeneratedTestCasesByCharLimits(
       resultTestCases,
       injectVar,
       `Strategy ${strategy.id}`,
       strategyMaxCharsPerMessage,
-      strategyMinCharsPerMessage,
+      generatedMinCharsPerMessage,
     );
 
     newTestCases.push(

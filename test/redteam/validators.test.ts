@@ -414,6 +414,22 @@ describe('redteamConfigSchema', () => {
     ).toBe(true);
   });
 
+  it('should allow layer final limits to differ from intermediate step limits', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [
+          {
+            id: 'layer',
+            config: {
+              maxCharsPerMessage: 5,
+              steps: [{ id: 'goat', config: { minCharsPerMessage: 10 } }, { id: 'base64' }],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject layered strategy step ranges combined with plugin ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({

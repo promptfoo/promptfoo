@@ -352,10 +352,14 @@ function validateEffectiveCharsPerMessageRanges(
     if (strategy.id !== 'layer' || !Array.isArray(ownConfig.steps)) {
       return current;
     }
+    // A layer's limits constrain the completed pipeline, not each intermediate
+    // step. Only inherit targeting so step ranges remain independently valid.
+    const stepTargetingConfig =
+      config.plugins === undefined ? undefined : { plugins: config.plugins };
     return [
       ...current,
       ...ownConfig.steps.flatMap((step) =>
-        expandLayerSteps(step as ScopedPromptLimit, index, config),
+        expandLayerSteps(step as ScopedPromptLimit, index, stepTargetingConfig),
       ),
     ];
   };

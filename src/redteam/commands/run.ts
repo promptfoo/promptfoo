@@ -25,11 +25,14 @@ function applyCloudRunOverrides(config: Record<string, unknown>, opts: RedteamRu
   }
 
   const redteam = (config.redteam ??= {}) as Record<string, unknown>;
+  const commandLineOptions = config.commandLineOptions as Record<string, unknown> | undefined;
   if (opts.maxCharsPerMessage !== undefined) {
     redteam.maxCharsPerMessage = opts.maxCharsPerMessage;
+    delete commandLineOptions?.maxCharsPerMessage;
   }
   if (opts.minCharsPerMessage !== undefined) {
     redteam.minCharsPerMessage = opts.minCharsPerMessage;
+    delete commandLineOptions?.minCharsPerMessage;
   }
 }
 
