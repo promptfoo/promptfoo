@@ -98,10 +98,28 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
+type XAIModelCost = {
+  input: number;
+  output: number;
+  cache_read?: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    output: number;
+    cache_read?: number;
+  };
+};
+
+type XAIChatModel = {
+  id: string;
+  cost: XAIModelCost;
+  aliases?: string[];
+};
+
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
 // reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
 // by `usage.cost_in_usd_ticks` on chat/responses results.
-export const XAI_CHAT_MODELS = [
+export const XAI_CHAT_MODELS: XAIChatModel[] = [
   // Grok 4.20 Models
   {
     id: 'grok-4.20-0309-reasoning',
@@ -198,6 +216,12 @@ export const XAI_CHAT_MODELS = [
       input: 1.0 / 1e6,
       output: 2.0 / 1e6,
       cache_read: 0.2 / 1e6,
+      longContext: {
+        threshold: 200_000,
+        input: 2.0 / 1e6,
+        output: 4.0 / 1e6,
+        cache_read: 0.4 / 1e6,
+      },
     },
     aliases: ['grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'],
   },
@@ -460,6 +484,11 @@ export const GROK_4_MODELS = [
   'grok-4-1-fast-reasoning-latest',
   'grok-4-1-fast-non-reasoning',
   'grok-4-1-fast-non-reasoning-latest',
+  // Grok Build and retired Grok Code Fast aliases
+  'grok-build-0.1',
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
   // Grok 4 Fast
   'grok-4-fast-reasoning',
   'grok-4-fast',
@@ -505,11 +534,22 @@ export function calculateXAICost(
     return undefined;
   }
 
+  // xAI applies long-context rates to the entire request once prompt tokens,
+  // including cached tokens, reach the model's threshold.
+  const longContextCost =
+    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
+      ? model.cost.longContext
+      : undefined;
   const inputCostOverride = config.inputCost ?? config.cost;
-  const inputCost = inputCostOverride ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const inputCost = inputCostOverride ?? longContextCost?.input ?? model.cost.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   const cacheReadCost =
-    config.cacheReadCost ?? inputCostOverride ?? model.cost.cache_read ?? inputCost;
+    config.cacheReadCost ??
+    inputCostOverride ??
+    longContextCost?.cache_read ??
+    model.cost.cache_read ??
+    inputCost;
 
   const billableCachedTokens = Number.isFinite(cachedTokens)
     ? Math.min(Math.max(cachedTokens!, 0), promptTokens)

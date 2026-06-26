@@ -325,20 +325,33 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
-    it('treats Grok Build as a reasoning model when constructing requests', async () => {
-      const provider = createXAIProvider('xai:grok-build-0.1') as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            max_completion_tokens: 2048,
-            max_tokens: 1024,
+    it('filters unsupported controls for Grok Build and its retired aliases', async () => {
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_completion_tokens: 2048,
+              max_tokens: 1024,
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['END'],
+            },
           },
-        },
-      });
+        });
 
-      expect(provider.isReasoningModel()).toBe(true);
-      expect(result.body.max_completion_tokens).toBe(2048);
-      expect(result.body.max_tokens).toBeUndefined();
+        expect(provider.isReasoningModel()).toBe(true);
+        expect(result.body.max_completion_tokens).toBe(2048);
+        expect(result.body.max_tokens).toBeUndefined();
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+      }
     });
 
     it('recognizes Grok 4.3 models as reasoning models', () => {
@@ -588,6 +601,12 @@ describe('xAI Chat Provider', () => {
       expect(grokBuild?.cost?.input).toBe(1 / 1e6);
       expect(grokBuild?.cost?.output).toBe(2 / 1e6);
       expect(grokBuild?.cost?.cache_read).toBe(0.2 / 1e6);
+      expect(grokBuild?.cost?.longContext).toEqual({
+        threshold: 200_000,
+        input: 2 / 1e6,
+        output: 4 / 1e6,
+        cache_read: 0.4 / 1e6,
+      });
     });
 
     it('includes Grok 4.1 Fast in XAI_CHAT_MODELS with correct pricing', () => {
@@ -728,12 +747,18 @@ describe('xAI Chat Provider', () => {
         'grok-code-fast',
         'grok-code-fast-1-0825',
       ]) {
-        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3, 10);
-        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000, 0, 800_000)).toBeCloseTo(
-          2.36,
-          10,
-        );
+        expect(calculateXAICost(modelName, {}, 100_000, 100_000)).toBeCloseTo(0.3, 10);
+        expect(calculateXAICost(modelName, {}, 100_000, 100_000, 0, 80_000)).toBeCloseTo(0.236, 10);
       }
+    });
+
+    it('uses Grok Build long-context pricing at the 200K prompt threshold', () => {
+      expect(calculateXAICost('grok-build-0.1', {}, 199_999, 100_000)).toBeCloseTo(0.399999, 10);
+      expect(calculateXAICost('grok-build-0.1', {}, 200_000, 100_000)).toBeCloseTo(0.8, 10);
+      expect(calculateXAICost('grok-code-fast-1', {}, 200_000, 100_000, 0, 100_000)).toBeCloseTo(
+        0.64,
+        10,
+      );
     });
 
     it('returns undefined for invalid inputs', () => {
