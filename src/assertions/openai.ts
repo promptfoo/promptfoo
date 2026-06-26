@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { type OpenAiFunction, validateFunctionCall } from '../providers/openai/util';
 import {
   type AssertionParams,
@@ -86,15 +88,11 @@ function parseMetadataMcpToolCalls(metadataCalls: unknown): StructuredMcpToolCal
     ) {
       return { error: 'MCP tool call metadata is malformed' };
     }
+    const error =
+      'error' in value && typeof value.error === 'string' && value.error ? value.error : undefined;
     calls.push(
-      value.status === 'error'
-        ? {
-            name: value.name,
-            error:
-              'error' in value && typeof value.error === 'string' && value.error
-                ? value.error
-                : 'unknown error',
-          }
+      value.status === 'error' || error
+        ? { name: value.name, error: error ?? 'unknown error' }
         : { name: value.name },
     );
   }
@@ -106,6 +104,17 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
     typeof raw === 'object' && raw !== null && 'output' in raw && Array.isArray(raw.output)
       ? raw.output
       : [];
+  if (
+    rawOutput.some(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        'type' in item &&
+        item.type === 'mcp_approval_request',
+    )
+  ) {
+    return { error: 'MCP tool call response is awaiting approval' };
+  }
   const rawCalls = rawOutput.filter(
     (item) =>
       typeof item === 'object' && item !== null && 'type' in item && item.type === 'mcp_call',
@@ -235,14 +244,14 @@ function wasMcpOutputTransformed({
   test,
 }: Pick<AssertionParams, 'assertion' | 'output' | 'provider' | 'providerResponse' | 'test'>) {
   const assertionChangedOutput =
-    Boolean(assertion.transform) && output !== providerResponse?.output;
+    Boolean(assertion.transform) && !isDeepStrictEqual(output, providerResponse?.output);
   const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
   const testChangedOutput =
     hasTestTransform &&
-    (providerResponse?.providerTransformedOutput === undefined ||
-      providerResponse.output !== providerResponse.providerTransformedOutput);
+    providerResponse?.providerTransformedOutput !== undefined &&
+    !isDeepStrictEqual(providerResponse.output, providerResponse.providerTransformedOutput);
   const providerChangedOutput =
-    Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false;
+    Boolean(provider?.transform) && providerResponse?.providerTransformChanged === true;
   return assertionChangedOutput || testChangedOutput || providerChangedOutput;
 }
 

@@ -1164,6 +1164,20 @@ export function geminiFormatAndSystemInstructions(
  * @param {object | any} schemaNode - The current node (object or value) being processed.
  * @returns {object | any} - The processed node with type keywords lowercased.
  */
+function shouldSkipGoogleSchemaField(key: string, value: unknown): boolean {
+  if (key === 'propertyOrdering' || key === 'property_ordering') {
+    return true;
+  }
+  return (
+    key === 'format' &&
+    typeof value === 'string' &&
+    !Object.prototype.hasOwnProperty.call(
+      (ajv as unknown as { formats: Record<string, unknown> }).formats,
+      value,
+    )
+  );
+}
+
 function normalizeSchemaTypes(schemaNode: any): any {
   // Handle non-objects (including null) and arrays directly by iterating/returning
   if (typeof schemaNode !== 'object' || schemaNode === null) {
@@ -1181,6 +1195,9 @@ function normalizeSchemaTypes(schemaNode: any): any {
     if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
       const value = schemaNode[key];
 
+      if (shouldSkipGoogleSchemaField(key, value)) {
+        continue;
+      }
       if (key === 'type') {
         if (
           typeof value === 'string' &&
@@ -1199,6 +1216,12 @@ function normalizeSchemaTypes(schemaNode: any): any {
           // Handle type used as function field rather than a schema type definition
           newNode[key] = normalizeSchemaTypes(value);
         }
+      } else if (
+        (key === 'minItems' || key === 'maxItems') &&
+        typeof value === 'string' &&
+        /^\d+$/.test(value)
+      ) {
+        newNode[key] = Number(value);
       } else {
         // Recursively process nested objects/arrays
         newNode[key] = normalizeSchemaTypes(value);
@@ -1218,7 +1241,14 @@ export function parseStringObject(input: string | any) {
 
 function compileFunctionDeclarationValidators(functionDeclarations: FunctionDeclaration[]) {
   const validators = new Map<FunctionDeclaration, ReturnType<typeof ajv.compile>>();
+  const names = new Set<string>();
   for (const functionDeclaration of functionDeclarations) {
+    if (names.has(functionDeclaration.name)) {
+      throw new FunctionToolCallValidationSetupError(
+        `Duplicate function schema configured for "${functionDeclaration.name}"`,
+      );
+    }
+    names.add(functionDeclaration.name);
     if (functionDeclaration.parameters === undefined) {
       continue;
     }
@@ -1330,7 +1360,8 @@ export function validateFunctionCall(
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
-    const functionArgs = parseStringObject(functionCall.args);
+    const functionArgs =
+      functionCall.args === undefined ? {} : parseStringObject(functionCall.args);
     const functionSchema = functionDeclarations.find((f) => f.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);

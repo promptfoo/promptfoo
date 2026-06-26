@@ -602,8 +602,6 @@ tests:
       query: 'What is MCP?'
     assert:
       - type: is-valid-openai-tools-call # Validates MCP tool success
-      - type: contains
-        value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
 
 ### tool-call-f1

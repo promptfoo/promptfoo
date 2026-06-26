@@ -294,7 +294,7 @@ describe('util', () => {
       );
     });
 
-    it('should throw error when propertyOrdering references invalid property', () => {
+    it('should ignore propertyOrdering during argument validation', () => {
       const output = [
         {
           functionCall: {
@@ -311,15 +311,13 @@ describe('util', () => {
               parameters: {
                 type: 'OBJECT',
                 properties: { param1: { type: 'STRING' } },
-                propertyOrdering: ['param1', 'param2'],
+                propertyOrdering: ['param1'],
               },
             },
           ],
         },
       ];
-      expect(() => validateFunctionCall(output, functions)).toThrow(
-        /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
-      );
+      expect(() => validateFunctionCall(output, functions)).not.toThrow();
     });
   });
 

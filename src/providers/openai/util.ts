@@ -812,7 +812,6 @@ export function validateFunctionCall(
   } catch (error) {
     throw new FunctionToolCallValidationSetupError((error as Error).message);
   }
-  const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   if (!Array.isArray(interpolatedFunctions) || interpolatedFunctions.length === 0) {
     throw new FunctionToolCallValidationSetupError(
@@ -856,7 +855,11 @@ export function validateFunctionCall(
       );
     }
     try {
-      validators.set(functionDefinition.name, ajv.compile(functionSchema));
+      const validate = ajv.compile(functionSchema);
+      if ((validate as { $async?: boolean }).$async) {
+        throw new Error('Async function schemas are not supported');
+      }
+      validators.set(functionDefinition.name, validate);
     } catch (error) {
       throw new FunctionToolCallValidationSetupError((error as Error).message);
     }
@@ -866,6 +869,7 @@ export function validateFunctionCall(
   if (!functionDefinition) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
   }
+  const functionArgs = JSON.parse(functionCall.arguments);
   const validate = validators.get(functionDefinition.name)!;
   if (!validate(functionArgs)) {
     throw new Error(

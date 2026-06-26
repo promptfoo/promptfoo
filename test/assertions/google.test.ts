@@ -444,6 +444,106 @@ describe('Google assertions', () => {
       });
     });
 
+    it.each([
+      [
+        'property ordering',
+        {
+          type: 'OBJECT',
+          properties: { value: { type: 'STRING' } },
+          propertyOrdering: ['value'],
+        },
+      ],
+      [
+        'string array bounds',
+        {
+          type: 'OBJECT',
+          properties: {
+            values: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              minItems: '1',
+              maxItems: '2',
+            },
+          },
+        },
+      ],
+      [
+        'custom format',
+        {
+          type: 'OBJECT',
+          properties: {
+            choice: { type: 'STRING', format: 'enum', enum: ['A', 'B'] },
+          },
+        },
+      ],
+    ] as const)('does not let an unused valid %s schema poison another call', async (_name, parameters) => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ name: 'plain' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            { functionDeclarations: [{ name: 'plain' }] },
+            {
+              functionDeclarations: [{ name: 'unused', parameters: parameters as never }],
+            },
+          ],
+        },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: true, score: 1 });
+      expect(inverse).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('does not invert duplicate function names across tool groups', async () => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: '{}', name: 'duplicate' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            { functionDeclarations: [{ name: 'duplicate' }] },
+            { functionDeclarations: [{ name: 'duplicate' }] },
+          ],
+        },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Duplicate function schema'),
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('Duplicate function schema'),
+      });
+    });
+
     it('should fail for an invalid function call with incorrect arguments', async () => {
       const output = [
         {
@@ -747,6 +847,7 @@ describe('Google assertions', () => {
 
     it.each([
       ['empty object', '{}', true, false],
+      ['omitted value', undefined, true, false],
       ['array', '[]', false, true],
       ['number', '0', false, true],
       ['boolean', 'false', false, true],
@@ -756,6 +857,97 @@ describe('Google assertions', () => {
       });
       const provider = new GoogleLiveProvider('foo', {
         config: { tools: [{ functionDeclarations: [{ name: 'noop' }] }] },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+    });
+
+    it.each([
+      [
+        'optional schema',
+        { type: 'OBJECT', properties: { value: { type: 'STRING' } } },
+        true,
+        false,
+      ],
+      [
+        'required schema',
+        {
+          type: 'OBJECT',
+          properties: { value: { type: 'STRING' } },
+          required: ['value'],
+        },
+        false,
+        true,
+      ],
+    ] as const)('validates omitted arguments against a %s', async (_name, parameters, positivePass, inversePass) => {
+      const output = [{ functionCall: { name: 'lookup' } }];
+      const provider = new AIStudioChatProvider('foo', {
+        config: {
+          tools: [{ functionDeclarations: [{ name: 'lookup', parameters: parameters as never }] }],
+        },
+      });
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+          runAssertion({
+            prompt: 'Some prompt',
+            provider,
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+    });
+
+    it.each([
+      ['within bounds', ['one'], true, false],
+      ['below minimum', [], false, true],
+      ['above maximum', ['one', 'two', 'three'], false, true],
+    ] as const)('validates string-valued Google array bounds when %s', async (_name, values, positivePass, inversePass) => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: { values }, name: 'bounded' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'bounded',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: {
+                      values: {
+                        type: 'ARRAY',
+                        items: { type: 'STRING' },
+                        minItems: '1',
+                        maxItems: '2',
+                      },
+                    },
+                    required: ['values'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
       });
 
       const [positive, inverse] = await Promise.all(
