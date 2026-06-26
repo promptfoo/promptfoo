@@ -49,7 +49,7 @@ import {
   setCachedStandaloneEvals,
 } from './standaloneEvalCache';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingRequest,
   createEmptyAssertions,
   subtractAssertionTokenUsage,
   subtractResponseTokenUsage,
@@ -539,7 +539,9 @@ function recomputeAssertionTokenUsageFromResults(
 ): ReturnType<typeof createEmptyAssertions> {
   const assertions = createEmptyAssertions();
   for (const result of results) {
-    accumulateAssertionTokenUsage(assertions, result.gradingResult?.tokensUsed);
+    if (result.gradingResult) {
+      accumulateGradingRequest(assertions, result.gradingResult.tokensUsed);
+    }
   }
   return assertions;
 }

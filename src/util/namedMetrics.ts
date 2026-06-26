@@ -14,6 +14,10 @@ interface NamedMetricContribution {
   weightedScoreTotal: number;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 function getContributingAssertionCount(
   gradingResult: GradingResult | null | undefined,
   metricName: string,
@@ -48,8 +52,11 @@ function getNamedMetricContribution({
     namedScoreWeights ?? {},
     metricName,
   );
+  const namedScoreWeight = namedScoreWeights?.[metricName];
   const metricWeightTotal = hasNamedScoreWeight
-    ? (namedScoreWeights?.[metricName] ?? 0)
+    ? isFiniteNumber(namedScoreWeight)
+      ? namedScoreWeight
+      : assertionCount
     : assertionCount;
 
   return {

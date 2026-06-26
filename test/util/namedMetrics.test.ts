@@ -45,6 +45,39 @@ describe('accumulateNamedMetric', () => {
     });
   });
 
+  it('falls back to assertion counts when stored weights are malformed', () => {
+    const metrics = {
+      namedScores: {},
+      namedScoresCount: {},
+      namedScoreWeights: {},
+    };
+
+    accumulateNamedMetric(metrics, {
+      metricName: 'accuracy',
+      metricValue: 0.75,
+      gradingResult: {
+        pass: true,
+        score: 0.75,
+        reason: 'imported malformed metric weight',
+        namedScoreWeights: { accuracy: 'bad' } as any,
+        componentResults: [
+          {
+            pass: true,
+            score: 0.75,
+            reason: 'metric assertion',
+            assertion: { type: 'contains', value: 'ok', metric: 'accuracy' },
+          },
+        ],
+      },
+    });
+
+    expect(metrics).toEqual({
+      namedScores: { accuracy: 0.75 },
+      namedScoresCount: { accuracy: 1 },
+      namedScoreWeights: { accuracy: 1 },
+    });
+  });
+
   it('falls back to rendered assertion counts when stored weights are absent', () => {
     const metrics = {
       namedScores: {},
@@ -175,6 +208,39 @@ describe('subtractNamedMetric', () => {
       namedScores: {},
       namedScoresCount: {},
       namedScoreWeights: {},
+    });
+  });
+
+  it('does not write non-finite values when stored weights are malformed', () => {
+    const metrics = {
+      namedScores: { accuracy: 1.5 },
+      namedScoresCount: { accuracy: 2 },
+      namedScoreWeights: { accuracy: 2 },
+    };
+
+    subtractNamedMetric(metrics, {
+      metricName: 'accuracy',
+      metricValue: 0.75,
+      gradingResult: {
+        pass: true,
+        score: 0.75,
+        reason: 'imported malformed metric weight',
+        namedScoreWeights: { accuracy: 'bad' } as any,
+        componentResults: [
+          {
+            pass: true,
+            score: 0.75,
+            reason: 'metric assertion',
+            assertion: { type: 'contains', value: 'ok', metric: 'accuracy' },
+          },
+        ],
+      },
+    });
+
+    expect(metrics).toEqual({
+      namedScores: { accuracy: 0.75 },
+      namedScoresCount: { accuracy: 1 },
+      namedScoreWeights: { accuracy: 1 },
     });
   });
 });

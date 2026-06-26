@@ -295,7 +295,27 @@ const outputToSimpleString = (output: EvaluateTableOutput | undefined) => {
     `.trim();
 };
 
-const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
+const outputToHtmlReportCell = (output?: EvaluateTableOutput) => {
+  if (!output) {
+    return {
+      status: '',
+      statusLabel: '',
+      score: '',
+      namedScores: [],
+      text: '',
+      reason: '',
+      prompt: '',
+      provider: '',
+      error: '',
+      failureReason: undefined,
+      latencyDisplay: '',
+      costDisplay: '',
+      totalTokensDisplay: '',
+      promptTokensDisplay: '',
+      completionTokensDisplay: '',
+    };
+  }
+
   const status = output.pass
     ? 'pass'
     : output.failureReason === ResultFailureReason.ERROR
@@ -334,6 +354,40 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
         : '',
   };
 };
+
+type EvalTableForHtml = NonNullable<Awaited<ReturnType<Eval['getTable']>>>;
+
+function buildHtmlReportTable(table: EvalTableForHtml) {
+  return [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...Array.from({ length: table.head.prompts.length }, (_, outputIndex) => {
+        const output = row.outputs[outputIndex];
+        return {
+          kind: 'output',
+          detailId: `result-detail-${rowIndex}-${outputIndex}`,
+          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+          description: row.description || row.test?.description || '',
+          ...outputToHtmlReportCell(output),
+        };
+      }),
+    ]),
+  ];
+}
+
+function getHtmlReportOutputs(table: EvalTableForHtml): EvaluateTableOutput[] {
+  return table.body.flatMap((row) =>
+    row.outputs.filter((output): output is EvaluateTableOutput => Boolean(output)),
+  );
+}
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   return sanitizeObject(config, {
@@ -560,6 +614,44 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
+  const table = await evalRecord.getTable();
+  invariant(table, 'Table is required');
+  const summary = await evalRecord.toEvaluateSummary();
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = buildHtmlReportTable(table);
+  const reportOutputs = getHtmlReportOutputs(table);
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  const htmlOutput = getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    results: summary,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+  await fsPromises.writeFile(outputPath, htmlOutput);
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -618,60 +710,7 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await writeHtmlOutput(outputPath, evalRecord);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {

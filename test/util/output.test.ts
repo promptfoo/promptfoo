@@ -1619,6 +1619,49 @@ describe('writeOutput', () => {
     expect(html).toContain('>FAIL<');
   });
 
+  it('writeOutput with HTML keeps sparse prompt columns aligned', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    const eval_ = new Eval({ description: 'HTML sparse prompt columns' });
+    await eval_.addPrompts([
+      { raw: 'Prompt zero', label: 'Prompt zero', provider: 'provider' },
+      { raw: 'Prompt one', label: 'Prompt one', provider: 'provider' },
+    ]);
+    eval_.setVars(['input']);
+
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt one', label: 'Prompt one' },
+      response: { output: 'Surviving prompt one output' },
+      vars: { input: 'sparse' },
+      promptIdx: 1,
+      testIdx: 0,
+      testCase: { vars: { input: 'sparse' } },
+      promptId: 'prompt-one',
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'survivor',
+      },
+    });
+
+    await writeOutput('output.html', eval_, null);
+
+    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(html.match(/<td\s+data-output-cell="true"/g)).toHaveLength(2);
+    expect(html).toContain('Result detail - row 1, prompt 1');
+    expect(html).toContain('Result detail - row 1, prompt 2');
+    expect(html).toContain('Surviving prompt one output');
+  });
+
   it('writeOutput with HTML keeps visible runtime errors searchable without pre-rendering row variables per output', async () => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');

@@ -716,6 +716,7 @@ describe('database eval deletion', () => {
         prompt: 5,
         completion: 4,
         cached: 0,
+        numRequests: 1,
       });
     });
 
