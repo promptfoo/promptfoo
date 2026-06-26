@@ -39,10 +39,31 @@ import type { Strategy } from './types';
 
 export type { Strategy };
 
+export const INTERNAL_PER_TURN_LAYERS_ERROR =
+  'Strategy config field "_perTurnLayers" is reserved for internal layer composition; configure per-turn transforms with a layer strategy';
+
+function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
+  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
+    return false;
+  }
+
+  const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
+  if (config && Object.hasOwn(config, '_perTurnLayers')) {
+    return true;
+  }
+  return id === 'layer' && Array.isArray(config?.steps)
+    ? config.steps.some(hasUserConfiguredPerTurnLayers)
+    : false;
+}
+
 export function getStrategyCompatibilityError(
   strategies: readonly unknown[],
   inputs: unknown,
 ): string | undefined {
+  if (strategies.some(hasUserConfiguredPerTurnLayers)) {
+    return INTERNAL_PER_TURN_LAYERS_ERROR;
+  }
+
   const hasMultiInput =
     inputs !== null &&
     typeof inputs === 'object' &&
@@ -405,6 +426,11 @@ export const Strategies: Strategy[] = [
 ];
 
 export async function validateStrategies(strategies: RedteamStrategyObject[]): Promise<void> {
+  const compatibilityError = getStrategyCompatibilityError(strategies, undefined);
+  if (compatibilityError) {
+    throw new Error(compatibilityError);
+  }
+
   const invalidStrategies = [];
 
   for (const strategy of strategies) {

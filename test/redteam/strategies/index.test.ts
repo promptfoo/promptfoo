@@ -63,6 +63,28 @@ describe('validateStrategies', () => {
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
+  it.each([
+    {
+      label: 'direct attack provider config',
+      strategies: [{ id: 'jailbreak:hydra', config: { _perTurnLayers: ['posterior'] } }],
+    },
+    {
+      label: 'nested layer step config',
+      strategies: [
+        {
+          id: 'layer',
+          config: {
+            steps: [{ id: 'jailbreak:hydra', config: { _perTurnLayers: ['posterior'] } }],
+          },
+        },
+      ],
+    },
+  ])('rejects user-configured internal per-turn layers in $label', async ({ strategies }) => {
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Strategy config field "_perTurnLayers" is reserved for internal layer composition',
+    );
+  });
+
   it('should throw error for invalid strategies', async () => {
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 

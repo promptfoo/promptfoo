@@ -16,6 +16,7 @@ import {
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  resolveRedteamTargetProviderConfigs,
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
@@ -34,6 +35,7 @@ import type {
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
+const mockResolveProviderConfigs = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
 // Create a hoisted mock class that can be instantiated with `new`
 const mockOpenAiInstances: any[] = [];
@@ -88,6 +90,7 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 }));
 vi.mock('../../../src/providers/index', () => ({
   loadApiProviders: mockLoadApiProviders,
+  resolveProviderConfigs: mockResolveProviderConfigs,
 }));
 vi.mock('../../../src/util/server', () => ({
   checkServerFeatureSupport: mockCheckServerFeatureSupport,
@@ -95,6 +98,7 @@ vi.mock('../../../src/util/server', () => ({
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
+const mockedResolveProviderConfigs = mockResolveProviderConfigs;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
 
 function setCliStateConfig(config: typeof cliState.config) {
@@ -114,6 +118,7 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
+    mockedResolveProviderConfigs.mockReset();
     mockedCheckServerFeatureSupport.mockReset();
 
     // Clear the instances array
@@ -128,6 +133,18 @@ describe('shared redteam provider utilities', () => {
       redteam: {
         provider: undefined,
       },
+    });
+  });
+
+  it('resolves target provider config references through the shared provider module', async () => {
+    const resolved = [{ id: 'echo', inputs: { query: 'User query' } }];
+    mockedResolveProviderConfigs.mockReturnValue(resolved);
+
+    await expect(
+      resolveRedteamTargetProviderConfigs(['file://providers.yaml'], '/config'),
+    ).resolves.toEqual(resolved);
+    expect(mockedResolveProviderConfigs).toHaveBeenCalledWith(['file://providers.yaml'], {
+      basePath: '/config',
     });
   });
 

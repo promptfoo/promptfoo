@@ -1,3 +1,7 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
@@ -13,7 +17,10 @@ vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 // Import after mocking
 import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import {
+  redteamProviderManager,
+  resolveRedteamTargetProviderConfigs,
+} from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import {
@@ -24,6 +31,7 @@ import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
+const mockedResolveRedteamTargetProviderConfigs = vi.mocked(resolveRedteamTargetProviderConfigs);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
@@ -193,6 +201,29 @@ describe('Redteam Routes', () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error).toBe('Posterior strategy does not support multi-input targets');
+        expect(pluginFind).not.toHaveBeenCalled();
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
+      it('should reject user-configured internal per-turn layers before preview generation', async () => {
+        const pluginFind = vi.fn();
+        mockedPlugins.find = pluginFind;
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'policy', config: {} },
+            strategy: {
+              id: 'jailbreak:hydra',
+              config: { _perTurnLayers: ['posterior'] },
+            },
+            config: {
+              applicationDefinition: { purpose: 'test assistant' },
+            },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('"_perTurnLayers" is reserved');
         expect(pluginFind).not.toHaveBeenCalled();
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
       });
@@ -550,6 +581,10 @@ describe('Redteam Routes', () => {
     beforeEach(() => {
       vi.resetAllMocks();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
+      mockedResolveRedteamTargetProviderConfigs.mockImplementation(
+        async (providers) =>
+          providers as Awaited<ReturnType<typeof resolveRedteamTargetProviderConfigs>>,
+      );
     });
 
     afterEach(() => {
@@ -765,6 +800,108 @@ describe('Redteam Routes', () => {
         hasRunningJob: true,
         jobId: firstResponse.body.id,
       });
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it('should resolve referenced target inputs before replacing the active job', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-redteam-target-'));
+      const providerPath = path.join(tempDir, 'providers.yaml');
+      fs.writeFileSync(
+        providerPath,
+        [
+          'id: echo',
+          'inputs:',
+          '  context: Reference context',
+          '  question: User question',
+          '',
+        ].join('\n'),
+      );
+
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderConfigs.mockImplementationOnce(
+        async (providers, basePath) => {
+          const { resolveProviderConfigs } =
+            await vi.importActual<typeof import('../../../src/providers')>(
+              '../../../src/providers',
+            );
+          return resolveProviderConfigs(providers as any, { basePath });
+        },
+      );
+
+      try {
+        const firstResponse = await request(app)
+          .post('/api/redteam/run')
+          .send({ config: { purpose: 'first' } });
+        expect(firstResponse.status).toBe(200);
+
+        const incompatibleResponse = await request(app)
+          .post('/api/redteam/run')
+          .send({
+            config: {
+              targets: [`file://${providerPath}`],
+              redteam: { strategies: ['posterior'] },
+            },
+          });
+
+        expect(incompatibleResponse.status).toBe(400);
+        expect(incompatibleResponse.body.error).toBe(
+          'Posterior strategy does not support multi-input targets',
+        );
+        expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+        expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+        resolveRun!(undefined);
+        await vi.waitFor(async () => {
+          const statusResponse = await request(app).get('/api/redteam/status');
+          expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+        });
+      } finally {
+        fs.rmSync(tempDir, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject user-configured internal per-turn layers before replacing the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            redteam: {
+              strategies: [
+                {
+                  id: 'jailbreak:hydra',
+                  config: { _perTurnLayers: ['posterior'] },
+                },
+              ],
+            },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toContain('"_perTurnLayers" is reserved');
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
 
       resolveRun!(undefined);
       await vi.waitFor(async () => {
