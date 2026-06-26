@@ -187,6 +187,7 @@ from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 
 
 def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
@@ -202,16 +203,20 @@ def reject_invalid_json_constant(value: str) -> NoReturn:
     raise ValueError(f"Invalid JSON constant: {value}")
 
 
-def parse_finite_json_float(value: str) -> float:
+def parse_safe_json_float(value: str) -> float:
     parsed = float(value)
     if not math.isfinite(parsed):
         raise ValueError(f"JSON number is outside the finite range: {value}")
+    if abs(parsed) > MAX_SAFE_JSON_INTEGER:
+        raise ValueError(f"JSON number is outside JavaScript's safe range: {value}")
     return parsed
 
 
-def parse_safe_json_int(value: str) -> int:
+def parse_safe_json_int(value: str) -> int | float:
+    if value == "-0":
+        return -0.0
     parsed = int(value)
-    if abs(parsed) > (1 << 53) - 1:
+    if abs(parsed) > MAX_SAFE_JSON_INTEGER:
         raise ValueError(f"JSON integer is outside JavaScript's safe range: {value}")
     return parsed
 
@@ -307,7 +312,7 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
                 json_string,
                 object_pairs_hook=reject_duplicate_json_keys,
                 parse_constant=reject_invalid_json_constant,
-                parse_float=parse_finite_json_float,
+                parse_float=parse_safe_json_float,
                 parse_int=parse_safe_json_int,
             )
         except (json.JSONDecodeError, ValueError) as e:

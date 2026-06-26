@@ -44,9 +44,9 @@ defaultTest:
         required: ['candidates', 'summary']
 
 tests:
-  - description: 'Senior Full-Stack Engineer'
+  - description: 'Full-Stack Engineer skill match'
     vars:
-      role: 'A Senior Full-Stack Engineer with 8+ years of experience in Python, Django, and React.'
+      role: 'A Full-Stack Engineer with Python, Django, and React experience.'
     assert:
       - type: python
         value: |
@@ -87,9 +87,9 @@ tests:
               for candidate in output.get('candidates', [])
           )
 
-  - description: 'Junior UX/UI Designer'
+  - description: 'UX/UI Designer skill match'
     vars:
-      role: 'A junior UX/UI designer with Figma and Adobe Creative Suite experience.'
+      role: 'A UX/UI designer with Figma and Adobe tools experience.'
     assert:
       - type: python
         value: |

@@ -159,12 +159,11 @@ print(json.dumps(result))
       ['-Infinity', 'Invalid JSON constant: -Infinity'],
       ['1e999', 'JSON number is outside the finite range: 1e999'],
       ['-1e999', 'JSON number is outside the finite range: -1e999'],
-      ['9007199254740992', "JSON integer is outside JavaScript's safe range: 9007199254740992"],
-      ['-9007199254740992', "JSON integer is outside JavaScript's safe range: -9007199254740992"],
-      [
-        '1' + '0'.repeat(400),
-        "JSON integer is outside JavaScript's safe range: " + '1' + '0'.repeat(400),
-      ],
+      ['9007199254740993.0', "JSON number is outside JavaScript's safe range"],
+      ['9007199254740993e0', "JSON number is outside JavaScript's safe range"],
+      ['9007199254740992', "JSON integer is outside JavaScript's safe range"],
+      ['-9007199254740992', "JSON integer is outside JavaScript's safe range"],
+      ['1' + '0'.repeat(400), "JSON integer is outside JavaScript's safe range"],
     ]) {
       const raw = `{"candidates": [], "summary": "No match", "score": ${value}}`;
       expect(callProvider(raw, 'test-key')).toEqual({
@@ -172,6 +171,28 @@ print(json.dumps(result))
         raw,
       });
     }
+  });
+
+  it('preserves supported JSON numbers across the provider boundary', () => {
+    expect(
+      callProvider(
+        '{"candidates": [], "summary": "No match", "score": 0.5, "count": 9007199254740991}',
+        'test-key',
+      ),
+    ).toEqual({
+      output: {
+        candidates: [],
+        summary: 'No match',
+        score: 0.5,
+        count: 9007199254740991,
+      },
+    });
+
+    const negativeZero = callProvider(
+      '{"candidates": [], "summary": "No match", "score": -0}',
+      'test-key',
+    );
+    expect(Object.is(negativeZero.output.score, -0)).toBe(true);
   });
 
   it('reports a missing OpenAI API key before constructing the crew', () => {
@@ -293,11 +314,11 @@ print(json.dumps(result))
       });
     };
 
-    expect(evaluateSkills('Senior', ['Python', 'Django'])).toBe(false);
-    expect(evaluateSkills('Senior', ['Python', 'React'])).toBe(false);
-    expect(evaluateSkills('Senior', ['Django', 'React'])).toBe(false);
-    expect(evaluateSkills('Senior', ['CPython', 'Djangology', 'ReactNative'])).toBe(false);
-    expect(evaluateSkills('Senior', ['Python', 'Django', 'React'])).toBe(true);
+    expect(evaluateSkills('Full-Stack', ['Python', 'Django'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Python', 'React'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Django', 'React'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['CPython', 'Djangology', 'ReactNative'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React'])).toBe(true);
     expect(evaluateSkills('Data Scientist', ['Python', 'AWS'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Machine Learning', 'AWS'])).toBe(false);
@@ -305,10 +326,11 @@ print(json.dumps(result))
       false,
     );
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'AWS'])).toBe(true);
-    expect(evaluateSkills('Junior UX', ['Figma'])).toBe(false);
-    expect(evaluateSkills('Junior UX', ['Adobe Creative Suite'])).toBe(false);
-    expect(evaluateSkills('Junior UX', ['Figmaware', 'Adobeish'])).toBe(false);
-    expect(evaluateSkills('Junior UX', ['Figma', 'Adobe Creative Suite'])).toBe(true);
+    expect(evaluateSkills('UX/UI', ['Figma'])).toBe(false);
+    expect(evaluateSkills('UX/UI', ['Adobe Creative Suite'])).toBe(false);
+    expect(evaluateSkills('UX/UI', ['Figmaware', 'Adobeish'])).toBe(false);
+    expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Creative Suite'])).toBe(true);
+    expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Acrobat'])).toBe(true);
   });
 
   it('keeps the guide RoR and React assertion role-specific', () => {
