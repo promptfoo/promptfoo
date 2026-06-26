@@ -108,6 +108,7 @@ describe('GLEU score calculation', () => {
   it('treats tokenless candidate and reference inputs symmetrically', () => {
     expect(calculateGleuScore('   ', ['...'])).toBe(0);
     expect(calculateGleuScore('...', ['   '])).toBe(0);
+    expect(calculateGleuScore('...', ['...'])).toBe(0);
   });
 
   it('preserves standalone period tokens in mixed content', () => {
