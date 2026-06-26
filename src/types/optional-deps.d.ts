@@ -37,6 +37,7 @@ declare module '@libsql/client/node' {
     batch(...args: any[]): Promise<any>;
     migrate(...args: any[]): Promise<any>;
     executeMultiple(...args: any[]): Promise<any>;
+    transaction(...args: any[]): Promise<any>;
     close(): void | Promise<void>;
   }
 

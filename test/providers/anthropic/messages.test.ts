@@ -1257,7 +1257,7 @@ describe('AnthropicMessagesProvider', () => {
           content: [{ type: 'text', text: 'Test response' }],
           stop_reason: 'end_turn', // Should be normalized to 'stop'
           usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('stop');
@@ -1269,7 +1269,7 @@ describe('AnthropicMessagesProvider', () => {
           content: [{ type: 'text', text: 'Test response' }],
           stop_reason: 'max_tokens', // Should be normalized to 'length'
           usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('length');
@@ -1281,7 +1281,7 @@ describe('AnthropicMessagesProvider', () => {
           content: [{ type: 'text', text: 'Test response' }],
           stop_reason: 'tool_use', // Should be normalized to 'tool_calls'
           usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('tool_calls');
@@ -1293,7 +1293,7 @@ describe('AnthropicMessagesProvider', () => {
           content: [{ type: 'text', text: 'Test response' }],
           stop_reason: null,
           usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBeUndefined();
@@ -1305,7 +1305,7 @@ describe('AnthropicMessagesProvider', () => {
           content: [{ type: 'text', text: 'Test response' }],
           stop_reason: undefined as any,
           usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBeUndefined();
@@ -1405,7 +1405,7 @@ describe('AnthropicMessagesProvider', () => {
           ],
           stop_reason: 'tool_use',
           usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
+        } as unknown as Anthropic.Messages.Message)
         .mockResolvedValueOnce({
           content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
           stop_reason: 'end_turn',
@@ -1486,7 +1486,7 @@ describe('AnthropicMessagesProvider', () => {
             output_tokens_details: { thinking_tokens: 3 },
             server_tool_use: null,
           },
-        } as Anthropic.Messages.Message)
+        } as unknown as Anthropic.Messages.Message)
         .mockResolvedValueOnce({
           content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
           stop_reason: 'end_turn',
@@ -1496,7 +1496,7 @@ describe('AnthropicMessagesProvider', () => {
             output_tokens_details: { thinking_tokens: 2 },
             server_tool_use: null,
           },
-        } as Anthropic.Messages.Message);
+        } as unknown as Anthropic.Messages.Message);
 
       const result = await provider.callApi('Find clean energy companies');
 
