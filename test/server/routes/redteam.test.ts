@@ -819,7 +819,7 @@ describe('Redteam Routes', () => {
       });
     });
 
-    it('should keep a replaced job cancelled when its stale run settles', async () => {
+    it('waits for a replaced job to clean up before starting its successor', async () => {
       let resolveFirstRun: ((value: any) => void) | undefined;
       let resolveSecondRun: ((value: undefined) => void) | undefined;
       mockedDoRedteamRun
@@ -837,11 +837,15 @@ describe('Redteam Routes', () => {
       const firstResponse = await request(app)
         .post('/api/redteam/run')
         .send({ config: { purpose: 'first' } });
-      const secondResponse = await request(app)
+      const secondResponsePromise = request(app)
         .post('/api/redteam/run')
-        .send({ config: { purpose: 'second' } });
+        .send({ config: { purpose: 'second' } })
+        .then((response) => response);
       expect(firstResponse.status).toBe(200);
-      expect(secondResponse.status).toBe(200);
+      await vi.waitFor(() => {
+        expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+      });
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
 
       const cancelledResponse = await request(app).get(`/api/eval/job/${firstResponse.body.id}`);
       expect(cancelledResponse.body).toMatchObject({
@@ -863,6 +867,10 @@ describe('Redteam Routes', () => {
       });
       expect(toEvaluateSummary).toHaveBeenCalledOnce();
 
+      const secondResponse = await secondResponsePromise;
+      expect(secondResponse.status).toBe(200);
+      expect(mockedDoRedteamRun).toHaveBeenCalledTimes(2);
+
       resolveSecondRun!(undefined);
       await vi.waitFor(async () => {
         const statusResponse = await request(app).get('/api/redteam/status');
@@ -871,6 +879,43 @@ describe('Redteam Routes', () => {
           jobId: null,
         });
       });
+    });
+
+    it('cancels a replacement while it waits for the previous run to clean up', async () => {
+      let resolveFirstRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const replacementResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'replacement' } })
+        .then((response) => response);
+      await vi.waitFor(() => {
+        expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+      });
+
+      const pendingStatus = await request(app).get('/api/redteam/status');
+      expect(pendingStatus.body).toMatchObject({
+        hasPendingRun: true,
+        hasRunningJob: false,
+      });
+
+      const cancelResponse = await request(app).post('/api/redteam/cancel');
+      expect(cancelResponse.status).toBe(200);
+      expect(cancelResponse.body.message).toBe('Pending run cancelled');
+
+      resolveFirstRun!(undefined);
+      const replacementResponse = await replacementResponsePromise;
+      expect(replacementResponse.status).toBe(409);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
     });
 
     it.each([

@@ -351,9 +351,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 // Track the current running job
 let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
+let currentRunPromise: Promise<void> | null = null;
 let latestRunRequest = 0;
 let pendingRunRequest: number | null = null;
 let latestRunId: string | null = null;
+
+function clearPendingRunRequest(runRequest: number): void {
+  if (pendingRunRequest === runRequest) {
+    pendingRunRequest = null;
+  }
+}
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
@@ -371,30 +378,30 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   let preflightError: unknown;
   try {
     compatibilityError = await getLiveConfigCompatibilityError(config, {
-      loadDynamicProviders: currentJobId !== null,
+      loadDynamicProviders: currentRunPromise !== null,
     });
   } catch (error) {
     preflightError = error;
-  } finally {
-    if (pendingRunRequest === runRequest) {
-      pendingRunRequest = null;
-    }
   }
   if (runRequest !== latestRunRequest) {
+    clearPendingRunRequest(runRequest);
     res.status(409).json({ error: 'Run request superseded by a newer request' });
     return;
   }
   if (preflightError) {
+    clearPendingRunRequest(runRequest);
     logger.warn('[Redteam] Failed to resolve target configuration before starting run');
     res.status(400).json({ error: 'Invalid target provider configuration' });
     return;
   }
   if (compatibilityError) {
+    clearPendingRunRequest(runRequest);
     res.status(400).json({ error: compatibilityError });
     return;
   }
 
-  // If there's a current job running, abort it
+  const previousRunPromise = currentRunPromise;
+  // If there's a current job running, abort it and wait for provider cleanup before replacement.
   if (currentJobId) {
     if (currentAbortController) {
       currentAbortController.abort();
@@ -403,8 +410,20 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       append: true,
       resetResult: false,
     });
+    cliState.webUI = false;
+    currentJobId = null;
+    currentAbortController = null;
+  }
+  if (previousRunPromise !== null) {
+    await previousRunPromise;
+    if (runRequest !== latestRunRequest) {
+      clearPendingRunRequest(runRequest);
+      res.status(409).json({ error: 'Run request superseded by a newer request' });
+      return;
+    }
   }
 
+  clearPendingRunRequest(runRequest);
   currentJobId = id;
   currentAbortController = new AbortController();
 
@@ -414,7 +433,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   cliState.webUI = true;
 
   // Run redteam in background
-  doRedteamRun({
+  const runPromise = doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
@@ -452,7 +471,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         currentJobId = null;
         currentAbortController = null;
       }
+    })
+    .finally(() => {
+      if (currentRunPromise === runPromise) {
+        currentRunPromise = null;
+      }
     });
+  currentRunPromise = runPromise;
 
   res.json(RedteamSchemas.Run.Response.parse({ id }));
 });
@@ -471,7 +496,6 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   }
 
   const jobId = currentJobId;
-
   if (currentAbortController) {
     currentAbortController.abort();
   }
@@ -486,7 +510,7 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   currentJobId = null;
   currentAbortController = null;
 
-  // Wait a moment to ensure cleanup
+  // Preserve the bounded cancellation response; a replacement still awaits currentRunPromise.
   await new Promise((resolve) => setTimeout(resolve, 100));
 
   res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));

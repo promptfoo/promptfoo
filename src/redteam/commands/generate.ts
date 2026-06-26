@@ -18,7 +18,11 @@ import {
 } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getConfiguredProviderInputs, getProviderIds } from '../../providers/index';
+import {
+  getConfiguredProviderInputs,
+  getProviderIds,
+  isProviderInputMetadataUnresolved,
+} from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
@@ -288,6 +292,30 @@ function getEffectiveStrategyObjects(
   return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
 }
 
+function findTargetCompatibilityError(
+  strategies: readonly RedteamStrategyObject[],
+  plugins: readonly unknown[],
+  inputs: readonly unknown[],
+): string | undefined {
+  return inputs
+    .filter((input) => !isProviderInputMetadataUnresolved(input))
+    .map((input) => getStrategyCompatibilityError(strategies, input, { plugins }))
+    .find((error) => error !== undefined);
+}
+
+function getCompatibilityPlugins(
+  optionPlugins: RedteamCliGenerateOptions['plugins'],
+  configuredPlugins: RedteamFileConfig['plugins'] | undefined,
+): readonly unknown[] {
+  if (Array.isArray(optionPlugins) && optionPlugins.length > 0) {
+    return optionPlugins;
+  }
+  if (configuredPlugins && configuredPlugins.length > 0) {
+    return configuredPlugins;
+  }
+  return Array.from(REDTEAM_DEFAULT_PLUGINS);
+}
+
 async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
   for (const provider of testSuite.providers as ApiProvider[]) {
     try {
@@ -401,12 +429,7 @@ async function doGenerateRedteamInternal(
       basePath,
     }: Parameters<NonNullable<ResolveConfigsHooks['beforeProviderLoad']>>[0]) => {
       const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
-      const compatibilityPlugins =
-        Array.isArray(options.plugins) && options.plugins.length > 0
-          ? options.plugins
-          : redteam?.plugins && redteam.plugins.length > 0
-            ? redteam.plugins
-            : Array.from(REDTEAM_DEFAULT_PLUGINS);
+      const compatibilityPlugins = getCompatibilityPlugins(options.plugins, redteam?.plugins);
       const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
       if (strategyConfigError) {
         throw new Error(strategyConfigError);
@@ -424,6 +447,14 @@ async function doGenerateRedteamInternal(
           basePath,
           env,
         );
+        let compatibilityError = findTargetCompatibilityError(
+          strategies,
+          compatibilityPlugins,
+          resolvedInputs.inputs,
+        );
+        if (compatibilityError) {
+          throw new Error(compatibilityError);
+        }
         if (cachedRedteamConfig && resolvedInputs.hasUnresolved) {
           resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
             providers,
@@ -432,14 +463,12 @@ async function doGenerateRedteamInternal(
             undefined,
             { loadDynamicProviders: true },
           );
+          compatibilityError = findTargetCompatibilityError(
+            strategies,
+            compatibilityPlugins,
+            resolvedInputs.inputs,
+          );
         }
-        const compatibilityError = resolvedInputs.inputs
-          .map((inputs) =>
-            getStrategyCompatibilityError(strategies, inputs, {
-              plugins: compatibilityPlugins,
-            }),
-          )
-          .find((error) => error !== undefined);
         if (compatibilityError) {
           throw new Error(compatibilityError);
         }

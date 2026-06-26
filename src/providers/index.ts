@@ -451,13 +451,22 @@ async function resolveConfiguredProviderInputs(
   if (isCloudProvider(renderedCloudProviderId)) {
     throw new Error('A cloud provider cannot point to another cloud provider');
   }
+  const mergedCloudOptions: ProviderOptions = {
+    ...cloudProvider,
+    config: {
+      ...cloudProvider.config,
+      ...renderedOptions.config,
+    },
+    label: renderedOptions.label ?? cloudProvider.label,
+    transform: renderedOptions.transform ?? cloudProvider.transform,
+    delay: renderedOptions.delay ?? cloudProvider.delay,
+    prompts: renderedOptions.prompts ?? cloudProvider.prompts,
+    inputs: configuredInputs ?? getConfiguredProviderInputs(cloudProvider),
+    env: { ...cloudProvider.env, ...renderedOptions.env },
+  };
   return resolveConfiguredProviderInputs(
     renderedCloudProviderId,
-    {
-      ...cloudProvider,
-      inputs: configuredInputs ?? getConfiguredProviderInputs(cloudProvider),
-      env: { ...cloudProvider.env, ...providerOptions.env },
-    },
+    mergedCloudOptions,
     configEnv,
     basePath,
     visitedProviderFiles,
@@ -639,7 +648,7 @@ export async function resolveProviderInputsForValidation(
     options.filter,
   );
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     providerConfigs.map(async (provider, index) => {
       if (isApiProvider(provider)) {
         return getConfiguredProviderInputs(provider);
@@ -689,6 +698,14 @@ export async function resolveProviderInputsForValidation(
       }
     }),
   );
+
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failure) {
+    throw failure.reason;
+  }
+  return results.map((result) => (result as PromiseFulfilledResult<unknown>).value);
 }
 
 /**

@@ -23,6 +23,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
   );
 };
 
+const mockStrategyConfigDialog = vi.hoisted(() => vi.fn());
+
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useApiHealth', () => ({
@@ -31,7 +33,10 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
-  default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
+  default: (props: unknown) => {
+    mockStrategyConfigDialog(props);
+    return <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>;
+  },
 }));
 
 const mockUpdateConfig = vi.fn();
@@ -305,6 +310,32 @@ describe('Strategies', () => {
           'Remove Posterior Attack from the selected strategies or Layer steps, or clear the configured target or plugin inputs.',
         ),
       ).toBeVisible();
+    });
+
+    it('scopes Layer Posterior availability to the Layer target plugins', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: { config: { stateful: false } },
+          strategies: [{ id: 'layer', config: { plugins: ['harmful:hate'], steps: [] } }],
+          plugins: [
+            {
+              id: 'policy',
+              config: { inputs: { context: 'Reference context', question: 'User question' } },
+            },
+            'harmful:hate',
+          ],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const dialogProps = mockStrategyConfigDialog.mock.lastCall?.[0] as {
+        isLayerStepUnavailable: (strategyId: string, plugins?: readonly string[]) => boolean;
+      };
+      expect(dialogProps.isLayerStepUnavailable('posterior', ['harmful:hate'])).toBe(false);
+      expect(dialogProps.isLayerStepUnavailable('posterior', ['policy'])).toBe(true);
     });
 
     it('allows Posterior when plugin-level inputs belong only to an exempt plugin', async () => {

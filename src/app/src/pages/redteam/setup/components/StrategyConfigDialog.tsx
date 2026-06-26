@@ -66,6 +66,7 @@ interface StrategyConfigDialogProps {
   selectedPlugins?: string[];
   allStrategies?: Array<string | { id: string; config?: Partial<StrategyConfig> }>;
   unavailableStrategies?: readonly string[];
+  isLayerStepUnavailable?: (strategyId: string, targetPlugins?: readonly string[]) => boolean;
 }
 
 export default function StrategyConfigDialog({
@@ -78,6 +79,7 @@ export default function StrategyConfigDialog({
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
   unavailableStrategies = EMPTY_UNAVAILABLE_STRATEGIES,
+  isLayerStepUnavailable,
 }: StrategyConfigDialogProps) {
   const { data: cloudConfig } = useCloudConfig();
   const isCloudEnabled = cloudConfig?.isEnabled ?? false;
@@ -142,12 +144,15 @@ export default function StrategyConfigDialog({
         return [id, s];
       }),
     );
+    const targetPlugins =
+      pluginTargeting === 'specific' && layerPlugins.length > 0 ? layerPlugins : undefined;
+    const targetAvailableStrategies = LAYER_TRANSFORMABLE_STRATEGIES.filter(
+      (strategy) =>
+        !unavailableStrategies.includes(strategy) &&
+        !isLayerStepUnavailable?.(strategy, targetPlugins),
+    );
 
-    return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
-      if (unavailableStrategies.includes(strategy)) {
-        return false;
-      }
-
+    return targetAvailableStrategies.filter((strategy) => {
       // Cannot add duplicates
       if (stepIds.has(strategy)) {
         return false;
@@ -182,7 +187,16 @@ export default function StrategyConfigDialog({
 
       return true;
     });
-  }, [steps, allStrategies, isAgenticStrategy, isMultiModalStrategy, unavailableStrategies]);
+  }, [
+    steps,
+    allStrategies,
+    isAgenticStrategy,
+    isMultiModalStrategy,
+    unavailableStrategies,
+    isLayerStepUnavailable,
+    pluginTargeting,
+    layerPlugins,
+  ]);
 
   // Get validation message for why strategies might be disabled
   const getValidationMessage = (): string | null => {
