@@ -5,11 +5,19 @@ import { closeDb, getDb, getDbPath, isDbOpen } from '../../../src/database/index
 import logger from '../../../src/logger';
 
 const RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
-const logs: Array<{
-  context?: Record<string, unknown>;
-  level: 'debug' | 'warn';
-  message: string;
-}> = [];
+
+export interface WalCheckpointProbeResult {
+  elapsedMs: number;
+  isDbOpen: boolean;
+  logs: Array<{
+    context?: Record<string, unknown>;
+    level: 'debug' | 'warn';
+    message: string;
+  }>;
+  rowCount: number;
+}
+
+const logs: WalCheckpointProbeResult['logs'] = [];
 
 logger.debug = (message, context) => logs.push({ level: 'debug', message, context });
 logger.warn = (message, context) => logs.push({ level: 'warn', message, context });

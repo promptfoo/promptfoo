@@ -233,7 +233,8 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  await withTimeout(closeDbIfOpen(), 'closeDbIfOpen()');
+  const dbClosePromise = closeDbIfOpen();
+  await withTimeout(dbClosePromise, 'closeDbIfOpen()');
 
   logger.debug('Closing logger file transports');
   try {
@@ -250,6 +251,10 @@ export const shutdownGracefully = async (): Promise<void> => {
   } catch {
     // Silently handle dispatcher destroy errors.
   }
+
+  // Preserve the original shutdown safety window for in-flight database work. If the close is
+  // still pending, the force-exit watchdog remains the hard upper bound.
+  await dbClosePromise;
 
   clearTimeout(forceExitTimeout);
 

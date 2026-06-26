@@ -17,23 +17,14 @@ import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
+import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
+
 vi.mock('../../src/envars');
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
 
 const execFileAsync = promisify(execFile);
 const WAL_PROBE_RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
-
-interface WalCheckpointProbeResult {
-  elapsedMs: number;
-  isDbOpen: boolean;
-  logs: Array<{
-    context?: Record<string, unknown>;
-    level: 'debug' | 'warn';
-    message: string;
-  }>;
-  rowCount: number;
-}
 
 async function runWalCheckpointProbe(
   tempConfigDir: string,
@@ -282,6 +273,11 @@ describe('database', () => {
           message: 'Successfully checkpointed WAL file before closing',
         }),
       );
+      expect(
+        result.logs.some(
+          (entry) => entry.message === 'WAL checkpoint incomplete before closing database',
+        ),
+      ).toBe(false);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(1);
     });
@@ -307,7 +303,7 @@ describe('database', () => {
       ).toBe(false);
       expect(result.isDbOpen).toBe(false);
       expect(result.rowCount).toBe(2);
-      expect(result.elapsedMs).toBeLessThan(3_000);
+      expect(result.elapsedMs).toBeLessThan(1_000);
     });
 
     it('should close database connection and reset instances', async () => {
