@@ -84,9 +84,11 @@ ${border}\n`,
 
     const updateInstruction = updateCommands.isCustomContainer
       ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
-      : `Please run ${chalk.green(updateCommands.primary)}${
-          updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
-        } to update.`;
+      : updateCommands.commandType === 'docker'
+        ? `Run ${chalk.green(updateCommands.primary)}. If this is a derived image, update its Promptfoo base and rebuild it. Then redeploy the container.`
+        : `Please run ${chalk.green(updateCommands.primary)}${
+            updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
+          } to update.`;
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(

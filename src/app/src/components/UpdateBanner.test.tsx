@@ -88,6 +88,17 @@ describe('UpdateBanner', () => {
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
         },
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
@@ -109,6 +120,7 @@ describe('UpdateBanner', () => {
       'dark:text-amber-200',
     );
     expect(screen.queryByText(/Update available: v2.0.0/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/then update Promptfoo/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy Update Command/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
       'href',
@@ -227,8 +239,63 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
-    expect(screen.getByText(/then update Promptfoo to v2.0.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/then update Promptfoo to the latest release/i)).toBeInTheDocument();
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+  });
+
+  it('should not restore dismissed update guidance inside later runtime reminders', () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
+    const runtimeNotice = {
+      id: 'node20-removal-2026-07-30',
+      kind: 'runtime_deprecation' as const,
+      runtime: 'node' as const,
+      currentVersion: 'v20.20.2',
+      currentMajor: 20,
+      removalDate: '2026-07-30',
+      minimumVersion: '22.22.0',
+      recommendedVersion: '24 LTS',
+      documentationUrl:
+        'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support' as const,
+    };
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: false,
+        updateBlockedByRuntime: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        commandType: 'npm',
+        runtimeNotice,
+        blockedUpdateNotice: runtimeNotice,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimeNoticeDismissed: false,
+      updateDismissed: true,
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.queryByText(/then update Promptfoo/i)).not.toBeInTheDocument();
+
+    mockUseVersionCheck.mockReturnValue({
+      ...versionCheckResult,
+      versionInfo: {
+        ...versionCheckResult.versionInfo!,
+        updateCommands: { primary: '', alternative: null, isCustomContainer: true },
+      },
+    });
+    rerender(<UpdateBanner />);
+
+    expect(
+      screen.getByText(/Update this custom image's Node.js base to 24 LTS/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Update the Promptfoo source, dependency, or parent image/i),
+    ).not.toBeInTheDocument();
   });
 
   it('should report ended support for a post-cutoff Docker deployment', () => {
@@ -266,6 +333,9 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
     expect(screen.getByText(/Pull the latest Promptfoo Docker image/i)).toBeInTheDocument();
+    expect(screen.getByText(/If this is a derived image/i)).toHaveTextContent(
+      /update its Promptfoo base and rebuild it/i,
+    );
     expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toHaveAttribute(
       'title',
       'docker pull ghcr.io/promptfoo/promptfoo:latest',
@@ -466,9 +536,8 @@ describe('UpdateBanner', () => {
     rerender(<UpdateBanner />);
 
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade Node.js before updating Promptfoo/i)).toBeInTheDocument();
+    expect(screen.getByText(/then update Promptfoo to the latest release/i)).toBeInTheDocument();
   });
 
   it('should show blocked update guidance when runtime reminders are disabled', async () => {
@@ -511,11 +580,9 @@ describe('UpdateBanner', () => {
 
     const { rerender } = renderWithProviders(<UpdateBanner />);
 
-    expect(
-      screen.getByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade Node.js before updating Promptfoo/i)).toBeInTheDocument();
     expect(screen.getByText(/Upgrade to Node.js 22.22.0 or newer/i)).toBeInTheDocument();
-    expect(screen.getByText(/then update Promptfoo to v2.0.0/i)).toBeInTheDocument();
+    expect(screen.getByText(/then update Promptfoo to the latest release/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
       'href',
       'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
@@ -530,7 +597,7 @@ describe('UpdateBanner', () => {
     rerender(<UpdateBanner />);
 
     expect(
-      screen.queryByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
+      screen.queryByText(/Upgrade Node.js before updating Promptfoo/i),
     ).not.toBeInTheDocument();
   });
 
@@ -560,6 +627,9 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toBeInTheDocument();
+    expect(screen.getByText(/If this is a derived image/i)).toHaveTextContent(
+      /update its Promptfoo base and rebuild before redeploying/i,
+    );
   });
 
   it('should show actionable custom-container updates before cutoff and block them after', () => {

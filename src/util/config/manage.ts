@@ -4,14 +4,19 @@ import * as path from 'path';
 
 import { getEnvString } from '../../envars';
 
-let configDirectoryPath: string | undefined = getEnvString('PROMPTFOO_CONFIG_DIR');
+// Keep programmatic overrides separate from the environment so an --env-file loaded after this
+// module is imported can still select the config directory.
+let configDirectoryPath: string | undefined;
 
 // Check if we're in a Node.js environment
 const isNodeEnvironment =
   typeof process !== 'undefined' && process.versions && process.versions.node;
 
 export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
-  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+  const p =
+    configDirectoryPath ||
+    getEnvString('PROMPTFOO_CONFIG_DIR') ||
+    path.join(os.homedir(), '.promptfoo');
 
   // Only perform filesystem operations in Node.js environment
   if (createIfNotExists && isNodeEnvironment) {

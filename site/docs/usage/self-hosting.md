@@ -298,6 +298,9 @@ FROM ghcr.io/promptfoo/promptfoo:latest
 ENV PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
 ```
 
+Existing derived images that inherit the marker receive safe fallback guidance to refresh the
+Promptfoo base, rebuild the customized image, and then redeploy it.
+
 ### 3. Run the Custom Docker Container
 
 Use the same `docker run` command as in Method 1, but replace the image name:

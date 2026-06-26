@@ -163,8 +163,9 @@ describe('runtime compatibility CLI notice', () => {
     ).toBe(true);
 
     const message = vi.mocked(console.warn).mock.calls[0][0] as string;
+    expect(message).toContain('Pull the latest Promptfoo Docker image');
     expect(message).toContain(
-      'Pull the latest Promptfoo Docker image, then redeploy the container',
+      'If this is a derived image, update its Promptfoo base and rebuild it',
     );
     expect(message).not.toContain('Upgrade to Node.js');
   });

@@ -264,6 +264,12 @@ describe('checkForUpdates', () => {
       2,
       expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
     );
+    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        'If this is a derived image, update its Promptfoo base and rebuild it',
+      ),
+    );
     expect(loggerWarnSpy).not.toHaveBeenCalled();
   });
 

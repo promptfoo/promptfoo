@@ -30,22 +30,22 @@ function formatRemovalDate(removalDate: string): string {
 function RuntimeUpgradeMessage({
   notice,
   commandType,
-  blockedUpdateVersion,
+  isBlockedUpdate,
 }: {
   notice: RuntimeCompatibilityNotice;
   commandType: string | null | undefined;
-  blockedUpdateVersion?: string;
+  isBlockedUpdate: boolean;
 }) {
   if (commandType === 'docker') {
     return (
       <>
-        Pull the latest Promptfoo Docker image, then redeploy the container to upgrade its bundled
-        Node.js runtime.
+        Pull the latest Promptfoo Docker image. If this is a derived image, update its Promptfoo
+        base and rebuild it. Then redeploy the container to upgrade its bundled Node.js runtime.
       </>
     );
   }
   if (commandType === 'container') {
-    if (blockedUpdateVersion) {
+    if (isBlockedUpdate) {
       return (
         <>
           Update the Promptfoo source, dependency, or parent image to the latest release and this
@@ -61,11 +61,11 @@ function RuntimeUpgradeMessage({
       </>
     );
   }
-  if (blockedUpdateVersion) {
+  if (isBlockedUpdate) {
     return (
       <>
         This Promptfoo server is running {notice.currentVersion}. Upgrade to Node.js{' '}
-        {notice.minimumVersion} or newer, then update Promptfoo to v{blockedUpdateVersion}.
+        {notice.minimumVersion} or newer, then update Promptfoo to the latest release.
       </>
     );
   }
@@ -130,15 +130,22 @@ function getCopyStatus(copied: boolean): string {
 }
 
 function ContainerUpdateMessage({ commandType }: { commandType: string | null | undefined }) {
-  if (commandType !== 'container') {
-    return null;
+  if (commandType === 'docker') {
+    return (
+      <span className="text-sm text-muted-foreground">
+        If this is a derived image, update its Promptfoo base and rebuild before redeploying.
+      </span>
+    );
   }
-  return (
-    <span className="text-sm text-muted-foreground">
-      Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
-      container.
-    </span>
-  );
+  if (commandType === 'container') {
+    return (
+      <span className="text-sm text-muted-foreground">
+        Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
+        container.
+      </span>
+    );
+  }
+  return null;
 }
 
 function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefined {
@@ -162,11 +169,10 @@ function getRuntimeGuidanceHeading(
   notice: RuntimeCompatibilityNotice,
   isRuntimeReminder: boolean,
   runtimeSupportEnded: boolean,
-  latestVersion: string,
 ): string {
   return isRuntimeReminder
     ? `Node.js 20 support ${runtimeSupportEnded ? 'ended' : 'ends'} ${formatRemovalDate(notice.removalDate)}`
-    : `Promptfoo v${latestVersion} requires a newer Node.js runtime`;
+    : 'Upgrade Node.js before updating Promptfoo';
 }
 
 function shouldRenderBanner(
@@ -215,6 +221,8 @@ export default function UpdateBanner() {
     isUpdateDismissed,
     updateBlockedByRuntime,
   );
+  const isBlockedUpdate =
+    !!versionInfo?.blockedUpdateNotice && updateBlockedByRuntime && !isUpdateDismissed;
   const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
@@ -372,16 +380,13 @@ export default function UpdateBanner() {
                 activeRuntimeGuidance,
                 !!activeRuntimeNotice,
                 runtimeSupportEnded,
-                versionInfo.latestVersion,
               )}
             </span>
             <span className="text-sm text-muted-foreground dark:text-amber-200">
               <RuntimeUpgradeMessage
                 notice={activeRuntimeGuidance}
                 commandType={updateMode}
-                blockedUpdateVersion={
-                  versionInfo.blockedUpdateNotice ? versionInfo.latestVersion : undefined
-                }
+                isBlockedUpdate={isBlockedUpdate}
               />
             </span>
           </div>

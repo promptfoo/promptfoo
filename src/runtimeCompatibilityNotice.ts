@@ -31,7 +31,7 @@ export function formatRuntimeCompatibilityNotice(
 ): string {
   const supportStatus = hasNode20SupportEnded(now) ? 'ended' : 'ends';
   const upgradeInstruction = isOfficialDockerImage
-    ? 'Pull the latest Promptfoo Docker image, then redeploy the container.'
+    ? 'Pull the latest Promptfoo Docker image. If this is a derived image, update its Promptfoo base and rebuild it. Then redeploy the container.'
     : isContainer
       ? `Update the Promptfoo source, dependency, or parent image to the latest release and this custom image's Node.js base to ${notice.recommendedVersion}, then rebuild and redeploy the container.`
       : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;

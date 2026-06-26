@@ -72,6 +72,15 @@ describe('config', () => {
       expect(getConfigDirectoryPath()).toBe(defaultConfigPath);
     });
 
+    it('reads a config directory loaded into the environment after module initialization', () => {
+      const restoreConfigDir = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: '/env-file/config' });
+      try {
+        expect(getConfigDirectoryPath()).toBe('/env-file/config');
+      } finally {
+        restoreConfigDir();
+      }
+    });
+
     it('does not create directory when createIfNotExists is false', () => {
       getConfigDirectoryPath(false);
       expect(mockFs.mkdirSync).not.toHaveBeenCalled();
