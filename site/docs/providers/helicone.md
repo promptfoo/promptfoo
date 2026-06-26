@@ -47,8 +47,8 @@ To route requests through your local Helicone AI Gateway:
 
 ```yaml
 providers:
-  - helicone:openai/gpt-5-mini
-  - helicone:anthropic/claude-sonnet-4-5-20250929
+  - helicone:openai/gpt-4o-mini
+  - helicone:anthropic/claude-sonnet-4-0
   - helicone:groq/llama-3.1-8b-instant
 ```
 
@@ -100,9 +100,9 @@ Examples:
 
 ### Supported Models
 
-Model IDs are forwarded to the configured upstream provider. Check both the
-[Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway) and the upstream
-provider's current catalog before pinning an ID.
+The self-hosted gateway validates model IDs against its bundled catalog before forwarding requests.
+Check both the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway) and the
+upstream provider's current catalog before pinning an ID.
 
 ### Configuration Parameters
 
@@ -132,7 +132,7 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - helicone:openai/gpt-5-mini
+  - helicone:openai/gpt-4o-mini
 
 prompts:
   - "Translate '{{text}}' to French"
@@ -156,7 +156,7 @@ providers:
       properties:
         model_family: 'gpt-4'
 
-  - id: helicone:anthropic/claude-sonnet-4-5-20250929
+  - id: helicone:anthropic/claude-sonnet-4-0
     config:
       tags: ['anthropic', 'claude']
       properties:
@@ -199,7 +199,7 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: helicone:openai/gpt-5-mini
+  - id: helicone:openai/gpt-4o-mini
     config:
       cache: true
       properties:

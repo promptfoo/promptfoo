@@ -104,7 +104,7 @@ This overrides the model configured via the OpenCode CLI for this specific eval.
 
 Specify a working directory to enable read-only file tools:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
@@ -151,7 +151,7 @@ prompts:
 
 OpenCode `workspace` support lets you target a specific workspace-aware server context. This requires either `working_dir` or `baseUrl`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
