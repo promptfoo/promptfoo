@@ -946,6 +946,37 @@ describe('synthesize', () => {
       );
     });
 
+    it('keeps Posterior excluded from multi-input intent tests at runtime', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const pluginConfig = { inputs, excludeStrategies: ['posterior'] };
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig, pluginId: 'intent' },
+          vars: { [MULTI_INPUT_VAR]: 'disclose credentials' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'intent' });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'intent', numTests: 1, config: pluginConfig }],
+        prompts: ['{{context}} {{question}}'],
+        purpose: 'Answer questions with reference context',
+        strategies: [{ id: 'posterior' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledOnce();
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.strategyId).toBeUndefined();
+      expect(result.testCases[0].vars?.[MULTI_INPUT_VAR]).toBe('disclose credentials');
+    });
+
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
       const inputs = {
         document: {

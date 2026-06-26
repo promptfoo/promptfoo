@@ -2557,6 +2557,26 @@ inputs:
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it('loads dynamic provider inputs for uppercase JavaScript-family extensions', async () => {
+    class DynamicProvider {
+      inputs = { context: 'Reference context', question: 'User question' };
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(['file:///workspace/dynamic-provider.MJS'], {
+        loadDynamicProviders: true,
+      }),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.MJS');
+  });
+
   it('preserves dynamic provider inputs when validation cleanup fails', async () => {
     const cleanupError = new Error('cleanup failed');
     const cleanup = vi.fn().mockRejectedValue(cleanupError);

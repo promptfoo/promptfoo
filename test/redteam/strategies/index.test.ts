@@ -194,10 +194,34 @@ describe('getStrategyCompatibilityError', () => {
       expected: undefined,
     },
     {
-      label: 'plugin collections whose child exclusions cannot be resolved statically',
+      label: 'Posterior excluded from every child of a plugin collection',
       strategies: ['posterior'],
       plugins: [{ id: 'harmful', config: { excludeStrategies: ['posterior'] } }],
+      expected: undefined,
+    },
+    {
+      label: 'Posterior targeted away from every child of a plugin collection',
+      strategies: [{ id: 'posterior', config: { plugins: ['harmful'] } }],
+      plugins: ['pii'],
+      expected: undefined,
+    },
+    {
+      label: 'Posterior targeted to a child of a plugin collection',
+      strategies: [{ id: 'posterior', config: { plugins: ['pii:direct'] } }],
+      plugins: ['pii'],
       expected: 'Posterior strategy does not support multi-input targets',
+    },
+    {
+      label: 'Posterior targeted to a child of an aliased plugin collection',
+      strategies: [{ id: 'posterior', config: { plugins: ['politics'] } }],
+      plugins: ['bias'],
+      expected: 'Posterior strategy does not support multi-input targets',
+    },
+    {
+      label: 'plugins skipped entirely in multi-input mode',
+      strategies: ['posterior'],
+      plugins: ['cca', { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } }],
+      expected: undefined,
     },
     {
       label: 'unreachable Posterior after an excluded pre-attack step',

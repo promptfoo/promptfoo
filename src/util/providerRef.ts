@@ -3,9 +3,14 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { maybeLoadConfigFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
 import invariant from './invariant';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
+
+export function isJavascriptProviderFile(providerPath: string): boolean {
+  return isJavascriptFile(providerPath);
+}
 
 // Keys belonging to the ProviderOptions interface (src/types/providers.ts).
 // When an object's first key matches one of these, it is NOT treated as a

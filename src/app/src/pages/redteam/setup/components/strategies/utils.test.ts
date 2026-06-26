@@ -117,10 +117,27 @@ describe('hasPosteriorStrategy', () => {
         { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
       ]),
     ).toBe(false);
+    expect(
+      hasPosteriorStrategy(
+        [{ id: 'posterior', config: { plugins: ['harmful'] } }] as RedteamStrategy[],
+        ['pii'],
+      ),
+    ).toBe(false);
+    expect(
+      hasPosteriorStrategy([{ id: 'posterior' }] as RedteamStrategy[], [
+        'cca',
+        { id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } },
+      ]),
+    ).toBe(false);
   });
 });
 
 describe('isPluginCompatibleWithStrategy', () => {
+  it('allows Basic previews for strategy-exempt plugins', () => {
+    expect(isPluginCompatibleWithStrategy('aegis', 'basic')).toBe(true);
+    expect(isPluginCompatibleWithStrategy('harmbench', 'basic')).toBe(true);
+  });
+
   it('supports direct and category-prefix targeting', () => {
     expect(
       isPluginCompatibleWithStrategy('policy', 'layer', {

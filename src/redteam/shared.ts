@@ -8,7 +8,11 @@ import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '..
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { dereferenceConfig, loadDefaultConfig } from '../util/config/default';
+import {
+  dereferenceConfig,
+  loadDefaultConfig,
+  renderConfigEnvTemplates,
+} from '../util/config/default';
 import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -23,9 +27,10 @@ import type { RedteamRunOptions } from './types';
 export async function dereferenceLiveRedteamConfig(
   config: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  return (await dereferenceConfig(
+  const dereferencedConfig = (await dereferenceConfig(
     structuredClone(config) as Parameters<typeof dereferenceConfig>[0],
   )) as unknown as Record<string, unknown>;
+  return renderConfigEnvTemplates(dereferencedConfig as { env?: Record<string, string> });
 }
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {

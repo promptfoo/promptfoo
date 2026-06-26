@@ -216,4 +216,26 @@ describe('useStrategyTestGeneration', () => {
     expect(result.current.isTestCaseGenerationAvailable).toBe(false);
     expect(generateTestCase).not.toHaveBeenCalled();
   });
+
+  it('keeps Basic previews available for strategy-exempt plugins', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: ['aegis'],
+        strategies: ['basic'],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() => useStrategyTestGeneration({ strategyId: 'basic' }));
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBe('aegis');
+    expect(result.current.isTestCaseGenerationAvailable).toBe(true);
+    expect(generateTestCase).toHaveBeenCalledWith(
+      { id: 'aegis', config: {}, isStatic: true },
+      { id: 'basic', config: {}, isStatic: false },
+    );
+  });
 });

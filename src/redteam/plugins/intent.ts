@@ -49,6 +49,14 @@ export class IntentPlugin extends RedteamPluginBase {
   async generateTests(_n: number, delayMs: number): Promise<TestCase[]> {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
+    const compatibilityConfig = {
+      ...(this.config.excludeStrategies
+        ? { excludeStrategies: this.config.excludeStrategies }
+        : {}),
+      ...(this.config.inputs ? { inputs: this.config.inputs } : {}),
+    };
+    const pluginConfig =
+      Object.keys(compatibilityConfig).length > 0 ? compatibilityConfig : undefined;
 
     for (const intent of this.intents) {
       if (typeof intent === 'string') {
@@ -62,7 +70,7 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             goal: extractedIntent,
             pluginId: this.id,
-            pluginConfig: undefined,
+            pluginConfig,
           },
         });
       } else {
@@ -83,7 +91,7 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             goal: extractedIntent,
             pluginId: this.id,
-            pluginConfig: undefined,
+            pluginConfig,
           },
         });
       }

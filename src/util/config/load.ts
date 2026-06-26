@@ -317,7 +317,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * @param config - The config object to render
  * @returns The config with env templates rendered
  */
-function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
+export function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
   // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
   const processEnvDisabled = getEnvBool(
     'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
