@@ -1494,6 +1494,115 @@ Application Details:
       );
     });
 
+    it('should recover a pending job that completes between status polls', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? {
+                    hasRunningJob: false,
+                    hasPendingRun: true,
+                    jobId: null,
+                    latestRunId: 'fast-job',
+                  }
+                : {
+                    hasRunningJob: false,
+                    hasPendingRun: false,
+                    jobId: null,
+                    latestRunId: 'fast-job',
+                  },
+          } as Response;
+        }
+        if (url === '/eval/job/fast-job') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'fast-eval',
+              logs: ['Completed before the next status poll'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(
+        () => {
+          expect(callApi).toHaveBeenCalledWith('/eval/job/fast-job');
+          expect(screen.getByRole('link', { name: /view report/i })).toBeInTheDocument();
+        },
+        { timeout: 2500 },
+      );
+      expect(mockSetJob).toHaveBeenCalledWith('fast-job');
+    });
+
+    it('should follow the newest pending run when it changes between polls', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          const statuses = [
+            {
+              hasRunningJob: false,
+              hasPendingRun: true,
+              jobId: null,
+              latestRunId: 'older-pending-job',
+            },
+            {
+              hasRunningJob: false,
+              hasPendingRun: true,
+              jobId: null,
+              latestRunId: 'newer-pending-job',
+            },
+            {
+              hasRunningJob: false,
+              hasPendingRun: false,
+              jobId: null,
+              latestRunId: 'newer-pending-job',
+            },
+          ];
+          return {
+            ok: true,
+            json: async () => statuses[Math.min(statusCalls - 1, statuses.length - 1)],
+          } as Response;
+        }
+        if (url === '/eval/job/newer-pending-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'complete', evalId: 'newer-eval', logs: ['Done'] }),
+          } as Response;
+        }
+        return { ok: false, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/eval/job/newer-pending-job'), {
+        timeout: 3500,
+      });
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/older-pending-job');
+      expect(mockSetJob).toHaveBeenCalledWith('older-pending-job');
+      expect(mockSetJob).toHaveBeenCalledWith('newer-pending-job');
+    });
+
     it('should wait for a pending replacement instead of following the old running job', async () => {
       let statusCalls = 0;
       vi.mocked(callApi).mockImplementation(async (url: string) => {
@@ -1572,6 +1681,40 @@ Application Details:
         },
         { timeout: 3500 },
       );
+    });
+
+    it('should ignore a historical latest run after an idle status retry', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          if (statusCalls === 1) {
+            throw new Error('Temporary status failure');
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              hasRunningJob: false,
+              hasPendingRun: false,
+              jobId: null,
+              latestRunId: 'historical-job',
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => expect(mockClearJob).toHaveBeenCalled(), { timeout: 2500 });
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/historical-job');
+      expect(mockSetJob).not.toHaveBeenCalledWith('historical-job');
     });
 
     it('should show completed state when returning to completed job', async () => {

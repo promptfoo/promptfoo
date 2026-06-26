@@ -1,3 +1,4 @@
+import { isExpandablePluginId, pluginConfigHasApplicablePosterior } from '../sharedFrontend';
 import { deduplicateStrategies } from './util';
 
 import type { TestCase } from '../../types/index';
@@ -89,6 +90,54 @@ export function hasActivePosteriorStrategy(strategies: readonly unknown[]): bool
     }
     return containsPosteriorStrategy(strategy, visited);
   });
+}
+
+export function hasApplicablePosteriorStrategy(
+  strategies: readonly unknown[],
+  plugins?: readonly unknown[],
+  options: { includeDisabledStrategies?: boolean } = {},
+): boolean {
+  const effectiveStrategies = getEffectiveStrategies(strategies).filter(
+    (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
+  );
+  if (!plugins || plugins.length === 0) {
+    const visited = new Set<object>();
+    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
+  }
+
+  const normalizedPlugins = plugins.map((plugin) => {
+    if (typeof plugin === 'string') {
+      return { id: plugin, config: undefined };
+    }
+    if (
+      plugin &&
+      typeof plugin === 'object' &&
+      !Array.isArray(plugin) &&
+      typeof (plugin as { id?: unknown }).id === 'string'
+    ) {
+      return {
+        id: (plugin as { id: string }).id,
+        config: (plugin as { config?: unknown }).config,
+      };
+    }
+    return undefined;
+  });
+  if (
+    normalizedPlugins.some(
+      (plugin) =>
+        plugin === undefined ||
+        (isExpandablePluginId(plugin.id) && !plugin.id.startsWith('coding-agent:')),
+    )
+  ) {
+    const visited = new Set<object>();
+    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
+  }
+
+  return effectiveStrategies.some((strategy) =>
+    normalizedPlugins.some(
+      (plugin) => plugin && pluginConfigHasApplicablePosterior(plugin.id, plugin.config, strategy),
+    ),
+  );
 }
 
 function getEffectiveStrategies(strategies: readonly unknown[]): RedteamStrategyObject[] {

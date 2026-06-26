@@ -97,6 +97,11 @@ describe('validateStrategies', () => {
 });
 
 describe('getStrategyCompatibilityError', () => {
+  const inputs = {
+    context: 'Reference context',
+    question: 'User question',
+  };
+
   it('handles cyclic layer aliases without overflowing the stack', () => {
     const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
       id: 'layer',
@@ -155,6 +160,95 @@ describe('getStrategyCompatibilityError', () => {
         question: 'User question',
       }),
     ).toBeUndefined();
+  });
+
+  it.each([
+    {
+      label: 'direct Posterior for an ordinary plugin',
+      strategies: ['posterior'],
+      plugins: ['harmful:hate'],
+      expected: 'Posterior strategy does not support multi-input targets',
+    },
+    {
+      label: 'direct Posterior excluded by plugin config',
+      strategies: ['posterior'],
+      plugins: [{ id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } }],
+      expected: undefined,
+    },
+    {
+      label: 'layered Posterior for an ordinary plugin',
+      strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+      plugins: ['harmful:hate'],
+      expected: 'Posterior strategy does not support multi-input targets',
+    },
+    {
+      label: 'layered Posterior implicitly excluded from coding-agent plugins',
+      strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+      plugins: ['coding-agent:secret-env-read'],
+      expected: undefined,
+    },
+    {
+      label: 'layered Posterior implicitly excluded from a coding-agent collection',
+      strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+      plugins: ['coding-agent:core'],
+      expected: undefined,
+    },
+    {
+      label: 'plugin collections whose child exclusions cannot be resolved statically',
+      strategies: ['posterior'],
+      plugins: [{ id: 'harmful', config: { excludeStrategies: ['posterior'] } }],
+      expected: 'Posterior strategy does not support multi-input targets',
+    },
+    {
+      label: 'unreachable Posterior after an excluded pre-attack step',
+      strategies: [
+        {
+          id: 'layer',
+          config: {
+            steps: [{ id: 'base64', config: { plugins: ['policy'] } }, 'posterior'],
+          },
+        },
+      ],
+      plugins: ['harmful:hate'],
+      expected: undefined,
+    },
+    {
+      label: 'Posterior after an excluded per-turn sibling',
+      strategies: [
+        {
+          id: 'layer',
+          config: {
+            steps: [
+              'jailbreak:hydra',
+              { id: 'base64', config: { plugins: ['policy'] } },
+              'posterior',
+            ],
+          },
+        },
+      ],
+      plugins: ['harmful:hate'],
+      expected: 'Posterior strategy does not support multi-input targets',
+    },
+  ])('accounts for plugin applicability with $label', ({ strategies, plugins, expected }) => {
+    expect(getStrategyCompatibilityError(strategies, inputs, { plugins })).toBe(expected);
+  });
+
+  it('handles cyclic per-turn layers while finding an applicable Posterior sibling', () => {
+    const cyclicLayer = { id: 'layer', config: { steps: [] as unknown[] } };
+    cyclicLayer.config.steps.push(cyclicLayer);
+
+    expect(
+      getStrategyCompatibilityError(
+        [
+          {
+            id: 'layer',
+            config: { steps: ['jailbreak:hydra', cyclicLayer, 'posterior'] },
+          },
+        ],
+        inputs,
+        { plugins: ['harmful:hate'] },
+      ),
+    ).toBe('Posterior strategy does not support multi-input targets');
   });
 });
 

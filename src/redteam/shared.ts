@@ -8,7 +8,7 @@ import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '..
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { loadDefaultConfig } from '../util/config/default';
+import { dereferenceConfig, loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -19,6 +19,14 @@ import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
+
+export async function dereferenceLiveRedteamConfig(
+  config: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return (await dereferenceConfig(
+    structuredClone(config) as Parameters<typeof dereferenceConfig>[0],
+  )) as unknown as Record<string, unknown>;
+}
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);

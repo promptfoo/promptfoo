@@ -401,13 +401,21 @@ async function doGenerateRedteamInternal(
       basePath,
     }: Parameters<NonNullable<ResolveConfigsHooks['beforeProviderLoad']>>[0]) => {
       const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
+      const compatibilityPlugins =
+        Array.isArray(options.plugins) && options.plugins.length > 0
+          ? options.plugins
+          : redteam?.plugins;
       const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
       if (strategyConfigError) {
         throw new Error(strategyConfigError);
       }
 
       const requiresResolvedInputs =
-        getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+        getStrategyCompatibilityError(
+          strategies,
+          { compatibilityProbe: true },
+          { plugins: compatibilityPlugins },
+        ) !== undefined;
       if (requiresResolvedInputs) {
         let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
           providers,
@@ -424,7 +432,11 @@ async function doGenerateRedteamInternal(
           );
         }
         const compatibilityError = resolvedInputs.inputs
-          .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+          .map((inputs) =>
+            getStrategyCompatibilityError(strategies, inputs, {
+              plugins: compatibilityPlugins,
+            }),
+          )
           .find((error) => error !== undefined);
         if (compatibilityError) {
           throw new Error(compatibilityError);
@@ -675,7 +687,9 @@ async function doGenerateRedteamInternal(
 
   const compatibilityError = testSuite.providers
     .map((provider) =>
-      getStrategyCompatibilityError(strategyObjs, provider.inputs ?? provider.config?.inputs),
+      getStrategyCompatibilityError(strategyObjs, provider.inputs ?? provider.config?.inputs, {
+        plugins,
+      }),
     )
     .find((error) => error !== undefined);
   if (compatibilityError) {

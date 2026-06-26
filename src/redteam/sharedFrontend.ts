@@ -1,7 +1,9 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
 
 import {
+  ALIASED_PLUGINS,
   CANARY_BREAKING_STRATEGY_IDS,
+  COLLECTIONS,
   MULTI_TURN_STRATEGIES,
   type Plugin,
   REDTEAM_DEFAULTS,
@@ -15,6 +17,13 @@ import type { UnifiedConfig, Vars } from '../types/index';
 import type { RedteamPluginObject, RedteamStrategyObject, SavedRedteamConfig } from './types';
 
 export { REDTEAM_DEFAULTS };
+
+export function isExpandablePluginId(pluginId: string): boolean {
+  return (
+    COLLECTIONS.includes(pluginId as (typeof COLLECTIONS)[number]) ||
+    ALIASED_PLUGINS.includes(pluginId as (typeof ALIASED_PLUGINS)[number])
+  );
+}
 
 export function pluginConfigMatchesStrategyTargets(
   pluginId: string,
@@ -49,17 +58,111 @@ export function pluginConfigMatchesStrategyTargets(
   );
 }
 
-function layerStepsMatchPlugin(
+interface LayerPluginAnalysis {
+  matches: boolean;
+  posteriorReached: boolean;
+}
+
+interface NormalizedLayerStep {
+  config?: Record<string, unknown>;
+  id: string;
+  node: object;
+  targets?: readonly string[];
+}
+
+function normalizeLayerStep(
+  step: unknown,
+  inheritedTargets?: readonly string[],
+): NormalizedLayerStep | undefined {
+  const stepObject = typeof step === 'string' ? { id: step } : step;
+  if (
+    typeof stepObject !== 'object' ||
+    stepObject === null ||
+    !('id' in stepObject) ||
+    typeof stepObject.id !== 'string'
+  ) {
+    return undefined;
+  }
+  const config =
+    'config' in stepObject && typeof stepObject.config === 'object' && stepObject.config !== null
+      ? (stepObject.config as Record<string, unknown>)
+      : undefined;
+  return {
+    config,
+    id: stepObject.id,
+    node: stepObject,
+    targets: Array.isArray(config?.plugins) ? (config.plugins as string[]) : inheritedTargets,
+  };
+}
+
+function perTurnLayersHaveApplicablePosterior(
+  pluginId: string,
+  pluginConfig: unknown,
+  steps: readonly unknown[],
+  startIndex: number,
+  inheritedTargets: readonly string[] | undefined,
+  ancestors: ReadonlySet<object>,
+): boolean {
+  const activeLayers = new Set(ancestors);
+  const pending: Array<{
+    steps: readonly unknown[];
+    index: number;
+    inheritedTargets?: readonly string[];
+    layer?: object;
+  }> = [{ steps, index: startIndex, inheritedTargets }];
+
+  while (pending.length > 0) {
+    const current = pending[pending.length - 1];
+    if (current.index >= current.steps.length) {
+      if (current.layer) {
+        activeLayers.delete(current.layer);
+      }
+      pending.pop();
+      continue;
+    }
+
+    const step = normalizeLayerStep(current.steps[current.index++], current.inheritedTargets);
+    if (!step) {
+      continue;
+    }
+    if (!pluginConfigMatchesStrategyTargets(pluginId, pluginConfig, step.id, step.targets)) {
+      continue;
+    }
+    if (step.id === 'posterior') {
+      return true;
+    }
+    if (step.id !== 'layer') {
+      continue;
+    }
+
+    const nestedSteps = Array.isArray(step.config?.steps) ? step.config.steps : [];
+    if (nestedSteps.length === 0 || activeLayers.has(step.node)) {
+      continue;
+    }
+    activeLayers.add(step.node);
+    pending.push({
+      steps: nestedSteps,
+      index: 0,
+      inheritedTargets: step.targets,
+      layer: step.node,
+    });
+  }
+
+  return false;
+}
+
+function analyzeLayerStepsForPlugin(
   pluginId: string,
   pluginConfig: unknown,
   steps: readonly unknown[],
   inheritedTargets?: readonly string[],
   rootLayer?: object,
-): boolean {
+): LayerPluginAnalysis {
   if (steps.length === 0) {
-    return false;
+    return { matches: false, posteriorReached: false };
   }
 
+  let posteriorReached = false;
   const activeLayers = new Set<object>();
   if (rootLayer) {
     activeLayers.add(rootLayer);
@@ -81,47 +184,45 @@ function layerStepsMatchPlugin(
       continue;
     }
 
-    const step = current.steps[current.index++];
-    const stepObject = typeof step === 'string' ? { id: step } : step;
-    if (
-      typeof stepObject !== 'object' ||
-      stepObject === null ||
-      !('id' in stepObject) ||
-      typeof stepObject.id !== 'string'
-    ) {
-      return false;
+    const step = normalizeLayerStep(current.steps[current.index++], current.inheritedTargets);
+    if (!step) {
+      return { matches: false, posteriorReached };
     }
-    if (isAttackProvider(stepObject.id)) {
+    if (isAttackProvider(step.id)) {
+      posteriorReached ||= perTurnLayersHaveApplicablePosterior(
+        pluginId,
+        pluginConfig,
+        current.steps,
+        current.index,
+        current.inheritedTargets,
+        activeLayers,
+      );
       current.index = current.steps.length;
       continue;
     }
 
-    const stepConfig =
-      'config' in stepObject && typeof stepObject.config === 'object' && stepObject.config !== null
-        ? (stepObject.config as Record<string, unknown>)
-        : undefined;
-    const stepTargets = Array.isArray(stepConfig?.plugins)
-      ? (stepConfig.plugins as string[])
-      : current.inheritedTargets;
-    if (!pluginConfigMatchesStrategyTargets(pluginId, pluginConfig, stepObject.id, stepTargets)) {
-      return false;
+    if (!pluginConfigMatchesStrategyTargets(pluginId, pluginConfig, step.id, step.targets)) {
+      return { matches: false, posteriorReached };
     }
-    if (stepObject.id === 'layer') {
-      const nestedSteps = Array.isArray(stepConfig?.steps) ? stepConfig.steps : [];
-      if (nestedSteps.length === 0 || activeLayers.has(stepObject)) {
-        return false;
+    if (step.id === 'posterior') {
+      posteriorReached = true;
+    }
+    if (step.id === 'layer') {
+      const nestedSteps = Array.isArray(step.config?.steps) ? step.config.steps : [];
+      if (nestedSteps.length === 0 || activeLayers.has(step.node)) {
+        return { matches: false, posteriorReached };
       }
-      activeLayers.add(stepObject);
+      activeLayers.add(step.node);
       pending.push({
         steps: nestedSteps,
         index: 0,
-        inheritedTargets: stepTargets,
-        layer: stepObject,
+        inheritedTargets: step.targets,
+        layer: step.node,
       });
     }
   }
 
-  return true;
+  return { matches: true, posteriorReached };
 }
 
 export function pluginConfigMatchesStrategy(
@@ -136,13 +237,37 @@ export function pluginConfigMatchesStrategy(
   if (strategy.id !== 'layer') {
     return true;
   }
-  return layerStepsMatchPlugin(
+  return analyzeLayerStepsForPlugin(
     pluginId,
     pluginConfig,
     Array.isArray(strategy.config?.steps) ? strategy.config.steps : [],
     targetPlugins,
     strategy,
-  );
+  ).matches;
+}
+
+export function pluginConfigHasApplicablePosterior(
+  pluginId: string,
+  pluginConfig: unknown,
+  strategy: RedteamStrategyObject,
+): boolean {
+  const targetPlugins = strategy.config?.plugins;
+  if (!pluginConfigMatchesStrategyTargets(pluginId, pluginConfig, strategy.id, targetPlugins)) {
+    return false;
+  }
+  if (strategy.id === 'posterior') {
+    return true;
+  }
+  if (strategy.id !== 'layer') {
+    return false;
+  }
+  return analyzeLayerStepsForPlugin(
+    pluginId,
+    pluginConfig,
+    Array.isArray(strategy.config?.steps) ? strategy.config.steps : [],
+    targetPlugins,
+    strategy,
+  ).posteriorReached;
 }
 
 export function getRiskCategorySeverityMap(

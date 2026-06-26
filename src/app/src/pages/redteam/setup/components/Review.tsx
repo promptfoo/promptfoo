@@ -68,6 +68,7 @@ interface JobStatusResponse {
   hasRunningJob: boolean;
   hasPendingRun?: boolean;
   jobId?: string;
+  latestRunId?: string;
   statusUnavailable?: boolean;
 }
 
@@ -284,6 +285,7 @@ export default function Review({
         hasRunningJob,
         hasPendingRun,
         jobId: serverJobId,
+        latestRunId,
         statusUnavailable,
       } = await checkForRunningJob();
       if (!isCurrentRecovery()) {
@@ -292,7 +294,10 @@ export default function Review({
 
       if (hasPendingRun) {
         setIsRunning(true);
-        startPendingRunPolling(savedJobId ?? undefined);
+        if (latestRunId) {
+          setJob(latestRunId);
+        }
+        startPendingRunPolling(savedJobId ?? undefined, latestRunId);
       } else if (hasRunningJob && serverJobId) {
         const result = await recoverJobById(serverJobId, recoveryRequest);
         if (!isCurrentRecovery()) {
@@ -571,7 +576,7 @@ export default function Review({
   );
 
   const startPendingRunPolling = useCallback(
-    (fallbackJobId?: string) => {
+    (fallbackJobId?: string, initialPendingRunId?: string) => {
       const pollGeneration = ++pollGenerationRef.current;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
@@ -579,13 +584,14 @@ export default function Review({
       }
 
       let inFlight = false;
+      let pendingRunId = initialPendingRunId;
       const interval = window.setInterval(async () => {
         if (inFlight || pollGeneration !== pollGenerationRef.current) {
           return;
         }
         inFlight = true;
         try {
-          const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } =
+          const { hasRunningJob, hasPendingRun, jobId, latestRunId, statusUnavailable } =
             await checkForRunningJob();
           if (pollGeneration !== pollGenerationRef.current) {
             return;
@@ -594,19 +600,33 @@ export default function Review({
             return;
           }
           if (hasPendingRun) {
+            if (latestRunId && latestRunId !== pendingRunId) {
+              pendingRunId = latestRunId;
+              setJob(latestRunId);
+            }
             return;
           }
           if (hasRunningJob && jobId) {
             setJob(jobId);
             startPolling(jobId);
           } else {
-            if (fallbackJobId) {
-              const result = await recoverJobById(fallbackJobId, runRequestRef.current);
+            const recoveryJobIds = [
+              ...new Set(
+                [pendingRunId, fallbackJobId].filter((candidate): candidate is string =>
+                  Boolean(candidate),
+                ),
+              ),
+            ];
+            for (const recoveryJobId of recoveryJobIds) {
+              const result = await recoverJobById(recoveryJobId, runRequestRef.current);
               if (pollGeneration !== pollGenerationRef.current || result === 'running') {
                 return;
               }
               if (result === 'unavailable' || result === 'stale') {
                 return;
+              }
+              if (result === 'finished') {
+                break;
               }
             }
             window.clearInterval(interval);
@@ -628,13 +648,17 @@ export default function Review({
   );
 
   const reconnectToActiveRun = async (runRequest: number): Promise<boolean> => {
-    const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } = await checkForRunningJob();
+    const { hasRunningJob, hasPendingRun, jobId, latestRunId, statusUnavailable } =
+      await checkForRunningJob();
     if (runRequest !== runRequestRef.current) {
       return false;
     }
     if (hasPendingRun || statusUnavailable) {
       setIsRunning(true);
-      startPendingRunPolling();
+      if (hasPendingRun && latestRunId) {
+        setJob(latestRunId);
+      }
+      startPendingRunPolling(undefined, hasPendingRun ? latestRunId : undefined);
       return true;
     }
     if (hasRunningJob && jobId) {
