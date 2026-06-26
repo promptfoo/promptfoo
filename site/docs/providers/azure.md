@@ -783,10 +783,15 @@ tests:
 If you encounter this error when using reasoning models:
 
 ```
-API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
+API response error (status 400)
+
+Response metadata: {
+  "errorCode": "unsupported_parameter",
+  "errorParam": "max_tokens"
+}
 ```
 
-This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
+The safe error metadata indicates that you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
 
 ## Using Vision Models
 
