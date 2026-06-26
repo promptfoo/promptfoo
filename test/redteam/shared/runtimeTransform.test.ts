@@ -130,6 +130,16 @@ describe('runtimeTransform', () => {
       expect(expandStrategy.action).not.toHaveBeenCalled();
     });
 
+    it('enforces media layer minimums against the transcript', async () => {
+      const result = await applyRuntimeTransforms(
+        'short',
+        'input',
+        [{ id: 'audio', config: { minCharsPerMessage: 10 } }],
+        mockStrategies,
+      );
+      expect(result.error).toContain('Transform audio output is below minCharsPerMessage=10');
+    });
+
     it('should extract audio data from data URL', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['audio'], mockStrategies);
 

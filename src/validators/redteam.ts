@@ -232,7 +232,9 @@ function strategyTargetsPlugin(
 ): boolean {
   // Validate the same concrete plugin ids that runtime materializes, then delegate the
   // targeting decision to runtime's predicate instead of maintaining a validator simulation.
-  return expandRuntimePlugins([{ id: pluginId, config: pluginConfig }]).plugins.some((plugin) =>
+  return expandRuntimePlugins([{ id: pluginId, config: pluginConfig }], (id) =>
+    REDTEAM_ALL_PLUGINS.includes(id as Plugin),
+  ).plugins.some((plugin) =>
     pluginIdMatchesStrategyTargets(
       plugin.id,
       plugin.config,

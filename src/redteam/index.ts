@@ -1090,17 +1090,15 @@ export async function synthesize({
     return true;
   });
 
-  let hasAgenticStrategy = strategies.some((strategy) => {
-    if (AGENTIC_STRATEGIES_SET.has(strategy.id as any)) {
+  const containsAgenticStrategy = (strategy: string | { id?: string; config?: any }): boolean => {
+    const id = typeof strategy === 'string' ? strategy : strategy.id;
+    if (AGENTIC_STRATEGIES_SET.has(id as any)) {
       return true;
     }
-    if (strategy.id !== 'layer' || !Array.isArray(strategy.config?.steps)) {
-      return false;
-    }
-    return strategy.config.steps.some((step: string | { id?: string }) =>
-      AGENTIC_STRATEGIES_SET.has((typeof step === 'string' ? step : step.id) as any),
-    );
-  });
+    const steps = typeof strategy === 'string' ? undefined : strategy.config?.steps;
+    return id === 'layer' && Array.isArray(steps) && steps.some(containsAgenticStrategy);
+  };
+  let hasAgenticStrategy = strategies.some(containsAgenticStrategy);
   // Only extract intent/goal when strategies that need it are selected
   const needsGoalExtraction = strategies.some(
     (s) => Strategies.find((def) => def.id === s.id)?.requiresGoalExtraction,
@@ -1388,14 +1386,14 @@ export async function synthesize({
             ...resolvePluginConfigWithCharLimits(
               plugin.config,
               maxCharsPerMessage,
-              minCharsPerMessage,
+              hasAgenticStrategy ? undefined : minCharsPerMessage,
             ),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
             modifiers: buildRedteamModifiers({
               maxCharsPerMessage,
-              minCharsPerMessage,
+              minCharsPerMessage: hasAgenticStrategy ? undefined : minCharsPerMessage,
               pluginConfig: plugin.config,
               testGenerationInstructions,
             }),
@@ -1553,7 +1551,7 @@ export async function synthesize({
             ...resolvePluginConfigWithCharLimits(
               plugin.config,
               maxCharsPerMessage,
-              minCharsPerMessage,
+              hasAgenticStrategy ? undefined : minCharsPerMessage,
             ),
             ...(lang ? { language: lang } : {}),
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1562,7 +1560,7 @@ export async function synthesize({
             ...resolvedConfig,
             modifiers: buildRedteamModifiers({
               maxCharsPerMessage,
-              minCharsPerMessage,
+              minCharsPerMessage: hasAgenticStrategy ? undefined : minCharsPerMessage,
               pluginConfig: resolvedConfig,
               testGenerationInstructions,
             }),

@@ -146,6 +146,7 @@ export async function applyRuntimeTransforms(
     }
 
     try {
+      const transcriptBeforeTransform = String(testCase.vars?.[injectVar] ?? '');
       // Call existing strategy action - this REUSES all existing implementation
       // The strategy expects an array of test cases and returns transformed test cases
       const result = await strategy.action([testCase], injectVar, {
@@ -165,7 +166,11 @@ export async function applyRuntimeTransforms(
             pluginId: testCase.metadata.pluginId,
           },
         };
-        const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
+        const varsToValidate =
+          layerId === 'audio' || layerId === 'image'
+            ? { ...testCase.vars, [injectVar]: transcriptBeforeTransform }
+            : testCase.vars;
+        const violation = getGeneratedTestCaseLengthViolation(varsToValidate, injectVar, {
           maxCharsPerMessage: layerConfig.maxCharsPerMessage as number | undefined,
           minCharsPerMessage: layerConfig.minCharsPerMessage as number | undefined,
         });

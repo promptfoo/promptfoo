@@ -387,6 +387,15 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should preserve direct plugin IDs when validating targeted ranges', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'bias:gender', config: { maxCharsPerMessage: 5 } }],
+        strategies: [{ id: 'goat', config: { plugins: ['politics'], minCharsPerMessage: 10 } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should reject invalid layered strategy step message limits', () => {
     expect(
       RedteamConfigSchema.safeParse({
