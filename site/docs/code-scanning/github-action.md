@@ -63,6 +63,7 @@ Only select config content from a trusted workflow or base revision. A config re
   uses: actions/checkout@v6
   with:
     fetch-depth: 0
+    persist-credentials: false
 
 - name: Load trusted Code Scan config
   env:
@@ -217,6 +218,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run Promptfoo Code Scan
         id: promptfoo-code-scan
