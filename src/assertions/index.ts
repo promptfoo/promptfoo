@@ -42,8 +42,8 @@ import { sleep } from '../util/time';
 import {
   cloneTransformInput,
   didTransformChange,
-  transform,
   type TransformInputClone,
+  transform,
 } from '../util/transform';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
