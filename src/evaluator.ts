@@ -1314,20 +1314,24 @@ async function transformRunEvalResponse({
 }> {
   const processedResponse = { ...response };
   const providerTransformInput = response.output;
+  let providerTransformInputSnapshot = providerTransformInput;
+  let providerTransformInputSnapshotIsReliable = true;
   if (provider.transform) {
+    try {
+      providerTransformInputSnapshot = structuredClone(providerTransformInput);
+    } catch {
+      providerTransformInputSnapshotIsReliable = false;
+    }
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,
     });
   }
   const providerTransformedOutput = processedResponse.output;
-  const providerInputIsReferenceLike =
-    providerTransformInput !== null &&
-    (typeof providerTransformInput === 'object' || typeof providerTransformInput === 'function');
   const providerTransformChanged = Boolean(
     provider.transform &&
-      (providerInputIsReferenceLike ||
-        !isDeepStrictEqual(providerTransformInput, providerTransformedOutput)),
+      (!providerTransformInputSnapshotIsReliable ||
+        !isDeepStrictEqual(providerTransformInputSnapshot, providerTransformedOutput)),
   );
 
   const testTransform = test.options?.transform || test.options?.postprocess;

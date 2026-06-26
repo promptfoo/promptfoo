@@ -84,6 +84,9 @@ function mockMetadataTransform(code: string, input: any, context?: any) {
 }
 
 async function mockTransform(code: unknown, input: any, context?: any) {
+  if (typeof code === 'function') {
+    return code(input, context);
+  }
   if (typeof code !== 'string') {
     return input;
   }

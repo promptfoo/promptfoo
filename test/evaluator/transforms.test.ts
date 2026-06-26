@@ -189,6 +189,50 @@ describeEvaluator('evaluator transforms', () => {
     );
   });
 
+  it('retains structured MCP provenance after an identity provider object transform', async () => {
+    const provider: ApiProvider = {
+      id: () => 'mcp-provider-identity-object',
+      callApi: async () => ({
+        output: { content: 'rendered MCP result' },
+        raw: {
+          output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+        },
+      }),
+      transform: 'output',
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          threshold: 0.5,
+          assert: (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map(
+            (type) => ({ type }),
+          ),
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    const components = summary.results[0].gradingResult?.componentResults ?? [];
+
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'is-valid-openai-tools-call' }),
+          pass: true,
+          score: 1,
+        }),
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'not-is-valid-openai-tools-call' }),
+          pass: false,
+          score: 0,
+        }),
+      ]),
+    );
+  });
+
   it('evaluate with vars transform', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
