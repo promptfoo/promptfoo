@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
@@ -872,6 +873,64 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
       expect(result.output).toBe(expectedOutput);
       expect(result.metadata?.mcpToolCalls).toEqual([expectedOutcome]);
+    });
+
+    it('preserves an MCP failure when a later function callback falls back', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { function: { name: 'read_file', arguments: '{}' } },
+                  { function: { name: 'fallback', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const fallback = vi.fn().mockRejectedValue(new Error('callback failed'));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { functionToolCallbacks: { fallback } },
+      });
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: 'denied', isError: true }),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const providerResponse = await provider.callApi('Read the file');
+
+      expect(providerResponse.metadata?.mcpToolCalls).toEqual([
+        { name: 'read_file', status: 'error', error: 'denied' },
+      ]);
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Read the file',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ),
+      );
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call failed for read_file: denied',
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'MCP tool call failed for read_file: denied',
+      });
     });
 
     it('should handle multiple function tool calls', async () => {

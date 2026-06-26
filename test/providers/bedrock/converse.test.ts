@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import logger from '../../../src/logger';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
@@ -724,6 +725,31 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.output).toBe(
         'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
       );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        { name: 'list_resources', status: 'success' },
+      ]);
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'List resources',
+            provider,
+            providerResponse: result,
+            test: { vars: {} },
+          }),
+        ),
+      );
+      expect(positive).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'MCP tool call succeeded for list_resources',
+      });
+      expect(inverse).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a valid OpenAI tools call, but it was',
+      });
     });
 
     it('should return MCP tool errors', async () => {
@@ -755,6 +781,13 @@ describe('AwsBedrockConverseProvider', () => {
       // assertions and exit codes treat broken MCP calls as failures rather than
       // greenlighting them on the strength of an embedded error string.
       expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'MCP server failed',
+        },
+      ]);
     });
 
     it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
@@ -780,6 +813,13 @@ describe('AwsBedrockConverseProvider', () => {
 
       expect(result.error).toBe('MCP Tool Error (list_resources): connection refused');
       expect(result.output).toContain('MCP Tool Error (list_resources)');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'connection refused',
+        },
+      ]);
     });
 
     it('should not crash on malformed JSON tool_use input from the model', async () => {
@@ -3310,6 +3350,9 @@ Third line`;
       expect(result.output).toBe(
         'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
       );
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        { name: 'list_resources', status: 'success' },
+      ]);
     });
 
     it('should return MCP errors from streaming tool use responses', async () => {
@@ -3348,6 +3391,13 @@ Third line`;
 
       expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
       expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'MCP server failed',
+        },
+      ]);
     });
 
     it('should not invoke MCP from streaming when toolChoice is none', async () => {
@@ -3413,6 +3463,13 @@ Third line`;
       // Don't call MCP with garbage args
       expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
       expect(result.error).toContain('invalid JSON arguments');
+      expect(result.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'list_resources',
+          status: 'error',
+          error: 'model emitted invalid JSON arguments',
+        },
+      ]);
     });
 
     it('should combine streaming text with MCP tool results', async () => {

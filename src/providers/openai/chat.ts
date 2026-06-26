@@ -642,13 +642,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
+      const mcpToolCalls: Array<{
+        error?: string;
+        name: string;
+        status: 'error' | 'success';
+      }> = [];
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
-        const mcpToolCalls: Array<{
-          error?: string;
-          name: string;
-          status: 'error' | 'success';
-        }> = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
@@ -797,6 +797,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }),
           guardrails: { flagged: contentFiltered },
           metadata: {
+            ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
             http: {
               status,
               statusText,
@@ -819,6 +820,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }),
         guardrails: { flagged: contentFiltered },
         metadata: {
+          ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
           http: {
             status,
             statusText,

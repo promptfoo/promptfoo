@@ -124,6 +124,12 @@ export interface BedrockConverseOptions extends BedrockOptions {
   streaming?: boolean;
 }
 
+interface McpToolCallOutcome {
+  error?: string;
+  name: string;
+  status: 'error' | 'success';
+}
+
 /**
  * Tool configuration for Converse API
  */
@@ -1370,18 +1376,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async dispatchMcpToolCall(
     name: string,
     input: unknown,
-  ): Promise<{ output: string; error?: string }> {
+  ): Promise<{ output: string; error?: string; mcpToolCall: McpToolCallOutcome }> {
     try {
       const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
       if (isMcpErrorResult(mcpResult)) {
-        const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
-        return { output: msg, error: msg };
+        const error = getMcpErrorMessage(mcpResult);
+        const msg = formatMcpToolError(name, error);
+        return {
+          output: msg,
+          error: msg,
+          mcpToolCall: { name, status: 'error', error },
+        };
       }
-      return { output: formatMcpToolResult(name, mcpResult?.content) };
+      return {
+        output: formatMcpToolResult(name, mcpResult?.content),
+        mcpToolCall: { name, status: 'success' },
+      };
     } catch (err) {
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
-      const msg = formatMcpToolError(name, errorMessage(err));
-      return { output: msg, error: msg };
+      const error = errorMessage(err);
+      const msg = formatMcpToolError(name, error);
+      return {
+        output: msg,
+        error: msg,
+        mcpToolCall: { name, status: 'error', error },
+      };
     }
   }
 
@@ -1393,9 +1412,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async formatStreamingToolUseBlocks(
     blocks: StreamingToolUseBlock[],
     toolsDisabled: boolean,
-  ): Promise<{ toolUseParts: string[]; mcpErrors: string[] }> {
+  ): Promise<{
+    toolUseParts: string[];
+    mcpErrors: string[];
+    mcpToolCalls: McpToolCallOutcome[];
+  }> {
     const toolUseParts: string[] = [];
     const mcpErrors: string[] = [];
+    const mcpToolCalls: McpToolCallOutcome[] = [];
     const mcpTools = this.mcpClient?.getAllTools() ?? [];
 
     for (const toolBlock of blocks) {
@@ -1418,20 +1442,26 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       if (parseFailed) {
-        const msg = formatMcpToolError(toolBlock.name, 'model emitted invalid JSON arguments');
+        const error = 'model emitted invalid JSON arguments';
+        const msg = formatMcpToolError(toolBlock.name, error);
         toolUseParts.push(msg);
         mcpErrors.push(msg);
+        mcpToolCalls.push({ name: toolBlock.name, status: 'error', error });
         continue;
       }
 
-      const { output, error } = await this.dispatchMcpToolCall(toolBlock.name, parsedInput);
+      const { output, error, mcpToolCall } = await this.dispatchMcpToolCall(
+        toolBlock.name,
+        parsedInput,
+      );
       toolUseParts.push(output);
+      mcpToolCalls.push(mcpToolCall);
       if (error) {
         mcpErrors.push(error);
       }
     }
 
-    return { toolUseParts, mcpErrors };
+    return { toolUseParts, mcpErrors, mcpToolCalls };
   }
 
   /**
@@ -1440,14 +1470,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * responsible for deciding what to do with them. Returns formatted result
    * strings and any errors encountered.
    */
-  private async executeMcpToolCalls(
-    blocks: { name: string; input: unknown }[],
-  ): Promise<{ results: string[]; errors: string[] }> {
+  private async executeMcpToolCalls(blocks: { name: string; input: unknown }[]): Promise<{
+    results: string[];
+    errors: string[];
+    mcpToolCalls: McpToolCallOutcome[];
+  }> {
     const results: string[] = [];
     const errors: string[] = [];
+    const mcpToolCalls: McpToolCallOutcome[] = [];
 
     if (!this.mcpClient) {
-      return { results, errors };
+      return { results, errors, mcpToolCalls };
     }
     const tools = this.mcpClient.getAllTools();
 
@@ -1455,14 +1488,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (!name || !tools.find((tool) => tool.name === name)) {
         continue;
       }
-      const { output, error } = await this.dispatchMcpToolCall(name, input);
+      const { output, error, mcpToolCall } = await this.dispatchMcpToolCall(name, input);
       results.push(output);
+      mcpToolCalls.push(mcpToolCall);
       if (error) {
         errors.push(error);
       }
     }
 
-    return { results, errors };
+    return { results, errors, mcpToolCalls };
   }
 
   /**
@@ -1576,6 +1610,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     );
     const dispatchResults: string[] = [];
     const mcpErrors: string[] = [];
+    const mcpToolCalls: McpToolCallOutcome[] = [];
     const handledIndexes = new Set<number>();
 
     if (!toolsDisabled && toolUseBlocks.length > 0) {
@@ -1595,6 +1630,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
         dispatchResults.push(...mcpResult.results);
         mcpErrors.push(...mcpResult.errors);
+        mcpToolCalls.push(...mcpResult.mcpToolCalls);
       }
 
       // 2) functionToolCallbacks for any remaining (non-MCP) tool_use blocks.
@@ -1651,6 +1687,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
       // take precedence since they're a model-level (not tool-level) failure.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
+      if (mcpToolCalls.length > 0) {
+        metadata.mcpToolCalls = mcpToolCalls;
+      }
       return {
         output: dispatchResults.join('\n'),
         tokenUsage,
@@ -1806,7 +1845,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       // Format tool use blocks for output (same as non-streaming)
-      const { toolUseParts, mcpErrors } = await this.formatStreamingToolUseBlocks(
+      const { toolUseParts, mcpErrors, mcpToolCalls } = await this.formatStreamingToolUseBlocks(
         Array.from(toolUseBlocks.values()),
         toolsDisabled,
       );
@@ -1830,6 +1869,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const metadata: Record<string, unknown> = {};
       if (stopReason) {
         metadata.stopReason = stopReason;
+      }
+      if (mcpToolCalls.length > 0) {
+        metadata.mcpToolCalls = mcpToolCalls;
       }
       if (stopReason === 'malformed_model_output') {
         malformedError =
