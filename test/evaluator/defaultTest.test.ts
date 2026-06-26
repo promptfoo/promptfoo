@@ -9,7 +9,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { type ApiProvider, type TestCase, type TestSuite } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockApiProvider, resetMockProviders, toPrompt } from './helpers';
 
@@ -661,6 +661,70 @@ describe('defaultTest normalization for extensions', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
     await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
+  });
+
+  it('applies strict no-assert validation after beforeEach adds assertions', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach') {
+        const test = (context as { test: TestCase }).test;
+        return {
+          ...context,
+          test: { ...test, assert: [{ type: 'contains', value: 'Test output' }] },
+        };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).resolves.toBe(evalRecord);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects when beforeEach removes the final assertion', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach') {
+        const test = (context as { test: TestCase }).test;
+        return { ...context, test: { ...test, assert: [] } };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test output' }] }],
+      extensions: ['file://test-extension.js'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      /Strict config: 1 evaluated test row/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('allows intentional internal assertion-free evaluations', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(
+      evaluate(testSuite, evalRecord, { skipStrictAssertionValidation: true }),
+    ).resolves.toBe(evalRecord);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
   it('checks scenario rows in strict mode after suite expansion', async () => {

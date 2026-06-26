@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError, StrictConfigError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -877,6 +877,11 @@ export async function doEval(
           cliState.retryMode = false;
         }
       }
+    } catch (error) {
+      if (error instanceof StrictConfigError && isCliInvocation) {
+        throw new ConfigResolutionError(error.message);
+      }
+      throw error;
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
     }

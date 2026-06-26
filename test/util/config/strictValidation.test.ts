@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  findTestsWithoutAssertions,
-  findUnknownTopLevelKeys,
-} from '../../../src/util/config/strictValidation';
+import { findTestsWithoutAssertions } from '../../../src/evaluator';
+import { findUnknownTopLevelKeys } from '../../../src/util/config/load';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -70,6 +68,10 @@ describe('findUnknownTopLevelKeys', () => {
     expect(findUnknownTopLevelKeys({ $schema: './config-schema.json', prompts: ['hi'] })).toEqual(
       [],
     );
+  });
+
+  it('accepts a root $ref before dereferencing', () => {
+    expect(findUnknownTopLevelKeys({ $ref: './shared.yaml' })).toEqual([]);
   });
 
   it('accepts extension keys and reusable local-ref definition containers', () => {
@@ -145,6 +147,14 @@ describe('findTestsWithoutAssertions', () => {
     ];
 
     expect(findTestsWithoutAssertions(tests)).toEqual([0, 1, 2]);
+  });
+
+  it('counts weight-zero metric assertions because they still execute', () => {
+    const tests: TestCase[] = [
+      { assert: [{ type: 'contains', value: 'diagnostic', metric: 'signal', weight: 0 }] },
+    ];
+
+    expect(findTestsWithoutAssertions(tests)).toEqual([]);
   });
 
   it('does not treat an empty defaultTest.assert as a covering set', () => {

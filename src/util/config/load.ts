@@ -48,7 +48,25 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
-import { findUnknownTopLevelKeys } from './strictValidation';
+
+const KNOWN_TOP_LEVEL_CONFIG_KEYS: ReadonlySet<string> = new Set([
+  ...Object.keys(TestSuiteConfigSchema.shape),
+  // Keys added by UnifiedConfigSchema.extend(...).
+  'evaluateOptions',
+  'commandLineOptions',
+  'targets',
+  // JSON Schema metadata and reusable definition containers ignored by this typo heuristic.
+  '$schema',
+  '$ref',
+  '$defs',
+  'definitions',
+  'assertionTemplates',
+  // Deprecated aliases auto-migrated by the loader.
+  'plugins',
+  'strategies',
+]);
+
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -126,6 +144,90 @@ function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined)
 
   const inputs = firstProvider.inputs;
   return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+/**
+ * Finds top-level keys that are not part of the unified config shape. This intentionally operates
+ * on the parsed object before dereferencing, templating, or schema normalization can remove keys.
+ */
+export function findUnknownTopLevelKeys(rawConfig: unknown): string[] {
+  if (!isRecord(rawConfig)) {
+    return [];
+  }
+  return Object.keys(rawConfig).filter(
+    (key) => !KNOWN_TOP_LEVEL_CONFIG_KEYS.has(key) && !key.startsWith('x-'),
+  );
+}
+
+function parseEnvBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return value !== undefined && TRUE_ENV_VALUES.has(String(value).toLowerCase());
+}
+
+/**
+ * Resolves strictness from the config currently being loaded, then process.env. In particular,
+ * this must not consult cliState.config because watch mode may still hold the previous config.
+ */
+function isStrictConfigEnabled(
+  rawConfig: unknown,
+  dereferencedConfig: unknown,
+  renderedConfig: unknown,
+): boolean {
+  const configEnvWithOverride = [rawConfig, dereferencedConfig]
+    .map((config) =>
+      isRecord(config) && hasOwn(config, 'env') && isRecord(config.env) ? config.env : undefined,
+    )
+    .find((env) => env && hasOwn(env, 'PROMPTFOO_STRICT_CONFIG'));
+  if (configEnvWithOverride) {
+    const renderedEnv =
+      isRecord(renderedConfig) && hasOwn(renderedConfig, 'env') ? renderedConfig.env : undefined;
+    const renderedValue =
+      isRecord(renderedEnv) && hasOwn(renderedEnv, 'PROMPTFOO_STRICT_CONFIG')
+        ? renderedEnv.PROMPTFOO_STRICT_CONFIG
+        : configEnvWithOverride.PROMPTFOO_STRICT_CONFIG;
+    return parseEnvBoolean(renderedValue);
+  }
+  return parseEnvBoolean(process.env.PROMPTFOO_STRICT_CONFIG);
+}
+
+function validateUnknownTopLevelKeys(
+  rawConfig: unknown,
+  dereferencedConfig: unknown,
+  renderedConfig: unknown,
+  configPath: string,
+): void {
+  const unknownTopLevelKeys = [
+    ...new Set([
+      ...findUnknownTopLevelKeys(rawConfig),
+      ...findUnknownTopLevelKeys(dereferencedConfig),
+    ]),
+  ];
+  if (unknownTopLevelKeys.length === 0) {
+    return;
+  }
+
+  const keyList = unknownTopLevelKeys.map((key) => JSON.stringify(key)).join(', ');
+  const message =
+    `Unknown top-level config key(s) ${keyList} in ${JSON.stringify(configPath)}. ` +
+    'Did you mean to nest these under another field (e.g. `defaultTest.assert`)?';
+  if (isStrictConfigEnabled(rawConfig, dereferencedConfig, renderedConfig)) {
+    failConfigResolution(message);
+  }
+  logger.warn(
+    'Unknown top-level config key(s) found. Did you mean to nest these under another field ' +
+      '(e.g. `defaultTest.assert`)? Set PROMPTFOO_STRICT_CONFIG=true to fail on this.',
+    { configPath, unknownTopLevelKeys },
+  );
 }
 
 /**
@@ -338,6 +440,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // This allows env vars to be used in paths and other config values.
     // Runtime templates like {{ vars.x }} are preserved for later evaluation.
     const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+    validateUnknownTopLevelKeys(rawConfig, dereferencedConfig, renderedConfig, configPath);
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -379,6 +482,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     // Render environment variable templates for JS configs too.
     // This ensures consistent behavior across config file types.
     const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+    validateUnknownTopLevelKeys(imported, imported, renderedConfig, configPath);
     const normalizedCommandLineOptions = normalizeConfiguredCommandLineOptions(
       renderedConfig.commandLineOptions,
       `configuration file ${configPath}`,
@@ -397,19 +501,6 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     ret = normalizedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
-  }
-
-  // Surface typo'd top-level keys (e.g. `assert:` at the root when the user meant
-  // `defaultTest.assert`). In strict mode, fail loudly; otherwise log a warning so users notice
-  // without breaking existing workflows.
-  const unknownTopLevelKeys = findUnknownTopLevelKeys(ret as Record<string, unknown>);
-  if (unknownTopLevelKeys.length > 0) {
-    const keyList = unknownTopLevelKeys.map((k) => `'${k}'`).join(', ');
-    const message = `Unknown top-level config key(s) ${keyList} in ${configPath}. Did you mean to nest these under another field (e.g. \`defaultTest.assert\`)?`;
-    if (getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
-      failConfigResolution(message);
-    }
-    logger.warn(`${message} Set PROMPTFOO_STRICT_CONFIG=true to fail on this.`);
   }
 
   if (ret.targets) {

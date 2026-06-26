@@ -8,4 +8,6 @@ import type { EvaluateOptions } from './index';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
+  /** Allow internal provider probes that intentionally evaluate outputs without assertions. */
+  skipStrictAssertionValidation?: boolean;
 };
