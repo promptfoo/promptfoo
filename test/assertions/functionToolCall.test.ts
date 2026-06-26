@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
 import { runAssertion } from '../../src/assertions/index';
+import { FunctionToolCallValidationSetupError } from '../../src/contracts';
 
 import type { ApiProvider, AssertionParams, AssertionType } from '../../src/types/index';
 
@@ -19,6 +20,13 @@ const invalidProvider = {
 const noValidatorProvider = {
   id: () => 'test',
   callApi: async () => ({}),
+};
+const setupErrorProvider = {
+  id: () => 'test',
+  callApi: async () => ({}),
+  validateFunctionToolCall: () => {
+    throw new FunctionToolCallValidationSetupError('validator schema unavailable');
+  },
 };
 
 function params(overrides: Partial<AssertionParams>): AssertionParams {
@@ -93,6 +101,19 @@ describe('handleIsValidFunctionCall', () => {
       expect(r.pass).toBe(false);
       expect(r.score).toBe(0);
       expect(r.reason).toBe('Provider does not have functionality for checking function call.');
+    });
+
+    it.each([
+      'not-is-valid-function-call',
+      'not-is-valid-openai-function-call',
+    ] as const)('%s does not invert a validator setup error', async (type) => {
+      const r = await runInverse(type, setupErrorProvider as ApiProvider);
+
+      expect(r).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'validator schema unavailable',
+      });
     });
   });
 });

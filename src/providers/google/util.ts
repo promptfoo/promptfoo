@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
+import { FunctionToolCallValidationSetupError, type VarValue } from '../../types/index';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -10,7 +11,6 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { FunctionToolCallValidationSetupError } from '../functionToolCallValidation';
 import {
   calculateCost,
   type ProviderConfig,
@@ -22,7 +22,6 @@ import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
-import type { VarValue } from '../../types/shared';
 import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
 
 /**
@@ -1229,14 +1228,29 @@ export function validateFunctionCall(
     throw new FunctionToolCallValidationSetupError((error as Error).message);
   }
 
+  if (!Array.isArray(interpolatedFunctions)) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const functionDeclarations = interpolatedFunctions.find(
+    (tool) =>
+      typeof tool === 'object' &&
+      tool !== null &&
+      'functionDeclarations' in tool &&
+      Array.isArray(tool.functionDeclarations),
+  )?.functionDeclarations;
+  if (!functionDeclarations || functionDeclarations.length === 0) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
-    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-    const functionSchema = functionDeclarations?.functionDeclarations?.find(
-      (f) => f.name === functionName,
-    );
+    const functionSchema = functionDeclarations.find((f) => f.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }

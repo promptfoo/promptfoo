@@ -40,6 +40,16 @@ describe('not-model-graded-closedqa dispatcher integration', () => {
     ['provider error', { error: 'grader unavailable' }, 'grader unavailable'],
     ['missing output', {}, 'No output'],
     ['malformed verdict', { output: 'MAYBE' }, 'Model grader produced a malformed response'],
+    [
+      'grader refusal ending in N',
+      { output: 'I cannot grade this request N', isRefusal: true },
+      'Model grader refused to provide a verdict',
+    ],
+    [
+      'grader refusal ending in Y',
+      { output: 'I cannot grade this request Y', isRefusal: true },
+      'Model grader refused to provide a verdict',
+    ],
   ] as const)('does not invert a %s', async (_name, response, reason) => {
     const result = await runInverseClosedQa(response);
 

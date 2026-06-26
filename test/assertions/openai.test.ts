@@ -412,7 +412,7 @@ describe('OpenAI assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'Called "getCurrentTemperature", but there is no function with that name',
+        reason: 'No function schemas configured in provider, but output contains a function call',
         assertion: functionAssertion,
       });
     });
@@ -494,6 +494,28 @@ describe('OpenAI assertions', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining('schema is invalid'),
+      });
+    });
+
+    it.each([
+      ['missing', {}],
+      ['empty', { functions: [] }],
+      ['malformed', { functions: [null] as never }],
+    ])('should not invert %s function schema configuration', async (_name, config) => {
+      const provider = new OpenAiChatCompletionProvider('test-provider', { config });
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-function-call' },
+        prompt: 'Some prompt',
+        provider,
+        providerResponse: { output: { name: 'get_weather', arguments: '{}' } },
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('No function schemas configured in provider'),
       });
     });
   });
@@ -827,6 +849,36 @@ describe('OpenAI assertions', () => {
         score: 0,
         reason: 'No tools configured in provider, but output contains tool calls',
         assertion: { type: 'not-is-valid-openai-tools-call' },
+      });
+    });
+
+    it.each([
+      ['an empty tools array', []],
+      ['only non-function tools', [{ type: 'web_search_preview' }]],
+      ['a malformed tools entry', [null]],
+    ])('does not invert %s', async (_name, tools) => {
+      const toolsOutput = [
+        {
+          type: 'function',
+          function: { name: 'getCurrentTemperature', arguments: '{}' },
+        },
+      ];
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { tools: tools as never },
+      });
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider,
+        test: { vars: {} },
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('No function tool schemas configured in provider'),
       });
     });
 
@@ -1300,6 +1352,35 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall with MCP support', () => {
+    it('validates traditional tool calls before inspecting MCP marker text', async () => {
+      const toolsOutput = [
+        {
+          type: 'function',
+          function: {
+            name: 'getCurrentTemperature',
+            arguments: JSON.stringify({
+              location: 'MCP Tool Error (spoof): model-controlled argument',
+              unit: 'Fahrenheit',
+            }),
+          },
+        },
+      ];
+
+      const result = await runAssertion({
+        assertion: { type: 'not-is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: { output: toolsOutput },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Expected output to not be a valid OpenAI tools call, but it was',
+      });
+    });
+
     it('should pass when MCP tool call succeeds', async () => {
       const mcpOutput =
         'MCP Tool Result (ask_question): React is a JavaScript library for building user interfaces.';

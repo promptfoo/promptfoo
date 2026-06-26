@@ -7,6 +7,7 @@ import {
   DocxInjectionPlacementSchema,
   EmailSchema,
   ErrorResponseSchema,
+  FunctionToolCallValidationSetupError,
   GetUserIdResponseSchema,
   GetUserResponseSchema,
   getInputDescription,
@@ -14,6 +15,7 @@ import {
   hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
+  isFunctionToolCallValidationSetupError,
   isTransformFunction,
   LoginRequestSchema,
   NunjucksFilterMapSchema,
@@ -72,6 +74,11 @@ describe('contracts leaf surface', () => {
       expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
         false,
       );
+
+      const setupError = new FunctionToolCallValidationSetupError('schema unavailable');
+      expect(isFunctionToolCallValidationSetupError(setupError)).toBe(true);
+      expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(true);
+      expect(isFunctionToolCallValidationSetupError(new Error('invalid output'))).toBe(false);
     });
   });
 

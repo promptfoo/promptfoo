@@ -565,6 +565,8 @@ This ensures that any JSON LLM output adheres to the schema specified in the `fu
 
 Use `not-is-valid-function-call` (or the legacy `not-is-valid-openai-function-call`) to require an invalid function call. Provider capability and schema setup errors remain failures because no validation verdict was produced.
 
+Custom validators can signal a non-invertible setup failure by throwing `FunctionToolCallValidationSetupError` from `promptfoo/contracts`. Ordinary validation errors continue to mean that the model output is invalid.
+
 ### is-valid-openai-function-call
 
 Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).

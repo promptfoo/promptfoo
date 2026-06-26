@@ -13,17 +13,20 @@ import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 import type { TransformFunction } from './transform';
 
-export type {
-  ChatMessage,
-  GuardrailResponse,
-  ImageOutput,
-  ModerationFlag,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
-  ProviderModerationResponse,
-  ProviderResponse,
-  ProviderSimilarityResponse,
+export {
+  type ChatMessage,
+  FunctionToolCallValidationSetupError,
+  type GuardrailResponse,
+  type ImageOutput,
+  isFunctionToolCallValidationSetupError,
+  type ModerationFlag,
+  type ProviderClassificationResponse,
+  type ProviderEmbeddingResponse,
+  type ProviderModerationResponse,
+  type ProviderResponse,
+  type ProviderSimilarityResponse,
 } from '../contracts/providers';
+
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;

@@ -1,9 +1,12 @@
-import { FunctionToolCallValidationSetupError } from '../providers/functionToolCallValidation';
 import { validateFunctionCall } from '../providers/openai/util';
+import {
+  type AssertionParams,
+  type GradingResult,
+  isFunctionToolCallValidationSetupError,
+} from '../types/index';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
-import type { AssertionParams, GradingResult } from '../types/index';
 
 interface OpenAiToolCall {
   function: { arguments: string; name: string };
@@ -38,6 +41,21 @@ function applyInverse(result: GradingResult, inverse: boolean): GradingResult {
   };
 }
 
+function getMcpOutputText(output: unknown): string | undefined {
+  if (typeof output === 'string') {
+    return output;
+  }
+  if (
+    typeof output === 'object' &&
+    output !== null &&
+    'content' in output &&
+    typeof output.content === 'string'
+  ) {
+    return output.content;
+  }
+  return undefined;
+}
+
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   inverse,
@@ -45,11 +63,19 @@ export const handleIsValidOpenAiToolsCall = async ({
   provider,
   test,
 }: AssertionParams): Promise<GradingResult> => {
-  // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+  // Traditional tool calls take precedence so model-controlled arguments cannot
+  // be misclassified merely by containing an MCP result/error marker.
+  let toolsOutput: unknown = output;
+  const hasTraditionalToolCalls =
+    Array.isArray(output) ||
+    (output !== null && typeof output === 'object' && 'tool_calls' in output);
+  if (!Array.isArray(output) && hasTraditionalToolCalls) {
+    toolsOutput = (output as { tool_calls: unknown }).tool_calls;
+  }
 
-  // Check for MCP tool results in the output
-  if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {
+  // Handle textual MCP tool outputs from Responses API.
+  const outputStr = hasTraditionalToolCalls ? undefined : getMcpOutputText(output);
+  if (outputStr?.includes('MCP Tool Result') || outputStr?.includes('MCP Tool Error')) {
     // For MCP tools, we validate that the tool call was successful
     if (outputStr.includes('MCP Tool Error')) {
       const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
@@ -81,10 +107,6 @@ export const handleIsValidOpenAiToolsCall = async ({
   }
 
   // Handle traditional OpenAI function/tool calls
-  let toolsOutput: unknown = output;
-  if (output !== null && typeof output === 'object' && 'tool_calls' in output) {
-    toolsOutput = output.tool_calls;
-  }
   if (
     !Array.isArray(toolsOutput) ||
     toolsOutput.length === 0 ||
@@ -128,15 +150,32 @@ export const handleIsValidOpenAiToolsCall = async ({
       assertion,
     };
   }
+
+  const functionDefinitions = tools.flatMap((tool) => {
+    if (
+      typeof tool === 'object' &&
+      tool !== null &&
+      'type' in tool &&
+      tool.type === 'function' &&
+      'function' in tool &&
+      typeof tool.function === 'object' &&
+      tool.function !== null
+    ) {
+      return [tool.function];
+    }
+    return [];
+  });
+  if (functionDefinitions.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'No function tool schemas configured in provider, but output contains tool calls',
+      assertion,
+    };
+  }
   try {
     toolsOutput.forEach((toolOutput) => {
-      validateFunctionCall(
-        toolOutput.function,
-        tools
-          .filter((tool) => tool.type === 'function' && 'function' in tool)
-          .map((tool) => tool.function),
-        test.vars,
-      );
+      validateFunctionCall(toolOutput.function, functionDefinitions, test.vars);
     });
     return applyInverse(
       {
@@ -154,8 +193,6 @@ export const handleIsValidOpenAiToolsCall = async ({
       reason: (err as Error).message,
       assertion,
     };
-    return err instanceof FunctionToolCallValidationSetupError
-      ? result
-      : applyInverse(result, inverse);
+    return isFunctionToolCallValidationSetupError(err) ? result : applyInverse(result, inverse);
   }
 };

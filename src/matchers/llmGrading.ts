@@ -397,6 +397,12 @@ export async function matchesClosedQa(
   if (resp.error || !resp.output) {
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
+  if (resp.isRefusal) {
+    return graderFail(
+      `Model grader refused to provide a verdict:\n${resp.output}`,
+      resp.tokenUsage,
+    );
+  }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   try {

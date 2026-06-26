@@ -259,7 +259,7 @@ describe('Google assertions', () => {
       };
       expect(() => {
         validateFunctionCall(functionOutput, emptyProvider.config.tools, {});
-      }).toThrow('Called "getCurrentTemperature", but there is no function with that name');
+      }).toThrow('No function schemas configured in provider, but output contains a function call');
     });
 
     it('should fail when function output is not an object', () => {
@@ -652,6 +652,33 @@ describe('Google assertions', () => {
         pass: false,
         score: 0,
         reason: expect.stringContaining("Tool schema doesn't compile with ajv"),
+      });
+    });
+
+    it.each([
+      ['missing tools', undefined],
+      ['empty tools', []],
+      ['tools without function declarations', [{ googleSearch: {} }]],
+    ])('should not invert %s configuration', async (_name, tools) => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: '{}', name: 'lookup' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: tools === undefined ? {} : { tools: tools as never },
+      });
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: { type: 'not-is-valid-function-call' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('No function schemas configured in provider'),
       });
     });
   });

@@ -1,5 +1,7 @@
-import { hasFunctionToolCallValidator } from '../contracts/providers';
-import { FunctionToolCallValidationSetupError } from '../providers/functionToolCallValidation';
+import {
+  hasFunctionToolCallValidator,
+  isFunctionToolCallValidationSetupError,
+} from '../contracts/providers';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -26,7 +28,7 @@ export const handleIsValidFunctionCall = ({
     isValid = true;
   } catch (err) {
     invalidReason = (err as Error).message;
-    if (err instanceof FunctionToolCallValidationSetupError) {
+    if (isFunctionToolCallValidationSetupError(err)) {
       return {
         pass: false,
         score: 0,

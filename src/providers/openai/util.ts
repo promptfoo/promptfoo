@@ -1,10 +1,13 @@
 import OpenAI from 'openai';
+import {
+  FunctionToolCallValidationSetupError,
+  type TokenUsage,
+  type VarValue,
+} from '../../types/index';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { FunctionToolCallValidationSetupError } from '../functionToolCallValidation';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
@@ -810,9 +813,31 @@ export function validateFunctionCall(
   }
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
-  const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
-  if (!functionSchema) {
+  if (!Array.isArray(interpolatedFunctions) || interpolatedFunctions.length === 0) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const functionDefinitions = interpolatedFunctions.filter(
+    (fn): fn is OpenAiFunction =>
+      typeof fn === 'object' && fn !== null && typeof fn.name === 'string',
+  );
+  if (functionDefinitions.length === 0) {
+    throw new FunctionToolCallValidationSetupError(
+      'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const functionDefinition = functionDefinitions.find(
+    (fn) => typeof fn === 'object' && fn !== null && fn.name === functionName,
+  );
+  if (!functionDefinition) {
     throw new Error(`Called "${functionName}", but there is no function with that name`);
+  }
+  const functionSchema = functionDefinition.parameters;
+  if (!functionSchema || typeof functionSchema !== 'object') {
+    throw new FunctionToolCallValidationSetupError(
+      `Function "${functionName}" does not have a usable parameters schema`,
+    );
   }
   let validate;
   try {
