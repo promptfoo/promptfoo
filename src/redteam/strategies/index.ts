@@ -4,7 +4,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
-import { resolveIntentPluginForCompatibility } from '../plugins/intent';
+import { resolvePluginForCompatibility } from '../plugins/intent';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -113,7 +113,7 @@ export function getStrategyCompatibilityError(
     return undefined;
   }
 
-  const resolvedPlugins = options.plugins?.map(resolveIntentPluginForCompatibility);
+  const resolvedPlugins = options.plugins?.map(resolvePluginForCompatibility);
   const hasPosterior =
     hasTargetInputs &&
     hasApplicablePosteriorStrategy(strategies, resolvedPlugins, {
@@ -123,6 +123,7 @@ export function getStrategyCompatibilityError(
     ? resolvedPlugins?.filter(pluginHasConfiguredInputs)
     : undefined;
   const pluginInputsHavePosterior =
+    !hasTargetInputs &&
     pluginsWithConfiguredInputs &&
     pluginsWithConfiguredInputs.length > 0 &&
     hasApplicablePosteriorStrategy(strategies, pluginsWithConfiguredInputs, {

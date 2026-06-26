@@ -16,6 +16,7 @@ import {
 } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
+import { isProviderInputMetadataUnresolved } from '../../../src/providers';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
@@ -64,12 +65,20 @@ function resetCommonMocks() {
   vi.mocked(fs.existsSync).mockReset();
   vi.mocked(fs.readFileSync).mockReset();
   vi.mocked(getStrategyCompatibilityError).mockReset().mockReturnValue(undefined);
+  vi.mocked(synthesize).mockReset().mockResolvedValue({
+    testCases: [],
+    purpose: '',
+    entities: [],
+    injectVar: 'input',
+    failedPlugins: [],
+  });
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
   vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
   vi.mocked(promptForEmailUnverified).mockReset().mockResolvedValue({
     emailNeedsValidation: false,
   });
+  vi.mocked(isProviderInputMetadataUnresolved).mockReset().mockReturnValue(false);
 }
 
 function mockReadFileSync(content: unknown) {
@@ -303,6 +312,7 @@ vi.mock('../../../src/providers', async (importOriginal) => {
     ]),
 
     getProviderIds: vi.fn().mockReturnValue(['test-provider']),
+    isProviderInputMetadataUnresolved: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -1095,7 +1105,7 @@ describe('doGenerateRedteam', () => {
         write: false,
         config: 'test-config.yaml',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
 
     const pluginLists = vi
       .mocked(getStrategyCompatibilityError)
@@ -1223,6 +1233,135 @@ describe('doGenerateRedteam', () => {
         undefined,
         { loadDynamicProviders: true },
       );
+      expect(synthesize).not.toHaveBeenCalled();
+    } finally {
+      resolveInputs.mockRestore();
+    }
+  });
+
+  it('rejects known cached incompatibilities before hydrating unresolved providers', async () => {
+    const configPath = 'test-config.yaml';
+    const outputPath = 'redteam.yaml';
+    const configContent = 'prompts: [test]\nproviders: [echo, file:///workspace/provider.mjs]\n';
+    const configHash = createHash('md5').update(`${VERSION}:${configContent}`).digest('hex');
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => filePath === configPath || filePath === outputPath,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath === configPath) {
+        return configContent;
+      }
+      if (filePath === outputPath) {
+        return yaml.dump({ metadata: { configHash }, tests: [{ vars: { input: 'cached' } }] });
+      }
+      throw new Error(`Unexpected read: ${String(filePath)}`);
+    });
+    vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, inputs) => {
+      if (inputs && typeof inputs === 'object' && 'compatibilityProbe' in inputs) {
+        return 'Posterior compatibility probe';
+      }
+      return inputs && typeof inputs === 'object' && Object.keys(inputs).length > 1
+        ? 'Posterior strategy does not support multi-input targets'
+        : undefined;
+    });
+    const resolveInputs = vi
+      .spyOn(redteamProviderShared, 'resolveRedteamTargetProviderInputMetadata')
+      .mockResolvedValueOnce({
+        inputs: [{ context: 'Reference context', question: 'User question' }, undefined],
+        hasUnresolved: true,
+      });
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
+      async (_cmdObj, defaultConfig) => {
+        const hooks = configModule.getResolveConfigsHooks(defaultConfig);
+        await hooks?.beforeProviderLoad?.({
+          providers: ['echo', 'file:///workspace/provider.mjs'],
+          redteam: { strategies: ['posterior'] },
+          env: undefined,
+          basePath: '.',
+        });
+        throw new Error('Expected compatibility preflight to reject');
+      },
+    );
+
+    try {
+      await expect(
+        doGenerateRedteam({
+          cache: true,
+          config: configPath,
+          defaultConfig: {},
+          output: outputPath,
+          write: false,
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+      expect(resolveInputs).toHaveBeenCalledOnce();
+      expect(synthesize).not.toHaveBeenCalled();
+    } finally {
+      resolveInputs.mockRestore();
+    }
+  });
+
+  it('hydrates unresolved inputs before evaluating plugin-local compatibility', async () => {
+    const configPath = 'test-config.yaml';
+    const outputPath = 'redteam.yaml';
+    const configContent = 'prompts: [test]\nproviders: [file:///workspace/provider.mjs]\n';
+    const cachedConfig = {
+      metadata: {
+        configHash: createHash('md5').update(`${VERSION}:${configContent}`).digest('hex'),
+      },
+      tests: [{ vars: { input: 'cached' } }],
+    };
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => filePath === configPath || filePath === outputPath,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+      filePath === outputPath ? yaml.dump(cachedConfig) : configContent,
+    );
+    const unresolved = Symbol('unresolved provider inputs');
+    const hydratedInputs = { context: 'Reference context', question: 'User question' };
+    vi.mocked(isProviderInputMetadataUnresolved).mockImplementation(
+      (input) => input === unresolved,
+    );
+    vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, inputs, options) =>
+      options?.plugins && inputs !== hydratedInputs
+        ? 'Posterior strategy does not support multi-input targets'
+        : undefined,
+    );
+    const resolveInputs = vi
+      .spyOn(redteamProviderShared, 'resolveRedteamTargetProviderInputMetadata')
+      .mockResolvedValueOnce({ inputs: [unresolved], hasUnresolved: true })
+      .mockResolvedValueOnce({ inputs: [hydratedInputs], hasUnresolved: false });
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
+      async (_cmdObj, defaultConfig) => {
+        const hooks = configModule.getResolveConfigsHooks(defaultConfig);
+        await hooks?.beforeProviderLoad?.({
+          providers: ['file:///workspace/provider.mjs'],
+          redteam: {
+            plugins: [
+              {
+                id: 'cca',
+                config: { inputs: { context: 'Plugin context', question: 'Plugin question' } },
+              },
+            ],
+            strategies: ['posterior'],
+          },
+          env: undefined,
+          basePath: '.',
+        });
+        throw new Error('Expected matching cache to stop config resolution');
+      },
+    );
+
+    try {
+      await expect(
+        doGenerateRedteam({
+          cache: true,
+          config: configPath,
+          defaultConfig: {},
+          output: outputPath,
+          write: false,
+        }),
+      ).resolves.toEqual(cachedConfig);
+      expect(resolveInputs).toHaveBeenCalledTimes(2);
       expect(synthesize).not.toHaveBeenCalled();
     } finally {
       resolveInputs.mockRestore();

@@ -129,6 +129,23 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     hasPosteriorStrategy([{ id: 'posterior' }], compatibilityPlugins, {
       pluginsUseTargetInputs: targetHasInputs,
     });
+  const isLayerStepUnavailable = useCallback(
+    (strategyId: string, targetPlugins?: readonly string[]) => {
+      if (strategyId !== 'posterior' || !isPosteriorUnavailable) {
+        return false;
+      }
+      const posterior = {
+        id: 'posterior',
+        ...(targetPlugins && targetPlugins.length > 0
+          ? { config: { plugins: [...targetPlugins] } }
+          : {}),
+      } as RedteamStrategyObject;
+      return hasPosteriorStrategy([posterior], compatibilityPlugins, {
+        pluginsUseTargetInputs: targetHasInputs,
+      });
+    },
+    [compatibilityPlugins, isPosteriorUnavailable, targetHasInputs],
+  );
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
@@ -675,7 +692,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             }
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
-            unavailableStrategies={isDirectPosteriorUnavailable ? ['posterior'] : undefined}
+            isLayerStepUnavailable={isLayerStepUnavailable}
           />
         </div>
       </TestCaseGenerationProvider>

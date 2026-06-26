@@ -43,6 +43,23 @@ function getRuntimeStrategyKey(strategy: RedteamStrategyObject): string {
   return strategy.id;
 }
 
+function stringifyCompatibilityConfig(value: unknown): string {
+  const seen = new WeakMap<object, number>();
+  let nextReference = 0;
+  return (
+    JSON.stringify(value, (_key, current) => {
+      if (current && typeof current === 'object') {
+        const reference = seen.get(current);
+        if (reference !== undefined) {
+          return `[Ref:${reference}]`;
+        }
+        seen.set(current, nextReference++);
+      }
+      return current;
+    }) ?? 'undefined'
+  );
+}
+
 export function getEffectiveStrategiesForCompatibility(
   strategies: readonly unknown[],
 ): RedteamStrategyObject[] {
@@ -66,9 +83,9 @@ export function getEffectiveStrategiesForCompatibility(
       if (strategy.id === 'layer' && strategy.config?.label) {
         key = `layer/${strategy.config.label}`;
       } else if (strategy.id === 'layer' && strategy.config?.steps) {
-        key = `layer:${JSON.stringify(strategy.config.steps)}`;
+        key = `layer:${stringifyCompatibilityConfig(strategy.config.steps)}`;
       } else if (strategy.config && Object.keys(strategy.config).length > 0) {
-        key = `${strategy.id}:${JSON.stringify(strategy.config)}`;
+        key = `${strategy.id}:${stringifyCompatibilityConfig(strategy.config)}`;
       }
     } catch {
       key = `${strategy.id}:unserializable:${index}`;
@@ -195,6 +212,26 @@ interface NormalizedLayerStep {
   targets?: readonly string[];
 }
 
+type LayerVisitState = WeakMap<object, Set<string>>;
+
+function visitLayerOnce(
+  visitedLayers: LayerVisitState,
+  layer: object,
+  targets: readonly string[] | undefined,
+): boolean {
+  const key = targets ? stringifyCompatibilityConfig(targets) : '';
+  const targetKeys = visitedLayers.get(layer);
+  if (targetKeys?.has(key)) {
+    return false;
+  }
+  if (targetKeys) {
+    targetKeys.add(key);
+  } else {
+    visitedLayers.set(layer, new Set([key]));
+  }
+  return true;
+}
+
 function normalizeLayerStep(
   step: unknown,
   inheritedTargets?: readonly string[],
@@ -227,6 +264,7 @@ function perTurnLayersHaveApplicablePosterior(
   startIndex: number,
   inheritedTargets: readonly string[] | undefined,
   ancestors: ReadonlySet<object>,
+  visitedLayers: LayerVisitState,
 ): boolean {
   const activeLayers = new Set(ancestors);
   const pending: Array<{
@@ -261,7 +299,11 @@ function perTurnLayersHaveApplicablePosterior(
     }
 
     const nestedSteps = Array.isArray(step.config?.steps) ? step.config.steps : [];
-    if (nestedSteps.length === 0 || activeLayers.has(step.node)) {
+    if (
+      nestedSteps.length === 0 ||
+      activeLayers.has(step.node) ||
+      !visitLayerOnce(visitedLayers, step.node, step.targets)
+    ) {
       continue;
     }
     activeLayers.add(step.node);
@@ -289,8 +331,10 @@ function analyzeLayerStepsForPlugin(
 
   let posteriorReached = false;
   const activeLayers = new Set<object>();
+  const visitedLayers: LayerVisitState = new WeakMap();
   if (rootLayer) {
     activeLayers.add(rootLayer);
+    visitLayerOnce(visitedLayers, rootLayer, inheritedTargets);
   }
   const pending: Array<{
     steps: readonly unknown[];
@@ -321,6 +365,7 @@ function analyzeLayerStepsForPlugin(
         current.index,
         current.inheritedTargets,
         activeLayers,
+        visitedLayers,
       );
       current.index = current.steps.length;
       continue;
@@ -336,6 +381,9 @@ function analyzeLayerStepsForPlugin(
       const nestedSteps = Array.isArray(step.config?.steps) ? step.config.steps : [];
       if (nestedSteps.length === 0 || activeLayers.has(step.node)) {
         return { matches: false, posteriorReached };
+      }
+      if (!visitLayerOnce(visitedLayers, step.node, step.targets)) {
+        continue;
       }
       activeLayers.add(step.node);
       pending.push({
@@ -403,13 +451,7 @@ export function configuredPluginHasApplicablePosteriorForMultiInput(
   options: { pluginsUseTargetInputs?: boolean } = {},
 ): boolean {
   const normalizedPluginId = normalizePluginId(pluginId);
-  if (
-    normalizedPluginId === 'intent' &&
-    typeof pluginConfig === 'object' &&
-    pluginConfig !== null &&
-    Array.isArray((pluginConfig as { intent?: unknown }).intent) &&
-    (pluginConfig as { intent: unknown[] }).intent.every(Array.isArray)
-  ) {
+  if (isSequenceOnlyIntentPlugin(pluginId, pluginConfig)) {
     return false;
   }
 
@@ -422,6 +464,16 @@ export function configuredPluginHasApplicablePosteriorForMultiInput(
           expandedPluginId as (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number],
         )) &&
       pluginConfigHasApplicablePosterior(expandedPluginId, pluginConfig, strategy),
+  );
+}
+
+export function isSequenceOnlyIntentPlugin(pluginId: string, pluginConfig: unknown): boolean {
+  return (
+    normalizePluginId(pluginId) === 'intent' &&
+    typeof pluginConfig === 'object' &&
+    pluginConfig !== null &&
+    Array.isArray((pluginConfig as { intent?: unknown }).intent) &&
+    (pluginConfig as { intent: unknown[] }).intent.every(Array.isArray)
   );
 }
 

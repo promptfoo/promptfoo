@@ -207,6 +207,16 @@ describe('isPluginCompatibleWithStrategy', () => {
     expect(isPluginCompatibleWithStrategy('coding-agent:secret-env-read', 'posterior')).toBe(false);
   });
 
+  it('excludes sequence-only intent plugins from non-basic strategy previews', () => {
+    const sequenceOnlyIntent = {
+      id: 'intent',
+      config: { intent: [['first turn', 'second turn']] },
+    };
+
+    expect(isPluginCompatibleWithStrategy(sequenceOnlyIntent, 'posterior')).toBe(false);
+    expect(isPluginCompatibleWithStrategy(sequenceOnlyIntent, 'basic')).toBe(true);
+  });
+
   it('rejects cyclic layer configurations without overflowing the stack', () => {
     const layer: { id: string; config: { steps: unknown[] } } = {
       id: 'layer',

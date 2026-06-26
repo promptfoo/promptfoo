@@ -1,6 +1,7 @@
 import {
   configuredPluginHasApplicablePosteriorForMultiInput,
   getEffectiveStrategiesForCompatibility,
+  isSequenceOnlyIntentPlugin,
   pluginConfigMatchesStrategy,
   REDTEAM_DEFAULTS,
 } from '@promptfoo/redteam/sharedFrontend';
@@ -26,11 +27,14 @@ export function isPluginCompatibleWithStrategy(
     return true;
   }
   const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
-  return pluginConfigMatchesStrategy(
-    pluginId,
-    typeof plugin === 'string' ? undefined : plugin.config,
-    { id: strategyId as Strategy, config: strategyConfig },
-  );
+  const pluginConfig = typeof plugin === 'string' ? undefined : plugin.config;
+  if (isSequenceOnlyIntentPlugin(pluginId, pluginConfig)) {
+    return false;
+  }
+  return pluginConfigMatchesStrategy(pluginId, pluginConfig, {
+    id: strategyId as Strategy,
+    config: strategyConfig,
+  });
 }
 
 function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {

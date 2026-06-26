@@ -2505,6 +2505,44 @@ inputs:
     expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000000');
   });
 
+  it('merges local cloud config before discovering dynamic provider inputs', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs: Record<string, string> | undefined;
+      cleanup = cleanup;
+      constructor(options: { config?: { inputMode?: string } }) {
+        this.inputs =
+          options.config?.inputMode === 'multi'
+            ? { context: 'Reference context', question: 'User question' }
+            : undefined;
+      }
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'file:///workspace/dynamic-provider.mjs',
+      config: { inputMode: 'single' },
+    });
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+
+    await expect(
+      resolveProviderInputsForValidation(
+        [
+          {
+            id: 'promptfoo://provider/00000000-0000-0000-0000-000000000000',
+            config: { inputMode: 'multi' },
+          },
+        ],
+        { loadDynamicProviders: true },
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it.each([
     {
       label: 'empty local metadata over cloud metadata',
@@ -2633,6 +2671,49 @@ inputs:
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it('waits for every validation-owned provider cleanup before rejecting', async () => {
+    let releaseCleanup: (() => void) | undefined;
+    const cleanupStarted = vi.fn();
+    class DynamicProvider {
+      inputs = { prompt: 'User prompt' };
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+      async cleanup() {
+        cleanupStarted();
+        await new Promise<void>((resolve) => {
+          releaseCleanup = resolve;
+        });
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const invalidProvider = JSON.parse('{"__proto__":{"id":"echo"}}');
+    let settled = false;
+    const outcome = resolveProviderInputsForValidation(
+      ['file:///workspace/dynamic-provider.mjs', invalidProvider],
+      { loadDynamicProviders: true },
+    )
+      .then(
+        () => ({ status: 'fulfilled' as const }),
+        (reason: unknown) => ({ status: 'rejected' as const, reason }),
+      )
+      .finally(() => {
+        settled = true;
+      });
+
+    await vi.waitFor(() => expect(cleanupStarted).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    releaseCleanup!();
+
+    const result = await outcome;
+    expect(result.status).toBe('rejected');
+    expect(result).toHaveProperty('reason');
+    expect((result as { reason: Error }).reason.message).toContain('Invalid provider');
   });
 
   it.each([
