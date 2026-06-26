@@ -403,12 +403,11 @@ providers:
       max_output_tokens: 4000
 
 prompts:
-  - 'Analyze this data and provide insights: {{data}}'
-  - 'Write a Python function to solve: {{problem}}'
+  - '{{task}}'
 
 tests:
   - vars:
-      data: 'Sales increased by 25% in Q3 compared to Q2'
+      task: 'Analyze this data and provide insights: Sales increased by 25% in Q3 compared to Q2'
     assert:
       - type: contains
         value: 'growth'
@@ -416,7 +415,7 @@ tests:
         value: '25%'
 
   - vars:
-      problem: 'Calculate fibonacci sequence up to n terms'
+      task: 'Write a Python function to solve: Calculate fibonacci sequence up to n terms'
     assert:
       - type: javascript
         value: |

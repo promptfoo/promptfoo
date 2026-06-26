@@ -358,14 +358,11 @@ providers:
       waitForUser: U_SUPPORT_BOT_ID
 
 prompts:
-  - '<@U_SUPPORT_BOT_ID> How do I reset my password?'
-  - '<@U_SUPPORT_BOT_ID> What are your business hours?'
-  - '<@U_SUPPORT_BOT_ID> I need to speak to a human'
-  - "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
+  - '{{message}}'
 
 tests:
   - vars:
-      expected_intent: password_reset
+      message: '<@U_SUPPORT_BOT_ID> How do I reset my password?'
     assert:
       - type: contains
         value: 'reset'
@@ -373,19 +370,19 @@ tests:
         value: 'password'
 
   - vars:
-      expected_intent: business_hours
+      message: '<@U_SUPPORT_BOT_ID> What are your business hours?'
     assert:
       - type: contains-any
         value: ['hours', 'open', 'closed', 'Monday', 'schedule']
 
   - vars:
-      expected_intent: human_handoff
+      message: '<@U_SUPPORT_BOT_ID> I need to speak to a human'
     assert:
       - type: contains-any
         value: ['agent', 'representative', 'transfer', 'human']
 
   - vars:
-      expected_intent: order_status
+      message: "<@U_SUPPORT_BOT_ID> My order hasn't arrived yet, order #12345"
     assert:
       - type: contains
         value: '12345'
