@@ -20,11 +20,11 @@ When xAI is the selected fallback provider family, Promptfoo can use xAI default
 
 ## Supported Models
 
-The xAI provider includes support for the following model formats. xAI's public model catalog recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
+The xAI provider includes support for the following model formats. Consult xAI's current model catalog and workload-specific migration guides when choosing a model for a long-lived integration.
 
 :::caution Legacy xAI model aliases
 
-xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, `grok-code-fast-1`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` directly.
+xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. xAI's replacement table and code-workload guidance instead map `grok-code-fast-1` to `grok-build-0.1`; migrate that coding slug explicitly rather than relying on redirect behavior. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer the current catalog model for the workload.
 
 :::
 
@@ -53,8 +53,8 @@ These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
 
 ### Grok Code Fast Models
 
-These slugs are retired compatibility aliases that redirect to `grok-4.3`. Use
-`xai:grok-4.3` in new configurations.
+These slugs are retired compatibility aliases. For `grok-code-fast-1`, xAI recommends
+`grok-build-0.1` for code workloads; use `xai:grok-build-0.1` in Promptfoo configs.
 
 ### Grok-4 Fast Models
 
@@ -130,8 +130,8 @@ configuration states what it will actually run.
 
 ### Grok Code Fast Specific Behavior
 
-Grok Code Fast is retired. Existing slugs redirect to Grok 4.3; migrate the model ID so the
-configuration states what it will actually run.
+Grok Code Fast is retired. For `grok-code-fast-1`, xAI recommends `grok-build-0.1` for code
+workloads; use `xai:grok-build-0.1` in Promptfoo configs instead of relying on the retired slug.
 
 ### Region Support
 

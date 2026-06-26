@@ -166,7 +166,7 @@ providers:
 
 You can specify which Mistral model to use in your configuration. Mistral adds and retires
 models regularly, so use its [model overview](https://docs.mistral.ai/models/overview) as the
-source of truth for availability.
+source of truth for availability and pricing.
 
 ### Chat Models
 
@@ -174,7 +174,7 @@ source of truth for availability.
 
 | Model                  | Context | Input Price | Output Price | Best For                               |
 | ---------------------- | ------- | ----------- | ------------ | -------------------------------------- |
-| `mistral-medium-3-5`   | 256k    | $1.50/1M    | $7.50/1M     | Agentic and coding-heavy workloads     |
+| `mistral-medium-3-5`   | 256k    | See catalog | See catalog  | Agentic and coding-heavy workloads     |
 | `mistral-large-latest` | 256k    | See catalog | See catalog  | General-purpose multimodal tasks       |
 | `mistral-small-2603`   | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding |
 | `codestral-latest`     | 128k    | See catalog | See catalog  | Code generation and FIM                |
