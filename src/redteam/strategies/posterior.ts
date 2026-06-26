@@ -64,6 +64,18 @@ export function hasPosteriorStrategy(strategies: readonly unknown[]): boolean {
   return strategies.some(containsPosteriorStrategy);
 }
 
+export function hasActivePosteriorStrategy(strategies: readonly unknown[]): boolean {
+  return strategies.some((strategy) => {
+    if (strategy && typeof strategy === 'object' && !Array.isArray(strategy)) {
+      const config = (strategy as { config?: Record<string, unknown> }).config;
+      if (config?.numTests === 0) {
+        return false;
+      }
+    }
+    return containsPosteriorStrategy(strategy);
+  });
+}
+
 export function assertPosteriorTargetSupported(testCases: TestCase[]): void {
   const hasMultiInput = testCases.some((testCase) => {
     const inputs = testCase.metadata?.pluginConfig?.inputs;

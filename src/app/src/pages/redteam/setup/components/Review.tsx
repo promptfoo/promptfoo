@@ -518,7 +518,7 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
-  const handleRunWithSettings = async () => {
+  const handleRunWithSettings = async (replaceRunningJob = false) => {
     // Check email verification first
     const emailResult = await checkEmailStatus();
 
@@ -542,11 +542,13 @@ export default function Review({
       showToast(emailResult.status.message, 'warning');
     }
 
-    const { hasRunningJob } = await checkForRunningJob();
+    if (!replaceRunningJob) {
+      const { hasRunningJob } = await checkForRunningJob();
 
-    if (hasRunningJob) {
-      setIsJobStatusDialogOpen(true);
-      return;
+      if (hasRunningJob) {
+        setIsJobStatusDialogOpen(true);
+        return;
+      }
     }
 
     // Clear any existing polling interval before starting a new job
@@ -642,16 +644,8 @@ export default function Review({
   };
 
   const handleCancelExistingAndRun = async () => {
-    try {
-      await handleCancel();
-      setIsJobStatusDialogOpen(false);
-      setTimeout(() => {
-        handleRunWithSettings();
-      }, 500);
-    } catch (error) {
-      console.error('Error canceling existing job:', error);
-      showToast('Failed to cancel existing job', 'error');
-    }
+    setIsJobStatusDialogOpen(false);
+    await handleRunWithSettings(true);
   };
 
   useEffect(() => {
@@ -1218,7 +1212,7 @@ export default function Review({
                   <TooltipTrigger asChild>
                     <span>
                       <Button
-                        onClick={handleRunWithSettings}
+                        onClick={() => handleRunWithSettings()}
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >

@@ -55,6 +55,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { getProviderFromCloud } from '../../src/util/cloud';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
@@ -2429,5 +2430,61 @@ inputs:
         question: 'User question',
       },
     ]);
+  });
+
+  it('should apply two-pass environment rendering to provider file references', async () => {
+    mockProcessEnv({ POSTERIOR_PROVIDER_ROOT: path.join(path.sep, 'workspace') });
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  context: Reference context
+  question: User question
+`);
+
+    try {
+      const result = await resolveProviderInputsForValidation(
+        ['file://{{ env.PROVIDER_DIR }}/provider.yaml'],
+        {
+          env: { PROVIDER_DIR: '{{ env.POSTERIOR_PROVIDER_ROOT }}/targets' },
+        },
+      );
+
+      expect(mockFsReadFileSync).toHaveBeenCalledWith(
+        path.join(path.sep, 'workspace', 'targets', 'provider.yaml'),
+        'utf8',
+      );
+      expect(result).toEqual([{ context: 'Reference context', question: 'User question' }]);
+    } finally {
+      mockProcessEnv({ POSTERIOR_PROVIDER_ROOT: undefined });
+    }
+  });
+
+  it('should read cloud input metadata without instantiating the provider', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: 'echo',
+      inputs: { context: 'Reference context', question: 'User question' },
+    });
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000000',
+      ),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000000');
+  });
+
+  it('should not take ownership of already-instantiated providers', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'existing-provider',
+      callApi: vi.fn(),
+      cleanup,
+      inputs: { prompt: 'User prompt' },
+    };
+
+    await expect(resolveProviderInputsForValidation(provider)).resolves.toEqual([
+      { prompt: 'User prompt' },
+    ]);
+    expect(cleanup).not.toHaveBeenCalled();
   });
 });

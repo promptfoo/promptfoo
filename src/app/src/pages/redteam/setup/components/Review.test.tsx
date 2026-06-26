@@ -1600,6 +1600,62 @@ Application Details:
       expect(callApi).not.toHaveBeenCalledWith('/eval/job/undefined');
     });
 
+    it('should validate a replacement before the server cancels the running job', async () => {
+      const user = userEvent.setup({ delay: null });
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? { hasRunningJob: false }
+                : { hasRunningJob: true, jobId: 'existing-job' },
+          } as Response;
+        }
+        if (url === '/eval/job/existing-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: [] }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({
+              error: 'Posterior strategy does not support multi-input targets',
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel existing & run new/i }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          expect.stringContaining('Posterior strategy does not support multi-input targets'),
+          'error',
+        );
+      });
+      expect(vi.mocked(callApi).mock.calls.some(([url]) => url === '/redteam/cancel')).toBe(false);
+      expect(mockClearJob).not.toHaveBeenCalled();
+    });
+
     it('should call clearJob when cancelling a job', async () => {
       const user = userEvent.setup({ delay: null });
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {

@@ -17,7 +17,7 @@ import {
   normalizeProviderRef,
   readProviderConfigFile,
 } from '../util/providerRef';
-import { renderEnvOnlyInObject } from '../util/render';
+import { renderEnvOnlyInObject, renderEnvOverrides } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
 import { getProviderFactories } from './registry';
 
@@ -344,23 +344,80 @@ export function resolveProviderConfigs(
   return results;
 }
 
+function getConfiguredProviderInputs(options: ProviderOptions): unknown {
+  return options.inputs ?? options.config?.inputs;
+}
+
+async function resolveConfiguredProviderInputs(
+  providerPath: string,
+  options: ProviderOptions = {},
+): Promise<unknown> {
+  const configuredInputs = getConfiguredProviderInputs(options);
+  if (configuredInputs !== undefined || !isCloudProvider(providerPath)) {
+    return configuredInputs;
+  }
+
+  const cloudDatabaseId = getCloudDatabaseId(providerPath);
+  const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+  if (isCloudProvider(cloudProvider.id)) {
+    throw new Error(
+      `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+    );
+  }
+  return getConfiguredProviderInputs(cloudProvider);
+}
+
 /**
- * Resolves and loads target providers so callers can validate runtime input metadata.
- * Providers are cleaned up before this function returns.
+ * Resolves target input metadata without instantiating providers. Validation must not start
+ * executable or MCP targets before the real run owns their lifecycle.
  */
 export async function resolveProviderInputsForValidation(
   providerPaths: ProvidersConfig,
   options: { basePath?: string; env?: EnvOverrides } = {},
 ): Promise<unknown[]> {
-  const renderedProviderPaths = renderEnvOnlyInObject(providerPaths, options.env);
+  const renderedProviderPaths = renderEnvOnlyInObject(
+    providerPaths,
+    renderEnvOverrides(options.env),
+  );
   const resolvedProviderConfigs = resolveProviderConfigs(renderedProviderPaths, options);
-  const providers = await loadApiProviders(resolvedProviderConfigs, options);
+  const providerConfigs = Array.isArray(resolvedProviderConfigs)
+    ? resolvedProviderConfigs
+    : [resolvedProviderConfigs];
 
-  try {
-    return providers.map((provider) => provider.inputs);
-  } finally {
-    await Promise.allSettled(providers.map((provider) => provider.cleanup?.()));
-  }
+  return Promise.all(
+    providerConfigs.map(async (provider, index) => {
+      if (isApiProvider(provider)) {
+        return provider.inputs;
+      }
+      if (typeof provider === 'function') {
+        return (provider as ProviderFunctionWithMetadata).inputs;
+      }
+
+      const descriptor = normalizeProviderRef(provider, { index });
+      switch (descriptor.kind) {
+        case 'named':
+          return resolveConfiguredProviderInputs(descriptor.loadProviderPath);
+        case 'options':
+        case 'map':
+          return resolveConfiguredProviderInputs(
+            descriptor.loadProviderPath,
+            descriptor.loadOptions,
+          );
+        case 'file':
+          throw new Error(`Unresolved provider config file: ${descriptor.loadProviderPath}`);
+        case 'unknown':
+          throw new Error(
+            `Invalid provider at index ${index}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${describeInvalidProvider(provider)}`,
+          );
+        case 'function':
+          return (provider as ProviderFunctionWithMetadata).inputs;
+        default: {
+          const _exhaustive: never = descriptor;
+          throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
+        }
+      }
+    }),
+  );
 }
 
 /**

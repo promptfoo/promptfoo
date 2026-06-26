@@ -230,6 +230,29 @@ describe('Strategies', () => {
       expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
     });
 
+    it('disables Posterior Attack for legacy config.inputs targets', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+              inputs: { context: 'Reference context', question: 'User question' },
+            },
+          },
+          strategies: [],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Posterior Attack' })).toBeDisabled();
+    });
+
     it('blocks progression but allows removing Posterior Attack after inputs are configured', async () => {
       const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
