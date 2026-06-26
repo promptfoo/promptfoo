@@ -1623,7 +1623,7 @@ export async function synthesize({
             `Custom plugin ${plugin.id}`,
             maxCharsPerMessage,
             minCharsPerMessage,
-            hasAgenticStrategy,
+            deferPluginMinimum,
           );
 
           return {

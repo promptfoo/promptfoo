@@ -639,6 +639,42 @@ describe('synthesize', () => {
       );
     });
 
+    it('does not defer a custom plugin minimum for an unrelated agentic strategy', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: vi.fn().mockImplementation((testCases) => testCases),
+        id: 'goat',
+      });
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-minimum.yaml';
+      const pluginId = 'file://./' + pluginPath;
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockImplementation((filePath) => {
+        if (String(filePath).endsWith(pluginPath)) {
+          return {
+            generator: 'Prompt: custom minimum probe',
+            grader: 'Grade the response based on {{ purpose }}',
+            metric: 'custom-minimum',
+          };
+        }
+        return filePath;
+      });
+      mockProvider.callApi.mockResolvedValue({ output: 'tiny' });
+
+      const result = await synthesize({
+        minCharsPerMessage: 5,
+        numTests: 1,
+        plugins: [{ id: pluginId, numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [{ id: 'goat', config: { plugins: ['different-plugin'] } }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(0);
+      expect(result.failedPlugins).toEqual([{ pluginId, requested: 1 }]);
+    });
+
     it('should pass target inputs into custom file plugins in multi-input mode', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-multi-input.yaml';
