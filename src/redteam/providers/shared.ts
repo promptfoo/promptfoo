@@ -63,9 +63,14 @@ export async function resolveRedteamTargetProviderInputs(
   providers: unknown,
   basePath?: string,
   env?: Record<string, string>,
+  filter?: string,
 ): Promise<unknown[]> {
   const { resolveProviderInputsForValidation } = await getProviderModule();
-  return resolveProviderInputsForValidation(providers as ProvidersConfig, { basePath, env });
+  return resolveProviderInputsForValidation(providers as ProvidersConfig, {
+    basePath,
+    env,
+    ...(filter === undefined ? {} : { filter }),
+  });
 }
 
 let redteamProviderLoader = defaultRedteamProviderLoader;

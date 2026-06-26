@@ -518,6 +518,17 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
+  const reconnectToRunningJob = async (): Promise<boolean> => {
+    const { hasRunningJob, jobId } = await checkForRunningJob();
+    if (!hasRunningJob || !jobId) {
+      return false;
+    }
+    setIsRunning(true);
+    setJob(jobId);
+    startPolling(jobId);
+    return true;
+  };
+
   const handleRunWithSettings = async (replaceRunningJob = false) => {
     // Check email verification first
     const emailResult = await checkEmailStatus();
@@ -601,6 +612,10 @@ export default function Review({
 
       const data = await response.json();
       if (response.ok === false) {
+        if (response.status === 409) {
+          setIsRunning(false);
+          return;
+        }
         throw new Error(
           typeof data?.error === 'string' ? data.error : `Request failed (${response.status})`,
         );
@@ -614,7 +629,10 @@ export default function Review({
       startPolling(data.id);
     } catch (error) {
       console.error('Error running redteam:', error);
-      setIsRunning(false);
+      const recoveredExistingJob = replaceRunningJob && (await reconnectToRunningJob());
+      if (!recoveredExistingJob) {
+        setIsRunning(false);
+      }
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(
         `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,

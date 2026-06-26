@@ -45,31 +45,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function getInlineTargetInputs(target: unknown): unknown[] {
-  if (!isRecord(target)) {
-    return [];
-  }
-
-  const targetConfig = isRecord(target.config) ? target.config : undefined;
-  const directInputs = target.inputs ?? targetConfig?.inputs;
-  if (directInputs !== undefined) {
-    return [directInputs];
-  }
-
-  if ('id' in target) {
-    return [];
-  }
-
-  return Object.values(target).flatMap((options) => {
-    if (!isRecord(options)) {
-      return [];
-    }
-    const optionsConfig = isRecord(options.config) ? options.config : undefined;
-    const inputs = options.inputs ?? optionsConfig?.inputs;
-    return inputs === undefined ? [] : [inputs];
-  });
-}
-
 async function getLiveConfigCompatibilityError(
   config: Record<string, unknown>,
 ): Promise<string | undefined> {
@@ -87,13 +62,8 @@ async function getLiveConfigCompatibilityError(
     return strategyConfigError;
   }
   const configuredTargets = config.targets ?? config.providers;
-  const targets = Array.isArray(configuredTargets) ? configuredTargets : [configuredTargets];
-  const inlineError = targets
-    .flatMap(getInlineTargetInputs)
-    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
-    .find((error) => error !== undefined);
-  if (inlineError || configuredTargets === undefined) {
-    return inlineError;
+  if (configuredTargets === undefined) {
+    return undefined;
   }
 
   const requiresResolvedInputs =
@@ -103,10 +73,13 @@ async function getLiveConfigCompatibilityError(
   }
 
   const env = isRecord(config.env) ? (config.env as Record<string, string>) : undefined;
+  const configuredFilter = commandLineOptions?.filterProviders || commandLineOptions?.filterTargets;
+  const filter = typeof configuredFilter === 'string' ? configuredFilter : undefined;
   const resolvedInputs = await resolveRedteamTargetProviderInputs(
     configuredTargets,
     cliState.basePath,
     env,
+    filter,
   );
   return resolvedInputs
     .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
@@ -329,6 +302,8 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 // Track the current running job
 let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
+let latestRunRequest = 0;
+let pendingRunRequests = 0;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
@@ -338,12 +313,24 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const runRequest = ++latestRunRequest;
+  pendingRunRequests += 1;
   let compatibilityError: string | undefined;
+  let preflightError: unknown;
   try {
     compatibilityError = await getLiveConfigCompatibilityError(config);
   } catch (error) {
+    preflightError = error;
+  } finally {
+    pendingRunRequests -= 1;
+  }
+  if (runRequest !== latestRunRequest) {
+    res.status(409).json({ error: 'Run request superseded by a newer request' });
+    return;
+  }
+  if (preflightError) {
     logger.warn('[Redteam] Failed to resolve target configuration before starting run', {
-      error,
+      error: preflightError,
     });
     res.status(400).json({ error: 'Invalid target provider configuration' });
     return;
@@ -418,7 +405,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
+  const hadPendingRun = pendingRunRequests > 0;
+  latestRunRequest += 1;
   if (!currentJobId) {
+    if (hadPendingRun) {
+      res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Pending run cancelled' }));
+      return;
+    }
     res.status(400).json({ error: 'No job currently running' });
     return;
   }

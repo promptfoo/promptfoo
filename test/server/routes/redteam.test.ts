@@ -761,6 +761,19 @@ describe('Redteam Routes', () => {
       targets,
     }) => {
       let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
+        async (providers, basePath, env, filter) => {
+          const { resolveProviderInputsForValidation } =
+            await vi.importActual<typeof import('../../../src/providers')>(
+              '../../../src/providers',
+            );
+          return resolveProviderInputsForValidation(providers as any, {
+            basePath,
+            env,
+            ...(filter === undefined ? {} : { filter }),
+          });
+        },
+      );
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveRun = resolve;
@@ -812,6 +825,19 @@ describe('Redteam Routes', () => {
 
     it('should preflight command-line strategy overrides before replacing the active job', async () => {
       let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
+        async (providers, basePath, env, filter) => {
+          const { resolveProviderInputsForValidation } =
+            await vi.importActual<typeof import('../../../src/providers')>(
+              '../../../src/providers',
+            );
+          return resolveProviderInputsForValidation(providers as any, {
+            basePath,
+            env,
+            ...(filter === undefined ? {} : { filter }),
+          });
+        },
+      );
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveRun = resolve;
@@ -873,12 +899,16 @@ describe('Redteam Routes', () => {
         }),
       );
       mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
-        async (providers, basePath, env) => {
+        async (providers, basePath, env, filter) => {
           const { resolveProviderInputsForValidation } =
             await vi.importActual<typeof import('../../../src/providers')>(
               '../../../src/providers',
             );
-          return resolveProviderInputsForValidation(providers as any, { basePath, env });
+          return resolveProviderInputsForValidation(providers as any, {
+            basePath,
+            env,
+            ...(filter === undefined ? {} : { filter }),
+          });
         },
       );
 
@@ -947,6 +977,7 @@ describe('Redteam Routes', () => {
         ['promptfoo://provider/00000000-0000-0000-0000-000000000000'],
         undefined,
         undefined,
+        undefined,
       );
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
       expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
@@ -956,6 +987,115 @@ describe('Redteam Routes', () => {
         const statusResponse = await request(app).get('/api/redteam/status');
         expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
       });
+    });
+
+    it('should apply target filters before compatibility validation', async () => {
+      const targets = [
+        { id: 'echo', label: 'selected-single' },
+        {
+          id: 'echo',
+          label: 'excluded-multi',
+          inputs: { context: 'Reference context', question: 'User question' },
+        },
+      ];
+      mockedResolveRedteamTargetProviderInputs.mockResolvedValueOnce([undefined]);
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets,
+            redteam: { strategies: ['posterior'] },
+            commandLineOptions: { filterTargets: 'selected-single' },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledWith(
+        targets,
+        undefined,
+        undefined,
+        'selected-single',
+      );
+    });
+
+    it('should let the newest overlapping run request win after async preflight', async () => {
+      let resolveFirstPreflight: ((inputs: unknown[]) => void) | undefined;
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputs
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirstPreflight = resolve;
+            }),
+        )
+        .mockResolvedValueOnce([]);
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const config = {
+        targets: [{ id: 'echo' }],
+        redteam: { strategies: ['posterior'] },
+      };
+      const firstResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({ config: { ...config, purpose: 'older' } })
+        .then((response) => response);
+      await vi.waitFor(() => {
+        expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledTimes(1);
+      });
+
+      const newerResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { ...config, purpose: 'newer' } });
+      expect(newerResponse.status).toBe(200);
+
+      resolveFirstPreflight!([]);
+      const olderResponse = await firstResponsePromise;
+      expect(olderResponse.status).toBe(409);
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it('should cancel a run that is still awaiting compatibility preflight', async () => {
+      let resolvePreflight: ((inputs: unknown[]) => void) | undefined;
+      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePreflight = resolve;
+          }),
+      );
+
+      const runResponsePromise = request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [{ id: 'echo' }],
+            redteam: { strategies: ['posterior'] },
+          },
+        })
+        .then((response) => response);
+      await vi.waitFor(() => {
+        expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledOnce();
+      });
+
+      const cancelResponse = await request(app).post('/api/redteam/cancel');
+      expect(cancelResponse.status).toBe(200);
+      expect(cancelResponse.body.message).toBe('Pending run cancelled');
+
+      resolvePreflight!([]);
+      const runResponse = await runResponsePromise;
+      expect(runResponse.status).toBe(409);
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
     it('should not expose provider resolution details in validation errors', async () => {
