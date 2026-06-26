@@ -119,8 +119,14 @@ describe('Version Route', () => {
 
   it('should block package updates but preserve Docker updates at the cutoff', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-07-30T00:00:00.000Z'));
+    vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
+    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Seed future retry state'));
+    const futureResponse = await request(app).get('/api/version');
+    expect(futureResponse.status).toBe(200);
+
+    mockedGetLatestVersion.mockReset();
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
+    vi.setSystemTime(new Date('2026-07-30T00:00:00.000Z'));
 
     const packageResponse = await request(app).get('/api/version');
     expect(packageResponse.status).toBe(200);

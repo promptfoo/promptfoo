@@ -1,6 +1,6 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
-import { mockClipboard } from '@app/tests/browserMocks';
+import { mockClipboard, mockDocumentExecCommand } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -536,7 +536,42 @@ describe('UpdateBanner', () => {
       const checkIcon = copyCommandButton.querySelector('.lucide-check');
       expect(checkIcon).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Copied' })).toBe(copyCommandButton);
+      expect(screen.getByText('Command copied')).toHaveAttribute('aria-live', 'polite');
     });
+  });
+
+  it('should not report copy success when the clipboard fallback rejects the command', async () => {
+    const user = userEvent.setup();
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+    mockClipboard({ writeText: vi.fn().mockRejectedValue(new Error('Clipboard unavailable')) });
+    const execCommand = mockDocumentExecCommand().mockReturnValue(false);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderWithProviders(<UpdateBanner />);
+    await user.click(screen.getByRole('button', { name: /Copy Update Command/i }));
+
+    await waitFor(() => {
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(alertSpy).toHaveBeenCalledWith('Failed to copy. Command: npm i -g promptfoo@latest');
+    });
+    expect(screen.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Command copied')).not.toBeInTheDocument();
   });
 
   it("should make the don't remind me action clickable", async () => {

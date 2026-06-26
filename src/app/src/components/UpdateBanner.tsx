@@ -59,6 +59,27 @@ function getCopyCommandLabel(commandType: string | null | undefined, copied: boo
   return 'Copy Update Command';
 }
 
+function copyCommandWithFallback(command: string): void {
+  const textarea = document.createElement('textarea');
+  textarea.value = command;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+
+  try {
+    textarea.select();
+    if (!document.execCommand('copy')) {
+      throw new Error('Fallback copy command was rejected');
+    }
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+function getCopyStatus(copied: boolean): string {
+  return copied ? 'Command copied' : '';
+}
+
 export default function UpdateBanner() {
   const {
     versionInfo,
@@ -182,22 +203,13 @@ export default function UpdateBanner() {
       } catch (err) {
         // Fallback for browsers that don't support clipboard API or when it fails
         console.error('Failed to copy to clipboard:', err);
-        // Create a temporary textarea element as fallback
-        const textarea = document.createElement('textarea');
-        textarea.value = command;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
         try {
-          document.execCommand('copy');
+          copyCommandWithFallback(command);
           onSuccess();
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
           // Show the command in an alert as last resort
           alert(`Failed to copy. Command: ${command}`);
-        } finally {
-          document.body.removeChild(textarea);
         }
       }
     }
@@ -285,6 +297,9 @@ export default function UpdateBanner() {
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {getCopyStatus(copied)}
+        </span>
         {activeRuntimeNotice ? (
           <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
             <a
