@@ -338,6 +338,19 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should skip disabled basic ranges when other strategies are configured', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        minCharsPerMessage: 10,
+        plugins: [{ id: 'harmful:hate', config: { maxCharsPerMessage: 5 } }],
+        strategies: [
+          { id: 'basic', config: { enabled: false } },
+          { id: 'goat', config: { maxCharsPerMessage: 30 } },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should ignore default coding-agent strategy exclusions in message length ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({

@@ -361,7 +361,10 @@ function validateEffectiveCharsPerMessageRanges(
   };
   const configuredStrategies = data.strategies ?? [];
   const basicStrategyConfigs = configuredStrategies.flatMap((strategy, index) =>
-    isBasicStrategy(strategy) ? [{ index, strategy: { id: '', config: undefined } }] : [],
+    isBasicStrategy(strategy) &&
+    (typeof strategy === 'string' || strategy.config?.enabled !== false)
+      ? [{ index, strategy: { id: '', config: undefined } }]
+      : [],
   );
   const strategyConfigs = configuredStrategies
     .filter((strategy) => !isBasicStrategy(strategy))
