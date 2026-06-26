@@ -421,6 +421,14 @@ describe('redteamConfigSchema', () => {
     expect(RedteamConfigSchema.safeParse({ strategies: [cyclicLayer] }).success).toBe(false);
   });
 
+  it('should ignore steps in custom plugin config', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        plugins: [{ id: 'file://custom-plugin.js', config: { steps: [null] } }],
+      }).success,
+    ).toBe(true);
+  });
+
   it('should preserve layered strategy step targets in message length ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({

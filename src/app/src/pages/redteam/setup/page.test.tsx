@@ -221,6 +221,42 @@ describe('RedTeamSetupPage', () => {
       });
     });
 
+    it('should reject imported message length limits with an invalid range', async () => {
+      const user = userEvent.setup();
+      const showToast = vi.fn();
+      mockedUseToast.mockReturnValue({ showToast });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          `redteam:
+  minCharsPerMessage: 100
+  maxCharsPerMessage: 50
+`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        expect(showToast).toHaveBeenCalledWith(
+          'redteam.minCharsPerMessage must be less than or equal to redteam.maxCharsPerMessage',
+          'error',
+        );
+      });
+      const { config } = useRedTeamConfig.getState();
+      expect(config.minCharsPerMessage).not.toBe(100);
+      expect(config.maxCharsPerMessage).not.toBe(50);
+    });
+
     it('should preserve redteam.provider when loading a YAML config', async () => {
       const user = userEvent.setup();
       mockedUseToast.mockReturnValue({ showToast: vi.fn() });

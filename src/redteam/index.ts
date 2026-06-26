@@ -484,6 +484,9 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
     const resolvedCharLimits = getTargetPromptCharLimits(
       { test: testCase },
       { maxCharsPerMessage, minCharsPerMessage },
+      // These arguments are resolved runtime/CLI overrides. Prefer them over
+      // stale file-backed cliState values captured before command overrides.
+      { preferProviderCharLimits: true },
     );
     const charLimits = ignoreMinCharsPerMessage
       ? { ...resolvedCharLimits, minCharsPerMessage: undefined }

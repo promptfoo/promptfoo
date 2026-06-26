@@ -316,16 +316,21 @@ export function throwIfTargetPromptViolatesCharLimits(
 export function getTargetPromptCharLimits(
   context?: PromptLengthContext,
   providerCharLimits?: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  { preferProviderCharLimits = false }: { preferProviderCharLimits?: boolean } = {},
 ): {
   maxCharsPerMessage?: number;
   minCharsPerMessage?: number;
 } {
   const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
-    const configuredLimit =
-      cliState.config?.redteam?.[key] ??
-      providerCharLimits?.[key] ??
-      (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
-      (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
+    const configuredLimit = preferProviderCharLimits
+      ? (providerCharLimits?.[key] ??
+        cliState.config?.redteam?.[key] ??
+        (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
+        (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key])
+      : (cliState.config?.redteam?.[key] ??
+        providerCharLimits?.[key] ??
+        (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
+        (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key]);
     return typeof configuredLimit === 'number' &&
       Number.isInteger(configuredLimit) &&
       configuredLimit > 0

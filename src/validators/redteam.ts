@@ -287,6 +287,7 @@ function validateScopedCharsPerMessageLimits(
   pathPrefix: Array<string | number>,
   ctx: z.RefinementCtx,
   seen = new WeakSet<object>(),
+  recurseLayerSteps = false,
 ): void {
   for (const [index, scope] of scopes.entries()) {
     if (typeof scope === 'string') {
@@ -330,8 +331,14 @@ function validateScopedCharsPerMessageLimits(
     ) {
       addCharsPerMessageRangeIssue(ctx, [...configPath, 'minCharsPerMessage']);
     }
-    if (Array.isArray(scope.config.steps)) {
-      validateScopedCharsPerMessageLimits(scope.config.steps, [...configPath, 'steps'], ctx, seen);
+    if (recurseLayerSteps && scope.id === 'layer' && Array.isArray(scope.config.steps)) {
+      validateScopedCharsPerMessageLimits(
+        scope.config.steps,
+        [...configPath, 'steps'],
+        ctx,
+        seen,
+        true,
+      );
     }
   }
 }
@@ -619,7 +626,13 @@ export const RedteamConfigSchema = z
       addCharsPerMessageRangeIssue(ctx, ['minCharsPerMessage']);
     }
     validateScopedCharsPerMessageLimits(data.plugins ?? [], ['plugins'], ctx);
-    validateScopedCharsPerMessageLimits(data.strategies ?? [], ['strategies'], ctx);
+    validateScopedCharsPerMessageLimits(
+      data.strategies ?? [],
+      ['strategies'],
+      ctx,
+      undefined,
+      true,
+    );
     validateEffectiveCharsPerMessageRanges(data, ctx);
   })
   .transform((data): RedteamFileConfig => {

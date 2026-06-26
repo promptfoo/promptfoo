@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getGeneratedTestCaseLengthViolation } from '../../../src/redteam/shared/promptLength';
+import cliState from '../../../src/cliState';
+import {
+  getGeneratedTestCaseLengthViolation,
+  getTargetPromptCharLimits,
+} from '../../../src/redteam/shared/promptLength';
 
 describe('getGeneratedTestCaseLengthViolation', () => {
   it('checks each generated sequence prompt against the minimum', () => {
@@ -8,6 +12,25 @@ describe('getGeneratedTestCaseLengthViolation', () => {
         minCharsPerMessage: 3,
       }),
     ).toEqual({ kind: 'min', length: 1, limit: 3, path: 'prompt' });
+  });
+
+  it('prefers resolved runtime overrides over stale cli state when requested', () => {
+    const originalConfig = cliState.config;
+    cliState.config = { redteam: { minCharsPerMessage: 100 } };
+
+    try {
+      expect(
+        getTargetPromptCharLimits(
+          undefined,
+          { minCharsPerMessage: 10 },
+          {
+            preferProviderCharLimits: true,
+          },
+        ),
+      ).toEqual({ maxCharsPerMessage: undefined, minCharsPerMessage: 10 });
+    } finally {
+      cliState.config = originalConfig;
+    }
   });
 
   it('counts only text parts in multimodal user messages', () => {

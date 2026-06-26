@@ -369,6 +369,23 @@ export default function RedTeamSetupPage() {
       const applicationDefinition = yamlConfig.redteam?.applicationDefinition
         ? yamlConfig.redteam.applicationDefinition
         : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
+      const maxCharsPerMessage = normalizeImportedPositiveInteger(
+        yamlConfig.redteam?.maxCharsPerMessage,
+        'maxCharsPerMessage',
+      );
+      const minCharsPerMessage = normalizeImportedPositiveInteger(
+        yamlConfig.redteam?.minCharsPerMessage,
+        'minCharsPerMessage',
+      );
+      if (
+        minCharsPerMessage !== undefined &&
+        maxCharsPerMessage !== undefined &&
+        minCharsPerMessage > maxCharsPerMessage
+      ) {
+        throw new Error(
+          'redteam.minCharsPerMessage must be less than or equal to redteam.maxCharsPerMessage',
+        );
+      }
 
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
@@ -381,14 +398,8 @@ export default function RedTeamSetupPage() {
         provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
-        maxCharsPerMessage: normalizeImportedPositiveInteger(
-          yamlConfig.redteam?.maxCharsPerMessage,
-          'maxCharsPerMessage',
-        ),
-        minCharsPerMessage: normalizeImportedPositiveInteger(
-          yamlConfig.redteam?.minCharsPerMessage,
-          'minCharsPerMessage',
-        ),
+        maxCharsPerMessage,
+        minCharsPerMessage,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,
         testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',
