@@ -61,12 +61,12 @@ function getMcpOutputText(output: unknown): string | undefined {
   return undefined;
 }
 
-interface McpToolCallOutcome {
+export interface McpToolCallOutcome {
   error?: string;
   name: string;
 }
 
-type StructuredMcpToolCalls =
+export type StructuredMcpToolCalls =
   | { calls: McpToolCallOutcome[]; error?: never }
   | { calls?: never; error: string };
 
@@ -175,7 +175,7 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
   return { calls };
 }
 
-function getStructuredMcpToolCalls(
+export function getStructuredMcpToolCalls(
   providerResponse: AssertionParams['providerResponse'] | undefined,
 ): StructuredMcpToolCalls | undefined {
   const metadataResult = parseMetadataMcpToolCalls(providerResponse?.metadata?.mcpToolCalls);
@@ -307,15 +307,18 @@ function trustsRenderedMcpOutput(
   );
 }
 
-export const handleIsValidOpenAiToolsCall = async ({
-  assertion,
-  assertionTransformChanged,
-  inverse,
-  output,
-  provider,
-  providerResponse,
-  test,
-}: AssertionParams): Promise<GradingResult> => {
+export const handleIsValidOpenAiToolsCall = async (
+  {
+    assertion,
+    assertionTransformChanged,
+    inverse,
+    output,
+    provider,
+    providerResponse,
+    test,
+  }: AssertionParams,
+  capturedMcpToolCalls?: StructuredMcpToolCalls | null,
+): Promise<GradingResult> => {
   // Traditional tool calls take precedence so model-controlled arguments cannot
   // be misclassified merely by containing an MCP result/error marker.
   let toolsOutput: unknown = output;
@@ -338,7 +341,9 @@ export const handleIsValidOpenAiToolsCall = async ({
   });
   const structuredMcpResult = outputWasTransformed
     ? undefined
-    : getStructuredMcpToolCalls(providerResponse);
+    : capturedMcpToolCalls === undefined
+      ? getStructuredMcpToolCalls(providerResponse)
+      : (capturedMcpToolCalls ?? undefined);
   if (structuredMcpResult?.error) {
     return applyInverse(
       {

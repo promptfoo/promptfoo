@@ -77,7 +77,11 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiToolsCall } from './openai';
+import {
+  getStructuredMcpToolCalls,
+  handleIsValidOpenAiToolsCall,
+  type StructuredMcpToolCalls,
+} from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
@@ -180,6 +184,17 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
   return Boolean(assertions?.some(assertionMayNeedTraceContext));
+}
+
+function assertionUsesOpenAiToolsCall(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionUsesOpenAiToolsCall);
+  }
+  return getAssertionBaseType(assertion) === 'is-valid-openai-tools-call';
+}
+
+export function hasOpenAiToolsCallAssertions(assertions?: AssertionOrSet[]): boolean {
+  return Boolean(assertions?.some(assertionUsesOpenAiToolsCall));
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -417,6 +432,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   assertionTransformInputSnapshot,
+  mcpToolCallProvenance,
   traceId,
   traceData,
 }: {
@@ -430,6 +446,8 @@ export async function runAssertion({
   assertIndex?: number;
   /** Internal baseline shared by concurrent assertions so in-place transforms fail closed. */
   assertionTransformInputSnapshot?: TransformInputClone<ProviderResponse['output']>;
+  /** Internal MCP outcome captured before user-provided transforms and assertion scripts run. */
+  mcpToolCallProvenance?: StructuredMcpToolCalls | null;
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
@@ -441,18 +459,28 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
+  const baseType = getAssertionBaseType(assertion);
+  const tracksMcpProvenance = baseType === 'is-valid-openai-tools-call';
+  const capturedMcpToolCalls = tracksMcpProvenance
+    ? mcpToolCallProvenance === undefined
+      ? (getStructuredMcpToolCalls(providerResponse) ?? null)
+      : mcpToolCallProvenance
+    : undefined;
+
   let assertionTransformChanged = false;
   if (assertion.transform) {
     const assertionTransformInput = output;
-    const clonedInput =
-      assertionTransformInputSnapshot ?? cloneTransformInput(assertionTransformInput);
+    const clonedInput = tracksMcpProvenance
+      ? (assertionTransformInputSnapshot ?? cloneTransformInput(assertionTransformInput))
+      : undefined;
     output = await transform(assertion.transform, assertionTransformInput, {
       vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
-    assertionTransformChanged =
-      !clonedInput.reliable || didTransformChange(clonedInput.value, output);
+    assertionTransformChanged = Boolean(
+      clonedInput && (!clonedInput.reliable || didTransformChange(clonedInput.value, output)),
+    );
   }
 
   const context: AssertionValueFunctionContext = {
@@ -575,8 +603,6 @@ export async function runAssertion({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
-
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {
@@ -660,7 +686,10 @@ export async function runAssertion({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
-    const result = await handler(assertionParams);
+    const result =
+      assertionParams.baseType === 'is-valid-openai-tools-call'
+        ? await handleIsValidOpenAiToolsCall(assertionParams, capturedMcpToolCalls)
+        : await handler(assertionParams);
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
@@ -740,6 +769,7 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
+  mcpToolCallProvenance,
   test,
   vars,
   traceId,
@@ -749,6 +779,8 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  /** Internal MCP outcome captured before provider/test transforms run. */
+  mcpToolCallProvenance?: StructuredMcpToolCalls | null;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
@@ -791,7 +823,17 @@ export async function runAssertions({
     })
     .flat();
 
-  const assertionTransformInputSnapshot = asserts.some(({ assertion }) => assertion.transform)
+  const tracksMcpProvenance = asserts.some(({ assertion }) =>
+    assertionUsesOpenAiToolsCall(assertion),
+  );
+  const capturedMcpToolCalls = tracksMcpProvenance
+    ? mcpToolCallProvenance === undefined
+      ? (getStructuredMcpToolCalls(providerResponse) ?? null)
+      : mcpToolCallProvenance
+    : undefined;
+  const assertionTransformInputSnapshot = asserts.some(
+    ({ assertion }) => assertion.transform && assertionUsesOpenAiToolsCall(assertion),
+  )
     ? cloneTransformInput(providerResponse.output)
     : undefined;
   const shouldPreloadTrace =
@@ -823,6 +865,7 @@ export async function runAssertions({
       provider,
       providerResponse,
       assertionTransformInputSnapshot,
+      mcpToolCallProvenance: capturedMcpToolCalls,
       assertion,
       test,
       vars,

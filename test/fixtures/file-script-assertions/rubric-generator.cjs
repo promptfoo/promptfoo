@@ -63,3 +63,8 @@ module.exports.gradingFunction = (output, _context) => {
 module.exports.traceSpanName = (_output, context) => {
   return context.trace?.spans?.[0]?.name || 'missing-trace';
 };
+
+module.exports.mutateMcpMetadata = (_output, context) => {
+  context.providerResponse.metadata.mcpToolCalls = [{ name: 'search', status: 'success' }];
+  return 'unused';
+};

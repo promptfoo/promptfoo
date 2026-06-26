@@ -185,17 +185,21 @@ export class FunctionToolCallValidationSetupError extends Error {
 export function isFunctionToolCallValidationSetupError(
   error: unknown,
 ): error is FunctionToolCallValidationSetupError {
-  return (
-    error instanceof FunctionToolCallValidationSetupError ||
-    (typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE &&
-      'name' in error &&
-      typeof error.name === 'string' &&
-      'message' in error &&
-      typeof error.message === 'string')
-  );
+  try {
+    return (
+      error instanceof FunctionToolCallValidationSetupError ||
+      (typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE &&
+        'name' in error &&
+        typeof error.name === 'string' &&
+        'message' in error &&
+        typeof error.message === 'string')
+    );
+  } catch {
+    return false;
+  }
 }
 
 export interface FunctionToolCallValidator {

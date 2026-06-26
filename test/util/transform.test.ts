@@ -4,6 +4,7 @@ import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import {
   cloneTransformInput,
+  didTransformChange,
   FILE_TRANSFORM_LABEL,
   getTransformErrorMessage,
   getTransformLabel,
@@ -71,6 +72,60 @@ describe('util', () => {
       });
 
       expect(cloneTransformInput({ nested }).reliable).toBe(false);
+    });
+
+    it('does not invoke accessors while checking snapshot reliability', () => {
+      let reads = 0;
+      const output = {};
+      Object.defineProperty(output, 'content', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return 'value';
+        },
+      });
+
+      expect(cloneTransformInput(output)).toEqual({ reliable: false, value: output });
+      expect(reads).toBe(0);
+    });
+
+    it('does not invoke proxy traps while checking snapshot reliability', () => {
+      const ownKeys = vi.fn<() => (string | symbol)[]>();
+      const getOwnPropertyDescriptor = vi.fn();
+      const output = new Proxy(
+        { content: 'value' },
+        {
+          ownKeys,
+          getOwnPropertyDescriptor,
+        },
+      );
+
+      expect(cloneTransformInput(output)).toEqual({ reliable: false, value: output });
+      expect(ownKeys).not.toHaveBeenCalled();
+      expect(getOwnPropertyDescriptor).not.toHaveBeenCalled();
+    });
+
+    it('fails closed before enumerating binary transform inputs', () => {
+      const output = new Uint8Array(100_000);
+
+      expect(cloneTransformInput(output)).toEqual({ reliable: false, value: output });
+    });
+
+    it('marks accessor-backed transform outputs as changed without invoking them', () => {
+      let reads = 0;
+      const output = {};
+      Object.defineProperty(output, 'content', {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return 'original';
+        },
+      });
+
+      expect(didTransformChange({ content: 'original' }, output)).toBe(true);
+      expect(reads).toBe(0);
     });
 
     it('transforms output using a direct function', async () => {

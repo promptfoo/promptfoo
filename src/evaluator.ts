@@ -8,11 +8,13 @@ import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
+  hasOpenAiToolsCallAssertions,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { getStructuredMcpToolCalls, type StructuredMcpToolCalls } from './assertions/openai';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -1232,6 +1234,7 @@ async function gradeRunEvalResponse({
   vars: Vars;
 }) {
   const {
+    mcpToolCallProvenance,
     processedResponse,
     providerTransformChanged,
     providerTransformedOutput,
@@ -1265,6 +1268,7 @@ async function gradeRunEvalResponse({
       { abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
+          mcpToolCallProvenance,
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
@@ -1285,6 +1289,7 @@ async function gradeRunEvalResponse({
     { abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
+        mcpToolCallProvenance,
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
@@ -1318,22 +1323,33 @@ async function transformRunEvalResponse({
   testIdx: number;
   vars: Vars;
 }): Promise<{
+  mcpToolCallProvenance?: StructuredMcpToolCalls | null;
   processedResponse: ProviderResponse;
   providerTransformChanged: boolean;
   providerTransformedOutput: ProviderResponse['output'];
   testTransformChanged: boolean;
 }> {
+  const tracksMcpProvenance = hasOpenAiToolsCallAssertions(test.assert);
+  const mcpToolCallProvenance = tracksMcpProvenance
+    ? (getStructuredMcpToolCalls(response) ?? null)
+    : undefined;
   const processedResponse = { ...response };
+  const changedWithoutSnapshot = (input: unknown, output: unknown) =>
+    (input !== null && (typeof input === 'object' || typeof input === 'function')) ||
+    !Object.is(input, output);
   let providerTransformChanged = false;
   if (provider.transform) {
     const providerTransformInput = processedResponse.output;
-    const clonedInput = cloneTransformInput(providerTransformInput);
+    const clonedInput = tracksMcpProvenance
+      ? cloneTransformInput(providerTransformInput)
+      : undefined;
     processedResponse.output = await transform(provider.transform, providerTransformInput, {
       vars,
       prompt,
     });
-    providerTransformChanged =
-      !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output);
+    providerTransformChanged = clonedInput
+      ? !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output)
+      : changedWithoutSnapshot(providerTransformInput, processedResponse.output);
   }
   const providerTransformedOutput = processedResponse.output;
 
@@ -1341,14 +1357,15 @@ async function transformRunEvalResponse({
   let testTransformChanged = false;
   if (testTransform) {
     const testTransformInput = processedResponse.output;
-    const clonedInput = cloneTransformInput(testTransformInput);
+    const clonedInput = tracksMcpProvenance ? cloneTransformInput(testTransformInput) : undefined;
     processedResponse.output = await transform(testTransform, testTransformInput, {
       vars,
       prompt,
       ...(response && response.metadata && { metadata: response.metadata }),
     });
-    testTransformChanged =
-      !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output);
+    testTransformChanged = clonedInput
+      ? !clonedInput.reliable || didTransformChange(clonedInput.value, processedResponse.output)
+      : changedWithoutSnapshot(testTransformInput, processedResponse.output);
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
@@ -1359,6 +1376,7 @@ async function transformRunEvalResponse({
   });
 
   return {
+    mcpToolCallProvenance,
     processedResponse: blobbedResponse || processedResponse,
     providerTransformChanged,
     providerTransformedOutput,

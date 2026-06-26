@@ -2,7 +2,7 @@ import fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -2398,6 +2398,88 @@ describe('OpenAI assertions', () => {
         score: expectedPass ? 1 : 0,
         reason: expect.stringContaining('did not return a valid-looking tools response'),
       });
+    });
+
+    it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('does not trust structured MCP provenance after a %s transform adds an accessor', async (type, expectedPass) => {
+      const output = { content: 'original' };
+      let reads = 0;
+      const result = await runAssertion({
+        assertion: {
+          type,
+          transform: (transformedOutput: unknown) => {
+            Object.defineProperty(transformedOutput, 'content', {
+              configurable: true,
+              enumerable: true,
+              get: () => (reads++ === 0 ? 'original' : 'ordinary transformed text'),
+            });
+            return transformedOutput;
+          },
+        },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        score: expectedPass ? 1 : 0,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+      expect(reads).toBe(2);
+    });
+
+    it('shares immutable MCP provenance across concurrent assertion transforms', async () => {
+      const providerResponse = {
+        output: 'MCP Tool Error (search): real failure',
+        metadata: {
+          mcpToolCalls: [{ name: 'search', status: 'error', error: 'real failure' }],
+        },
+      };
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        providerResponse,
+        test: {
+          threshold: 0.5,
+          vars: {},
+          assert: [
+            {
+              type: 'is-valid-openai-tools-call',
+              transform: (output: unknown, context) => {
+                context.metadata!.mcpToolCalls = [{ name: 'search', status: 'success' }];
+                return output;
+              },
+            },
+            { type: 'not-is-valid-openai-tools-call' },
+          ],
+        },
+      });
+
+      expect(result.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'is-valid-openai-tools-call' }),
+            pass: false,
+            score: 0,
+            reason: 'MCP tool call failed for search: real failure',
+          }),
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'not-is-valid-openai-tools-call' }),
+            pass: true,
+            score: 1,
+            reason: 'MCP tool call failed for search: real failure',
+          }),
+        ]),
+      );
     });
 
     it('does not let structured MCP provenance bypass a test transform', async () => {

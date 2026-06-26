@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual, types as nodeUtilTypes } from 'node:util';
 
 import cliState from '../cliState';
 import { importModule } from '../esm';
@@ -57,24 +57,26 @@ function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>())
   if (value === null || typeof value !== 'object' || seen.has(value)) {
     return false;
   }
+  if (nodeUtilTypes.isProxy(value)) {
+    return true;
+  }
   seen.add(value);
 
   if (
     (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) ||
-    (ArrayBuffer.isView(value) &&
-      typeof SharedArrayBuffer !== 'undefined' &&
-      value.buffer instanceof SharedArrayBuffer)
+    value instanceof ArrayBuffer ||
+    ArrayBuffer.isView(value)
   ) {
     return true;
   }
   if (value instanceof Map) {
-    for (const [key, entryValue] of value) {
+    for (const [key, entryValue] of Map.prototype.entries.call(value)) {
       if (hasUnclonedTransformState(key, seen) || hasUnclonedTransformState(entryValue, seen)) {
         return true;
       }
     }
   } else if (value instanceof Set) {
-    for (const entryValue of value) {
+    for (const entryValue of Set.prototype.values.call(value)) {
       if (hasUnclonedTransformState(entryValue, seen)) {
         return true;
       }
@@ -88,8 +90,10 @@ function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>())
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     return (
       typeof key === 'symbol' ||
-      !descriptor?.enumerable ||
-      ('value' in descriptor && hasUnclonedTransformState(descriptor.value, seen))
+      !descriptor ||
+      !descriptor.enumerable ||
+      !('value' in descriptor) ||
+      hasUnclonedTransformState(descriptor.value, seen)
     );
   });
 }
@@ -116,6 +120,9 @@ export function cloneTransformInput<T>(value: T): TransformInputClone<T> {
 
 export function didTransformChange(input: unknown, output: unknown): boolean {
   try {
+    if (hasUnclonedTransformState(output)) {
+      return true;
+    }
     return !isDeepStrictEqual(input, output);
   } catch {
     return true;

@@ -175,6 +175,41 @@ describe('handleIsValidFunctionCall', () => {
   });
 
   it.each([
+    ['is-valid-function-call', false],
+    ['not-is-valid-function-call', true],
+  ] as const)('handles hostile validator errors for %s', async (type, expectedPass) => {
+    const provider = {
+      ...validProvider,
+      validateFunctionToolCall: () => {
+        throw {
+          name: 'ValidationError',
+          message: 'ordinary invalid call',
+          get code() {
+            throw new Error('code getter exploded');
+          },
+        };
+      },
+    } as ApiProvider;
+
+    const result = await runAssertions({
+      prompt: 'test prompt',
+      provider,
+      providerResponse: { output: '{}' },
+      test: { vars: {}, assert: [{ type }] },
+    });
+
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      score: expectedPass ? 1 : 0,
+    });
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: expectedPass,
+      score: expectedPass ? 1 : 0,
+      reason: expectedPass ? 'Assertion passed' : 'ordinary invalid call',
+    });
+  });
+
+  it.each([
     'is-valid-function-call',
     'is-valid-openai-function-call',
     'not-is-valid-function-call',

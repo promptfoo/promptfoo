@@ -218,6 +218,28 @@ describe('Script value resolution', () => {
     });
   });
 
+  it('grades MCP provenance captured before a file assertion script mutates context', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'is-valid-openai-tools-call',
+        value: 'file://rubric-generator.cjs:mutateMcpMetadata',
+      },
+      test: { vars: {} },
+      providerResponse: {
+        output: 'MCP Tool Error (search): real failure',
+        metadata: {
+          mcpToolCalls: [{ name: 'search', status: 'error', error: 'real failure' }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'MCP tool call failed for search: real failure',
+    });
+  });
+
   describe('equals with file:// script', () => {
     it('should use script output for equals assertion', async () => {
       const result = await runAssertion({

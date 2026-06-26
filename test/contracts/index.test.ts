@@ -84,6 +84,15 @@ describe('contracts leaf surface', () => {
       ).toBe(true);
       expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(false);
       expect(isFunctionToolCallValidationSetupError(new Error('invalid output'))).toBe(false);
+      expect(
+        isFunctionToolCallValidationSetupError({
+          name: 'ValidationError',
+          message: 'ordinary invalid call',
+          get code() {
+            throw new Error('code getter exploded');
+          },
+        }),
+      ).toBe(false);
     });
   });
 
