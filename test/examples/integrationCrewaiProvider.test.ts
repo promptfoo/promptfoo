@@ -418,6 +418,7 @@ print(json.dumps(result))
       path.join(process.cwd(), 'site', 'docs', 'guides', 'evaluate-crewai.md'),
       'utf8',
     );
+    expect(guide).toContain('promptfoo redteam run -c promptfooconfig.redteam.yaml --remote');
     const config = loadGuideConfig(guide) as {
       defaultTest: { assert: Array<{ type: string; value?: Record<string, unknown> }> };
       tests: Array<{ assert: Array<{ type: string; value?: string }> }>;

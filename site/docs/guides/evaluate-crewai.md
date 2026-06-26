@@ -648,6 +648,8 @@ In this step, you:
 - Review the recommended **Meta Agent** and **Hydra Multi-Turn** strategies, or expand **Show Advanced Strategies** to choose others.
 - Review the **Application Details** and **Example Data Identifiers and Formats** fields for the mock recruitment workflow.
 
+Meta Agent and Hydra require remote generation. Use `--remote`, set `PROMPTFOO_REMOTE_GENERATION_URL` to a self-hosted endpoint, or sign in with `promptfoo auth login` before running either strategy.
+
 ## **Step 11: Run and Check Final Red Team Results**
 
 Now choose how you want to launch the red teaming:
@@ -657,7 +659,7 @@ Now choose how you want to launch the red teaming:
 Move the downloaded configuration into the project directory beside `agent.py`. To preserve the functional config, rename it to `promptfooconfig.redteam.yaml`, then run:
 
 ```bash
-promptfoo redteam run -c promptfooconfig.redteam.yaml
+promptfoo redteam run -c promptfooconfig.redteam.yaml --remote
 ```
 
 **Option 2:** Click **Run Now** in the browser. This option requires Promptfoo Cloud connectivity and remote generation to be enabled.
