@@ -4,6 +4,7 @@ import { ResultFailureReason } from '../../types/index';
 import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
+  EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateTableRow,
@@ -37,6 +38,14 @@ export interface GenerateEvalCsvOptions {
    * If not provided, comparison exports will throw an error.
    */
   findEvalById?: (id: string) => Promise<Eval | null | undefined>;
+}
+
+/** Options shared by direct table-to-CSV exports. */
+export interface EvalTableCsvOptions {
+  /** Whether to include redteam metadata columns. */
+  isRedteam?: boolean;
+  /** Evaluation-level environment overrides, which take precedence over process.env. */
+  env?: EnvOverrides;
 }
 
 /**
@@ -435,6 +444,69 @@ export function tableRowToCsvValues(
 }
 
 /**
+ * Escape every cell of a CSV row matrix (headers + body) against spreadsheet
+ * formula injection (CWE-1236), unless disabled via
+ * `PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING`. Numbers and booleans pass through
+ * untouched; only string cells are inspected. Applied at the `csvStringify`
+ * boundary so `buildCsvHeaders`/`tableRowToCsvValues` stay pure and re-importable
+ * CSVs are never produced from un-escaped data.
+ */
+function escapeCsvRowsForFormulaInjection(
+  rows: (string | number | boolean)[][],
+  env?: EnvOverrides,
+): (string | number | boolean)[][] {
+  // Resolve the persisted evaluation config before process.env, matching the
+  // environment precedence used by the rest of promptfoo without importing the
+  // legacy runtime environment module into this node-layer export path.
+  const configuredValue =
+    env?.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING ??
+    process.env.PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING;
+  const disableEscaping = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
+    configuredValue?.toLowerCase() ?? '',
+  );
+  if (disableEscaping) {
+    return rows;
+  }
+  return rows.map((row) =>
+    row.map((cell) => (typeof cell === 'string' ? escapeCsvFormula(cell) : cell)),
+  );
+}
+
+function isNumericCell(value: string): boolean {
+  return value.trim() !== '' && Number.isFinite(Number(value));
+}
+
+/**
+ * Neutralize spreadsheet formula (CSV) injection at eval export time (CWE-1236).
+ *
+ * Spreadsheet applications execute cells beginning with `=`, `+`, `-`, or `@`
+ * as formulas. Exported eval data can contain attacker-controlled model output,
+ * variables, and grader comments, and CSV quoting alone does not neutralize
+ * those formulas. Prefix dangerous values with the spreadsheet-native text
+ * marker while preserving finite signed numbers.
+ *
+ * Leading whitespace and zero-width characters are ignored when identifying a
+ * trigger because spreadsheet applications can strip them before evaluation.
+ */
+export function escapeCsvFormula(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+
+  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
+  const firstChar = unpadded[0];
+  if (firstChar === undefined) {
+    return value;
+  }
+
+  const isFormulaTrigger =
+    firstChar === '=' ||
+    firstChar === '@' ||
+    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
+  return isFormulaTrigger ? `'${value}` : value;
+}
+
+/**
  * Generates CSV data from evaluation table data.
  *
  * Column structure per prompt:
@@ -458,9 +530,9 @@ export function tableRowToCsvValues(
  */
 export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
-  options: { isRedteam?: boolean } = { isRedteam: false },
+  options: EvalTableCsvOptions = {},
 ): string {
-  const { isRedteam } = options;
+  const { env, isRedteam = false } = options;
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
@@ -477,7 +549,7 @@ export function evalTableToCsv(
     ),
   ];
 
-  return csvStringify(csvRows);
+  return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
 
 /**
@@ -662,6 +734,7 @@ export async function generateEvalCsv(
   }
 
   return evalTableToCsv(finalTable, {
+    env: eval_.config.env,
     isRedteam: Boolean(eval_.config.redteam),
   });
 }
@@ -690,6 +763,7 @@ export interface StreamCsvOptions {
  */
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
   const { isRedteam = false, write } = options;
+  const env = eval_.config?.env;
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
@@ -734,7 +808,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     isRedteam,
     namedScoreNamesByPrompt,
   });
-  await write(csvStringify([headers]));
+  await write(csvStringify(escapeCsvRowsForFormulaInjection([headers], env)));
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
@@ -747,7 +821,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     );
 
     if (csvRows.length > 0) {
-      await write(csvStringify(csvRows));
+      await write(csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env)));
     }
   }
 }

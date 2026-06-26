@@ -233,8 +233,13 @@ describe('Redteam Routes', () => {
         expect(mockPluginFactory.action).toHaveBeenCalled();
       });
 
-      it('should exclude system-prompt-override with multi-input config', async () => {
-        // 'system-prompt-override' is a MULTI_INPUT_EXCLUDED_PLUGIN
+      it('should not exclude system-prompt-override with multi-input config', async () => {
+        const mockPluginFactory = {
+          key: 'system-prompt-override',
+          action: vi.fn().mockResolvedValue([{ vars: { __prompt: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
@@ -256,11 +261,11 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(response.body).toEqual({ testCases: [], count: 0 });
+        expect(mockPluginFactory.action).toHaveBeenCalled();
+        expect(response.body.prompt).toBe('generated test prompt');
       });
 
       it('should NOT exclude special-token-injection without multi-input config', async () => {
-        // 'special-token-injection' is a MULTI_INPUT_EXCLUDED_PLUGIN
         const mockPluginFactory = {
           key: 'special-token-injection',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
