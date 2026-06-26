@@ -23,6 +23,7 @@ const maxForks = process.env.CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
+const isCiBuild = process.env.CI === 'true';
 
 const ignoredTestConsolePatterns = [
   /^Warning: .*not wrapped in act/,
@@ -74,7 +75,7 @@ export default {
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
+  plugins: [browserModulesPlugin(), ...(isCiBuild ? [] : [reactCompilerPlugin()]), ...react()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -92,7 +93,7 @@ export default {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
-    sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
+    sourcemap: process.env.NODE_ENV === 'production' && !isCiBuild ? 'hidden' : false,
     rolldownOptions: {
       output: {
         codeSplitting: {
