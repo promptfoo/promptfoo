@@ -6,6 +6,7 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import {
   getStrategyCompatibilityError,
+  isStrategyApplicable,
   loadStrategy,
   validateStrategies,
 } from '../../../src/redteam/strategies/index';
@@ -144,22 +145,50 @@ describe('getStrategyCompatibilityError', () => {
     ).toBeUndefined();
   });
 
-  it.each([
-    ['direct Posterior', [{ id: 'posterior', config: { numTests: 0 } }, { id: 'posterior' }]],
-    [
-      'unlabelled layer',
-      [
-        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
-        { id: 'layer', config: { steps: ['posterior'] } },
-      ],
-    ],
-  ])('matches first-wins runtime deduplication for duplicate %s', (_label, strategies) => {
+  it('keeps first-wins runtime deduplication for differently configured direct strategies', () => {
+    const strategies = [{ id: 'posterior', config: { numTests: 0 } }, { id: 'posterior' }];
+
     expect(
       getStrategyCompatibilityError(strategies, {
         context: 'Reference context',
         question: 'User question',
       }),
     ).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'unlabelled layer',
+      [
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+        { id: 'layer', config: { steps: ['posterior'] } },
+      ],
+      'Posterior strategy does not support multi-input targets',
+    ],
+    [
+      'labelled layer',
+      [
+        { id: 'layer', config: { label: 'same', numTests: 0, steps: ['base64'] } },
+        { id: 'layer', config: { label: 'same', steps: ['posterior'] } },
+      ],
+      'Posterior strategy does not support multi-input targets',
+    ],
+    [
+      'labelled layer disabled last',
+      [
+        { id: 'layer', config: { label: 'same', steps: ['posterior'] } },
+        { id: 'layer', config: { label: 'same', numTests: 0, steps: ['posterior'] } },
+      ],
+      undefined,
+    ],
+  ])('matches config-schema last-wins deduplication for duplicate %s', (_label, strategies, expected) => {
+    expect(
+      getStrategyCompatibilityError(
+        strategies,
+        { context: 'Reference context', question: 'User question' },
+        { plugins: ['harmful:hate'] },
+      ),
+    ).toBe(expected);
   });
 
   it.each([
@@ -173,6 +202,12 @@ describe('getStrategyCompatibilityError', () => {
       label: 'direct Posterior excluded by plugin config',
       strategies: ['posterior'],
       plugins: [{ id: 'harmful:hate', config: { excludeStrategies: ['posterior'] } }],
+      expected: undefined,
+    },
+    {
+      label: 'direct Posterior with sequence-only intents',
+      strategies: ['posterior'],
+      plugins: [{ id: 'intent', config: { intent: [['first turn', 'second turn']] } }],
       expected: undefined,
     },
     {
@@ -255,6 +290,18 @@ describe('getStrategyCompatibilityError', () => {
     },
   ])('accounts for plugin applicability with $label', ({ strategies, plugins, expected }) => {
     expect(getStrategyCompatibilityError(strategies, inputs, { plugins })).toBe(expected);
+  });
+
+  it('normalizes generated plugin IDs before applying strategy targets', () => {
+    expect(
+      isStrategyApplicable(
+        {
+          vars: { query: 'test' },
+          metadata: { pluginId: 'promptfoo:redteam:intent', pluginConfig: {} },
+        },
+        { id: 'layer', config: { plugins: ['intent'], steps: ['base64'] } },
+      ),
+    ).toBe(true);
   });
 
   it('handles cyclic per-turn layers while finding an applicable Posterior sibling', () => {

@@ -320,6 +320,33 @@ describe('Redteam Routes', () => {
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
       });
 
+      it('normalizes generated intent plugin IDs before applying targeted layers', async () => {
+        const mockPluginFactory = {
+          key: 'intent',
+          action: vi.fn().mockResolvedValue([
+            {
+              vars: { query: 'test intent' },
+              metadata: { pluginId: 'promptfoo:redteam:intent', pluginConfig: {} },
+            },
+          ]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'intent', config: { intent: ['test intent'] } },
+            strategy: {
+              id: 'layer',
+              config: { plugins: ['intent'], steps: ['base64'] },
+            },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledOnce();
+      });
+
       it('should NOT exclude multi-input excluded plugins when plugin has no multi-input config', async () => {
         // 'cca' is a MULTI_INPUT_EXCLUDED_PLUGIN - should NOT be excluded without multi-input
         const mockPluginFactory = {

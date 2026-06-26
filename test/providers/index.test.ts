@@ -2314,6 +2314,19 @@ config:
     expect((result as any[])[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
   });
 
+  it('preserves ProviderOptionsMap entries loaded from provider files', () => {
+    mockFsReadFileSync.mockReturnValue(`
+echo:
+  label: mapped-echo
+`);
+
+    const result = resolveProviderConfigs(['file://./providers.yaml'], {
+      basePath: path.join(path.sep, 'test', 'path'),
+    });
+
+    expect(result).toEqual([{ echo: { label: 'mapped-echo' } }]);
+  });
+
   it('should handle mixed provider types preserving non-file providers', () => {
     const yamlContent = `
 id: ollama:phi3

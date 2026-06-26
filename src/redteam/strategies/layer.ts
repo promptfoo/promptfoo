@@ -188,6 +188,12 @@ export async function addLayerTestCases(
     // ═══════════════════════════════════════════════════════════════════════
     // REGULAR STRATEGY: Apply transform to test cases (existing behavior)
     // ═══════════════════════════════════════════════════════════════════════
+    const stepTargets =
+      (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
+    const applicable = current.filter((testCase) =>
+      pluginMatchesStrategyTargets(testCase, stepObj.id, stepTargets as string[] | undefined),
+    );
+
     let stepAction: Strategy['action'] | undefined;
 
     try {
@@ -209,16 +215,11 @@ export async function addLayerTestCases(
 
     if (!stepAction) {
       logger.warn(`layer strategy: step ${stepObj.id} not registered, skipping`);
+      current = applicable;
       continue;
     }
 
     // Determine applicable test cases for this step using the same targeting rules
-    const stepTargets =
-      (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
-    const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
-    );
-
     const next = await stepAction(applicable, injectVar, {
       ...(stepObj.config || {}),
       ...(config || {}),

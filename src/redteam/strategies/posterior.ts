@@ -1,8 +1,9 @@
-import { configuredPluginHasApplicablePosteriorForMultiInput } from '../sharedFrontend';
-import { deduplicateStrategies } from './util';
+import {
+  configuredPluginHasApplicablePosteriorForMultiInput,
+  getEffectiveStrategiesForCompatibility,
+} from '../sharedFrontend';
 
 import type { TestCase } from '../../types/index';
-import type { RedteamStrategyObject } from '../types';
 
 export const POSTERIOR_MULTI_INPUT_ERROR =
   'Posterior strategy does not support multi-input targets';
@@ -77,14 +78,14 @@ function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boo
 
 export function hasPosteriorStrategy(strategies: readonly unknown[]): boolean {
   const visited = new Set<object>();
-  return getEffectiveStrategies(strategies).some((strategy) =>
+  return getEffectiveStrategiesForCompatibility(strategies).some((strategy) =>
     containsPosteriorStrategy(strategy, visited),
   );
 }
 
 export function hasActivePosteriorStrategy(strategies: readonly unknown[]): boolean {
   const visited = new Set<object>();
-  return getEffectiveStrategies(strategies).some((strategy) => {
+  return getEffectiveStrategiesForCompatibility(strategies).some((strategy) => {
     if (strategy.config?.numTests === 0) {
       return false;
     }
@@ -97,7 +98,7 @@ export function hasApplicablePosteriorStrategy(
   plugins?: readonly unknown[],
   options: { includeDisabledStrategies?: boolean } = {},
 ): boolean {
-  const effectiveStrategies = getEffectiveStrategies(strategies).filter(
+  const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
     (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
   );
   if (!plugins || plugins.length === 0) {
@@ -134,24 +135,6 @@ export function hasApplicablePosteriorStrategy(
         configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
     ),
   );
-}
-
-function getEffectiveStrategies(strategies: readonly unknown[]): RedteamStrategyObject[] {
-  const normalized = strategies.flatMap((strategy): RedteamStrategyObject[] => {
-    if (typeof strategy === 'string') {
-      return [{ id: strategy }];
-    }
-    if (
-      strategy &&
-      typeof strategy === 'object' &&
-      !Array.isArray(strategy) &&
-      typeof (strategy as { id?: unknown }).id === 'string'
-    ) {
-      return [strategy as RedteamStrategyObject];
-    }
-    return [];
-  });
-  return deduplicateStrategies(normalized);
 }
 
 export function assertPosteriorTargetSupported(testCases: TestCase[]): void {
