@@ -79,12 +79,10 @@ describe('Scanner machine-readable output', () => {
     initialLogLevel = 'info',
     loadConfigError,
     processDiffError,
-    processDiffResult = [],
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
-    processDiffResult?: FileRecord[];
   } = {}) {
     let currentLogLevel = initialLogLevel;
 
@@ -93,7 +91,7 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
         ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue(processDiffResult),
+        : vi.fn().mockResolvedValue([]),
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
@@ -190,35 +188,6 @@ describe('Scanner machine-readable output', () => {
     expect(setLogLevelMock).toHaveBeenCalledWith('error');
     expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
     expect(getLogLevel()).toBe('info');
-  });
-
-  it('emits an empty JSON response when every changed file is skipped', async () => {
-    mockScanner({
-      processDiffResult: [
-        {
-          path: 'package-lock.json',
-          status: 'M',
-          skipReason: 'denylist',
-          shaA: 'abc123',
-          shaB: 'def456',
-          linesAdded: 10,
-          linesRemoved: 5,
-        },
-      ],
-    });
-
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const { processDiff } = await import('../../src/codeScan/git/diffProcessor');
-    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-
-    await executeScan('/test/repo', { json: true, diffsOnly: true });
-
-    expect(processDiff).toHaveBeenCalled();
-    expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
-      expect.any(Number),
-      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
-    );
   });
 
   it('restores the original log level when structured config loading fails early', async () => {

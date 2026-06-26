@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CodeScanOutputFormat, type FileRecord } from '../../../src/types/codeScan';
 
 type ScannerRequestModule = typeof import('../../../src/codeScan/scanner/request');
 
@@ -20,21 +21,23 @@ describe('scanner config policy boundary', () => {
     process.exitCode = 0;
   });
 
-  function mockScannerBoundaries() {
+  function mockScannerBoundaries(
+    processDiffResult: FileRecord[] = [
+      {
+        path: 'src/index.ts',
+        status: 'M',
+        shaA: 'abc123',
+        shaB: 'def456',
+        linesAdded: 1,
+        linesRemoved: 0,
+        patch: '@@ -1 +1,2 @@\n const existing = true;\n+const added = true;',
+      },
+    ],
+  ) {
     const disconnect = vi.fn();
 
     vi.doMock('../../../src/codeScan/git/diffProcessor', () => ({
-      processDiff: vi.fn().mockResolvedValue([
-        {
-          path: 'src/index.ts',
-          status: 'M',
-          shaA: 'abc123',
-          shaB: 'def456',
-          linesAdded: 1,
-          linesRemoved: 0,
-          patch: '@@ -1 +1,2 @@\n const existing = true;\n+const added = true;',
-        },
-      ]),
+      processDiff: vi.fn().mockResolvedValue(processDiffResult),
     }));
     vi.doMock('../../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
@@ -223,6 +226,33 @@ describe('scanner config policy boundary', () => {
       'test-session-id',
       undefined,
       'Review authentication boundaries.',
+    );
+  });
+
+  it('emits an empty JSON response when every changed file is skipped', async () => {
+    mockScannerBoundaries([
+      {
+        path: 'package-lock.json',
+        status: 'M',
+        skipReason: 'denylist',
+        shaA: 'abc123',
+        shaB: 'def456',
+        linesAdded: 10,
+        linesRemoved: 5,
+      },
+    ]);
+
+    const { executeScan } = await import('../../../src/codeScan/scanner/index');
+    const { processDiff } = await import('../../../src/codeScan/git/diffProcessor');
+    const { displayScanResults } = await import('../../../src/codeScan/scanner/output');
+
+    await executeScan(repoPath, { json: true, diffsOnly: true });
+
+    expect(processDiff).toHaveBeenCalled();
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], review: 'No files to scan' },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
     );
   });
 });
