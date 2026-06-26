@@ -298,9 +298,11 @@ export const Strategies: Strategy[] = [
   {
     id: 'posterior',
     action: async (testCases, injectVar) => {
-      logger.debug(`Adding Posterior Attack to ${testCases.length} test cases`);
+      logger.debug('Adding Posterior Attack test cases', { testCaseCount: testCases.length });
       const newTestCases = addPosteriorAttack(testCases, injectVar);
-      logger.debug(`Added ${newTestCases.length} Posterior Attack test cases`);
+      logger.debug('Added Posterior Attack test cases', {
+        testCaseCount: newTestCases.length,
+      });
       return newTestCases;
     },
   },

@@ -22,6 +22,7 @@ import {
 import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
+import { addPosteriorAttack } from '../../src/redteam/strategies/posterior';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
@@ -855,6 +856,48 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it('should reject posterior for multi-input targets', async () => {
+      const inputs = {
+        context: { description: 'Reference context', type: 'text' },
+        question: { description: 'User question', type: 'text' },
+      } satisfies Inputs;
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { pluginConfig: { inputs }, pluginId: 'test-plugin' },
+          vars: {
+            [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
+            context: 'reference',
+            question: 'request',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'test-plugin' });
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return [
+          {
+            action: async (
+              testCases: Parameters<typeof addPosteriorAttack>[0],
+              injectVar: string,
+            ) => addPosteriorAttack(testCases, injectVar),
+            id: 'posterior',
+          },
+        ].find(predicate);
+      });
+
+      await expect(
+        synthesize({
+          inputs,
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['{{context}} {{question}}'],
+          purpose: 'Answer questions with reference context',
+          strategies: [{ id: 'posterior' }],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
     });
 
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {

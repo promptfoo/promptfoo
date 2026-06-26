@@ -159,8 +159,12 @@ describe('loadStrategy', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.strategyId).toBe('posterior');
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Posterior Attack'));
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+    expect(logger.debug).toHaveBeenCalledWith('Adding Posterior Attack test cases', {
+      testCaseCount: 1,
+    });
+    expect(logger.debug).toHaveBeenCalledWith('Added Posterior Attack test cases', {
+      testCaseCount: 1,
+    });
   });
 
   it('should load mischievous user strategy', async () => {
