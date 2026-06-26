@@ -25,15 +25,35 @@ jobs:
       id-token: write
 
     steps:
+      - name: Resolve pull request refs
+        id: pr-refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          if [[ ! "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid pull request number" >&2
+            exit 1
+          fi
+          base_ref="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.base.ref')"
+          base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${base_ref}" --jq '.sha')"
+          if [[ ! "${base_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pull request base SHA" >&2
+            exit 1
+          fi
+          echo "base_sha=${base_sha}" >> "${GITHUB_OUTPUT}"
+          echo "checkout_ref=refs/pull/${PR_NUMBER}/head" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.pr-refs.outputs.checkout_ref }}
 
       - name: Load trusted Code Scan config
         env:
-          CONFIG_REF: ${{ github.event.pull_request.base.sha || github.sha }}
-        run: git show "${CONFIG_REF}:.github/promptfoo-code-scan.yaml" > "${RUNNER_TEMP}/promptfoo-code-scan.yaml"
+          CONFIG_REF: ${{ steps.pr-refs.outputs.base_sha }}
+        run: git worktree add --detach "${RUNNER_TEMP}/promptfoo-code-scan-base" "${CONFIG_REF}"
 
       # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
       # request on Linux runners, dragging the scanner's uncached
@@ -57,5 +77,5 @@ jobs:
           # min-release-age setting without changing nested npx package layout.
           NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
-          config-path: ${{ runner.temp }}/promptfoo-code-scan.yaml
+          config-path: ${{ runner.temp }}/promptfoo-code-scan-base/.github/promptfoo-code-scan.yaml
           enable-fork-prs: true

@@ -106,6 +106,22 @@ describe('scanner config policy boundary', () => {
     return { disconnect };
   }
 
+  function writeSelectedConfig(): string {
+    const guidancePath = path.join(repoPath, 'guidance.md');
+    const configPath = path.join(repoPath, 'selected.yaml');
+    fs.writeFileSync(guidancePath, 'Review authentication boundaries.');
+    fs.writeFileSync(
+      configPath,
+      [
+        'minimumSeverity: critical',
+        'diffsOnly: true',
+        'apiHost: https://scanner.example',
+        'guidanceFile: guidance.md',
+      ].join('\n'),
+    );
+    return configPath;
+  }
+
   it('ignores an unselected repository config and uses trusted defaults', async () => {
     fs.writeFileSync(
       path.join(repoPath, '.promptfoo-code-scan.yaml'),
@@ -150,18 +166,7 @@ describe('scanner config policy boundary', () => {
   });
 
   it('loads an explicitly selected config, including relative guidance', async () => {
-    const guidancePath = path.join(repoPath, 'guidance.md');
-    const configPath = path.join(repoPath, 'selected.yaml');
-    fs.writeFileSync(guidancePath, 'Review authentication boundaries.');
-    fs.writeFileSync(
-      configPath,
-      [
-        'minimumSeverity: critical',
-        'diffsOnly: true',
-        'apiHost: https://scanner.example',
-        'guidanceFile: guidance.md',
-      ].join('\n'),
-    );
+    const configPath = writeSelectedConfig();
     mockScannerBoundaries();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
@@ -178,6 +183,37 @@ describe('scanner config policy boundary', () => {
 
     expect(createAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'https://scanner.example' }),
+    );
+    expect(setupMcpBridge).not.toHaveBeenCalled();
+    expect(buildScanRequest).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      expect.objectContaining({ minimumSeverity: 'critical', diffsOnly: true }),
+      'test-session-id',
+      undefined,
+      'Review authentication boundaries.',
+    );
+  });
+
+  it('keeps selected config policy while an explicit workflow host wins', async () => {
+    const configPath = writeSelectedConfig();
+    mockScannerBoundaries();
+
+    const { executeScan } = await import('../../../src/codeScan/scanner/index');
+    const { setupMcpBridge } = await import('../../../src/codeScan/mcp/index');
+    const { createAgentClient } = await import('../../../src/util/agent/agentClient');
+    const { buildScanRequest } = await import('../../../src/codeScan/scanner/request');
+
+    await executeScan(repoPath, {
+      apiHost: 'https://api.promptfoo.app',
+      base: 'main',
+      compare: 'HEAD',
+      config: configPath,
+      json: true,
+    });
+
+    expect(createAgentClient).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'https://api.promptfoo.app' }),
     );
     expect(setupMcpBridge).not.toHaveBeenCalled();
     expect(buildScanRequest).toHaveBeenCalledWith(
