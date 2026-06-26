@@ -2356,6 +2356,50 @@ describe('OpenAI assertions', () => {
       });
     });
 
+    it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('does not trust structured MCP provenance after a non-enumerable %s transform', async (type, expectedPass) => {
+      const output = {};
+      Object.defineProperty(output, 'content', {
+        configurable: true,
+        enumerable: false,
+        value: 'rendered MCP result',
+        writable: true,
+      });
+
+      const result = await runAssertion({
+        assertion: {
+          type,
+          transform: (transformedOutput: unknown) => {
+            expect(transformedOutput).toBe(output);
+            Object.defineProperty(transformedOutput, 'content', {
+              configurable: true,
+              enumerable: false,
+              value: 'ordinary transformed text',
+              writable: true,
+            });
+            return transformedOutput;
+          },
+        },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output,
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        score: expectedPass ? 1 : 0,
+        reason: expect.stringContaining('did not return a valid-looking tools response'),
+      });
+    });
+
     it('does not let structured MCP provenance bypass a test transform', async () => {
       const result = await runAssertion({
         assertion: { type: 'is-valid-openai-tools-call' },

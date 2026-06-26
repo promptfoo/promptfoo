@@ -53,6 +53,47 @@ export interface TransformInputClone<T = unknown> {
   value: T;
 }
 
+function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+
+  if (
+    (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) ||
+    (ArrayBuffer.isView(value) &&
+      typeof SharedArrayBuffer !== 'undefined' &&
+      value.buffer instanceof SharedArrayBuffer)
+  ) {
+    return true;
+  }
+  if (value instanceof Map) {
+    for (const [key, entryValue] of value) {
+      if (hasUnclonedTransformState(key, seen) || hasUnclonedTransformState(entryValue, seen)) {
+        return true;
+      }
+    }
+  } else if (value instanceof Set) {
+    for (const entryValue of value) {
+      if (hasUnclonedTransformState(entryValue, seen)) {
+        return true;
+      }
+    }
+  }
+
+  return Reflect.ownKeys(value).some((key) => {
+    if (Array.isArray(value) && key === 'length') {
+      return false;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      typeof key === 'symbol' ||
+      !descriptor?.enumerable ||
+      ('value' in descriptor && hasUnclonedTransformState(descriptor.value, seen))
+    );
+  });
+}
+
 export function cloneTransformInput<T>(value: T): TransformInputClone<T> {
   const isReferenceLike =
     value !== null && (typeof value === 'object' || typeof value === 'function');
@@ -60,7 +101,14 @@ export function cloneTransformInput<T>(value: T): TransformInputClone<T> {
     return { reliable: true, value };
   }
   try {
-    return { reliable: true, value: structuredClone(value) as T };
+    if (hasUnclonedTransformState(value)) {
+      return { reliable: false, value };
+    }
+    const snapshot = structuredClone(value) as T;
+    return {
+      reliable: isDeepStrictEqual(value, snapshot),
+      value: snapshot,
+    };
   } catch {
     return { reliable: false, value };
   }

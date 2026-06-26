@@ -3,6 +3,7 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import {
+  cloneTransformInput,
   FILE_TRANSFORM_LABEL,
   getTransformErrorMessage,
   getTransformLabel,
@@ -58,6 +59,18 @@ describe('util', () => {
     afterEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
+    });
+
+    it('marks snapshots with nested non-enumerable state as unreliable', () => {
+      const nested = {};
+      Object.defineProperty(nested, 'hidden', {
+        configurable: true,
+        enumerable: false,
+        value: 'original',
+        writable: true,
+      });
+
+      expect(cloneTransformInput({ nested }).reliable).toBe(false);
     });
 
     it('transforms output using a direct function', async () => {
