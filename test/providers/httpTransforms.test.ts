@@ -98,6 +98,8 @@ describe('createTransformResponse', () => {
   it.each([
     ['parenthesized arrow', '(json) => json.data;', 'value'],
     ['single-parameter arrow', 'json => json.data;;\r\n', 'value'],
+    ['multiline parameters', '(\n json,\n text\n) => json.data;', 'value'],
+    ['parameter comment', '(json /* payload */) => json.data;', 'value'],
     ['anonymous function', 'function(json) { return json.data; };', 'value'],
   ])('should strip trailing semicolons from %s response expressions', async (_, code, output) => {
     const parser = await createTransformResponse(code);
@@ -111,6 +113,12 @@ describe('createTransformResponse', () => {
     );
     const result = parser({}, '');
     expect(result).toEqual({ output: 'literal;', metadata: { marker: 'inner;' } });
+  });
+
+  it('should preserve semicolons inside template literals', async () => {
+    const parser = await createTransformResponse('(json) => `value;${json.data};`;;');
+    const result = parser({ data: 'inner' }, '');
+    expect(result.output).toBe('value;inner;');
   });
 
   it('should handle multi-statement function bodies without stripping internal semicolons', async () => {
@@ -148,8 +156,21 @@ describe('createTransformResponse', () => {
     expect(result.output).toBe(returnedFunction);
   });
 
-  it('should reject serialized async response functions', async () => {
-    const parser = await createTransformResponse('async (json) => json.data;');
+  it.each([
+    ['bare-arrow sequence', 'json => json.data, json.callback;'],
+    ['arrow-like string', '(") =>", json.callback);'],
+  ])('should reject semicolon-terminated %s expressions without invoking them', async (_, code) => {
+    const callback = vi.fn(() => 'value');
+    const parser = await createTransformResponse(code);
+    expect(() => parser({ callback, data: 'ignored' }, '')).toThrow('Failed to transform response');
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'async (json) => json.data;',
+    '(async (json) => json.data);',
+  ])('should reject serialized async response function %s', async (code) => {
+    const parser = await createTransformResponse(code);
     expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
   });
 });
@@ -277,6 +298,7 @@ describe('createTransformRequest', () => {
   it.each([
     ['parenthesized arrow', '(prompt) => prompt.toUpperCase();'],
     ['single-parameter arrow', 'prompt => prompt.toUpperCase();;\r\n'],
+    ['multiline parameters', '(\n prompt,\n vars\n) => prompt.toUpperCase();'],
     ['anonymous function', 'function(prompt) { return prompt.toUpperCase(); };'],
   ])('should strip trailing semicolons from %s request expressions', async (_, code) => {
     const transform = await createTransformRequest(code);
@@ -287,6 +309,7 @@ describe('createTransformRequest', () => {
   it.each([
     ['spaced', 'async (prompt) => prompt.toUpperCase();'],
     ['unspaced', 'async(prompt) => prompt.toUpperCase();;'],
+    ['multiline parameters', 'async (\n prompt\n) => prompt.toUpperCase();'],
   ])('should handle %s serialized async request functions', async (_, code) => {
     const transform = await createTransformRequest(code);
     const result = await transform('hello', {} as any);
@@ -325,8 +348,32 @@ describe('createTransformRequest', () => {
     expect(result).toBe(callback);
   });
 
+  it.each([
+    ['bare-arrow sequence', 'prompt => prompt, vars.callback;'],
+    ['arrow-like string', '(") =>", vars.callback);'],
+  ])('should reject semicolon-terminated %s expressions without invoking them', async (_, code) => {
+    const callback = vi.fn(() => 'value');
+    const transform = await createTransformRequest(code);
+    await expect(transform('hello', { callback } as any)).rejects.toThrow(
+      'Failed to transform request',
+    );
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('should handle large multi-statement function bodies', async () => {
+    const transform = await createTransformRequest(`() => {${';'.repeat(50_000)}return 'ok';};`);
+    await expect(transform('hello', {} as any)).resolves.toBe('ok');
+  });
+
   it('should reject comment-prefixed serialized functions', async () => {
     const transform = await createTransformRequest('/* lead */ (prompt) => prompt.toUpperCase();');
+    await expect(transform('hello', {} as any)).rejects.toThrow('Failed to transform request');
+  });
+
+  it('should reject serialized functions with comments after the terminal semicolon', async () => {
+    const transform = await createTransformRequest(
+      '(prompt) => { return prompt.toUpperCase(); }; /* tail */',
+    );
     await expect(transform('hello', {} as any)).rejects.toThrow('Failed to transform request');
   });
 

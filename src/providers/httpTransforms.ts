@@ -7,18 +7,57 @@ import { normalizeResponseTransformResult } from './transformResult';
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
-const FUNCTION_EXPRESSION_PATTERN = /^(?:(?:\(.*?\)|[$A-Z_a-z][$\w]*)\s*=>|function\s*\(.*?\))/;
-const ASYNC_FUNCTION_EXPRESSION_PATTERN = /^async(?:[ \t]*\(.*?\)|[ \t]+[$A-Z_a-z][$\w]*)\s*=>/;
+const ANONYMOUS_FUNCTION_PATTERN = /^function\s*\(/;
 
-function stripTrailingSemicolons(code: string): string {
-  return code.replace(/;+\s*$/, '');
+function hasValidParameters(parameters: string, isAsync: boolean): boolean {
+  const parameterList = parameters.startsWith('(') ? parameters : `(${parameters})`;
+  try {
+    new Function(`return ${isAsync ? 'async ' : ''}function ${parameterList} {}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function isFunctionExpression(code: string, allowAsync = false): boolean {
-  return (
-    FUNCTION_EXPRESSION_PATTERN.test(code) ||
-    (allowAsync && ASYNC_FUNCTION_EXPRESSION_PATTERN.test(code))
-  );
+function getArrowFunctionType(code: string): 'async' | 'sync' | undefined {
+  for (let index = code.indexOf('=>'); index >= 0; index = code.indexOf('=>', index + 2)) {
+    const prefix = code.slice(0, index).trim();
+    if (hasValidParameters(prefix, false)) {
+      return 'sync';
+    }
+
+    const asyncMatch = /^async([ \t]*)([\s\S]+)$/.exec(prefix);
+    if (
+      asyncMatch &&
+      (asyncMatch[1] || asyncMatch[2].startsWith('(')) &&
+      hasValidParameters(asyncMatch[2], true)
+    ) {
+      return 'async';
+    }
+  }
+  return undefined;
+}
+
+function getFunctionExpression(code: string, allowAsync = false): string | false | undefined {
+  const arrowType = getArrowFunctionType(code);
+  const looksLikeFunction = arrowType !== undefined || ANONYMOUS_FUNCTION_PATTERN.test(code);
+  if (!looksLikeFunction || (arrowType === 'async' && !allowAsync)) {
+    return looksLikeFunction ? false : undefined;
+  }
+
+  let end = code.length;
+  while (end > 0 && code[end - 1] === ';') {
+    end--;
+  }
+  const source = code.slice(0, end);
+  try {
+    // A conditional consequent accepts a single function expression but rejects a
+    // top-level sequence whose final value merely happens to be callable.
+    new Function(`return true ? ${source} : undefined;`);
+    return source;
+  } catch {
+    return false;
+  }
 }
 
 export interface TransformResponseContext {
@@ -58,10 +97,9 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const originalParser = parser.trim();
-        const parserIsFunction = isFunctionExpression(originalParser);
-        const trimmedParser = parserIsFunction
-          ? stripTrailingSemicolons(originalParser)
-          : originalParser;
+        const functionExpression = getFunctionExpression(originalParser);
+        const parserIsFunction = Boolean(functionExpression);
+        const trimmedParser = functionExpression || originalParser;
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         const transformFn = new Function(
           'json',
@@ -124,33 +162,24 @@ export async function createTransformRequest(
     return async (prompt, vars, context) => {
       try {
         const trimmedTransform = transform.trim();
-        const transformIsFunction = isFunctionExpression(trimmedTransform, true);
-        const expressionTransform = transformIsFunction
-          ? stripTrailingSemicolons(trimmedTransform)
-          : trimmedTransform;
+        const functionExpression = getFunctionExpression(trimmedTransform, true);
+        const expressionTransform = functionExpression || trimmedTransform;
 
         let transformFn: Function;
         try {
           // Add process parameter for ESM compatibility - allows process.mainModule.require to work
-          transformFn = transformIsFunction
-            ? new Function(
-                'prompt',
-                'vars',
-                'context',
-                'process',
-                `try { return (${expressionTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
-              )
-            : new Function(
-                'prompt',
-                'vars',
-                'context',
-                'process',
-                `try { return (${expressionTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
-              );
+          const functionBody = functionExpression
+            ? `try { return (${expressionTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`
+            : `try { return (${expressionTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`;
+          transformFn = new Function('prompt', 'vars', 'context', 'process', functionBody);
         } catch (error) {
           // Preserve support for raw function bodies while letting valid expressions
           // containing the word "return" compile as expressions first.
-          if (error instanceof SyntaxError && /\breturn\b/.test(trimmedTransform)) {
+          if (
+            functionExpression === undefined &&
+            error instanceof SyntaxError &&
+            /\breturn\b/.test(trimmedTransform)
+          ) {
             transformFn = new Function(
               'prompt',
               'vars',
