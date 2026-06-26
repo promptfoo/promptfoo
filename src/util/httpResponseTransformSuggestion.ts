@@ -1,8 +1,10 @@
+import JSON5 from 'json5';
+
 const MAX_EXPRESSION_LENGTH = 512;
 const MAX_NUMERIC_ARGUMENT = 1_000_000;
 const FORBIDDEN_PROPERTIES = new Set(['__proto__', 'constructor', 'prototype']);
 const JSON_PATH_SEGMENT =
-  /(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]|\[("(?:\\[\s\S]|[^"\\\r\n])*")\])/gy;
+  /(?:\.([$_\p{ID_Start}][$_\u200C\u200D\p{ID_Continue}]*)|\[(\d+)\]|\[((?:"(?:\\[\s\S]|[^"\\\r\n\u2028\u2029])*")|(?:'(?:\\[\s\S]|[^'\\\r\n\u2028\u2029])*'))\])/guy;
 
 function parseBoundedInteger(value: string): number | undefined {
   if (!/^-?\d+$/.test(value)) {
@@ -44,7 +46,7 @@ function canonicalizeJsonPath(expression: string): string | undefined {
     let property: unknown = identifier;
     if (quotedProperty !== undefined) {
       try {
-        property = JSON.parse(quotedProperty);
+        property = JSON5.parse(quotedProperty);
       } catch {
         return undefined;
       }

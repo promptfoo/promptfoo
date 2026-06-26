@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -149,6 +149,7 @@ Content-Type: application/json
     result: TestResult;
   } | null>(null);
   const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
+  const [responseParserApplyStatus, setResponseParserApplyStatus] = useState('');
   const testRequestIdRef = useRef(0);
   const latestSelectedTargetRef = useRef(selectedTarget);
   latestSelectedTargetRef.current = selectedTarget;
@@ -157,6 +158,7 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+  const responseParserId = useId();
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
@@ -169,6 +171,7 @@ Content-Type: application/json
       requestId === testRequestIdRef.current && latestSelectedTargetRef.current === testedTarget;
     setTestRunningTarget(testedTarget);
     setTestResultState(null);
+    setResponseParserApplyStatus('');
 
     // Validate URL before testing (skip validation for raw request mode)
     if (!testedTarget.config?.request) {
@@ -788,7 +791,9 @@ ${exampleRequest}`;
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <Label htmlFor={responseParserId} className="mb-2 mt-6 block font-medium">
+          Response Parser
+        </Label>
         <div className="mb-4 text-sm text-muted-foreground">
           <p>
             This tells promptfoo how to extract the AI's response from your API. Most APIs return
@@ -825,8 +830,12 @@ ${exampleRequest}`;
           style={{ contain: 'inline-size' }}
         >
           <Editor
+            textareaId={responseParserId}
             value={selectedTarget.config.transformResponse || ''}
-            onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+            onValueChange={(code) => {
+              setResponseParserApplyStatus('');
+              updateCustomTarget('transformResponse', code);
+            }}
             highlight={highlightJS}
             padding={10}
             placeholder={'json.choices[0].message.content'}
@@ -850,6 +859,9 @@ ${exampleRequest}`;
             Test
           </Button>
         </div>
+        <p role="status" aria-live="polite" className="sr-only">
+          {responseParserApplyStatus}
+        </p>
 
         {/* Test Target Section - Common for both modes */}
         <TestSection
@@ -865,6 +877,8 @@ ${exampleRequest}`;
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
           onApplyTransformResponseSuggestion={(transformResponse) => {
+            document.getElementById(responseParserId)?.focus();
+            setResponseParserApplyStatus('Response parser suggestion applied');
             setTestResultState(null);
             updateCustomTarget('transformResponse', transformResponse);
           }}

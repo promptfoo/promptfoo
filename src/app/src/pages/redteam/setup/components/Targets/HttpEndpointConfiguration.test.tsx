@@ -12,9 +12,10 @@ import type { ProviderOptions } from '../../types';
 vi.mock('@app/utils/api');
 
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange, placeholder }: any) => (
+  default: ({ value, onValueChange, placeholder, textareaId }: any) => (
     <textarea
       data-testid="code-editor"
+      id={textareaId}
       placeholder={placeholder}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
@@ -438,10 +439,15 @@ describe('HttpEndpointConfiguration - Configuration Change Suggestions', () => {
 
     await user.click(screen.getByRole('button', { name: /Test Target/i }));
     expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Apply response parser suggestion' }));
+    const applyButton = screen.getByRole('button', { name: 'Apply response parser suggestion' });
+    applyButton.focus();
+    expect(applyButton).toHaveFocus();
+    await user.keyboard('{Enter}');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledOnce();
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('transformResponse', 'json.response');
+    expect(screen.getByLabelText('Response Parser')).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent('Response parser suggestion applied');
     await waitFor(() => {
       expect(screen.queryByText('Configuration Changes Needed')).not.toBeInTheDocument();
     });
