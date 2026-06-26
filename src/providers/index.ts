@@ -17,7 +17,11 @@ import {
   normalizeProviderRef,
   readProviderConfigFile,
 } from '../util/providerRef';
-import { renderEnvOnlyInObject, renderEnvOverrides } from '../util/render';
+import {
+  getProcessEnvForTemplates,
+  isConfigTemplatingDisabled,
+  renderEnvOnlyInObject,
+} from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
 import { getProviderFactories } from './registry';
 
@@ -366,8 +370,8 @@ async function resolveConfiguredProviderInputs(
 ): Promise<unknown> {
   const mergedEnv =
     configEnv || providerOptions.env ? { ...configEnv, ...providerOptions.env } : undefined;
-  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
-  const renderedOptions = renderEnvOnlyInObject(providerOptions, mergedEnv);
+  const renderedProviderPath = renderValidationEnvTemplates(providerPath, mergedEnv);
+  const renderedOptions = renderValidationEnvTemplates(providerOptions, mergedEnv);
   const configuredInputs = getConfiguredProviderInputs(renderedOptions);
 
   if (!isCloudProvider(renderedProviderPath)) {
@@ -376,32 +380,127 @@ async function resolveConfiguredProviderInputs(
         return configuredInputs;
       }
     }
-    throw new Error(getUnknownProviderErrorMessage(renderedProviderPath));
+    throw new Error(getUnknownProviderErrorMessage('[redacted]'));
   }
 
   const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
   const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
-  if (isCloudProvider(cloudProvider.id)) {
-    throw new Error(
-      `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
-    );
+  const renderedCloudProviderId = renderValidationEnvTemplates(cloudProvider.id, {
+    ...configEnv,
+    ...cloudProvider.env,
+    ...providerOptions.env,
+  });
+  if (isCloudProvider(renderedCloudProviderId)) {
+    throw new Error('A cloud provider cannot point to another cloud provider');
   }
-  for (const factory of await getProviderFactories(cloudProvider.id)) {
-    if (factory.test(cloudProvider.id)) {
+  for (const factory of await getProviderFactories(renderedCloudProviderId)) {
+    if (factory.test(renderedCloudProviderId)) {
       return configuredInputs ?? getConfiguredProviderInputs(cloudProvider);
     }
   }
-  throw new Error(getUnknownProviderErrorMessage(cloudProvider.id));
+  throw new Error(getUnknownProviderErrorMessage('[redacted]'));
 }
 
-function renderProviderConfigForValidation(
-  provider: ProviderConfig,
+const SIMPLE_ENV_TEMPLATE =
+  /\{\{\s*env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*(['"])([^'"]+)\2\s*\])\s*\}\}/g;
+const MAX_PROVIDER_VALIDATION_DEPTH = 1000;
+const MAX_PROVIDER_VALIDATION_NODES = 10_000;
+const PROVIDER_VALIDATION_COMPLEXITY_ERROR = 'Provider configuration is too complex to validate';
+
+/**
+ * Render only direct environment lookups during provider metadata validation.
+ *
+ * Runtime provider loading supports the full Nunjucks language, but validation happens before
+ * provider lifecycle ownership is established. Keeping this renderer deliberately small prevents
+ * expressions and filters from executing while still supporting the documented {{ env.NAME }}
+ * and {{ env['NAME'] }} forms needed to locate provider configs and read input metadata.
+ */
+function renderValidationEnvTemplates<T>(value: T, env: EnvOverrides | undefined): T {
+  if (typeof value === 'string') {
+    if (isConfigTemplatingDisabled()) {
+      return value;
+    }
+    return value.replace(SIMPLE_ENV_TEMPLATE, (match, dotName, _quote, bracketName) => {
+      const name = dotName ?? bracketName;
+      const replacement =
+        env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
+      return replacement === undefined ? match : replacement;
+    }) as T;
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const createContainer = (source: object): unknown[] | Record<string, unknown> =>
+    Array.isArray(source) ? [] : Object.create(null);
+  const result = createContainer(value);
+  const seen = new WeakMap<object, unknown>([[value, result]]);
+  const pending: Array<{
+    depth: number;
+    source: object;
+    target: unknown[] | Record<string, unknown>;
+  }> = [{ depth: 0, source: value, target: result }];
+  let nodeCount = 0;
+
+  while (pending.length > 0) {
+    const { depth, source, target } = pending.pop()!;
+    if (depth > MAX_PROVIDER_VALIDATION_DEPTH) {
+      throw new Error(PROVIDER_VALIDATION_COMPLEXITY_ERROR);
+    }
+    for (const [key, child] of Object.entries(source)) {
+      nodeCount += 1;
+      if (nodeCount > MAX_PROVIDER_VALIDATION_NODES) {
+        throw new Error(PROVIDER_VALIDATION_COMPLEXITY_ERROR);
+      }
+
+      let renderedChild: unknown = child;
+      if (typeof child === 'string') {
+        renderedChild = renderValidationEnvTemplates(child, env);
+      } else if (child && typeof child === 'object') {
+        const existing = seen.get(child);
+        if (existing === undefined) {
+          const childTarget = createContainer(child);
+          seen.set(child, childTarget);
+          renderedChild = childTarget;
+          pending.push({ depth: depth + 1, source: child, target: childTarget });
+        } else {
+          renderedChild = existing;
+        }
+      }
+
+      Object.defineProperty(target, key, {
+        configurable: true,
+        enumerable: true,
+        value: renderedChild,
+        writable: true,
+      });
+    }
+  }
+  return result as T;
+}
+
+function getValidationEnv(configEnv?: EnvOverrides): EnvOverrides {
+  const baseEnv = getProcessEnvForTemplates();
+  const renderedConfigEnv = configEnv
+    ? renderValidationEnvTemplates(configEnv, baseEnv as EnvOverrides)
+    : undefined;
+  return {
+    ...baseEnv,
+    ...cliState.config?.env,
+    ...Object.fromEntries(
+      Object.entries(renderedConfigEnv ?? {}).filter(([, value]) => value !== undefined),
+    ),
+  } as EnvOverrides;
+}
+
+function renderProviderConfigForValidation<T extends ProviderConfig>(
+  provider: T,
   env?: EnvOverrides,
-): ProviderConfig {
+): T {
   if (isApiProvider(provider) || typeof provider === 'function') {
     return provider;
   }
-  return renderEnvOnlyInObject(provider, env);
+  return renderValidationEnvTemplates(provider, env);
 }
 
 function getProviderValidationIdentity(
@@ -436,7 +535,7 @@ function getRenderedProviderConfigs(
   if (isApiProvider(providerPaths) || typeof providerPaths === 'function') {
     return providerPaths;
   }
-  return renderEnvOnlyInObject(providerPaths, env);
+  return renderProviderConfigForValidation(providerPaths, env);
 }
 
 /**
@@ -447,7 +546,7 @@ export async function resolveProviderInputsForValidation(
   providerPaths: ProvidersConfig,
   options: { basePath?: string; env?: EnvOverrides; filter?: string } = {},
 ): Promise<unknown[]> {
-  const configEnv = renderEnvOverrides(options.env);
+  const configEnv = getValidationEnv(options.env);
   const renderedProviderPaths = getRenderedProviderConfigs(providerPaths, configEnv);
   const resolvedProviderConfigs = resolveProviderConfigs(renderedProviderPaths, options);
   const providerConfigs = filterProviderConfigsForValidation(
@@ -462,6 +561,13 @@ export async function resolveProviderInputsForValidation(
       }
       if (typeof provider === 'function') {
         return getConfiguredProviderInputs(provider as ProviderFunctionWithMetadata);
+      }
+      if (
+        provider &&
+        typeof provider === 'object' &&
+        Object.prototype.hasOwnProperty.call(provider, '__proto__')
+      ) {
+        throw new Error(`Invalid provider at index ${index}`);
       }
 
       const descriptor = normalizeProviderRef(provider, { index });
@@ -478,9 +584,7 @@ export async function resolveProviderInputsForValidation(
         case 'file':
           throw new Error(`Unresolved provider config file: ${descriptor.loadProviderPath}`);
         case 'unknown':
-          throw new Error(
-            `Invalid provider at index ${index}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${describeInvalidProvider(provider)}`,
-          );
+          throw new Error(`Invalid provider at index ${index}`);
         case 'function':
           return getConfiguredProviderInputs(provider as ProviderFunctionWithMetadata);
         default: {

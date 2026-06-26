@@ -271,8 +271,6 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   maxConcurrency?: number;
   output?: string;
   force?: boolean;
-  filterProviders?: string;
-  filterTargets?: string;
   write: boolean;
   inRedteamRun?: boolean;
   verbose?: boolean;

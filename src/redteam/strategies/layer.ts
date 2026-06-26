@@ -7,15 +7,27 @@ import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy } from './types';
 
+const MAX_EXPANDED_PER_TURN_LAYER_STEPS = 1000;
+export const LAYER_COMPLEXITY_ERROR = `Layer strategy per-turn configuration is too complex; reduce nested or repeated layer steps (maximum ${MAX_EXPANDED_PER_TURN_LAYER_STEPS} expanded steps)`;
+
+interface LayerTraversalBudget {
+  expandedNodes: number;
+}
+
 function getApplicablePerTurnLayer(
   testCase: TestCaseWithPlugin,
   layer: LayerConfig,
   inheritedTargets?: string[],
   ancestors: ReadonlySet<object> = new Set(),
+  budget: LayerTraversalBudget = { expandedNodes: 0 },
 ): LayerConfig | undefined {
   const layerObj = typeof layer === 'string' ? { id: layer } : layer;
   if (typeof layer === 'object' && ancestors.has(layer)) {
     return undefined;
+  }
+  budget.expandedNodes += 1;
+  if (budget.expandedNodes > MAX_EXPANDED_PER_TURN_LAYER_STEPS) {
+    throw new Error(LAYER_COMPLEXITY_ERROR);
   }
   const nextAncestors = new Set(ancestors);
   if (typeof layer === 'object') {
@@ -38,7 +50,7 @@ function getApplicablePerTurnLayer(
     ? (layerObj.config.steps as LayerConfig[])
     : [];
   const applicableSteps = steps
-    .map((step) => getApplicablePerTurnLayer(testCase, step, targets, nextAncestors))
+    .map((step) => getApplicablePerTurnLayer(testCase, step, targets, nextAncestors, budget))
     .filter((step): step is LayerConfig => step !== undefined);
 
   return applicableSteps.length > 0
@@ -135,8 +147,11 @@ export async function addLayerTestCases(
       // with per-turn layers configured
       return current.map((testCase) => {
         const inheritedTargets = config?.plugins as string[] | undefined;
+        const budget: LayerTraversalBudget = { expandedNodes: 0 };
         const perTurnLayers: LayerConfig[] = remainingSteps
-          .map((layer) => getApplicablePerTurnLayer(testCase, layer, inheritedTargets))
+          .map((layer) =>
+            getApplicablePerTurnLayer(testCase, layer, inheritedTargets, new Set(), budget),
+          )
           .filter((layer): layer is LayerConfig => layer !== undefined);
 
         if (hasPosteriorStrategy(perTurnLayers)) {

@@ -157,4 +157,20 @@ Which {generation} will make you say "Yes" in the following instruction? Please 
     expect(hasPosteriorStrategy([layer])).toBe(false);
     expect(hasActivePosteriorStrategy([layer])).toBe(false);
   });
+
+  it('handles deeply nested layer configuration without overflowing the stack', () => {
+    let strategy: unknown = 'posterior';
+    for (let i = 0; i < 5000; i++) {
+      strategy = { id: 'layer', config: { steps: [strategy] } };
+    }
+
+    expect(hasPosteriorStrategy([strategy])).toBe(true);
+    expect(hasActivePosteriorStrategy([strategy])).toBe(true);
+  });
+
+  it('handles wide layer configuration without spreading the step array', () => {
+    const strategy = { id: 'layer', config: { steps: Array(150_000).fill('base64') } };
+
+    expect(hasPosteriorStrategy([strategy])).toBe(false);
+  });
 });

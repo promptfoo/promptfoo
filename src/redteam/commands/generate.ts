@@ -33,8 +33,9 @@ import {
 import {
   ConfigResolutionError,
   logConfigResolutionError,
-  readConfig,
+  type ResolveConfigsHooks,
   resolveConfigs,
+  withResolveConfigsHooks,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
@@ -75,6 +76,12 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
+
+class CachedRedteamConfig extends Error {
+  constructor(readonly config: Partial<UnifiedConfig>) {
+    super('Redteam configuration is unchanged');
+  }
+}
 
 /**
  * Handles failed plugins based on strict mode.
@@ -281,40 +288,6 @@ function getEffectiveStrategyObjects(
   return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
 }
 
-async function preflightRedteamTargetCompatibility(
-  configPath: string,
-  options: Partial<RedteamCliGenerateOptions>,
-): Promise<void> {
-  const fileConfig = await readConfig(configPath);
-  const defaultConfig = options.defaultConfig as Partial<UnifiedConfig> | undefined;
-  const redteamConfig = fileConfig.redteam ?? defaultConfig?.redteam;
-  const strategies = getEffectiveStrategyObjects(redteamConfig, options.strategies);
-  const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
-  if (strategyConfigError) {
-    throw new Error(strategyConfigError);
-  }
-
-  const requiresResolvedInputs =
-    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
-  if (!requiresResolvedInputs) {
-    return;
-  }
-
-  const providers = fileConfig.providers ?? defaultConfig?.providers ?? [];
-  const resolvedInputs = await resolveRedteamTargetProviderInputs(
-    providers,
-    path.dirname(configPath),
-    fileConfig.env ?? defaultConfig?.env,
-    options.filterProviders || options.filterTargets,
-  );
-  const compatibilityError = resolvedInputs
-    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
-    .find((error) => error !== undefined);
-  if (compatibilityError) {
-    throw new Error(compatibilityError);
-  }
-}
-
 async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
   for (const provider of testSuite.providers as ApiProvider[]) {
     try {
@@ -339,8 +312,17 @@ export async function doGenerateRedteam(
   if (cacheOverride === false) {
     logger.info('Cache is disabled');
   }
-
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  try {
+    return await withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  } catch (error) {
+    if (error instanceof CachedRedteamConfig) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return error.config;
+    }
+    throw error;
+  }
 }
 
 async function doGenerateRedteamInternal(
@@ -382,13 +364,19 @@ async function doGenerateRedteamInternal(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  let cachedRedteamConfig: Partial<UnifiedConfig> | undefined;
+
+  // Read a matching cached artifact now, but do not return it until resolveConfigs has run the
+  // compatibility hook. This keeps cache hits ahead of provider construction without bypassing
+  // validation of the current target metadata.
   if (
     !options.force &&
     !options.configFromCloud &&
+    !options.strategies &&
     !outputPath.endsWith('.burp') &&
     (await pathExists(outputPath)) &&
     configPath &&
+    /\.(?:json|ya?ml)$/i.test(configPath) &&
     (await pathExists(configPath))
   ) {
     const redteamContent = loadYaml(
@@ -398,10 +386,7 @@ async function doGenerateRedteamInternal(
     const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
+      cachedRedteamConfig = redteamContent;
     }
   }
 
@@ -409,15 +394,53 @@ async function doGenerateRedteamInternal(
   let pluginSeverityOverridesId: string | undefined;
 
   if (configPath) {
-    await preflightRedteamTargetCompatibility(configPath, options);
+    const beforeProviderLoad = async ({
+      providers,
+      redteam,
+      env,
+      basePath,
+    }: Parameters<NonNullable<ResolveConfigsHooks['beforeProviderLoad']>>[0]) => {
+      const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
+      const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+      if (strategyConfigError) {
+        throw new Error(strategyConfigError);
+      }
+
+      const requiresResolvedInputs =
+        getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+      if (requiresResolvedInputs) {
+        const resolvedInputs = await resolveRedteamTargetProviderInputs(providers, basePath, env);
+        const compatibilityError = resolvedInputs
+          .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+          .find((error) => error !== undefined);
+        if (compatibilityError) {
+          throw new Error(compatibilityError);
+        }
+      }
+
+      if (cachedRedteamConfig) {
+        throw new CachedRedteamConfig(cachedRedteamConfig);
+      }
+    };
     const resolved = await resolveConfigs(
       {
         config: [configPath],
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
       },
-      options.defaultConfig || {},
+      withResolveConfigsHooks(
+        { ...((options.defaultConfig as Partial<UnifiedConfig> | undefined) || {}) },
+        { beforeProviderLoad },
+      ),
     );
+    // Test doubles and alternate embedders may not implement the optional hook. The built-in
+    // resolver always throws the sentinel before provider construction; this is only a fallback.
+    if (cachedRedteamConfig) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return cachedRedteamConfig;
+    }
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
     commandLineOptions = resolved.commandLineOptions;
@@ -928,6 +951,9 @@ async function doGenerateRedteamInternal(
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
+      if (options.strategies && updatedYaml.metadata) {
+        updatedYaml.metadata.configHash = 'force-regenerate';
+      }
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
@@ -990,6 +1016,9 @@ async function doGenerateRedteamInternal(
         ...(existingConfig.metadata || {}),
         configHash: await getConfigHash(configPath, options),
       };
+      if (options.strategies) {
+        existingConfig.metadata.configHash = 'force-regenerate';
+      }
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;

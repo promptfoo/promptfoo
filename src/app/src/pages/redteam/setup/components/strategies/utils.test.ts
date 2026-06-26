@@ -3,6 +3,7 @@ import {
   getEstimatedDuration,
   getEstimatedProbes,
   getStrategyId,
+  hasAnyPosteriorStrategy,
   hasPosteriorStrategy,
   isStrategyConfigured,
 } from './utils';
@@ -52,12 +53,26 @@ describe('hasPosteriorStrategy', () => {
   });
 
   it('ignores disabled top-level Posterior configurations', () => {
-    expect(
-      hasPosteriorStrategy([
-        { id: 'posterior', config: { numTests: 0 } },
+    const strategies = [
+      { id: 'posterior', config: { numTests: 0 } },
+      { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
+    expect(hasAnyPosteriorStrategy(strategies)).toBe(true);
+  });
+
+  it.each([
+    ['direct Posterior', [{ id: 'posterior', config: { numTests: 0 } }, { id: 'posterior' }]],
+    [
+      'unlabelled layer',
+      [
         { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
-      ]),
-    ).toBe(false);
+        { id: 'layer', config: { steps: ['posterior'] } },
+      ],
+    ],
+  ])('matches first-wins runtime deduplication for duplicate %s', (_label, strategies) => {
+    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(false);
   });
 
   it('ignores unrelated strategies and unsupported aliases', () => {
@@ -75,6 +90,17 @@ describe('hasPosteriorStrategy', () => {
     layer.config.steps.push(layer);
 
     expect(hasPosteriorStrategy([layer as RedteamStrategy])).toBe(false);
+  });
+
+  it('handles deeply nested and wide layer configuration iteratively', () => {
+    let nested: unknown = 'posterior';
+    for (let i = 0; i < 5000; i++) {
+      nested = { id: 'layer', config: { steps: [nested] } };
+    }
+    const wide = { id: 'layer', config: { steps: Array(150_000).fill('base64') } };
+
+    expect(hasPosteriorStrategy([nested as RedteamStrategy])).toBe(true);
+    expect(hasPosteriorStrategy([wide as RedteamStrategy])).toBe(false);
   });
 });
 

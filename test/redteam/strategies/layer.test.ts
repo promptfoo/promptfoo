@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants/plugins';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
 import { Strategies } from '../../../src/redteam/strategies/index';
-import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
+import { addLayerTestCases, LAYER_COMPLEXITY_ERROR } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
 import type { TestCaseWithPlugin } from '../../../src/types/index';
@@ -747,6 +747,63 @@ describe('addLayerTestCases', () => {
           config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
         }),
       );
+    });
+
+    it('should retain repeated per-turn layer aliases below the complexity limit', async () => {
+      const sharedLayer = { id: 'layer', config: { steps: ['audio'] } };
+
+      const [result] = await addLayerTestCases(
+        [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+        'input',
+        { steps: ['jailbreak:hydra', sharedLayer, sharedLayer] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result.provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            _perTurnLayers: [
+              { id: 'layer', config: { steps: ['audio'] } },
+              { id: 'layer', config: { steps: ['audio'] } },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should share the per-turn complexity budget across repeated roots', async () => {
+      let sharedLayer: unknown = 'audio';
+      for (let i = 0; i < 8; i++) {
+        sharedLayer = { id: 'layer', config: { steps: [sharedLayer, sharedLayer] } };
+      }
+
+      await expect(
+        addLayerTestCases(
+          [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+          'input',
+          { steps: ['jailbreak:hydra', sharedLayer, sharedLayer, sharedLayer] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(LAYER_COMPLEXITY_ERROR);
+    });
+
+    it('should reject deeply nested per-turn layers with a controlled error', async () => {
+      let nestedLayer: unknown = 'audio';
+      for (let i = 0; i < 1100; i++) {
+        nestedLayer = { id: 'layer', config: { steps: [nestedLayer] } };
+      }
+
+      await expect(
+        addLayerTestCases(
+          [{ vars: { input: 'canary task' }, metadata: { pluginId: 'harmful:hate' } }],
+          'input',
+          { steps: ['jailbreak:hydra', nestedLayer] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(LAYER_COMPLEXITY_ERROR);
     });
 
     it('should consume nested plugin targeting before applying per-turn layers at runtime', async () => {

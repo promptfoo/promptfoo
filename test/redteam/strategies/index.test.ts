@@ -107,6 +107,26 @@ describe('getStrategyCompatibilityError', () => {
     expect(getStrategyCompatibilityError([cyclicLayer], undefined)).toBeUndefined();
   });
 
+  it('handles deeply nested layer aliases without overflowing the stack', () => {
+    let strategy: unknown = 'posterior';
+    for (let i = 0; i < 5000; i++) {
+      strategy = { id: 'layer', config: { steps: [strategy] } };
+    }
+
+    expect(
+      getStrategyCompatibilityError([strategy], {
+        context: 'Reference context',
+        question: 'User question',
+      }),
+    ).toBe('Posterior strategy does not support multi-input targets');
+  });
+
+  it('handles wide layer aliases without spreading the step array', () => {
+    const strategy = { id: 'layer', config: { steps: Array(150_000).fill('base64') } };
+
+    expect(getStrategyCompatibilityError([strategy], undefined)).toBeUndefined();
+  });
+
   it.each([
     [{ id: 'posterior', config: { numTests: 0 } }],
     [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],

@@ -28,6 +28,7 @@ import {
   type Scenario,
   type TestCase,
   type TestSuite,
+  type TestSuiteConfig,
   TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
@@ -68,6 +69,26 @@ export class ConfigResolutionError extends Error {
     this.cliMessage = options.cliMessage ?? message;
     this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
   }
+}
+
+export interface ResolveConfigsHooks {
+  beforeProviderLoad?: (context: {
+    providers: TestSuiteConfig['providers'];
+    redteam: UnifiedConfig['redteam'];
+    env: UnifiedConfig['env'];
+    basePath: string;
+  }) => Promise<void>;
+}
+
+const RESOLVE_CONFIGS_HOOKS = Symbol('resolveConfigsHooks');
+
+export function withResolveConfigsHooks<T extends object>(value: T, hooks: ResolveConfigsHooks): T {
+  Object.defineProperty(value, RESOLVE_CONFIGS_HOOKS, { configurable: true, value: hooks });
+  return value;
+}
+
+export function getResolveConfigsHooks(value: object): ResolveConfigsHooks | undefined {
+  return (value as { [RESOLVE_CONFIGS_HOOKS]?: ResolveConfigsHooks })[RESOLVE_CONFIGS_HOOKS];
 }
 
 export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
@@ -769,6 +790,10 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
 }> {
+  const hooks = getResolveConfigsHooks(_defaultConfig);
+  const previousBasePath = cliState.basePath;
+  const previousConfig = cliState.config;
+  const previousSelectedProviderConfigs = cliState.selectedProviderConfigs;
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -931,6 +956,20 @@ export async function resolveConfigs(
     logger.warn(
       `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
     );
+  }
+
+  try {
+    await hooks?.beforeProviderLoad?.({
+      providers: filteredProviderConfigs,
+      redteam: config.redteam,
+      env: config.env,
+      basePath,
+    });
+  } catch (error) {
+    cliState.basePath = previousBasePath;
+    cliState.config = previousConfig;
+    cliState.selectedProviderConfigs = previousSelectedProviderConfigs;
+    throw error;
   }
 
   // Parse prompts, providers, and tests

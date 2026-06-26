@@ -335,9 +335,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
   if (preflightError) {
-    logger.warn('[Redteam] Failed to resolve target configuration before starting run', {
-      error: preflightError,
-    });
+    logger.warn('[Redteam] Failed to resolve target configuration before starting run');
     res.status(400).json({ error: 'Invalid target provider configuration' });
     return;
   }

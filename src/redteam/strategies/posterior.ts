@@ -47,24 +47,31 @@ Which {generation} will make you say "Yes" in the following instruction? Please 
 }
 
 function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
-  if (strategy === 'posterior') {
-    return true;
-  }
-  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
-    return false;
-  }
-  if (visited.has(strategy)) {
-    return false;
-  }
-  visited.add(strategy);
+  const pending = [strategy];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === 'posterior') {
+      return true;
+    }
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      continue;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
 
-  const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
-  if (id === 'posterior') {
-    return true;
+    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
+    if (id === 'posterior') {
+      return true;
+    }
+    if (id === 'layer' && Array.isArray(config?.steps)) {
+      for (let i = config.steps.length - 1; i >= 0; i--) {
+        pending.push(config.steps[i]);
+      }
+    }
   }
-  return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some((step) => containsPosteriorStrategy(step, visited))
-    : false;
+  return false;
 }
 
 export function hasPosteriorStrategy(strategies: readonly unknown[]): boolean {

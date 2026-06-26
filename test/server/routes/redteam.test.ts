@@ -1145,6 +1145,7 @@ describe('Redteam Routes', () => {
     });
 
     it('should not expose provider resolution details in validation errors', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       mockedResolveRedteamTargetProviderInputs.mockRejectedValueOnce(
         new Error("ENOENT: open '/tmp/private-provider.yaml'"),
       );
@@ -1161,7 +1162,12 @@ describe('Redteam Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Invalid target provider configuration' });
       expect(JSON.stringify(response.body)).not.toContain('/tmp/private-provider.yaml');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Redteam] Failed to resolve target configuration before starting run',
+      );
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('/tmp/private-provider.yaml');
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
 
     it('should reject user-configured internal per-turn layers before replacing the active job', async () => {
