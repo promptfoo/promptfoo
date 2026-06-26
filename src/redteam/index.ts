@@ -1148,7 +1148,7 @@ export async function synthesize({
   );
 
   // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
-  if (hasMultipleInputs) {
+  if (hasMultipleInputs && inputs) {
     const inputKeys = Object.keys(inputs);
     logger.info(
       `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
