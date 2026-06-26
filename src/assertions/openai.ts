@@ -5,6 +5,7 @@ import {
   isFunctionToolCallValidationSetupError,
 } from '../types/index';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { getValidationErrorMessage } from './functionToolCall';
 import { serializeAssertionOutput } from './utils';
 
 interface OpenAiToolCall {
@@ -67,10 +68,31 @@ export interface McpToolCallOutcome {
 }
 
 export type StructuredMcpToolCalls =
-  | { calls: McpToolCallOutcome[]; error?: never }
-  | { calls?: never; error: string };
+  | { calls: McpToolCallOutcome[]; error?: never; incomplete?: boolean }
+  | { calls?: never; error: string; incomplete?: never };
 
-function parseMetadataMcpToolCalls(metadataCalls: unknown): StructuredMcpToolCalls | undefined {
+function readOwnDataProperty(
+  value: unknown,
+  key: PropertyKey,
+): { ok: true; value: unknown } | { ok: false } {
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+    return { ok: false };
+  }
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) {
+      return { ok: true, value: undefined };
+    }
+    return 'value' in descriptor ? { ok: true, value: descriptor.value } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function parseMetadataMcpToolCalls(
+  metadataCalls: unknown,
+  complete: unknown,
+): StructuredMcpToolCalls | undefined {
   if (metadataCalls === undefined) {
     return undefined;
   }
@@ -106,14 +128,16 @@ function parseMetadataMcpToolCalls(metadataCalls: unknown): StructuredMcpToolCal
         : { name: value.name },
     );
   }
-  return calls.length > 0 ? { calls } : undefined;
+  if (complete !== undefined && typeof complete !== 'boolean') {
+    return { error: 'MCP tool call metadata is malformed' };
+  }
+  return calls.length > 0
+    ? { calls, ...(complete === false ? { incomplete: true } : {}) }
+    : undefined;
 }
 
-function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined {
-  const rawOutput: unknown[] =
-    typeof raw === 'object' && raw !== null && 'output' in raw && Array.isArray(raw.output)
-      ? raw.output
-      : [];
+function parseRawMcpToolCalls(rawOutputValue: unknown): StructuredMcpToolCalls | undefined {
+  const rawOutput: unknown[] = Array.isArray(rawOutputValue) ? rawOutputValue : [];
   if (
     rawOutput.some(
       (item) =>
@@ -132,6 +156,10 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
   if (rawCalls.length === 0) {
     return undefined;
   }
+  const incomplete = rawOutput.some(
+    (item) =>
+      typeof item === 'object' && item !== null && 'type' in item && item.type === 'function_call',
+  );
 
   const calls: McpToolCallOutcome[] = [];
   for (const value of rawCalls) {
@@ -172,22 +200,70 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
     }
     calls.push({ name: value.name });
   }
-  return { calls };
+  return { calls, ...(incomplete ? { incomplete: true } : {}) };
+}
+
+export function parseStructuredMcpToolCalls(
+  metadataCalls: unknown,
+  metadataComplete: unknown,
+  rawOutput: unknown,
+): StructuredMcpToolCalls | undefined {
+  const metadataResult = parseMetadataMcpToolCalls(metadataCalls, metadataComplete);
+  if (metadataResult?.error) {
+    return metadataResult;
+  }
+  const rawResult = parseRawMcpToolCalls(rawOutput);
+  if (rawResult?.error) {
+    return rawResult;
+  }
+  const calls = [...(metadataResult?.calls ?? []), ...(rawResult?.calls ?? [])];
+  const incomplete = Boolean(metadataResult?.incomplete || rawResult?.incomplete);
+  return calls.length > 0 ? { calls, ...(incomplete ? { incomplete: true } : {}) } : undefined;
 }
 
 export function getStructuredMcpToolCalls(
   providerResponse: AssertionParams['providerResponse'] | undefined,
 ): StructuredMcpToolCalls | undefined {
-  const metadataResult = parseMetadataMcpToolCalls(providerResponse?.metadata?.mcpToolCalls);
-  const rawResult = parseRawMcpToolCalls(providerResponse?.raw);
-  if (metadataResult?.error) {
-    return metadataResult;
+  if (!providerResponse) {
+    return undefined;
   }
-  if (rawResult?.error) {
-    return rawResult;
+  try {
+    const metadataProperty = readOwnDataProperty(providerResponse, 'metadata');
+    if (!metadataProperty.ok) {
+      return { error: 'MCP tool call metadata is malformed' };
+    }
+    let metadataCalls: unknown;
+    let metadataComplete: unknown;
+    if (metadataProperty.value !== undefined) {
+      const callsProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCalls');
+      const completeProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCallsComplete');
+      if (!callsProperty.ok || !completeProperty.ok) {
+        return { error: 'MCP tool call metadata is malformed' };
+      }
+      metadataCalls = callsProperty.value;
+      metadataComplete = completeProperty.value;
+    }
+
+    const rawProperty = readOwnDataProperty(providerResponse, 'raw');
+    if (!rawProperty.ok) {
+      return { error: 'MCP tool call response is malformed' };
+    }
+    let rawOutput: unknown;
+    if (
+      rawProperty.value !== undefined &&
+      typeof rawProperty.value === 'object' &&
+      rawProperty.value !== null
+    ) {
+      const outputProperty = readOwnDataProperty(rawProperty.value, 'output');
+      if (!outputProperty.ok) {
+        return { error: 'MCP tool call response is malformed' };
+      }
+      rawOutput = outputProperty.value;
+    }
+    return parseStructuredMcpToolCalls(metadataCalls, metadataComplete, rawOutput);
+  } catch {
+    return { error: 'MCP tool call provenance is malformed' };
   }
-  const calls = [...(metadataResult?.calls ?? []), ...(rawResult?.calls ?? [])];
-  return calls.length > 0 ? { calls } : undefined;
 }
 
 function getSerializedMcpToolCalls(output: unknown): McpToolCallOutcome[] {
@@ -263,48 +339,53 @@ function getFunctionToolDefinitions(
   return { ok: true, definitions };
 }
 
-function wasMcpOutputTransformed({
-  assertion,
-  assertionTransformChanged,
-  output,
+export function wasMcpProviderOrTestOutputTransformed({
   provider,
   providerResponse,
   test,
-}: Pick<
-  AssertionParams,
-  'assertion' | 'assertionTransformChanged' | 'output' | 'provider' | 'providerResponse' | 'test'
->) {
-  const isReferenceLike = (value: unknown) =>
-    value !== null && (typeof value === 'object' || typeof value === 'function');
-  const assertionChangedOutput =
-    Boolean(assertion.transform) &&
-    (assertionTransformChanged ??
-      (isReferenceLike(providerResponse?.output) || !Object.is(output, providerResponse?.output)));
-  const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
-  const testChangedOutput =
-    hasTestTransform &&
-    (providerResponse?.testTransformChanged ??
-      (providerResponse?.providerTransformedOutput === undefined ||
-        isReferenceLike(providerResponse.providerTransformedOutput) ||
-        !Object.is(providerResponse.output, providerResponse.providerTransformedOutput)));
-  const providerChangedOutput =
-    Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false;
-  return assertionChangedOutput || testChangedOutput || providerChangedOutput;
+}: Pick<AssertionParams, 'provider' | 'providerResponse' | 'test'>): boolean {
+  try {
+    const isReferenceLike = (value: unknown) =>
+      value !== null && (typeof value === 'object' || typeof value === 'function');
+    const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
+    const testChangedOutput =
+      providerResponse?.testTransformChanged === true ||
+      (hasTestTransform &&
+        providerResponse?.testTransformChanged !== false &&
+        (providerResponse?.providerTransformedOutput === undefined ||
+          isReferenceLike(providerResponse.providerTransformedOutput) ||
+          !Object.is(providerResponse.output, providerResponse.providerTransformedOutput)));
+    const providerChangedOutput =
+      providerResponse?.providerTransformChanged === true ||
+      (Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false);
+    return testChangedOutput || providerChangedOutput;
+  } catch {
+    return true;
+  }
 }
 
-function trustsRenderedMcpOutput(
+export function trustsRenderedMcpOutput(
   providerResponse: AssertionParams['providerResponse'] | undefined,
-) {
-  return (
-    providerResponse === undefined ||
-    (
-      providerResponse as
-        | (NonNullable<AssertionParams['providerResponse']> & {
-            [PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT]?: true;
-          })
-        | undefined
-    )?.[PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT] === true
-  );
+): boolean {
+  if (providerResponse === undefined) {
+    return true;
+  }
+  if (providerResponse === null) {
+    return false;
+  }
+  try {
+    return (
+      Object.getOwnPropertyDescriptor(providerResponse, PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT)
+        ?.value === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+interface CapturedMcpAssertionState {
+  outputWasTransformed: boolean;
+  trustedRenderedOutput?: string;
 }
 
 export const handleIsValidOpenAiToolsCall = async (
@@ -318,27 +399,34 @@ export const handleIsValidOpenAiToolsCall = async (
     test,
   }: AssertionParams,
   capturedMcpToolCalls?: StructuredMcpToolCalls | null,
+  capturedState?: CapturedMcpAssertionState,
 ): Promise<GradingResult> => {
-  // Traditional tool calls take precedence so model-controlled arguments cannot
-  // be misclassified merely by containing an MCP result/error marker.
-  let toolsOutput: unknown = output;
-  const hasTraditionalToolCalls =
-    Array.isArray(output) ||
-    (output !== null && typeof output === 'object' && 'tool_calls' in output);
-  if (!Array.isArray(output) && hasTraditionalToolCalls) {
-    toolsOutput = (output as { tool_calls: unknown }).tool_calls;
-  }
-
   // Prefer machine-readable MCP outcomes. Rendered tool content is untrusted and
   // may itself contain strings that look like result or error markers.
-  const outputWasTransformed = wasMcpOutputTransformed({
-    assertion,
-    assertionTransformChanged,
-    output,
-    provider,
-    providerResponse,
-    test,
-  });
+  const assertionOutputWasTransformed =
+    Boolean(assertion.transform) &&
+    (assertionTransformChanged ??
+      ((output !== null && (typeof output === 'object' || typeof output === 'function')) ||
+        !Object.is(output, providerResponse?.output)));
+  const outputWasTransformed =
+    capturedState?.outputWasTransformed ??
+    (wasMcpProviderOrTestOutputTransformed({ provider, providerResponse, test }) ||
+      assertionOutputWasTransformed);
+  const effectiveOutput =
+    !outputWasTransformed && capturedState?.trustedRenderedOutput !== undefined
+      ? capturedState.trustedRenderedOutput
+      : output;
+  // Traditional tool calls take precedence so model-controlled arguments cannot
+  // be misclassified merely by containing an MCP result/error marker.
+  let toolsOutput: unknown = effectiveOutput;
+  const hasTraditionalToolCalls =
+    Array.isArray(effectiveOutput) ||
+    (effectiveOutput !== null &&
+      typeof effectiveOutput === 'object' &&
+      'tool_calls' in effectiveOutput);
+  if (!Array.isArray(effectiveOutput) && hasTraditionalToolCalls) {
+    toolsOutput = (effectiveOutput as { tool_calls: unknown }).tool_calls;
+  }
   const structuredMcpResult = outputWasTransformed
     ? undefined
     : capturedMcpToolCalls === undefined
@@ -362,7 +450,18 @@ export const handleIsValidOpenAiToolsCall = async (
     assertion,
     inverse,
   );
-  if (structuredMcpGrade && (!hasTraditionalToolCalls || hasStructuredMcpFailure)) {
+  if (structuredMcpGrade && hasStructuredMcpFailure) {
+    return structuredMcpGrade;
+  }
+  if (structuredMcpResult?.incomplete) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'MCP tool call provenance does not cover every tool call in the response',
+      assertion,
+    };
+  }
+  if (structuredMcpGrade && !hasTraditionalToolCalls) {
     return structuredMcpGrade;
   }
 
@@ -370,8 +469,12 @@ export const handleIsValidOpenAiToolsCall = async (
   // calls always include providerResponse and therefore require structured MCP
   // provenance instead of trusting model-controlled marker text.
   const serializedMcpCalls =
-    !hasTraditionalToolCalls && !outputWasTransformed && trustsRenderedMcpOutput(providerResponse)
-      ? getSerializedMcpToolCalls(output)
+    !hasTraditionalToolCalls &&
+    !outputWasTransformed &&
+    (capturedState
+      ? capturedState.trustedRenderedOutput !== undefined
+      : trustsRenderedMcpOutput(providerResponse))
+      ? getSerializedMcpToolCalls(effectiveOutput)
       : [];
   const serializedMcpGrade = gradeMcpToolCalls(serializedMcpCalls, assertion, inverse);
   if (serializedMcpGrade) {
@@ -407,7 +510,7 @@ export const handleIsValidOpenAiToolsCall = async (
       return {
         pass: false,
         score: 0,
-        reason: (error as Error).message,
+        reason: getValidationErrorMessage(error),
         assertion,
       };
     }
@@ -467,7 +570,7 @@ export const handleIsValidOpenAiToolsCall = async (
     const result: GradingResult = {
       pass: false,
       score: 0,
-      reason: (err as Error).message,
+      reason: getValidationErrorMessage(err),
       assertion,
     };
     return isFunctionToolCallValidationSetupError(err) ? result : applyInverse(result, inverse);

@@ -75,6 +75,19 @@ describe('contracts leaf surface', () => {
         false,
       );
 
+      let capabilityTraps = 0;
+      const hostileProvider = new Proxy(
+        {},
+        {
+          has() {
+            capabilityTraps += 1;
+            throw new Error('capability trap exploded');
+          },
+        },
+      );
+      expect(hasFunctionToolCallValidator(hostileProvider)).toBe(false);
+      expect(capabilityTraps).toBe(1);
+
       const setupError = new FunctionToolCallValidationSetupError('schema unavailable');
       expect(isFunctionToolCallValidationSetupError(setupError)).toBe(true);
       expect(
@@ -93,6 +106,31 @@ describe('contracts leaf surface', () => {
           },
         }),
       ).toBe(false);
+
+      const inherited = Object.create({
+        code: setupError.code,
+        message: 'ordinary invalid call',
+        name: 'ValidationError',
+      });
+      expect(isFunctionToolCallValidationSetupError(inherited)).toBe(false);
+      expect(
+        isFunctionToolCallValidationSetupError(
+          Object.create(FunctionToolCallValidationSetupError.prototype),
+        ),
+      ).toBe(false);
+
+      let codeReads = 0;
+      expect(
+        isFunctionToolCallValidationSetupError({
+          name: 'ValidationError',
+          message: 'ordinary invalid call',
+          get code() {
+            codeReads += 1;
+            return setupError.code;
+          },
+        }),
+      ).toBe(false);
+      expect(codeReads).toBe(0);
     });
   });
 

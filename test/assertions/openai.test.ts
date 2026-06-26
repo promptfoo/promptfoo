@@ -1441,6 +1441,34 @@ describe('OpenAI assertions', () => {
       expect(inverse).toMatchObject({ pass: false, score: 0, reason: 'unable to load tools' });
     });
 
+    it('keeps a non-Error tool loading failure as a failed aggregate', async () => {
+      mocks.mockMaybeLoadToolsFromExternalFile.mockRejectedValue('loader exploded');
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: { tools: 'file://missing-tools.json' as never },
+      });
+
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        const result = await runAssertions({
+          prompt: 'Some prompt',
+          provider,
+          providerResponse: {
+            output: [{ type: 'function', function: { name: 'noop', arguments: '{}' } }],
+          },
+          test: { vars: {}, assert: [{ type }] },
+        });
+
+        expect(result).toMatchObject({ pass: false, score: 0, reason: 'loader exploded' });
+        expect(result.componentResults?.[0]).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'loader exploded',
+        });
+      }
+    });
+
     it('should load tools from external file', async () => {
       const toolsOutput = [
         {
@@ -1872,6 +1900,355 @@ describe('OpenAI assertions', () => {
   });
 
   describe('handleIsValidOpenAiToolsCall with MCP support', () => {
+    it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('rejects accessor-backed MCP provenance without reading it for %s', async (type, expectedPass) => {
+      let reads = 0;
+      const metadata = {};
+      Object.defineProperty(metadata, 'mcpToolCalls', {
+        get() {
+          reads += 1;
+          throw new Error('hostile metadata getter');
+        },
+      });
+
+      const result = await runAssertion({
+        assertion: { type },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                arguments: '{"location":"Paris","unit":"Celsius"}',
+              },
+            },
+          ],
+          metadata,
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        score: expectedPass ? 1 : 0,
+        reason: 'MCP tool call metadata is malformed',
+      });
+      expect(reads).toBe(0);
+    });
+
+    it('rejects accessor-backed raw MCP provenance without reading it', async () => {
+      let reads = 0;
+      const raw = {};
+      Object.defineProperty(raw, 'output', {
+        get() {
+          reads += 1;
+          throw new Error('hostile raw getter');
+        },
+      });
+
+      const result = await runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: [
+            {
+              type: 'function',
+              function: {
+                name: 'getCurrentTemperature',
+                arguments: '{"location":"Paris","unit":"Celsius"}',
+              },
+            },
+          ],
+          raw,
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call response is malformed',
+      });
+      expect(reads).toBe(0);
+    });
+
+    it('ignores opaque unrelated raw items without invoking accessors or proxy traps', async () => {
+      let reads = 0;
+      let traps = 0;
+      const accessorItem = {};
+      Object.defineProperty(accessorItem, 'type', {
+        get() {
+          reads += 1;
+          return 'message';
+        },
+      });
+      const proxyItem = new Proxy(
+        {},
+        {
+          get() {
+            traps += 1;
+            throw new Error('hostile unrelated raw item');
+          },
+          getOwnPropertyDescriptor() {
+            traps += 1;
+            throw new Error('hostile unrelated raw item');
+          },
+        },
+      );
+      const hiddenItem = {};
+      Object.defineProperty(hiddenItem, 'type', { value: 'message', enumerable: false });
+      const providerResponse = {
+        output: 'MCP Tool Result (search): ok',
+        raw: {
+          output: [
+            { type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' },
+            accessorItem,
+            proxyItem,
+            hiddenItem,
+            new Uint8Array([1, 2, 3]),
+          ],
+        },
+      };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: true, score: 1 });
+      expect(inverse).toMatchObject({ pass: false, score: 0 });
+      expect(reads).toBe(0);
+      expect(traps).toBe(0);
+    });
+
+    it.each([
+      ['metadata call status', 'metadata'],
+      ['raw call name', 'raw'],
+    ] as const)('rejects an accessor-backed %s without invoking it', async (_name, source) => {
+      let reads = 0;
+      const call =
+        source === 'metadata'
+          ? { name: 'search' }
+          : { type: 'mcp_call', status: 'completed', output: 'ok' };
+      Object.defineProperty(call, source === 'metadata' ? 'status' : 'name', {
+        get() {
+          reads += 1;
+          return source === 'metadata' ? 'success' : 'search';
+        },
+      });
+      const provenance =
+        source === 'metadata'
+          ? { metadata: { mcpToolCalls: [call] } }
+          : { raw: { output: [call] } };
+
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: 'MCP Tool Result (search): ok',
+              ...provenance,
+            },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
+      expect(positive.reason).toContain('malformed');
+      expect(inverse.reason).toContain('malformed');
+      expect(reads).toBe(0);
+    });
+
+    it.each([
+      'metadata',
+      'raw',
+    ] as const)('rejects a Proxy-backed %s provenance array without invoking traps', async (source) => {
+      let traps = 0;
+      const array = new Proxy([{ name: 'search', status: 'success' }], {
+        get() {
+          traps += 1;
+          throw new Error('hostile provenance array');
+        },
+        getOwnPropertyDescriptor() {
+          traps += 1;
+          throw new Error('hostile provenance array');
+        },
+      });
+      const provenance =
+        source === 'metadata' ? { metadata: { mcpToolCalls: array } } : { raw: { output: array } };
+
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        const result = await runAssertion({
+          assertion: { type },
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          test: { vars: {} },
+          providerResponse: { output: 'MCP Tool Result (search): ok', ...provenance },
+        });
+        expect(result.reason).toContain('malformed');
+      }
+      expect(traps).toBe(0);
+    });
+
+    it('fails closed for a sparse structured provenance array', async () => {
+      const sparse = new Array(1);
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: 'MCP Tool Result (search): ok',
+              metadata: { mcpToolCalls: sparse },
+            },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
+      expect(positive.reason).toContain('malformed');
+    });
+
+    it('ignores binary raw output while validating traditional tool calls', async () => {
+      const providerResponse = {
+        output: [
+          {
+            type: 'function',
+            function: {
+              name: 'getCurrentTemperature',
+              arguments: '{"location":"Paris","unit":"Celsius"}',
+            },
+          },
+        ],
+        raw: { output: new Uint8Array([1, 2, 3]) },
+      };
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse,
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: true, score: 1 });
+      expect(inverse).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('ignores inherited MCP provenance fields', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'ordinary model text',
+          metadata: Object.create({
+            mcpToolCalls: [Object.create({ name: 'spoof', status: 'success' })],
+          }),
+        },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it.each([
+      ['is-valid-openai-tools-call', false],
+      ['not-is-valid-openai-tools-call', true],
+    ] as const)('does not trust an inherited rendered-MCP brand for %s', async (type, expectedPass) => {
+      const trustedMcpOutput = Symbol.for('promptfoo.trustedMcpRenderedOutput');
+      const providerResponse = Object.assign(Object.create({ [trustedMcpOutput]: true }), {
+        output: 'MCP Tool Result (spoof): model-controlled marker',
+      });
+
+      const result = await runAssertion({
+        assertion: { type },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+    });
+
+    it.each([
+      'is-valid-openai-tools-call',
+      'not-is-valid-openai-tools-call',
+    ] as const)('%s hard-fails incomplete MCP provenance', async (type) => {
+      const result = await runAssertion({
+        assertion: { type },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'MCP Tool Result (search): ok',
+          metadata: {
+            mcpToolCalls: [{ name: 'search', status: 'success' }],
+            mcpToolCallsComplete: false,
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call provenance does not cover every tool call in the response',
+      });
+    });
+
+    it.each([
+      'is-valid-openai-tools-call',
+      'not-is-valid-openai-tools-call',
+    ] as const)('%s hard-fails a mixed Responses payload with incomplete provenance', async (type) => {
+      const result = await runAssertion({
+        assertion: { type },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: 'MCP Tool Result (search): ok',
+          raw: {
+            output: [
+              { type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' },
+              { type: 'function_call', name: 'other', arguments: '{}' },
+            ],
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'MCP tool call provenance does not cover every tool call in the response',
+      });
+    });
+
     it('validates traditional tool calls before inspecting MCP marker text', async () => {
       const toolsOutput = [
         {

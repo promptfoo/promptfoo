@@ -216,6 +216,67 @@ describeEvaluator('evaluator transforms', () => {
     );
   });
 
+  it('preserves immutable MCP provenance through deferred grading', async () => {
+    const provider: ApiProvider = {
+      id: () => 'mcp-deferred-transform',
+      callApi: async () => ({
+        output: 'MCP Tool Error (search): real failure',
+        metadata: {
+          mcpToolCalls: [{ name: 'search', status: 'error', error: 'real failure' }],
+        },
+      }),
+    };
+    const judge: ApiProvider = {
+      id: () => 'deferred-judge',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, reason: 'judge passed' }),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          threshold: 0.5,
+          options: {
+            transform: (output: unknown, context) => {
+              context.metadata!.mcpToolCalls = [{ name: 'search', status: 'success' }];
+              return output;
+            },
+          },
+          assert: [
+            { type: 'is-valid-openai-tools-call' },
+            { type: 'not-is-valid-openai-tools-call' },
+            { type: 'llm-rubric', value: 'Output is acceptable', provider: judge },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    const components = summary.results[0].gradingResult?.componentResults ?? [];
+
+    expect(judge.callApi).toHaveBeenCalled();
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'is-valid-openai-tools-call' }),
+          pass: false,
+          score: 0,
+          reason: 'MCP tool call failed for search: real failure',
+        }),
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'not-is-valid-openai-tools-call' }),
+          pass: true,
+          score: 1,
+          reason: 'MCP tool call failed for search: real failure',
+        }),
+      ]),
+    );
+  });
+
   it.each([
     'provider',
     'test',

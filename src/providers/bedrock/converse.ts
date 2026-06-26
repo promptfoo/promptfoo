@@ -288,26 +288,28 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * Coerces a tool_use input value into a plain object suitable for `MCPClient.callTool`.
- * Total: never throws. Malformed JSON strings yield `{}` so an MCP call still happens with
- * empty args rather than crashing the whole eval row.
+ * Parses a tool_use input value into a plain object suitable for `MCPClient.callTool`.
+ * Total: never throws. Empty input remains valid for parameterless tools; malformed or
+ * non-object input is reported so callers do not execute fabricated empty arguments.
  */
-function parseToolInput(input: unknown): Record<string, unknown> {
+function parseToolInput(input: unknown): { failed: boolean; value: Record<string, unknown> } {
+  if (input === undefined || input === '') {
+    return { failed: false, value: {} };
+  }
   if (typeof input === 'string') {
-    if (!input) {
-      return {};
-    }
     try {
       const parsed = JSON.parse(input);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? { failed: false, value: parsed }
+        : { failed: true, value: {} };
     } catch (err) {
       logger.warn(`[Bedrock Converse] Failed to parse tool_use input as JSON: ${err}`);
-      return {};
+      return { failed: true, value: {} };
     }
   }
   return input && typeof input === 'object' && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : {};
+    ? { failed: false, value: input as Record<string, unknown> }
+    : { failed: true, value: {} };
 }
 
 /**
@@ -365,16 +367,7 @@ function parseStreamingToolInput(raw: string): {
   if (!raw) {
     return { value: {}, failed: false };
   }
-  try {
-    return { value: parseToolInput(JSON.parse(raw)), failed: false };
-  } catch (err) {
-    logger.warn(
-      `[Bedrock Converse] Streaming tool_use input was not valid JSON: ${errorMessage(err)}`,
-    );
-    // Don't pass the broken string downstream; tracking the parse failure
-    // here lets us surface it as an error on the response.
-    return { value: {}, failed: true };
-  }
+  return parseToolInput(raw);
 }
 
 /**
@@ -1377,8 +1370,18 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     name: string,
     input: unknown,
   ): Promise<{ output: string; error?: string; mcpToolCall: McpToolCallOutcome }> {
+    const parsedInput = parseToolInput(input);
+    if (parsedInput.failed) {
+      const error = 'model emitted invalid JSON arguments';
+      const msg = formatMcpToolError(name, error);
+      return {
+        output: msg,
+        error: msg,
+        mcpToolCall: { name, status: 'error', error },
+      };
+    }
     try {
-      const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
+      const mcpResult = await this.mcpClient!.callTool(name, parsedInput.value);
       if (isMcpErrorResult(mcpResult)) {
         const error = getMcpErrorMessage(mcpResult);
         const msg = formatMcpToolError(name, error);
@@ -1416,20 +1419,24 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     toolUseParts: string[];
     mcpErrors: string[];
     mcpToolCalls: McpToolCallOutcome[];
+    mcpToolCallsComplete: boolean;
   }> {
     const toolUseParts: string[] = [];
     const mcpErrors: string[] = [];
     const mcpToolCalls: McpToolCallOutcome[] = [];
+    let mcpToolCallsComplete = true;
     const mcpTools = this.mcpClient?.getAllTools() ?? [];
 
     for (const toolBlock of blocks) {
       if (!toolBlock.name) {
+        mcpToolCallsComplete = false;
         continue;
       }
       const { value: parsedInput, failed: parseFailed } = parseStreamingToolInput(toolBlock.input);
       const matchedMcpTool = mcpTools.find((tool) => tool.name === toolBlock.name);
 
       if (toolsDisabled || !this.mcpClient || !matchedMcpTool) {
+        mcpToolCallsComplete = false;
         toolUseParts.push(
           JSON.stringify({
             type: 'tool_use',
@@ -1461,7 +1468,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
     }
 
-    return { toolUseParts, mcpErrors, mcpToolCalls };
+    return { toolUseParts, mcpErrors, mcpToolCalls, mcpToolCallsComplete };
   }
 
   /**
@@ -1689,6 +1696,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const error = malformedError ?? joinMcpErrors(mcpErrors);
       if (mcpToolCalls.length > 0) {
         metadata.mcpToolCalls = mcpToolCalls;
+        metadata.mcpToolCallsComplete = mcpToolCalls.length === toolUseBlocks.length;
       }
       return {
         output: dispatchResults.join('\n'),
@@ -1845,10 +1853,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       // Format tool use blocks for output (same as non-streaming)
-      const { toolUseParts, mcpErrors, mcpToolCalls } = await this.formatStreamingToolUseBlocks(
-        Array.from(toolUseBlocks.values()),
-        toolsDisabled,
-      );
+      const { toolUseParts, mcpErrors, mcpToolCalls, mcpToolCallsComplete } =
+        await this.formatStreamingToolUseBlocks(Array.from(toolUseBlocks.values()), toolsDisabled);
 
       // Combine reasoning, output, and tool use. Skip whitespace-only
       // reasoning — omitted-display adaptive thinking streams empty deltas.
@@ -1872,6 +1878,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
       if (mcpToolCalls.length > 0) {
         metadata.mcpToolCalls = mcpToolCalls;
+        metadata.mcpToolCallsComplete = mcpToolCallsComplete;
       }
       if (stopReason === 'malformed_model_output') {
         malformedError =

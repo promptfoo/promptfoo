@@ -814,7 +814,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         },
       },
       {
-        label: 'thrown error surfaced via the error field',
+        label: 'resolved error field',
         callToolResult: { content: '', error: 'Connection refused' },
         expectedOutput: 'MCP Tool Error (read_file): Connection refused',
         expectedOutcome: { name: 'read_file', status: 'error', error: 'Connection refused' },
@@ -875,6 +875,107 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.metadata?.mcpToolCalls).toEqual([expectedOutcome]);
     });
 
+    it('records a rejected MCP callback and dispatches both assertion polarities', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { function: { name: 'read_file', arguments: '{"path":"/tmp/file"}' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockRejectedValue(new Error('Connection refused')),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const response = await provider.callApi('Read the file');
+
+      expect(response.output).toBe('MCP Tool Error (read_file): Error: Connection refused');
+      expect(response.metadata?.mcpToolCalls).toEqual([
+        {
+          name: 'read_file',
+          status: 'error',
+          error: 'Error: Connection refused',
+        },
+      ]);
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            provider,
+            providerResponse: response,
+            test: { vars: {} },
+          }),
+        ),
+      );
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('marks MCP plus a successful ordinary callback as incomplete', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { function: { name: 'read_file', arguments: '{}' } },
+                  { function: { name: 'ordinary_tool', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const ordinaryCallback = vi.fn().mockResolvedValue('ordinary result');
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { functionToolCallbacks: { ordinary_tool: ordinaryCallback } },
+      });
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: 'ok' }),
+      };
+
+      const response = await provider.callApi('Read the file');
+
+      expect(ordinaryCallback).toHaveBeenCalledOnce();
+      expect(response.metadata).toMatchObject({
+        mcpToolCalls: [{ name: 'read_file', status: 'success' }],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            provider,
+            providerResponse: response,
+            test: { vars: {} },
+          }),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      }
+    });
+
     it('preserves an MCP failure when a later function callback falls back', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
@@ -931,6 +1032,58 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         score: 1,
         reason: 'MCP tool call failed for read_file: denied',
       });
+    });
+
+    it('fails closed after MCP success when a later ordinary callback rejects', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { function: { name: 'read_file', arguments: '{}' } },
+                  { function: { name: 'fallback', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const fallback = vi.fn().mockRejectedValue(new Error('callback failed'));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { functionToolCallbacks: { fallback } },
+      });
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: 'ok' }),
+      };
+
+      const providerResponse = await provider.callApi('Read the file');
+
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(providerResponse.metadata).toMatchObject({
+        mcpToolCalls: [{ name: 'read_file', status: 'success' }],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            prompt: 'Read the file',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ).resolves.toMatchObject({ pass: false, score: 0 });
+      }
     });
 
     it('should handle multiple function tool calls', async () => {

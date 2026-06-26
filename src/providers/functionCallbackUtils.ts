@@ -27,6 +27,7 @@ interface DetailedFunctionCallResult extends FunctionCallResult {
 
 interface DetailedFunctionCallsResult {
   mcpToolCalls: McpToolCallOutcome[];
+  mcpToolCallsComplete: boolean;
   output: any;
 }
 
@@ -138,7 +139,7 @@ export class FunctionCallbackHandler {
     _options?: { returnRawOnError?: boolean },
   ): Promise<DetailedFunctionCallsResult> {
     if (!calls) {
-      return { output: calls, mcpToolCalls: [] };
+      return { mcpToolCallsComplete: true, output: calls, mcpToolCalls: [] };
     }
 
     const isArray = Array.isArray(calls);
@@ -174,6 +175,7 @@ export class FunctionCallbackHandler {
     return {
       output,
       mcpToolCalls: results.flatMap((result) => (result.mcpToolCall ? [result.mcpToolCall] : [])),
+      mcpToolCallsComplete: results.every((result) => result.mcpToolCall !== undefined),
     };
   }
 

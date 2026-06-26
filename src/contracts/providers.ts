@@ -185,18 +185,20 @@ export class FunctionToolCallValidationSetupError extends Error {
 export function isFunctionToolCallValidationSetupError(
   error: unknown,
 ): error is FunctionToolCallValidationSetupError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
   try {
-    return (
-      error instanceof FunctionToolCallValidationSetupError ||
-      (typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE &&
-        'name' in error &&
-        typeof error.name === 'string' &&
-        'message' in error &&
-        typeof error.message === 'string')
-    );
+    const code = Object.getOwnPropertyDescriptor(error, 'code');
+    if (code?.value !== FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR_CODE) {
+      return false;
+    }
+    if (error instanceof Error) {
+      return true;
+    }
+    const name = Object.getOwnPropertyDescriptor(error, 'name');
+    const message = Object.getOwnPropertyDescriptor(error, 'message');
+    return typeof name?.value === 'string' && typeof message?.value === 'string';
   } catch {
     return false;
   }
@@ -209,10 +211,14 @@ export interface FunctionToolCallValidator {
 export function hasFunctionToolCallValidator(
   provider: unknown,
 ): provider is FunctionToolCallValidator {
-  return (
-    typeof provider === 'object' &&
-    provider !== null &&
-    'validateFunctionToolCall' in provider &&
-    typeof provider.validateFunctionToolCall === 'function'
-  );
+  try {
+    return (
+      typeof provider === 'object' &&
+      provider !== null &&
+      'validateFunctionToolCall' in provider &&
+      typeof provider.validateFunctionToolCall === 'function'
+    );
+  } catch {
+    return false;
+  }
 }

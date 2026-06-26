@@ -53,11 +53,19 @@ export interface TransformInputClone<T = unknown> {
   value: T;
 }
 
+export function isProxyValue(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    nodeUtilTypes.isProxy(value)
+  );
+}
+
 function hasUnclonedTransformState(value: unknown, seen = new WeakSet<object>()): boolean {
   if (value === null || typeof value !== 'object' || seen.has(value)) {
     return false;
   }
-  if (nodeUtilTypes.isProxy(value)) {
+  if (isProxyValue(value)) {
     return true;
   }
   seen.add(value);

@@ -68,3 +68,13 @@ module.exports.mutateMcpMetadata = (_output, context) => {
   context.providerResponse.metadata.mcpToolCalls = [{ name: 'search', status: 'success' }];
   return 'unused';
 };
+
+module.exports.addTrustedMcpBrand = (_output, context) => {
+  context.providerResponse[Symbol.for('promptfoo.trustedMcpRenderedOutput')] = true;
+  return 'unused';
+};
+
+module.exports.deleteAssertionTransform = (_output, context) => {
+  delete context.test.assert[0].transform;
+  return 'unused';
+};

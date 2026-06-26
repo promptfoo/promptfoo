@@ -647,6 +647,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         name: string;
         status: 'error' | 'success';
       }> = [];
+      let mcpToolCallsComplete = true;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
@@ -723,6 +724,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
 
           // Fall back to regular function callbacks
+          mcpToolCallsComplete = false;
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
               const functionResult = await this.executeFunctionCallback(
@@ -737,6 +739,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               logger.debug(
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
               );
+              mcpToolCallsComplete = false;
               hasSuccessfulCallback = false;
               break;
             }
@@ -756,7 +759,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }),
             guardrails: { flagged: contentFiltered },
             metadata: {
-              ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
+              ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
               http: {
                 status,
                 statusText,
@@ -797,7 +800,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }),
           guardrails: { flagged: contentFiltered },
           metadata: {
-            ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
+            ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
             http: {
               status,
               statusText,
@@ -820,7 +823,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }),
         guardrails: { flagged: contentFiltered },
         metadata: {
-          ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
+          ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
           http: {
             status,
             statusText,

@@ -1,11 +1,13 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -237,6 +239,151 @@ describe('Script value resolution', () => {
       pass: false,
       score: 0,
       reason: 'MCP tool call failed for search: real failure',
+    });
+  });
+
+  it.each([
+    ['is-valid-openai-tools-call', false],
+    ['not-is-valid-openai-tools-call', true],
+  ] as const)('keeps the captured transform decision when a file script mutates %s', async (type, expectedPass) => {
+    const assertion = {
+      type,
+      transform: () => 'ordinary transformed text',
+      value: 'file://rubric-generator.cjs:deleteAssertionTransform',
+    } as const;
+    const test = { vars: {}, assert: [assertion] };
+
+    const result = await runAssertion({
+      assertion,
+      test,
+      providerResponse: {
+        output: 'MCP Tool Result (search): ok',
+        raw: {
+          output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      score: expectedPass ? 1 : 0,
+      reason: expect.stringContaining('did not return a valid-looking tools response'),
+    });
+  });
+
+  it('does not let a file script add rendered-MCP authorization', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'is-valid-openai-tools-call',
+        value: 'file://rubric-generator.cjs:addTrustedMcpBrand',
+      },
+      test: { vars: {} },
+      providerResponse: {
+        output: 'MCP Tool Result (spoof): model-controlled marker',
+      },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
+
+  describe.each([
+    'concurrent',
+    'serial',
+  ] as const)('batch MCP state capture (%s dispatch)', (dispatchMode) => {
+    const runBatch = (
+      test: Parameters<typeof runAssertions>[0]['test'],
+      providerResponse: ProviderResponse,
+    ) => {
+      const run = () => runAssertions({ providerResponse, test });
+      return dispatchMode === 'serial'
+        ? withProviderCallExecutionContext(
+            { providerCallQueue: new ProviderGroupedCallQueue() },
+            run,
+          )
+        : run();
+    };
+
+    it('does not let a sibling authorize and rewrite untrusted marker text', async () => {
+      const providerResponse: ProviderResponse = { output: 'ordinary model text' };
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                context.providerResponse[Symbol.for('promptfoo.trustedMcpRenderedOutput')] = true;
+                context.providerResponse.output = 'MCP Tool Result (spoof): rewritten';
+                return true;
+              },
+            },
+            { type: 'is-valid-openai-tools-call' },
+            { type: 'not-is-valid-openai-tools-call' },
+          ],
+        },
+        providerResponse,
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({ pass: false, score: 0 });
+      expect(result.componentResults?.[2]).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('grades the originally authorized marker after a sibling rewrites live output', async () => {
+      const providerResponse: ProviderResponse = {
+        output: 'MCP Tool Result (search): original',
+        [Symbol.for('promptfoo.trustedMcpRenderedOutput')]: true,
+      };
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                context.providerResponse.output = 'ordinary rewritten text';
+                return true;
+              },
+            },
+            { type: 'is-valid-openai-tools-call' },
+            { type: 'not-is-valid-openai-tools-call' },
+          ],
+        },
+        providerResponse,
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({ pass: true, score: 1 });
+      expect(result.componentResults?.[2]).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('retains sibling assertion transforms captured before mutation', async () => {
+      const transform = () => 'ordinary transformed text';
+      const providerResponse: ProviderResponse = {
+        output: 'MCP Tool Result (search): original',
+        raw: {
+          output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+        },
+      };
+      const result = await runBatch(
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'javascript',
+              value: (_output: string, context: any) => {
+                delete context.test.assert[1].transform;
+                delete context.test.assert[2].transform;
+                return true;
+              },
+            },
+            { type: 'is-valid-openai-tools-call', transform },
+            { type: 'not-is-valid-openai-tools-call', transform },
+          ],
+        },
+        providerResponse,
+      );
+
+      expect(result.componentResults?.[1]).toMatchObject({ pass: false, score: 0 });
+      expect(result.componentResults?.[2]).toMatchObject({ pass: true, score: 1 });
     });
   });
 

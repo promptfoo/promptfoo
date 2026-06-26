@@ -42,6 +42,7 @@ import { sleep } from '../util/time';
 import {
   cloneTransformInput,
   didTransformChange,
+  isProxyValue,
   type TransformInputClone,
   transform,
 } from '../util/transform';
@@ -78,9 +79,11 @@ import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import {
-  getStructuredMcpToolCalls,
   handleIsValidOpenAiToolsCall,
+  parseStructuredMcpToolCalls,
   type StructuredMcpToolCalls,
+  trustsRenderedMcpOutput,
+  wasMcpProviderOrTestOutputTransformed,
 } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
@@ -195,6 +198,176 @@ function assertionUsesOpenAiToolsCall(assertion: AssertionOrSet): boolean {
 
 export function hasOpenAiToolsCallAssertions(assertions?: AssertionOrSet[]): boolean {
   return Boolean(assertions?.some(assertionUsesOpenAiToolsCall));
+}
+
+type OwnDataProperty =
+  | { exists: boolean; ok: true; value: unknown }
+  | { exists?: never; ok: false; value?: never };
+
+function readOwnDataProperty(value: unknown, key: PropertyKey): OwnDataProperty {
+  if (
+    (typeof value !== 'object' && typeof value !== 'function') ||
+    value === null ||
+    isProxyValue(value)
+  ) {
+    return { ok: false };
+  }
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor) {
+      return { exists: false, ok: true, value: undefined };
+    }
+    return 'value' in descriptor
+      ? { exists: true, ok: true, value: descriptor.value }
+      : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function readOwnArrayValues(value: unknown): { ok: true; values: unknown[] } | { ok: false } {
+  if (!Array.isArray(value) || isProxyValue(value)) {
+    return { ok: false };
+  }
+  const values: unknown[] = [];
+  for (let index = 0; index < value.length; index++) {
+    const item = readOwnDataProperty(value, String(index));
+    if (!item.ok || !item.exists) {
+      return { ok: false };
+    }
+    values.push(item.value);
+  }
+  return { ok: true, values };
+}
+
+function copyOwnDataProperties(
+  value: unknown,
+  keys: string[],
+): { ok: true; value: Record<string, unknown> } | { ok: false } {
+  const copy: Record<string, unknown> = {};
+  for (const key of keys) {
+    const property = readOwnDataProperty(value, key);
+    if (!property.ok) {
+      return { ok: false };
+    }
+    if (property.exists) {
+      copy[key] = property.value;
+    }
+  }
+  return { ok: true, value: copy };
+}
+
+function normalizeMetadataMcpCalls(value: unknown): { ok: true; value: unknown } | { ok: false } {
+  if (value === undefined) {
+    return { ok: true, value: undefined };
+  }
+  const entries = readOwnArrayValues(value);
+  if (!entries.ok) {
+    return { ok: false };
+  }
+  const calls: Record<string, unknown>[] = [];
+  for (const entry of entries.values) {
+    const call = copyOwnDataProperties(entry, ['name', 'status', 'error']);
+    if (!call.ok) {
+      return { ok: false };
+    }
+    calls.push(call.value);
+  }
+  return { ok: true, value: calls };
+}
+
+function normalizeRawMcpOutput(value: unknown): { ok: true; value: unknown } | { ok: false } {
+  if (!Array.isArray(value)) {
+    return { ok: true, value: undefined };
+  }
+  const entries = readOwnArrayValues(value);
+  if (!entries.ok) {
+    return { ok: false };
+  }
+  const relevant: Record<string, unknown>[] = [];
+  for (const entry of entries.values) {
+    if (typeof entry !== 'object' || entry === null || isProxyValue(entry)) {
+      continue;
+    }
+    const type = readOwnDataProperty(entry, 'type');
+    if (!type.ok) {
+      // Opaque, unrelated response items are not MCP provenance. Ignore them
+      // without invoking accessors; relevant entries must expose an own data
+      // discriminator before any other field is trusted.
+      continue;
+    }
+    if (
+      type.value !== 'mcp_call' &&
+      type.value !== 'mcp_approval_request' &&
+      type.value !== 'function_call'
+    ) {
+      continue;
+    }
+    const item = copyOwnDataProperties(entry, ['type', 'name', 'status', 'error', 'output']);
+    if (!item.ok) {
+      return { ok: false };
+    }
+    relevant.push(item.value);
+  }
+  return { ok: true, value: relevant };
+}
+
+export function captureMcpToolCallProvenance(
+  providerResponse: ProviderResponse,
+  assertions?: AssertionOrSet[],
+): StructuredMcpToolCalls | null | undefined {
+  if (!hasOpenAiToolsCallAssertions(assertions)) {
+    return undefined;
+  }
+  const metadataProperty = readOwnDataProperty(providerResponse, 'metadata');
+  if (!metadataProperty.ok) {
+    return { error: 'MCP tool call metadata is malformed' };
+  }
+  let metadataCalls: unknown;
+  let metadataComplete: unknown;
+  if (metadataProperty.value !== undefined) {
+    const callsProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCalls');
+    const completeProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCallsComplete');
+    if (!callsProperty.ok || !completeProperty.ok) {
+      return { error: 'MCP tool call metadata is malformed' };
+    }
+    const normalizedCalls = normalizeMetadataMcpCalls(callsProperty.value);
+    if (!normalizedCalls.ok) {
+      return { error: 'MCP tool call metadata is malformed' };
+    }
+    metadataCalls = normalizedCalls.value;
+    metadataComplete = completeProperty.value;
+  }
+
+  const rawProperty = readOwnDataProperty(providerResponse, 'raw');
+  if (!rawProperty.ok) {
+    return { error: 'MCP tool call response is malformed' };
+  }
+  let rawOutput: unknown;
+  if (
+    rawProperty.value !== undefined &&
+    typeof rawProperty.value === 'object' &&
+    rawProperty.value !== null
+  ) {
+    const outputProperty = readOwnDataProperty(rawProperty.value, 'output');
+    if (!outputProperty.ok) {
+      return { error: 'MCP tool call response is malformed' };
+    }
+    const normalizedOutput = normalizeRawMcpOutput(outputProperty.value);
+    if (!normalizedOutput.ok) {
+      return { error: 'MCP tool call response is malformed' };
+    }
+    rawOutput = normalizedOutput.value;
+  }
+  return parseStructuredMcpToolCalls(metadataCalls, metadataComplete, rawOutput) ?? null;
+}
+
+function captureTrustedMcpRenderedOutput(providerResponse: ProviderResponse): string | undefined {
+  if (isProxyValue(providerResponse) || !trustsRenderedMcpOutput(providerResponse)) {
+    return undefined;
+  }
+  const output = Object.getOwnPropertyDescriptor(providerResponse, 'output');
+  return typeof output?.value === 'string' ? output.value : undefined;
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -431,8 +604,11 @@ export async function runAssertion({
   vars,
   latencyMs,
   providerResponse,
+  assertionTransform,
   assertionTransformInputSnapshot,
   mcpToolCallProvenance,
+  mcpProviderOrTestOutputTransformed,
+  trustedMcpRenderedOutput,
   traceId,
   traceData,
 }: {
@@ -444,10 +620,16 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  /** Internal transform definition captured before sibling assertion scripts run. */
+  assertionTransform?: Assertion['transform'] | null;
   /** Internal baseline shared by concurrent assertions so in-place transforms fail closed. */
   assertionTransformInputSnapshot?: TransformInputClone<ProviderResponse['output']>;
   /** Internal MCP outcome captured before user-provided transforms and assertion scripts run. */
   mcpToolCallProvenance?: StructuredMcpToolCalls | null;
+  /** Internal transform decision captured before assertion scripts run. */
+  mcpProviderOrTestOutputTransformed?: boolean;
+  /** Internal rendered-output authorization captured before assertion scripts run. */
+  trustedMcpRenderedOutput?: string | null;
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
@@ -463,25 +645,43 @@ export async function runAssertion({
   const tracksMcpProvenance = baseType === 'is-valid-openai-tools-call';
   const capturedMcpToolCalls = tracksMcpProvenance
     ? mcpToolCallProvenance === undefined
-      ? (getStructuredMcpToolCalls(providerResponse) ?? null)
+      ? captureMcpToolCallProvenance(providerResponse, [assertion])
       : mcpToolCallProvenance
     : undefined;
+  const capturedProviderOrTestTransform = tracksMcpProvenance
+    ? (mcpProviderOrTestOutputTransformed ??
+      wasMcpProviderOrTestOutputTransformed({ provider, providerResponse, test }))
+    : false;
+  const capturedTrustedRenderedOutput = tracksMcpProvenance
+    ? trustedMcpRenderedOutput === undefined
+      ? captureTrustedMcpRenderedOutput(providerResponse)
+      : (trustedMcpRenderedOutput ?? undefined)
+    : undefined;
+  const effectiveAssertionTransform =
+    assertionTransform === undefined ? assertion.transform : (assertionTransform ?? undefined);
 
   let assertionTransformChanged = false;
-  if (assertion.transform) {
+  if (effectiveAssertionTransform) {
     const assertionTransformInput = output;
-    const clonedInput = tracksMcpProvenance
-      ? (assertionTransformInputSnapshot ?? cloneTransformInput(assertionTransformInput))
-      : undefined;
-    output = await transform(assertion.transform, assertionTransformInput, {
+    const clonedInput =
+      tracksMcpProvenance && capturedMcpToolCalls != null
+        ? (assertionTransformInputSnapshot ?? cloneTransformInput(assertionTransformInput))
+        : undefined;
+    output = await transform(effectiveAssertionTransform, assertionTransformInput, {
       vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
-    assertionTransformChanged = Boolean(
-      clonedInput && (!clonedInput.reliable || didTransformChange(clonedInput.value, output)),
-    );
+    assertionTransformChanged = clonedInput
+      ? !clonedInput.reliable || didTransformChange(clonedInput.value, output)
+      : (assertionTransformInput !== null &&
+          (typeof assertionTransformInput === 'object' ||
+            typeof assertionTransformInput === 'function')) ||
+        !Object.is(assertionTransformInput, output);
   }
+  const mcpOutputWasTransformed =
+    capturedProviderOrTestTransform ||
+    (Boolean(effectiveAssertionTransform) && assertionTransformChanged);
 
   const context: AssertionValueFunctionContext = {
     prompt,
@@ -688,7 +888,10 @@ export async function runAssertion({
   if (handler) {
     const result =
       assertionParams.baseType === 'is-valid-openai-tools-call'
-        ? await handleIsValidOpenAiToolsCall(assertionParams, capturedMcpToolCalls)
+        ? await handleIsValidOpenAiToolsCall(assertionParams, capturedMcpToolCalls, {
+            outputWasTransformed: mcpOutputWasTransformed,
+            trustedRenderedOutput: capturedTrustedRenderedOutput,
+          })
         : await handler(assertionParams);
 
     // Store rendered assertion value in metadata if it differs from the original template
@@ -795,6 +998,7 @@ export async function runAssertions({
   const subAssertResults: AssertionsResult[] = [];
   const asserts: {
     assertion: Assertion;
+    assertionTransform: Assertion['transform'] | null;
     assertResult: AssertionsResult;
     index: number;
   }[] = test.assert
@@ -813,13 +1017,19 @@ export async function runAssertions({
         return assertion.assert.map((subAssert, j) => {
           return {
             assertion: subAssert,
+            assertionTransform: subAssert.transform ?? null,
             assertResult: subAssertResult,
             index: j,
           };
         });
       }
 
-      return { assertion, assertResult: mainAssertResult, index: i };
+      return {
+        assertion,
+        assertionTransform: assertion.transform ?? null,
+        assertResult: mainAssertResult,
+        index: i,
+      };
     })
     .flat();
 
@@ -828,14 +1038,22 @@ export async function runAssertions({
   );
   const capturedMcpToolCalls = tracksMcpProvenance
     ? mcpToolCallProvenance === undefined
-      ? (getStructuredMcpToolCalls(providerResponse) ?? null)
+      ? captureMcpToolCallProvenance(providerResponse, test.assert)
       : mcpToolCallProvenance
     : undefined;
-  const assertionTransformInputSnapshot = asserts.some(
-    ({ assertion }) => assertion.transform && assertionUsesOpenAiToolsCall(assertion),
-  )
-    ? cloneTransformInput(providerResponse.output)
+  const mcpProviderOrTestOutputTransformed = tracksMcpProvenance
+    ? wasMcpProviderOrTestOutputTransformed({ provider, providerResponse, test })
+    : false;
+  const trustedMcpRenderedOutput = tracksMcpProvenance
+    ? (captureTrustedMcpRenderedOutput(providerResponse) ?? null)
     : undefined;
+  const assertionTransformInputSnapshot =
+    asserts.some(
+      ({ assertion, assertionTransform }) =>
+        assertionTransform && assertionUsesOpenAiToolsCall(assertion),
+    ) && capturedMcpToolCalls != null
+      ? cloneTransformInput(providerResponse.output)
+      : undefined;
   const shouldPreloadTrace =
     !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
@@ -854,34 +1072,41 @@ export async function runAssertions({
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;
 
-  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
-    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-      return;
-    }
+  await async.forEachOfLimit(
+    asserts,
+    concurrency,
+    async ({ assertion, assertionTransform, assertResult, index }) => {
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
 
-    const result = await runAssertion({
-      prompt,
-      provider,
-      providerResponse,
-      assertionTransformInputSnapshot,
-      mcpToolCallProvenance: capturedMcpToolCalls,
-      assertion,
-      test,
-      vars,
-      latencyMs,
-      assertIndex: index,
-      traceId,
-      traceData: preloadedTraceData,
-    });
+      const result = await runAssertion({
+        prompt,
+        provider,
+        providerResponse,
+        assertionTransform,
+        assertionTransformInputSnapshot,
+        mcpToolCallProvenance: capturedMcpToolCalls,
+        mcpProviderOrTestOutputTransformed,
+        trustedMcpRenderedOutput,
+        assertion,
+        test,
+        vars,
+        latencyMs,
+        assertIndex: index,
+        traceId,
+        traceData: preloadedTraceData,
+      });
 
-    assertResult.addResult({
-      index,
-      result,
-      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-      weight: assertion.weight,
-    });
-  });
+      assertResult.addResult({
+        index,
+        result,
+        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+        weight: assertion.weight,
+      });
+    },
+  );
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();

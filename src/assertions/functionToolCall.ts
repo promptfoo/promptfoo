@@ -1,13 +1,20 @@
-import {
-  hasFunctionToolCallValidator,
-  isFunctionToolCallValidationSetupError,
-} from '../contracts/providers';
+import { isFunctionToolCallValidationSetupError } from '../contracts/providers';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 const VALIDATION_FAILED_REASON = 'Function call validation failed';
 
-function getValidationErrorMessage(error: unknown): string {
+function isAbortError(error: unknown): boolean {
+  try {
+    return (
+      error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException')
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getValidationErrorMessage(error: unknown): string {
   try {
     let message: string;
     if (error instanceof Error) {
@@ -35,7 +42,19 @@ export const handleIsValidFunctionCall = async ({
   test,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
-  if (!hasFunctionToolCallValidator(provider)) {
+  let validateFunctionToolCall: unknown;
+  try {
+    validateFunctionToolCall = (provider as { validateFunctionToolCall?: unknown } | undefined)
+      ?.validateFunctionToolCall;
+  } catch (error) {
+    return {
+      pass: false,
+      score: 0,
+      reason: getValidationErrorMessage(error),
+      assertion,
+    };
+  }
+  if (typeof validateFunctionToolCall !== 'function') {
     return {
       pass: false,
       score: 0,
@@ -47,9 +66,12 @@ export const handleIsValidFunctionCall = async ({
   let isValid = false;
   let invalidReason = '';
   try {
-    await provider.validateFunctionToolCall(output, test.vars);
+    await validateFunctionToolCall.call(provider, output, test.vars);
     isValid = true;
   } catch (err) {
+    if (isAbortError(err)) {
+      throw err;
+    }
     invalidReason = getValidationErrorMessage(err);
     if (isFunctionToolCallValidationSetupError(err)) {
       return {

@@ -577,13 +577,15 @@ This ensures that any JSON LLM output adheres to the schema specified in the `to
 
 Use `not-is-valid-openai-tools-call` to require an invalid tool call. Missing or unusable provider tool schemas remain failures instead of satisfying the negated assertion.
 
-**MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls from built-in OpenAI providers. It will:
+**MCP Support**: Despite its legacy name, this assertion also validates MCP (Model Context Protocol) tool calls from built-in providers that expose structured outcomes, including OpenAI, Azure OpenAI, and AWS Bedrock Converse. It will:
 
 - Pass if the provider reports that all MCP tool calls succeeded
 - Fail if the provider reports a failed, incomplete, or malformed MCP tool call
 - Continue to validate traditional function tools as before
 
 Promptfoo uses structured provider response data for this check. Text that merely contains an `MCP Tool Result` or `MCP Tool Error` marker is not treated as proof that a tool ran.
+
+Custom providers must return `metadata.mcpToolCalls` entries (`{ name, status: 'success' | 'error', error? }`) or an OpenAI Responses-style `raw.output`; rendered markers alone are not accepted. If the entries cover only part of a mixed tool-call response, set `metadata.mcpToolCallsComplete: false` so the assertion fails closed. Omitting this flag preserves the legacy assumption that the reported MCP outcomes cover every call. If a provider-, test-, postprocess-, or assertion-level transform changes the output, pre-transform MCP provenance is not reused. Keep this assertion on unmodified output and assert transformed content separately.
 
 Example with MCP tools:
 

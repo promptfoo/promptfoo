@@ -7,14 +7,13 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
+  captureMcpToolCallProvenance,
   getAssertionBaseType,
-  hasOpenAiToolsCallAssertions,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
-import { getStructuredMcpToolCalls, type StructuredMcpToolCalls } from './assertions/openai';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -1323,16 +1322,14 @@ async function transformRunEvalResponse({
   testIdx: number;
   vars: Vars;
 }): Promise<{
-  mcpToolCallProvenance?: StructuredMcpToolCalls | null;
+  mcpToolCallProvenance?: ReturnType<typeof captureMcpToolCallProvenance>;
   processedResponse: ProviderResponse;
   providerTransformChanged: boolean;
   providerTransformedOutput: ProviderResponse['output'];
   testTransformChanged: boolean;
 }> {
-  const tracksMcpProvenance = hasOpenAiToolsCallAssertions(test.assert);
-  const mcpToolCallProvenance = tracksMcpProvenance
-    ? (getStructuredMcpToolCalls(response) ?? null)
-    : undefined;
+  const mcpToolCallProvenance = captureMcpToolCallProvenance(response, test.assert);
+  const tracksStructuredMcpProvenance = mcpToolCallProvenance != null;
   const processedResponse = { ...response };
   const changedWithoutSnapshot = (input: unknown, output: unknown) =>
     (input !== null && (typeof input === 'object' || typeof input === 'function')) ||
@@ -1340,7 +1337,7 @@ async function transformRunEvalResponse({
   let providerTransformChanged = false;
   if (provider.transform) {
     const providerTransformInput = processedResponse.output;
-    const clonedInput = tracksMcpProvenance
+    const clonedInput = tracksStructuredMcpProvenance
       ? cloneTransformInput(providerTransformInput)
       : undefined;
     processedResponse.output = await transform(provider.transform, providerTransformInput, {
@@ -1357,7 +1354,9 @@ async function transformRunEvalResponse({
   let testTransformChanged = false;
   if (testTransform) {
     const testTransformInput = processedResponse.output;
-    const clonedInput = tracksMcpProvenance ? cloneTransformInput(testTransformInput) : undefined;
+    const clonedInput = tracksStructuredMcpProvenance
+      ? cloneTransformInput(testTransformInput)
+      : undefined;
     processedResponse.output = await transform(testTransform, testTransformInput, {
       vars,
       prompt,
