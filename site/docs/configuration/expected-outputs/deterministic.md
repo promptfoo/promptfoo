@@ -304,41 +304,20 @@ assert:
 
 ### Select-Lowest-Cost
 
-`select-lowest-cost` compares the provider-reported cost of outputs generated for the same test case. The lowest-cost output passes this assertion, and the other outputs fail it. You need at least two outputs, which can come from multiple prompts, providers, or both.
+`select-lowest-cost` passes only the lowest-cost output for a test case. It requires at least two outputs and provider-reported cost data.
 
-By default, every output is considered, even if it failed another assertion. Set `onlyPassing` to exclude outputs that failed any non-selection assertion:
+By default, it considers every output. To consider only outputs that pass the other assertions:
 
 ```yaml
-providers:
-  - openai:gpt-5-mini
-  - openai:gpt-5
-
-prompts:
-  - 'Return a JSON object with an "answer" field for: {{question}}'
-
-tests:
-  - vars:
-      question: 'What is 21 times 2?'
-    assert:
-      - type: is-json
-      - type: contains
-        value: '42'
-      - type: select-lowest-cost
-        value:
-          onlyPassing: true
+assert:
+  - type: contains
+    value: '42'
+  - type: select-lowest-cost
+    value:
+      onlyPassing: true
 ```
 
-This selects the cheapest output that passes both `is-json` and `contains`. If every output fails another assertion, there is no eligible output and the selector fails for all of them.
-
-Without `onlyPassing`, the cheapest output wins the selector even when it failed another assertion. The selector does not override that failure, so it is possible for every output to fail overall: the cheapest output fails a quality check, while the higher-quality outputs fail `select-lowest-cost`.
-
-Run the eval with caching disabled:
-
-```sh
-promptfoo eval --no-cache
-```
-
-Every eligible output must report a finite, non-negative cost. If costs are equal, prompt order breaks the tie.
+With `onlyPassing`, the selector fails all outputs if none pass the other assertions. Run with `promptfoo eval --no-cache`; cached outputs and missing or invalid costs fail the comparison. Ties are resolved by prompt order.
 
 ### Equality
 
@@ -972,28 +951,16 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 ### Select-Lowest-Latency
 
-`select-lowest-latency` compares outputs generated for the same test case and selects the fastest output that passed all non-selection assertions. Unlike `select-lowest-cost`, failed outputs are always excluded.
+`select-lowest-latency` passes only the fastest output that passed the other assertions. It requires at least two outputs.
 
 ```yaml
-providers:
-  - openai:gpt-5-mini
-  - openai:gpt-5
-
-prompts:
-  - 'Answer in one sentence: {{question}}'
-
-tests:
-  - vars:
-      question: 'Why is the sky blue?'
-    assert:
-      - type: contains
-        value: 'scattering'
-      - type: select-lowest-latency
+assert:
+  - type: contains
+    value: 'scattering'
+  - type: select-lowest-latency
 ```
 
-At least two outputs are required. If every output fails another assertion, there is no eligible output and the selector fails for all of them.
-
-Run the eval with `promptfoo eval --no-cache` so that latency is measured from fresh requests. Every eligible output must have a finite, non-negative latency. If latencies are equal, prompt order breaks the tie.
+If no output passes the other assertions, the selector fails all outputs. Run with `promptfoo eval --no-cache`; cached outputs and missing or invalid latency fail the comparison. Ties are resolved by prompt order.
 
 ### Levenshtein distance
 
