@@ -33,7 +33,7 @@ export function formatRuntimeCompatibilityNotice(
   const upgradeInstruction = isOfficialDockerImage
     ? 'Pull the latest Promptfoo Docker image, then redeploy the container.'
     : isContainer
-      ? `Update this custom image's Node.js base to ${notice.recommendedVersion}, then rebuild and redeploy the container.`
+      ? `Update the Promptfoo source, dependency, or parent image to the latest release and this custom image's Node.js base to ${notice.recommendedVersion}, then rebuild and redeploy the container.`
       : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;
   if (compact) {
     return [

@@ -151,8 +151,9 @@ function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefin
 function getBlockedUpdateNotice(
   versionInfo: VersionInfo | null,
   updateDismissed: boolean,
+  updateBlockedByRuntime: boolean,
 ): RuntimeCompatibilityNotice | null {
-  return versionInfo?.runtimeNotice || updateDismissed
+  return versionInfo?.runtimeNotice || updateDismissed || !updateBlockedByRuntime
     ? null
     : (versionInfo?.blockedUpdateNotice ?? null);
 }
@@ -199,11 +200,9 @@ export default function UpdateBanner() {
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
-  const blockedUpdateNotice = getBlockedUpdateNotice(versionInfo, isUpdateDismissed);
-  const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const runtimeSupportEndDate =
-    activeRuntimeGuidance?.removalDate ??
     runtimeNotice?.removalDate ??
+    versionInfo?.blockedUpdateNotice?.removalDate ??
     versionInfo?.runtimePolicy?.supportEndDate;
   const runtimeSupportEnded = runtimeSupportEndDate
     ? hasRuntimeSupportEnded(runtimeSupportEndDate, runtimePolicyUpdatedAt)
@@ -211,6 +210,12 @@ export default function UpdateBanner() {
   const updateBlockedByRuntime =
     !!versionInfo?.updateBlockedByRuntime ||
     (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
+  const blockedUpdateNotice = getBlockedUpdateNotice(
+    versionInfo,
+    isUpdateDismissed,
+    updateBlockedByRuntime,
+  );
+  const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const shouldShowUpdate =
     !activeRuntimeNotice &&
     !isUpdateDismissed &&
@@ -374,7 +379,9 @@ export default function UpdateBanner() {
               <RuntimeUpgradeMessage
                 notice={activeRuntimeGuidance}
                 commandType={updateMode}
-                blockedUpdateVersion={blockedUpdateNotice ? versionInfo.latestVersion : undefined}
+                blockedUpdateVersion={
+                  versionInfo.blockedUpdateNotice ? versionInfo.latestVersion : undefined
+                }
               />
             </span>
           </div>

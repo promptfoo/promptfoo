@@ -57,9 +57,14 @@ describe('Version Route', () => {
     expect(typeof response.body.updateBlockedByRuntime).toBe('boolean');
     if (process.versions.node.startsWith('20.')) {
       expect(response.body.runtimeNotice).toMatchObject({ currentMajor: 20, runtime: 'node' });
+      expect(response.body.blockedUpdateNotice).toMatchObject({
+        currentMajor: 20,
+        runtime: 'node',
+      });
       expect(response.body.runtimePolicy).toEqual({ supportEndDate: '2026-07-30' });
     } else {
       expect(response.body.runtimeNotice).toBeNull();
+      expect(response.body.blockedUpdateNotice).toBeNull();
       expect(response.body.runtimePolicy).toBeNull();
     }
   });
@@ -246,7 +251,11 @@ describe('Version Route', () => {
       process.versions.node.startsWith('20.'),
     );
     expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
-    expect(packageResponse.body.blockedUpdateNotice).toBeNull();
+    expect(packageResponse.body.blockedUpdateNotice).toEqual(
+      process.versions.node.startsWith('20.')
+        ? expect.objectContaining({ currentMajor: 20 })
+        : null,
+    );
 
     mockedGetUpdateCommands.mockReturnValue({
       primary: '',
@@ -262,7 +271,11 @@ describe('Version Route', () => {
     expect(customContainerResponse.body.updateAvailable).toBe(
       !process.versions.node.startsWith('20.'),
     );
-    expect(customContainerResponse.body.blockedUpdateNotice).toBeNull();
+    expect(customContainerResponse.body.blockedUpdateNotice).toEqual(
+      process.versions.node.startsWith('20.')
+        ? expect.objectContaining({ currentMajor: 20 })
+        : null,
+    );
 
     mockedGetUpdateCommands.mockReturnValue({
       primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',

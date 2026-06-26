@@ -190,11 +190,22 @@ describe('UpdateBanner', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
-        updateAvailable: true,
+        updateAvailable: false,
         updateBlockedByRuntime: true,
         latestVersion: '2.0.0',
         currentVersion: '1.9.0',
         runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+        blockedUpdateNotice: {
           id: 'node20-removal-2026-07-30',
           kind: 'runtime_deprecation',
           runtime: 'node',
@@ -216,6 +227,7 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/then update Promptfoo to v2.0.0/i)).toBeInTheDocument();
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
   });
 
@@ -264,12 +276,23 @@ describe('UpdateBanner', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
       versionInfo: {
-        updateAvailable: true,
+        updateAvailable: false,
         updateBlockedByRuntime: true,
         latestVersion: '2.0.0',
         currentVersion: '1.9.0',
         commandType: 'npm',
         runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+        blockedUpdateNotice: {
           id: 'node20-removal-2026-07-30',
           kind: 'runtime_deprecation',
           runtime: 'node',
@@ -295,8 +318,8 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     expect(
-      screen.getByText(/Update this custom image's Node.js base to 24 LTS/i),
-    ).toBeInTheDocument();
+      screen.getByText(/Update the Promptfoo source, dependency, or parent image/i),
+    ).toHaveTextContent(/Node.js base to 24 LTS, then rebuild and redeploy/i);
     expect(screen.queryByText(/Pull the latest Promptfoo Docker image/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
   });
@@ -398,7 +421,7 @@ describe('UpdateBanner', () => {
     expect(screen.queryByText(/requires a newer Node.js runtime/i)).not.toBeInTheDocument();
   });
 
-  it('should fail closed after the cutoff when runtime notices are disabled', () => {
+  it('should replace a stale update with blocked guidance at the cutoff', () => {
     const versionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -406,6 +429,17 @@ describe('UpdateBanner', () => {
         latestVersion: '2.0.0',
         currentVersion: '1.9.0',
         runtimeNotice: null,
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
         runtimePolicy: { supportEndDate: '2026-07-30' },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
@@ -432,6 +466,9 @@ describe('UpdateBanner', () => {
     rerender(<UpdateBanner />);
 
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
+    ).toBeInTheDocument();
   });
 
   it('should show blocked update guidance when runtime reminders are disabled', async () => {

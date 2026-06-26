@@ -137,7 +137,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
         base.updateBlockedByRuntime,
       ),
       blockedUpdateNotice:
-        latestUpdateAvailable && base.updateBlockedByRuntime && !base.runtimeNotice
+        latestUpdateAvailable && base.commandType !== 'docker' && base.runtimePolicy
           ? getRuntimeNoticeForVersionResponse(process.version)
           : null,
     };
