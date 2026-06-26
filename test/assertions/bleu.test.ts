@@ -84,9 +84,9 @@ describe('BLEU score calculation', () => {
     );
   });
 
-  it('should pick the best matching reference for a short candidate', () => {
-    // The renormalized short-candidate path must still take the best match across
-    // references: the exact reference yields a perfect score.
+  it('should preserve a perfect score when a short candidate exactly matches one reference', () => {
+    // The exact reference supplies every maximum candidate n-gram count, so
+    // renormalizing the usable short-candidate orders still yields a perfect score.
     expect(calculateBleuScore('good dog', ['bad dog', 'good dog', 'the dog'])).toBeCloseTo(1, 5);
   });
 
