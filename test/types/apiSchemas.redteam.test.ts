@@ -237,7 +237,7 @@ describe('API schema red-team coverage', () => {
             success: false,
             message: 'Unsafe suggestion',
             configuration_change_suggestion: {
-              transformResponse: 'process.env.SECRET',
+              transformResponse: { executable: 'process.env.SECRET' },
             },
           },
         }).success,

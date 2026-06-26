@@ -12,7 +12,6 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, CheckCircle, ChevronDown, Info, Play, Send } from 'lucide-react';
-import type { ConfigurationChangeSuggestion } from '@promptfoo/types';
 
 import type { ProviderOptions } from '../../types';
 
@@ -34,7 +33,7 @@ export interface TestResult {
   transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
-  configuration_change_suggestion?: ConfigurationChangeSuggestion;
+  configuration_change_suggestion?: { transformResponse: string };
 }
 
 interface TestSectionProps {

@@ -1,5 +1,3 @@
-import type { ConfigurationChangeSuggestion } from '../types/providers';
-
 const MAX_EXPRESSION_LENGTH = 512;
 const MAX_NUMERIC_ARGUMENT = 1_000_000;
 const FORBIDDEN_PROPERTIES = new Set(['__proto__', 'constructor', 'prototype']);
@@ -104,7 +102,7 @@ export function canonicalizeResponseTransformSuggestion(value: unknown): string 
 
 export function parseConfigurationChangeSuggestion(
   value: unknown,
-): ConfigurationChangeSuggestion | undefined {
+): { transformResponse: string } | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined;
   }
