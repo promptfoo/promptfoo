@@ -37,7 +37,7 @@ const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
 
 function resolveStrictConfigEnabled(env: EnvOverrides | undefined): boolean {
   const value = env?.PROMPTFOO_STRICT_CONFIG ?? process.env.PROMPTFOO_STRICT_CONFIG;
-  return value !== undefined && TRUE_ENV_VALUES.has(value.toLowerCase());
+  return value !== undefined && TRUE_ENV_VALUES.has(String(value).toLowerCase());
 }
 
 /**

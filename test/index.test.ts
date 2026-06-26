@@ -315,7 +315,7 @@ describe('evaluate function', () => {
       prompts: ['test prompt'],
       providers: [],
       tests: [],
-      env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      env: { PROMPTFOO_STRICT_CONFIG: true as unknown as string },
     });
 
     expect(doEvaluate).toHaveBeenLastCalledWith(
@@ -329,7 +329,7 @@ describe('evaluate function', () => {
       prompts: ['test prompt'],
       providers: [],
       tests: [],
-      env: { PROMPTFOO_STRICT_CONFIG: 'false' },
+      env: { PROMPTFOO_STRICT_CONFIG: 0 as unknown as string },
     });
 
     expect(doEvaluate).toHaveBeenLastCalledWith(

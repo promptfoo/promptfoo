@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockFilteredEvaluate = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    id: 'filtered-eval-123',
+    toEvaluateSummary: vi.fn().mockResolvedValue({
+      version: 3,
+      stats: { successes: 1, failures: 0, errors: 0 },
+      results: [],
+      prompts: [],
+    }),
+  }),
+);
+
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
   default: {
@@ -53,6 +65,16 @@ vi.mock('../../../../src/node/doEval', () => ({
       prompts: [{ label: 'test-prompt', provider: 'test-provider', metrics: {} }],
     }),
   }),
+}));
+
+vi.mock('../../../../src/evaluator', () => ({
+  evaluate: mockFilteredEvaluate,
+}));
+
+vi.mock('../../../../src/models/eval', () => ({
+  default: {
+    create: vi.fn().mockResolvedValue({ id: 'filtered-eval-record' }),
+  },
 }));
 
 describe('runEvaluation tool', () => {
@@ -233,6 +255,40 @@ describe('runEvaluation tool', () => {
   });
 
   describe('promptFilter validation', () => {
+    it('should snapshot strict config for filtered evaluations', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: { env: { PROMPTFOO_STRICT_CONFIG: 'true' } },
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [{ id: 'test-provider' }],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      } as any);
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: 0,
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(mockFilteredEvaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ strictConfigEnabled: true }),
+      );
+    });
+
     it('should error on mixed numeric and non-numeric filters', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'

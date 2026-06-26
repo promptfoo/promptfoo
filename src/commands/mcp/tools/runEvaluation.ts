@@ -3,7 +3,7 @@ import { z } from 'zod';
 import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { resolveConfigs } from '../../../util/config/load';
+import { resolveConfigs, resolveStrictConfigEnabled } from '../../../util/config/load';
 import { filterPrompts } from '../../../util/eval/filterPrompts';
 import { escapeRegExp } from '../../../util/text';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
@@ -189,6 +189,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             },
             defaultConfig,
           );
+          const strictConfigEnabled = resolveStrictConfigEnabled(config.env);
 
           const filteredTestSuite = { ...testSuite };
 
@@ -327,6 +328,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             maxConcurrency,
             timeoutMs,
             eventSource: 'mcp',
+            strictConfigEnabled,
           });
           const endTime = Date.now();
 

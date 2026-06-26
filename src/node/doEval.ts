@@ -38,6 +38,7 @@ import {
   enforceUnknownConfigKeyDiagnostics,
   logConfigResolutionError,
   resolveConfigs,
+  resolveStrictConfigEnabled,
   type UnknownConfigKeyDiagnostic,
 } from '../util/config/load';
 import {
@@ -714,7 +715,7 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
-      strictConfigEnabled: getEnvBool('PROMPTFOO_STRICT_CONFIG'),
+      strictConfigEnabled: resolveStrictConfigEnabled(config.env),
     };
 
     if (!resumeEval && cmdObj.grader) {

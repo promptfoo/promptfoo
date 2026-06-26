@@ -205,7 +205,7 @@ function isStrictConfigEnabled(
   return parseEnvBoolean(process.env.PROMPTFOO_STRICT_CONFIG);
 }
 
-function isStrictConfigEnabledForEnv(env: UnifiedConfig['env'] | undefined): boolean {
+export function resolveStrictConfigEnabled(env: UnifiedConfig['env'] | undefined): boolean {
   if (isRecord(env) && hasOwn(env, 'PROMPTFOO_STRICT_CONFIG')) {
     return parseEnvBoolean((env as Record<string, unknown>).PROMPTFOO_STRICT_CONFIG);
   }
@@ -264,7 +264,7 @@ export function enforceUnknownConfigKeyDiagnostics(
   diagnostics: readonly UnknownConfigKeyDiagnostic[] | undefined,
   env: UnifiedConfig['env'] | undefined,
 ): void {
-  if (diagnostics?.length && isStrictConfigEnabledForEnv(env)) {
+  if (diagnostics?.length && resolveStrictConfigEnabled(env)) {
     failConfigResolution(diagnostics.map(formatUnknownConfigKeyDiagnostic).join('\n'));
   }
 }
@@ -915,7 +915,7 @@ async function combineConfigsWithDiagnostics(configPaths: string[]): Promise<Com
 
   reportUnknownConfigKeyDiagnostics(
     unknownConfigKeyDiagnostics,
-    isStrictConfigEnabledForEnv(combinedConfig.env),
+    resolveStrictConfigEnabled(combinedConfig.env),
   );
 
   return { config: combinedConfig, unknownConfigKeyDiagnostics };
