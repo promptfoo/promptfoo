@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import os from 'os';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -2802,8 +2803,9 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
   });
 
   it('applies a config-selected env file when enforcing deferred diagnostics', async () => {
-    const strictEnvPath = '/tmp/promptfoo-strict-config.env';
     const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const strictEnvDir = actualFs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-strict-config-'));
+    const strictEnvPath = path.join(strictEnvDir, '.env');
     const mockConfig = {
       commandLineOptions: { envPath: strictEnvPath },
       providers: ['echo'],
@@ -2823,7 +2825,7 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
       );
       expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
     } finally {
-      actualFs.rmSync(strictEnvPath, { force: true });
+      actualFs.rmSync(strictEnvDir, { recursive: true, force: true });
     }
   });
 
