@@ -29,6 +29,13 @@
       "enabled": false
     },
     {
+      "description": "Pin the code-scan workflow's Node to 24.15.0: Node >=24.16.0 has a Linux HTTPS slowdown (~10s/request) that drags the scanner's `npm install -g promptfoo` past the job's 15-minute timeout (see the comment in .github/workflows/promptfoo-code-scan.yml; first fixed in PR #9374, regressed by the blanket bump in PR #9859). Renovate must not re-bump this pin. Re-enable when a newer Node resolves the regression.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [".github/workflows/promptfoo-code-scan.yml"],
+      "matchPackageNames": ["node"],
+      "enabled": false
+    },
+    {
       "description": "Group example directory updates as a fallback so package-specific groups still win",
       "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
