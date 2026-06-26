@@ -328,6 +328,11 @@ describe('doGenerateRedteam', () => {
         redteam: {},
       },
     });
+    vi.mocked(readConfig).mockResolvedValue({
+      prompts: [],
+      providers: [],
+      redteam: {},
+    } as any);
   });
 
   it('should generate redteam tests and write to output file', async () => {
@@ -998,9 +1003,10 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should reject incompatible target inputs before provider inspection and clean up', async () => {
-    vi.mocked(getStrategyCompatibilityError).mockReturnValueOnce(
-      'Posterior strategy does not support multi-input targets',
-    );
+    vi.mocked(getStrategyCompatibilityError)
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce('Posterior strategy does not support multi-input targets');
     mockProvider.inputs = {
       context: 'Reference context',
       question: 'User question',
@@ -1043,26 +1049,19 @@ describe('doGenerateRedteam', () => {
         ? 'Posterior strategy does not support multi-input targets'
         : undefined,
     );
-    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(async (cmdObj) => {
-      expect(cmdObj).toMatchObject({
-        filterProviders: 'selected',
-        filterTargets: 'selected',
-      });
-      await cmdObj._beforeProviderLoad?.({
-        providers: [
-          {
-            id: 'echo',
-            config: {
-              inputs: { context: 'Reference context', question: 'User question' },
-            },
+    vi.mocked(readConfig).mockResolvedValueOnce({
+      prompts: [],
+      providers: [
+        {
+          id: 'echo',
+          label: 'selected',
+          config: {
+            inputs: { context: 'Reference context', question: 'User question' },
           },
-        ],
-        redteam: { strategies: ['posterior'] },
-        env: undefined,
-        basePath: '/mock/path',
-      });
-      throw new Error('Expected compatibility preflight to reject');
-    });
+        },
+      ],
+      redteam: { strategies: ['posterior'] },
+    } as any);
 
     await expect(
       doGenerateRedteam({
@@ -1080,6 +1079,7 @@ describe('doGenerateRedteam', () => {
     expect(extractA2AAgentCardInfo).not.toHaveBeenCalled();
     expect(extractMcpToolsInfo).not.toHaveBeenCalled();
     expect(synthesize).not.toHaveBeenCalled();
+    expect(configModule.resolveConfigs).not.toHaveBeenCalled();
     expect(mockProvider.cleanup).not.toHaveBeenCalled();
   });
 
@@ -1093,6 +1093,8 @@ describe('doGenerateRedteam', () => {
       question: 'User question',
     };
     vi.mocked(getStrategyCompatibilityError)
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined)
       .mockReturnValueOnce(undefined)
       .mockReturnValueOnce('Posterior strategy does not support multi-input targets');
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
@@ -4175,6 +4177,7 @@ describe('target ID extraction for retry strategy', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCommonMocks();
 
     mockProvider = createMockProvider({
       response: { output: 'test output' },
@@ -4182,6 +4185,11 @@ describe('target ID extraction for retry strategy', () => {
     });
 
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+    vi.mocked(readConfig).mockResolvedValue({
+      prompts: [],
+      providers: [],
+      redteam: {},
+    } as any);
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',

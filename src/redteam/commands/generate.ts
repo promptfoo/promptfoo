@@ -33,6 +33,7 @@ import {
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  readConfig,
   resolveConfigs,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
@@ -203,17 +204,6 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
   `;
 }
 
-function getEffectiveStrategyObjects(
-  redteamConfig: RedteamFileConfig | undefined,
-  strategyOverride: RedteamCliGenerateOptions['strategies'] | undefined,
-): RedteamStrategyObject[] {
-  const strategies =
-    strategyOverride ??
-    redteamConfig?.strategies ??
-    DEFAULT_STRATEGIES.map((strategy) => ({ id: strategy }));
-  return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
-}
-
 async function getConfigHash(
   configPath: string,
   options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
@@ -278,6 +268,51 @@ async function withGenerationConcurrency<T>(
   const cappedMaxConcurrency = Math.min(maxConcurrency, MAX_MAX_CONCURRENCY);
   const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : cappedMaxConcurrency;
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
+}
+
+function getEffectiveStrategyObjects(
+  redteamConfig: RedteamFileConfig | undefined,
+  strategyOverride: RedteamCliGenerateOptions['strategies'] | undefined,
+): RedteamStrategyObject[] {
+  const strategies =
+    strategyOverride ??
+    redteamConfig?.strategies ??
+    DEFAULT_STRATEGIES.map((strategy) => ({ id: strategy }));
+  return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
+}
+
+async function preflightRedteamTargetCompatibility(
+  configPath: string,
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<void> {
+  const fileConfig = await readConfig(configPath);
+  const defaultConfig = options.defaultConfig as Partial<UnifiedConfig> | undefined;
+  const redteamConfig = fileConfig.redteam ?? defaultConfig?.redteam;
+  const strategies = getEffectiveStrategyObjects(redteamConfig, options.strategies);
+  const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+  if (strategyConfigError) {
+    throw new Error(strategyConfigError);
+  }
+
+  const requiresResolvedInputs =
+    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+  if (!requiresResolvedInputs) {
+    return;
+  }
+
+  const providers = fileConfig.providers ?? defaultConfig?.providers ?? [];
+  const resolvedInputs = await resolveRedteamTargetProviderInputs(
+    providers,
+    path.dirname(configPath),
+    fileConfig.env ?? defaultConfig?.env,
+    options.filterProviders || options.filterTargets,
+  );
+  const compatibilityError = resolvedInputs
+    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+    .find((error) => error !== undefined);
+  if (compatibilityError) {
+    throw new Error(compatibilityError);
+  }
 }
 
 async function cleanupRedteamProviders(testSuite: TestSuite): Promise<void> {
@@ -374,32 +409,12 @@ async function doGenerateRedteamInternal(
   let pluginSeverityOverridesId: string | undefined;
 
   if (configPath) {
+    await preflightRedteamTargetCompatibility(configPath, options);
     const resolved = await resolveConfigs(
       {
         config: [configPath],
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
-        _beforeProviderLoad: async ({ providers, redteam, env, basePath }) => {
-          const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
-          const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
-          if (strategyConfigError) {
-            throw new Error(strategyConfigError);
-          }
-
-          const requiresResolvedInputs =
-            getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
-          if (!requiresResolvedInputs) {
-            return;
-          }
-
-          const resolvedInputs = await resolveRedteamTargetProviderInputs(providers, basePath, env);
-          const compatibilityError = resolvedInputs
-            .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
-            .find((error) => error !== undefined);
-          if (compatibilityError) {
-            throw new Error(compatibilityError);
-          }
-        },
       },
       options.defaultConfig || {},
     );
