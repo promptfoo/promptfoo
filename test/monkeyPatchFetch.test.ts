@@ -101,6 +101,24 @@ describe('monkeyPatchFetch', () => {
     expect(logRequestResponse).not.toHaveBeenCalled();
   });
 
+  it('removes the internal diagnostics header even when silence is disabled', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    await monkeyPatchFetch('https://example.com/api', {
+      headers: {
+        'X-Promptfoo-Silent': 'false',
+        'X-Test': 'preserved',
+      },
+    });
+
+    const [, outboundOptions] = mockOriginalFetch.mock.calls[0];
+    const outboundHeaders = new Headers(outboundOptions.headers);
+    expect(outboundHeaders.get('x-test')).toBe('preserved');
+    expect(outboundHeaders.has('x-promptfoo-silent')).toBe(false);
+    expect(logRequestResponse).toHaveBeenCalled();
+  });
+
   it('honors a silent header inherited from a Request object', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);

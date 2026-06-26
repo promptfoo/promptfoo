@@ -41,6 +41,7 @@ const SAFE_MESSAGE_ROLES = new Set([
   'user',
 ]);
 const SAFE_RESPONSE_FORMAT_TYPES = new Set(['json_object', 'json_schema', 'text']);
+const SAFE_AUDIO_FORMATS = new Set(['aac', 'flac', 'mp3', 'opus', 'pcm16', 'wav']);
 const SAFE_AZURE_ERROR_CODES = new Set([
   'content_filter',
   'insufficient_quota',
@@ -68,6 +69,44 @@ function getSafeErrorType(error: unknown): string {
   return ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
 }
 
+function getAzureChatRefusal(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return undefined;
+  }
+  const refusal = (message as Record<string, unknown>).refusal;
+  return typeof refusal === 'string' && refusal.length > 0 ? refusal : undefined;
+}
+
+function getAzureChatAudio(message: unknown): ProviderResponse['audio'] | undefined {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return undefined;
+  }
+  const audio = (message as Record<string, unknown>).audio;
+  if (!audio || typeof audio !== 'object' || Array.isArray(audio)) {
+    return undefined;
+  }
+  const record = audio as Record<string, unknown>;
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.data !== 'string' ||
+    typeof record.transcript !== 'string' ||
+    typeof record.expires_at !== 'number' ||
+    !Number.isFinite(record.expires_at) ||
+    record.expires_at < 0
+  ) {
+    return undefined;
+  }
+  return {
+    id: record.id,
+    data: record.data,
+    transcript: record.transcript,
+    expiresAt: record.expires_at,
+    ...(typeof record.format === 'string' && SAFE_AUDIO_FORMATS.has(record.format)
+      ? { format: record.format }
+      : {}),
+  };
+}
+
 function getAzureChatChoice(data: unknown, requireAssistant: boolean): Record<string, any> | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return null;
@@ -89,6 +128,8 @@ function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boole
       typeof message === 'object' &&
       (typeof message.content === 'string' ||
         (message.content === null && choice?.finish_reason === FINISH_REASON_MAP.content_filter) ||
+        getAzureChatRefusal(message) !== undefined ||
+        getAzureChatAudio(message) !== undefined ||
         (message.content == null && (message.tool_calls != null || message.function_call != null))),
   );
 }
@@ -603,6 +644,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let output = '';
     let logProbs: any;
     let finishReason: string;
+    let isRefusal = false;
+    let audio: ProviderResponse['audio'];
 
     try {
       const isContentFilterError =
@@ -639,8 +682,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
         finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-        // Handle structured output
-        output = message?.content;
+        const refusal = getAzureChatRefusal(message);
+        audio = getAzureChatAudio(message);
+        isRefusal = refusal !== undefined;
+        output = refusal ?? audio?.transcript ?? message?.content;
+        flaggedOutput = isRefusal;
 
         // Check for errors indicating that the content filters did not run on the completion.
         if (choice?.content_filter_results?.error) {
@@ -650,12 +696,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           });
         } else {
           // Was the completion filtered?
-          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
+          flaggedOutput ||= finishReason === FINISH_REASON_MAP.content_filter;
         }
 
-        if (output == null && finishReason === FINISH_REASON_MAP.content_filter) {
+        if (
+          !isRefusal &&
+          !audio &&
+          output == null &&
+          finishReason === FINISH_REASON_MAP.content_filter
+        ) {
           output = FILTERED_COMPLETION_OUTPUT;
-        } else if (output == null) {
+        } else if (!isRefusal && !audio && output == null) {
           // Handle tool_calls and function_call
           const toolCalls = message?.tool_calls;
           const functionCall = message?.function_call;
@@ -683,8 +734,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             output = toolCalls ?? functionCall;
           }
         } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+          !isRefusal &&
+          !audio &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object')
         ) {
           try {
             output = JSON.parse(output);
@@ -704,34 +757,40 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       return {
         output,
-        tokenUsage: fetchResult.cached
-          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-          : {
-              total: data.usage?.total_tokens,
-              prompt: data.usage?.prompt_tokens,
-              completion: data.usage?.completion_tokens,
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
-            },
+        tokenUsage: data?.error
+          ? undefined
+          : fetchResult.cached
+            ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
+            : {
+                total: data.usage?.total_tokens,
+                prompt: data.usage?.prompt_tokens,
+                completion: data.usage?.completion_tokens,
+                ...(data.usage?.completion_tokens_details
+                  ? {
+                      completionDetails: {
+                        reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                        acceptedPrediction:
+                          data.usage.completion_tokens_details.accepted_prediction_tokens,
+                        rejectedPrediction:
+                          data.usage.completion_tokens_details.rejected_prediction_tokens,
+                      },
+                    }
+                  : {}),
+              },
         cached: fetchResult.cached,
         latencyMs: fetchResult.latencyMs,
         logProbs,
         finishReason,
-        cost: calculateAzureCost(
-          this.deploymentName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-        ),
+        cost: data?.error
+          ? undefined
+          : calculateAzureCost(
+              this.deploymentName,
+              config,
+              data.usage?.prompt_tokens,
+              data.usage?.completion_tokens,
+            ),
+        ...(isRefusal ? { isRefusal: true } : {}),
+        ...(audio ? { audio } : {}),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,
           flaggedInput,

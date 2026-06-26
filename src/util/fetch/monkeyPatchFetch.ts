@@ -36,8 +36,10 @@ export async function monkeyPatchFetch(
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const effectiveHeaders = options?.headers ?? (url instanceof Request ? url.headers : undefined);
-  const isSilent = new Headers(effectiveHeaders).get('x-promptfoo-silent') === 'true';
+  const effectiveHeaders = new Headers(
+    options?.headers ?? (url instanceof Request ? url.headers : undefined),
+  );
+  const isSilent = effectiveHeaders.get('x-promptfoo-silent') === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
   const opts: RequestInit = {
@@ -48,10 +50,9 @@ export async function monkeyPatchFetch(
 
   // This header controls local diagnostics only. Remove it before the wire so
   // silent and ordinary requests remain identical upstream and in cache.
-  if (isSilent) {
-    const outboundHeaders = new Headers(effectiveHeaders);
-    outboundHeaders.delete('x-promptfoo-silent');
-    opts.headers = Object.fromEntries(outboundHeaders.entries());
+  if (effectiveHeaders.has('x-promptfoo-silent')) {
+    effectiveHeaders.delete('x-promptfoo-silent');
+    opts.headers = Object.fromEntries(effectiveHeaders.entries());
   }
 
   // Handle compression if requested

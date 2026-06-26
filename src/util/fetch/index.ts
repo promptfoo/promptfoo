@@ -35,6 +35,9 @@ import type { FetchOptions } from './types';
 // mid-process. If that assumption changes, add cache-invalidation logic.
 const cachedAgents: Map<number, Dispatcher> = new Map();
 const cachedProxyAgents: Map<string, Dispatcher> = new Map();
+const FETCH_TIMEOUT_MS = Symbol('fetchTimeoutMs');
+
+type FetchTimeoutError = Error & { [FETCH_TIMEOUT_MS]?: number };
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -325,7 +328,9 @@ export function fetchWithTimeout(
 
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
-      reject(new Error(`Request timed out after ${timeout} ms`));
+      const timeoutError = new Error(`Request timed out after ${timeout} ms`) as FetchTimeoutError;
+      timeoutError[FETCH_TIMEOUT_MS] = timeout;
+      reject(timeoutError);
     }, timeout);
 
     fetchWithProxy(url, {
@@ -657,6 +662,10 @@ function toFetchDiagnosticError(error: unknown): FetchDiagnosticError {
   }
   if (!(error instanceof Error)) {
     return new FetchDiagnosticError({ errorType: 'unknown' });
+  }
+  const timeoutMs = (error as FetchTimeoutError)[FETCH_TIMEOUT_MS];
+  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+    return new FetchDiagnosticError({ errorType: 'Error', timeoutMs });
   }
   const name = ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
   const typedError = error as SystemError;

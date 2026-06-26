@@ -565,6 +565,17 @@ describe('AzureChatCompletionProvider', () => {
       expect(JSON.stringify(result)).not.toContain('secret-');
     });
 
+    it('preserves safe locally generated timeout diagnostics', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new FetchDiagnosticError({ errorType: 'Error', timeoutMs: 5000 }),
+      );
+
+      const result = await provider.callApi('secret-transport-prompt-sentinel');
+
+      expect(result).toEqual({ error: 'API call error (Request timed out after 5000 ms)' });
+      expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
     it('redacts malformed prompt contents from thrown errors', async () => {
       const cases = [
         {
@@ -1398,6 +1409,16 @@ describe('AzureChatCompletionProvider', () => {
             },
           },
         },
+        usage: {
+          total_tokens: 'secret-usage-total-sentinel',
+          prompt_tokens: 'secret-usage-prompt-sentinel',
+          completion_tokens: 'secret-usage-completion-sentinel',
+          completion_tokens_details: {
+            reasoning_tokens: 'secret-usage-reasoning-sentinel',
+            accepted_prediction_tokens: 'secret-usage-accepted-sentinel',
+            rejected_prediction_tokens: 'secret-usage-rejected-sentinel',
+          },
+        },
       };
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -1415,7 +1436,9 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: false,
       });
       expect(result.output).toBe('Azure content filtering blocked the prompt.');
-      expect(JSON.stringify(result)).not.toContain('secret-content-filter-body-sentinel');
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('secret-');
       expect(result.finishReason).toBe('content_filter');
     });
 

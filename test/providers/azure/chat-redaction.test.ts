@@ -28,6 +28,8 @@ describe('Azure chat redaction integration', () => {
         'structured-error',
         'server-error',
         'stream',
+        'refusal',
+        'audio',
         'content-filter',
         'prompt-filter-error',
         'soft-rate-limit',
@@ -89,6 +91,51 @@ describe('Azure chat redaction integration', () => {
         response.writeHead(200, { 'content-type': 'text/event-stream' });
         response.end(
           'data: {"choices":[{"message":{"content":"stream-body-secret-sentinel"}}]}\n\n',
+        );
+        return;
+      }
+      if (mode === 'refusal') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  refusal: 'safe refusal output',
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { total_tokens: 3, prompt_tokens: 2, completion_tokens: 1 },
+          }),
+        );
+        return;
+      }
+      if (mode === 'audio') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  refusal: null,
+                  audio: {
+                    id: 'audio-id',
+                    expires_at: 1_800_000_000,
+                    data: 'audio-data',
+                    transcript: 'safe audio transcript',
+                    format: 'mp3',
+                  },
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { total_tokens: 3, prompt_tokens: 2, completion_tokens: 1 },
+          }),
         );
         return;
       }
@@ -235,6 +282,54 @@ describe('Azure chat redaction integration', () => {
     expect(second).toMatchObject({ output: 'safe success output', cached: true });
     expect(requestCounts.get('success')).toBe(previousRequests + 1);
     expect(sawSilentHeader).toBe(false);
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
+  it('preserves and caches documented refusal and audio responses', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider();
+    const previousRefusals = requestCounts.get('refusal') ?? 0;
+    const previousAudio = requestCounts.get('audio') ?? 0;
+
+    const [firstRefusal, cachedRefusal, firstAudio, cachedAudio] = await withCacheEnabled(
+      true,
+      () =>
+        withCacheNamespace(`azure-redaction-multimodal-${Date.now()}`, async () => [
+          await provider.callApi('refusal-prompt-secret-sentinel'),
+          await provider.callApi('refusal-prompt-secret-sentinel'),
+          await provider.callApi('audio-prompt-secret-sentinel'),
+          await provider.callApi('audio-prompt-secret-sentinel'),
+        ]),
+    );
+
+    expect(firstRefusal).toMatchObject({
+      output: 'safe refusal output',
+      isRefusal: true,
+      cached: false,
+      guardrails: { flagged: true, flaggedInput: false, flaggedOutput: true },
+    });
+    expect(cachedRefusal).toMatchObject({
+      output: 'safe refusal output',
+      isRefusal: true,
+      cached: true,
+    });
+    expect(firstAudio).toMatchObject({
+      output: 'safe audio transcript',
+      cached: false,
+      audio: {
+        id: 'audio-id',
+        expiresAt: 1_800_000_000,
+        data: 'audio-data',
+        transcript: 'safe audio transcript',
+        format: 'mp3',
+      },
+    });
+    expect(cachedAudio).toMatchObject({
+      output: 'safe audio transcript',
+      cached: true,
+    });
+    expect(requestCounts.get('refusal')).toBe(previousRefusals + 1);
+    expect(requestCounts.get('audio')).toBe(previousAudio + 1);
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 

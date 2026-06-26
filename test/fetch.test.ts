@@ -1057,7 +1057,10 @@ describe('fetchWithTimeout', () => {
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     vi.advanceTimersByTime(5000);
 
-    await expect(fetchPromise).rejects.toThrow('Request timed out after 5000 ms');
+    const error = await fetchPromise.catch((caught) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(FetchDiagnosticError);
+    expect(error).toMatchObject({ message: 'Request timed out after 5000 ms' });
   });
 
   it('should combine options.signal with timeout signal using AbortSignal.any', async () => {
@@ -1474,6 +1477,23 @@ describe('fetchWithRetries', () => {
     expect(serializedLogs).not.toContain('secret-transport-message-sentinel');
     expect(serializedLogs).not.toContain('secret-transport-cause-sentinel');
     expect(serializedLogs).not.toContain('secret-url-password-sentinel');
+  });
+
+  it('preserves locally generated timeout context for silent requests', async () => {
+    vi.mocked(global.fetch).mockImplementationOnce(() => new Promise(() => {}));
+
+    const error = await fetchWithRetries(
+      'https://example.com',
+      { headers: { 'x-promptfoo-silent': 'true' } },
+      1,
+      0,
+    ).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(FetchDiagnosticError);
+    expect(error).toMatchObject({
+      message: 'Request timed out after 1 ms',
+      timeoutMs: 1,
+    });
   });
 
   it('redacts authenticated proxy failures for silent requests', async () => {

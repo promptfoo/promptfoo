@@ -23,8 +23,9 @@ export class FetchDiagnosticError extends Error {
   readonly errorType: FetchDiagnosticErrorType;
   readonly status?: number;
   readonly code?: string;
+  readonly timeoutMs?: number;
 
-  constructor(init: { errorType: string; status?: number; code?: string }) {
+  constructor(init: { errorType: string; status?: number; code?: string; timeoutMs?: number }) {
     const errorType = ['AbortError', 'Error', 'TypeError'].includes(init.errorType)
       ? (init.errorType as FetchDiagnosticErrorType)
       : 'unknown';
@@ -37,11 +38,24 @@ export class FetchDiagnosticError extends Error {
         ? candidateStatus
         : undefined;
     const code = init.code && SAFE_FETCH_ERROR_CODES.has(init.code) ? init.code : undefined;
-    super(status === undefined ? (code ? `${errorType} (${code})` : errorType) : `HTTP ${status}`);
+    const timeoutMs =
+      typeof init.timeoutMs === 'number' && Number.isFinite(init.timeoutMs) && init.timeoutMs >= 0
+        ? init.timeoutMs
+        : undefined;
+    super(
+      timeoutMs === undefined
+        ? status === undefined
+          ? code
+            ? `${errorType} (${code})`
+            : errorType
+          : `HTTP ${status}`
+        : `Request timed out after ${timeoutMs} ms`,
+    );
     this.name = 'FetchDiagnosticError';
     this.errorType = errorType;
     this.status = status;
     this.code = code;
+    this.timeoutMs = timeoutMs;
   }
 }
 
