@@ -1,3 +1,4 @@
+import { parse, tokenizer } from 'acorn';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -7,57 +8,98 @@ import { normalizeResponseTransformResult } from './transformResult';
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
-const ANONYMOUS_FUNCTION_PATTERN = /^function\s*\(/;
+function normalizeParserSyntax(code: string): string {
+  // Acorn does not yet recognize Node's dynamic source-phase import syntax.
+  const tokens = [...tokenizer(code, { ecmaVersion: 'latest' })];
+  const replacements: Array<[number, number]> = [];
+  for (let index = 0; index < tokens.length - 3; index++) {
+    const previousLabel = tokens[index - 1]?.type.label;
+    if (
+      previousLabel !== '.' &&
+      previousLabel !== '?.' &&
+      tokens[index].type.label === 'import' &&
+      tokens[index + 1].type.label === '.' &&
+      code.slice(tokens[index + 2].start, tokens[index + 2].end) === 'source' &&
+      tokens[index + 3].type.label === '('
+    ) {
+      replacements.push([tokens[index].start, tokens[index + 2].end]);
+    }
+  }
 
-function hasValidParameters(parameters: string, isAsync: boolean): boolean {
-  const parameterList = parameters.startsWith('(') ? parameters : `(${parameters})`;
+  let normalized = '';
+  let cursor = 0;
+  for (const [start, end] of replacements) {
+    normalized += `${code.slice(cursor, start)}import`;
+    cursor = end;
+  }
+  return normalized + code.slice(cursor);
+}
+
+function parseExpression(code: string) {
   try {
-    new Function(`return ${isAsync ? 'async ' : ''}function ${parameterList} {}`);
-    return true;
+    const source = normalizeParserSyntax(code);
+    const program = parse(`function __promptfooTransformContext() { return (${source}\n); }`, {
+      ecmaVersion: 'latest',
+    });
+    const declaration = program.body[0];
+    const statement =
+      program.body.length === 1 &&
+      declaration.type === 'FunctionDeclaration' &&
+      declaration.body.body.length === 1 &&
+      declaration.body.body[0];
+    return statement && statement.type === 'ReturnStatement' ? statement.argument : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isSingleExpressionStatement(code: string): boolean {
+  try {
+    const source = normalizeParserSyntax(code);
+    const program = parse(`function __promptfooTransformContext() { ${source}\n }`, {
+      ecmaVersion: 'latest',
+    });
+    const declaration = program.body[0];
+    const statements =
+      declaration.type === 'FunctionDeclaration'
+        ? declaration.body.body.filter((statement) => statement.type !== 'EmptyStatement')
+        : [];
+    return (
+      program.body.length === 1 &&
+      declaration.type === 'FunctionDeclaration' &&
+      statements.length === 1 &&
+      statements[0].type === 'ExpressionStatement'
+    );
   } catch {
     return false;
   }
 }
 
-function getArrowFunctionType(code: string): 'async' | 'sync' | undefined {
-  for (let index = code.indexOf('=>'); index >= 0; index = code.indexOf('=>', index + 2)) {
-    const prefix = code.slice(0, index).trim();
-    if (hasValidParameters(prefix, false)) {
-      return 'sync';
-    }
-
-    const asyncMatch = /^async([ \t]*)([\s\S]+)$/.exec(prefix);
-    if (
-      asyncMatch &&
-      (asyncMatch[1] || asyncMatch[2].startsWith('(')) &&
-      hasValidParameters(asyncMatch[2], true)
-    ) {
-      return 'async';
-    }
-  }
-  return undefined;
+function isSupportedFunctionExpression(
+  expression: ReturnType<typeof parseExpression>,
+  allowAsync: boolean,
+): boolean {
+  return Boolean(
+    expression &&
+      ((expression.type === 'ArrowFunctionExpression' && (!expression.async || allowAsync)) ||
+        (expression.type === 'FunctionExpression' &&
+          expression.id === null &&
+          !expression.async &&
+          !expression.generator)),
+  );
 }
 
 function getFunctionExpression(code: string, allowAsync = false): string | false | undefined {
-  const arrowType = getArrowFunctionType(code);
-  const looksLikeFunction = arrowType !== undefined || ANONYMOUS_FUNCTION_PATTERN.test(code);
-  if (!looksLikeFunction || (arrowType === 'async' && !allowAsync)) {
-    return looksLikeFunction ? false : undefined;
-  }
-
   let end = code.length;
   while (end > 0 && code[end - 1] === ';') {
     end--;
   }
   const source = code.slice(0, end);
-  try {
-    // A conditional consequent accepts a single function expression but rejects a
-    // top-level sequence whose final value merely happens to be callable.
-    new Function(`return true ? ${source} : undefined;`);
+  const expression = parseExpression(source);
+  if (isSupportedFunctionExpression(expression, allowAsync)) {
     return source;
-  } catch {
-    return false;
   }
+  return expression || isSingleExpressionStatement(code) ? false : undefined;
 }
 
 export interface TransformResponseContext {
@@ -94,12 +136,12 @@ export async function createTransformResponse(
       `Response transform with file:// reference should be pre-loaded before calling createTransformResponse. This is a bug in the HTTP provider implementation.`,
     );
   } else if (typeof parser === 'string') {
+    const originalParser = parser.trim();
+    const functionExpression = getFunctionExpression(originalParser);
+    const parserIsFunction = Boolean(functionExpression);
+    const trimmedParser = functionExpression || originalParser;
     return (data, text, context) => {
       try {
-        const originalParser = parser.trim();
-        const functionExpression = getFunctionExpression(originalParser);
-        const parserIsFunction = Boolean(functionExpression);
-        const trimmedParser = functionExpression || originalParser;
         // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         const transformFn = new Function(
           'json',
@@ -159,12 +201,11 @@ export async function createTransformRequest(
       `Request transform with file:// reference should be pre-loaded before calling createTransformRequest. This is a bug in the HTTP provider implementation.`,
     );
   } else if (typeof transform === 'string') {
+    const trimmedTransform = transform.trim();
+    const functionExpression = getFunctionExpression(trimmedTransform, true);
+    const expressionTransform = functionExpression || trimmedTransform;
     return async (prompt, vars, context) => {
       try {
-        const trimmedTransform = transform.trim();
-        const functionExpression = getFunctionExpression(trimmedTransform, true);
-        const expressionTransform = functionExpression || trimmedTransform;
-
         let transformFn: Function;
         try {
           // Add process parameter for ESM compatibility - allows process.mainModule.require to work
