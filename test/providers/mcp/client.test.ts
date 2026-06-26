@@ -1434,21 +1434,27 @@ describe('MCPClient', () => {
       const cause = new Error(sentinels[1]);
       const clientError = new Error(`${sentinels[0]} ${sentinels[2]}`, { cause });
       clientError.name = sentinels[3];
+      const transportErrorToJSON = vi.fn(() => ({ prompt: sentinels[0] }));
       const transportError = {
         response: `${sentinels[1]} ${sentinels[4]}`,
-        toJSON: () => ({ prompt: sentinels[0] }),
+        toJSON: transportErrorToJSON,
       };
       const debugSpy = vi.spyOn(logger, 'debug');
+      const infoSpy = vi.spyOn(logger, 'info');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const errorSpy = vi.spyOn(logger, 'error');
 
-      mockClient.connect.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
-      mockClient.listTools
-        .mockResolvedValueOnce({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      const oldClient = createMockClient();
+      const refreshedClient = createMockClient(vi.fn().mockResolvedValue({ content: 'result' }));
+      oldClient.close.mockRejectedValueOnce(clientError);
+      vi.mocked(Client)
+        .mockImplementationOnce(function () {
+          return oldClient as unknown as Client;
         })
-        .mockResolvedValueOnce({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        .mockImplementationOnce(function () {
+          return refreshedClient as unknown as Client;
         });
-      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
+
       mockGetOAuthTokenWithExpiry
         .mockResolvedValueOnce({
           accessToken: 'initial-token',
@@ -1474,7 +1480,6 @@ describe('MCPClient', () => {
       });
 
       await mcpClient.initialize();
-      mockClient.close.mockRejectedValueOnce(clientError);
       if (shouldTransportFail) {
         mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
       }
@@ -1483,7 +1488,11 @@ describe('MCPClient', () => {
         content: 'result',
         raw: { content: 'result' },
       });
-      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(Client).toHaveBeenCalledTimes(2);
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(oldClient.close).toHaveBeenCalledOnce();
+      expect(oldClient.callTool).not.toHaveBeenCalled();
+      expect(refreshedClient.callTool).toHaveBeenCalledOnce();
       expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
 
       const diagnostics = debugSpy.mock.calls.filter(
@@ -1500,9 +1509,15 @@ describe('MCPClient', () => {
           },
         ],
       ]);
-      const serializedDiagnostics = JSON.stringify(diagnostics);
+      expect(transportErrorToJSON).not.toHaveBeenCalled();
+      const serializedLogs = JSON.stringify([
+        ...debugSpy.mock.calls,
+        ...infoSpy.mock.calls,
+        ...warnSpy.mock.calls,
+        ...errorSpy.mock.calls,
+      ]);
       for (const sentinel of sentinels) {
-        expect(serializedDiagnostics).not.toContain(sentinel);
+        expect(serializedLogs).not.toContain(sentinel);
       }
     });
 
