@@ -345,7 +345,7 @@ export const handleIsValidOpenAiToolsCall = async ({
     );
   }
   const hasStructuredMcpFailure =
-    structuredMcpResult?.calls.some((call) => call.error !== undefined) ?? false;
+    structuredMcpResult?.calls?.some((call) => call.error !== undefined) ?? false;
   const structuredMcpGrade = gradeMcpToolCalls(
     structuredMcpResult?.calls ?? [],
     assertion,
