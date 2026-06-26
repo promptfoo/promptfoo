@@ -95,4 +95,80 @@ describe('matchesCitationFaithfulness', () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain('valid verdict');
   });
+
+  it('fails when the grading provider returns an error', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      error: 'rate limited',
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('rate limited');
+  });
+
+  it('falls back to a default reason when the grader omits reasoning (unfaithful)', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'unfaithful' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('does not point to a passage');
+  });
+
+  it('falls back to a default reason when the grader omits reasoning (faithful)', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'FAITHFUL', reasoning: '   ' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'A claim [1].', context, 1);
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('All citations point to passages');
+  });
+
+  it('accepts a single string context and a custom rubric prompt', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'faithful', reasoning: 'ok' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    const spy = vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(
+      query,
+      'The tower is tall [1].',
+      'The Eiffel Tower stands 330 metres tall in Paris.',
+      0.5,
+      { rubricPrompt: 'Custom: {{question}} / {{answer}} / {{context}}' },
+    );
+
+    expect(result.pass).toBe(true);
+    const renderedPrompt = spy.mock.calls[0][0] as string;
+    expect(renderedPrompt).toContain('Custom:');
+    // A single string context is passed through as-is (caller pre-numbers it).
+    expect(renderedPrompt).toContain('The Eiffel Tower stands 330 metres tall in Paris.');
+  });
+
+  it('accepts a rubricPrompt provided as an array of message strings', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ verdict: 'faithful', reasoning: 'ok' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    const spy = vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesCitationFaithfulness(query, 'The tower is tall [1].', context, 1, {
+      rubricPrompt: ['ArrayCustom: {{question}} {{context}}'],
+    });
+
+    expect(result.pass).toBe(true);
+    const renderedPrompt = spy.mock.calls[0][0] as string;
+    expect(renderedPrompt).toContain('ArrayCustom:');
+  });
 });
