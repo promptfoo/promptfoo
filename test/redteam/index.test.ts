@@ -379,8 +379,14 @@ describe('synthesize', () => {
         action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
         key: 'mockPlugin',
       });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
       vi.spyOn(Strategies, 'find').mockReturnValue({
-        action: vi.fn().mockImplementation((testCases) => testCases),
+        action: strategyAction,
         id: 'goat',
       });
 
@@ -392,8 +398,53 @@ describe('synthesize', () => {
         targetIds: ['test-provider'],
       });
 
-      expect(result.testCases).toEqual(
+      expect(strategyAction).toHaveBeenCalledWith(
         expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        'query',
+        expect.any(Object),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+        ]),
+      );
+    });
+
+    it('preserves a short agentic seed with a plugin-scoped minimum', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
+        key: 'mockPlugin',
+      });
+      const strategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: { query: 'long enough final attack' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: strategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1, config: { minCharsPerMessage: 10 } }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(strategyAction).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        'query',
+        expect.any(Object),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+        ]),
       );
     });
 

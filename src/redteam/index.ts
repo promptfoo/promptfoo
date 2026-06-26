@@ -350,9 +350,12 @@ function resolvePluginConfigWithCharLimits(
   config: Record<string, any> | undefined,
   maxCharsPerMessage?: number,
   minCharsPerMessage?: number,
+  { omitMinCharsPerMessage = false }: { omitMinCharsPerMessage?: boolean } = {},
 ): Record<string, any> {
+  const resolvedConfig = resolvePluginConfig(config);
+  const { minCharsPerMessage: _omittedMinimum, ...configWithoutMinimum } = resolvedConfig;
   return {
-    ...resolvePluginConfig(config),
+    ...(omitMinCharsPerMessage ? configWithoutMinimum : resolvedConfig),
     ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
     ...(minCharsPerMessage ? { minCharsPerMessage } : {}),
   };
@@ -1417,6 +1420,7 @@ export async function synthesize({
               plugin.config,
               maxCharsPerMessage,
               deferPluginMinimum ? undefined : minCharsPerMessage,
+              { omitMinCharsPerMessage: deferPluginMinimum },
             ),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
@@ -1585,6 +1589,7 @@ export async function synthesize({
               plugin.config,
               maxCharsPerMessage,
               deferPluginMinimum ? undefined : minCharsPerMessage,
+              { omitMinCharsPerMessage: deferPluginMinimum },
             ),
             ...(lang ? { language: lang } : {}),
             ...(hasMultipleInputs ? { inputs } : {}),
