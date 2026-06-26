@@ -330,10 +330,9 @@ export const handleIsValidOpenAiToolsCall = async ({
     providerResponse,
     test,
   });
-  const structuredMcpResult =
-    hasTraditionalToolCalls || outputWasTransformed
-      ? undefined
-      : getStructuredMcpToolCalls(providerResponse);
+  const structuredMcpResult = outputWasTransformed
+    ? undefined
+    : getStructuredMcpToolCalls(providerResponse);
   if (structuredMcpResult?.error) {
     return applyInverse(
       {
@@ -345,12 +344,14 @@ export const handleIsValidOpenAiToolsCall = async ({
       inverse,
     );
   }
+  const hasStructuredMcpFailure =
+    structuredMcpResult?.calls.some((call) => call.error !== undefined) ?? false;
   const structuredMcpGrade = gradeMcpToolCalls(
     structuredMcpResult?.calls ?? [],
     assertion,
     inverse,
   );
-  if (structuredMcpGrade) {
+  if (structuredMcpGrade && (!hasTraditionalToolCalls || hasStructuredMcpFailure)) {
     return structuredMcpGrade;
   }
 
