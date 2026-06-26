@@ -312,7 +312,7 @@ describe('addLayerTestCases', () => {
 
   it('should handle colon-separated strategy IDs', async () => {
     const colonStrategy: Strategy = {
-      id: 'jailbreak',
+      id: 'jailbreak:composite',
       action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
         testCases.map((tc) => ({
           ...tc,
@@ -339,7 +339,7 @@ describe('addLayerTestCases', () => {
       mockLoadStrategy,
     );
 
-    // Should find and use the base 'jailbreak' strategy
+    // Should find and use the exact colon-separated strategy.
     expect(result).toHaveLength(1);
     expect(result[0].vars?.input).toBe('[Jailbreak] test');
     expect(colonStrategy.action).toHaveBeenCalledTimes(1);
@@ -615,14 +615,7 @@ describe('addLayerTestCases', () => {
         testCases,
         'input',
         {
-          targetId: 'cloud-target-123',
-          steps: [
-            {
-              id: 'jailbreak:hydra',
-              config: { maxTurns: 5, stateful: true, targetId: 'stale-target' },
-            },
-            'audio',
-          ],
+          steps: [{ id: 'jailbreak:hydra', config: { maxTurns: 5, stateful: true } }, 'audio'],
         },
         mockStrategies,
         mockLoadStrategy,
@@ -636,7 +629,6 @@ describe('addLayerTestCases', () => {
           expect.objectContaining({
             maxTurns: 5,
             stateful: true,
-            targetId: 'cloud-target-123',
             _perTurnLayers: ['audio'],
           }),
         );
@@ -698,11 +690,19 @@ describe('addLayerTestCases', () => {
       );
     });
 
-    it('should reject posterior per-turn layers for multi-input targets during generation', async () => {
+    it('should reject posterior per-turn layers for test cases with multi-input metadata', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {
           vars: { [MULTI_INPUT_VAR]: '{}' },
-          metadata: { pluginId: 'policy' },
+          metadata: {
+            pluginConfig: {
+              inputs: {
+                context: { description: 'Reference context', type: 'text' },
+                question: { description: 'User question', type: 'text' },
+              },
+            },
+            pluginId: 'policy',
+          },
         },
       ];
 
@@ -715,6 +715,30 @@ describe('addLayerTestCases', () => {
           mockLoadStrategy,
         ),
       ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+    });
+
+    it('should not resolve unsupported strategy aliases', async () => {
+      const posteriorAction = vi.fn(async (testCases: TestCaseWithPlugin[]) => testCases);
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'canary task' },
+          metadata: {
+            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginId: 'coding-agent:secret-env-read',
+          },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['posterior:alias'] },
+        [...mockStrategies, { id: 'posterior', action: posteriorAction }],
+        mockLoadStrategy,
+      );
+
+      expect(posteriorAction).not.toHaveBeenCalled();
+      expect(result).toEqual(testCases);
     });
 
     it('should generate correct metric suffix for each attack provider', async () => {

@@ -31,6 +31,7 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   getStrategyId,
+  hasPosteriorStrategy,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
@@ -44,6 +45,7 @@ const HERO_STRATEGY_IDS_SET: ReadonlySet<string> = new Set(HERO_STRATEGY_IDS);
 
 /** Strategies gated to enterprise only (always disabled in OSS) */
 const STRATEGIES_ENTERPRISE_ONLY = new Set(['gcg']);
+const POSTERIOR_UNAVAILABLE_MESSAGE = 'Posterior Attack supports single-input targets only.';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -92,6 +94,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isPosteriorUnavailable = Boolean(
     config.target?.inputs && Object.keys(config.target.inputs).length > 0,
+  );
+  const hasSelectedPosterior = useMemo(
+    () => hasPosteriorStrategy(config.strategies),
+    [config.strategies],
   );
 
   const isStrategyDisabled = useCallback(
@@ -176,7 +182,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       // Allow deselection even when disabled, but block selection
       if (isStrategyDisabled(strategyId) && !isSelected) {
         if (strategyId === 'posterior' && isPosteriorUnavailable) {
-          toast.showToast('Posterior Attack supports single-input targets only.', 'error');
+          toast.showToast(POSTERIOR_UNAVAILABLE_MESSAGE, 'error');
         } else if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
           toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
         } else {
@@ -372,16 +378,16 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Validation function to check if all selected strategies are properly configured
   const isStrategyConfigValid = useCallback(() => {
-    if (isPosteriorUnavailable && selectedStrategyIds.includes('posterior')) {
+    if (isPosteriorUnavailable && hasSelectedPosterior) {
       return false;
     }
     return config.strategies.every((strategy) =>
       isStrategyConfigured(getStrategyId(strategy), strategy),
     );
-  }, [config.strategies, isPosteriorUnavailable, selectedStrategyIds]);
+  }, [config.strategies, hasSelectedPosterior, isPosteriorUnavailable]);
 
   const getNextButtonTooltip = useCallback(() => {
-    if (isPosteriorUnavailable && selectedStrategyIds.includes('posterior')) {
+    if (isPosteriorUnavailable && hasSelectedPosterior) {
       return 'Posterior Attack supports single-input targets only. Remove it or clear the configured target inputs.';
     }
     if (!isStrategyConfigValid()) {
@@ -397,7 +403,23 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       }
     }
     return '';
-  }, [config.strategies, isPosteriorUnavailable, isStrategyConfigValid, selectedStrategyIds]);
+  }, [config.strategies, hasSelectedPosterior, isPosteriorUnavailable, isStrategyConfigValid]);
+
+  const getTestCaseGenerationDisabledReason = useCallback(
+    (strategyId: string): string | undefined => {
+      if (!isPosteriorUnavailable) {
+        return undefined;
+      }
+      if (strategyId === 'posterior') {
+        return POSTERIOR_UNAVAILABLE_MESSAGE;
+      }
+      const strategy = config.strategies.find((item) => getStrategyId(item) === strategyId);
+      return strategy && hasPosteriorStrategy([strategy])
+        ? POSTERIOR_UNAVAILABLE_MESSAGE
+        : undefined;
+    },
+    [config.strategies, isPosteriorUnavailable],
+  );
 
   // ----------------------------------------------
   // Derived states
@@ -474,14 +496,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      {isPosteriorUnavailable && (
+      {isPosteriorUnavailable && (hasSelectedPosterior || isAdvancedOpen) && (
         <Alert variant="warning" className="-mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
           <AlertContent>
             <AlertTitle>Posterior Attack requires a single-input target</AlertTitle>
             <AlertDescription>
-              This strategy is unavailable while target inputs are configured. Remove it from the
-              selected strategies or return to Targets and clear the configured inputs.
+              {hasSelectedPosterior
+                ? 'Remove Posterior Attack from the selected strategies or Layer steps, or return to Targets and clear the configured inputs.'
+                : 'Posterior Attack is unavailable while target inputs are configured.'}
             </AlertDescription>
           </AlertContent>
         </Alert>
@@ -578,6 +601,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
                   isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
+                  getTestCaseGenerationDisabledReason={getTestCaseGenerationDisabledReason}
                 />
               )}
 
@@ -616,6 +640,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             }
             selectedPlugins={config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? []}
             allStrategies={config.strategies}
+            unavailableStrategies={isPosteriorUnavailable ? ['posterior'] : undefined}
           />
         </div>
       </TestCaseGenerationProvider>

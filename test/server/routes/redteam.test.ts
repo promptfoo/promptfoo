@@ -167,6 +167,33 @@ describe('Redteam Routes', () => {
         expect(response.body).toEqual({ testCases: [], count: 0 });
       });
 
+      it.each([
+        ['directly', { id: 'posterior', config: {} }],
+        ['inside a layer', { id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
+      ])('should reject posterior %s for multi-input previews before generation', async (_label, strategy) => {
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'policy',
+              config: {
+                inputs: { query: 'user query', context: 'additional context' },
+              },
+            },
+            strategy,
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe('Posterior strategy does not support multi-input targets');
+        expect(mockedPlugins.find).not.toHaveBeenCalled();
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
       it('should NOT exclude multi-input excluded plugins when plugin has no multi-input config', async () => {
         // 'cca' is a MULTI_INPUT_EXCLUDED_PLUGIN - should NOT be excluded without multi-input
         const mockPluginFactory = {
