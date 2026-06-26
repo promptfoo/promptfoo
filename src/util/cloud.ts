@@ -210,7 +210,9 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
   const providers =
     config.providers === undefined
       ? config.providerIds === undefined
-        ? undefined
+        ? config.targets === undefined
+          ? []
+          : undefined
         : normalizeCloudEvalProviders(config.providerIds)
       : normalizeCloudEvalProviders(config.providers);
   const targets =

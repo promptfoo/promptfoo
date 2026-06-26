@@ -449,6 +449,23 @@ describe('cloud utils', () => {
       expect(result.targets).toBeUndefined();
     });
 
+    it('should allow CLI provider overrides when the cloud config has no provider', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              prompts: ['Say hello'],
+              tests: [],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.providers).toEqual([]);
+    });
+
     it('should reject configs with both targets and providers', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
@@ -538,6 +555,7 @@ describe('cloud utils', () => {
               env: { CUSTOM_ENV: 'value' },
               scenarios: [],
               extensions: ['file://extension.js'],
+              sharing: false,
               metadata: { source: 'yaml-import' },
             },
           }),
@@ -558,6 +576,7 @@ describe('cloud utils', () => {
         env: { CUSTOM_ENV: 'value' },
         scenarios: [],
         extensions: ['file://extension.js'],
+        sharing: false,
         metadata: { source: 'yaml-import', teamId: 'team-id', configId: 'config-id' },
       });
       expect(result.targets).toBeUndefined();
