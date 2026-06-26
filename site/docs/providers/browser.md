@@ -566,9 +566,9 @@ providers:
 
 ## Example: Testing a Login Flow
 
-Here's a complete example testing a login workflow:
+Here's a template for testing a login workflow against your own application:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Test login functionality
 

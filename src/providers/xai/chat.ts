@@ -534,8 +534,8 @@ export function calculateXAICost(
     return undefined;
   }
 
-  // xAI applies long-context rates to the entire request once prompt tokens,
-  // including cached tokens, reach the model's threshold.
+  // xAI's `long_context_threshold` API field applies long-context rates at or
+  // above the threshold. Prompt tokens include cached tokens here.
   const longContextCost =
     model.cost.longContext && promptTokens >= model.cost.longContext.threshold
       ? model.cost.longContext

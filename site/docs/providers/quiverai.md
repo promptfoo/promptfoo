@@ -90,7 +90,7 @@ When `n > 1`, multiple SVGs are joined with double newlines and ordered by the r
 
 The vectorize endpoint converts a raster image (PNG, JPEG, WebP) to SVG. The image can come from the prompt or from `config.image`.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: quiverai:vectorize:arrow-1.1
