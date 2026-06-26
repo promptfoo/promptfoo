@@ -214,6 +214,10 @@ describe('API schema red-team coverage', () => {
             message: 'Needs headers',
             changes_needed: true,
             changes_needed_suggestions: ['Add Authorization'],
+            configuration_change_suggestion: {
+              transformResponse: 'json.response',
+              ignoredFutureField: 'manual-only',
+            },
           },
           providerResponse: { output: { nested: true } },
           transformedRequest: { url: 'https://example.test' },
@@ -222,8 +226,22 @@ describe('API schema red-team coverage', () => {
         testResult: {
           success: false,
           message: 'Needs headers',
+          configuration_change_suggestion: {
+            transformResponse: 'json.response',
+          },
         },
       });
+      expect(
+        ProviderSchemas.Test.Response.safeParse({
+          testResult: {
+            success: false,
+            message: 'Unsafe suggestion',
+            configuration_change_suggestion: {
+              transformResponse: 'process.env.SECRET',
+            },
+          },
+        }).success,
+      ).toBe(false);
       expect(
         ProviderSchemas.Test.Response.safeParse({ testResult: { success: true } }).success,
       ).toBe(false);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalizeResponseTransformSuggestion } from '../../util/httpResponseTransformSuggestion';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
@@ -39,6 +40,16 @@ export const ConfigStatusResponseSchema = z.union([
   ErrorResponseSchema,
 ]);
 
+export const ConfigurationChangeSuggestionSchema = z.object({
+  transformResponse: z
+    .string()
+    .min(1)
+    .max(512)
+    .refine((value) => canonicalizeResponseTransformSuggestion(value) === value, {
+      message: 'Response transform suggestion must be a canonical safe accessor',
+    }),
+});
+
 export const TestProviderResponseSchema = z
   .object({
     testResult: z
@@ -49,6 +60,7 @@ export const TestProviderResponseSchema = z
         changes_needed: z.boolean().optional(),
         changes_needed_reason: z.string().optional(),
         changes_needed_suggestions: z.array(z.string()).optional(),
+        configuration_change_suggestion: ConfigurationChangeSuggestionSchema.optional(),
       })
       .passthrough(),
     providerResponse: z.unknown().optional(),

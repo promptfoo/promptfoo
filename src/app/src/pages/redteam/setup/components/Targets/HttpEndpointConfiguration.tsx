@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -143,33 +143,47 @@ Content-Type: application/json
   const [copied, setCopied] = useState(false);
 
   // Test Target state
-  const [isTestRunning, setIsTestRunning] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testRunningTarget, setTestRunningTarget] = useState<ProviderOptions | null>(null);
+  const [testResultState, setTestResultState] = useState<{
+    target: ProviderOptions;
+    result: TestResult;
+  } | null>(null);
   const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
+  const testRequestIdRef = useRef(0);
+  const latestSelectedTargetRef = useRef(selectedTarget);
+  latestSelectedTargetRef.current = selectedTarget;
+  const isTestRunning = testRunningTarget === selectedTarget;
+  const testResult = testResultState?.target === selectedTarget ? testResultState.result : null;
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
-  const [savedProviderResponse, setSavedProviderResponse] = useState<string>('');
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
-    setIsTestRunning(true);
-    setTestResult(null);
+    const requestId = ++testRequestIdRef.current;
+    const testedTarget = selectedTarget;
+    const isCurrentRequest = () =>
+      requestId === testRequestIdRef.current && latestSelectedTargetRef.current === testedTarget;
+    setTestRunningTarget(testedTarget);
+    setTestResultState(null);
 
     // Validate URL before testing (skip validation for raw request mode)
-    if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
+    if (!testedTarget.config?.request) {
+      const targetUrl = testedTarget.config?.url;
       if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-        setTestResult({
-          success: false,
-          message:
-            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: false,
+            message:
+              'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+          },
         });
         setTestDetailsExpanded(true);
-        setIsTestRunning(false);
+        setTestRunningTarget(null);
         onTargetTested?.(false);
         return;
       }
@@ -179,11 +193,17 @@ Content-Type: application/json
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
+        body: JSON.stringify({ providerOptions: testedTarget }),
       });
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
+        if (!isCurrentRequest()) {
+          return;
+        }
 
         // Check for changes_needed field (configuration issues) or success field
         const hasConfigIssues = data.testResult?.changes_needed === true;
@@ -195,39 +215,42 @@ Content-Type: application/json
           message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
         }
 
-        setTestResult({
-          success: isSuccess,
-          message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
-          changes_needed: hasConfigIssues,
-          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
-          configuration_change_suggestion: data.testResult?.configuration_change_suggestion,
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: isSuccess,
+            message,
+            providerResponse: data.providerResponse || {},
+            transformedRequest: data.transformedRequest,
+            changes_needed: hasConfigIssues,
+            changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+            configuration_change_suggestion: data.testResult?.configuration_change_suggestion,
+          },
         });
-
-        // Save the provider response for use in response parser test
-        if (data.providerResponse?.raw) {
-          const rawResponse =
-            typeof data.providerResponse.raw === 'string'
-              ? data.providerResponse.raw
-              : JSON.stringify(data.providerResponse.raw, null, 2);
-          setSavedProviderResponse(rawResponse);
-        }
 
         setTestDetailsExpanded(!isSuccess || hasConfigIssues);
         onTargetTested?.(isSuccess);
       } else {
         const errorData = await response.json();
-        setTestResult({
-          success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
+        if (!isCurrentRequest()) {
+          return;
+        }
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: false,
+            message: errorData.error || 'Failed to test target configuration',
+            providerResponse: errorData.providerResponse || {},
+            transformedRequest: errorData.transformedRequest,
+          },
         });
         setTestDetailsExpanded(true);
         onTargetTested?.(false);
       }
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       console.error('Error testing target:', error);
       let errorMessage = 'Failed to test target configuration';
       if (error instanceof Error) {
@@ -241,14 +264,19 @@ Content-Type: application/json
           errorMessage = error.message;
         }
       }
-      setTestResult({
-        success: false,
-        message: errorMessage,
+      setTestResultState({
+        target: testedTarget,
+        result: {
+          success: false,
+          message: errorMessage,
+        },
       });
       setTestDetailsExpanded(true);
       onTargetTested?.(false);
     } finally {
-      setIsTestRunning(false);
+      if (isCurrentRequest()) {
+        setTestRunningTarget(null);
+      }
     }
   }, [selectedTarget, onTargetTested]);
 
@@ -836,36 +864,9 @@ ${exampleRequest}`;
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
-          onApplyConfigSuggestion={(field, value) => {
-            const normalizedValue =
-              field === 'headers' &&
-              value !== null &&
-              typeof value === 'object' &&
-              !Array.isArray(value)
-                ? Object.fromEntries(Object.entries(value).map(([key, val]) => [key, String(val)]))
-                : value;
-
-            updateCustomTarget(field, normalizedValue);
-            if (
-              field === 'headers' &&
-              normalizedValue !== null &&
-              typeof normalizedValue === 'object' &&
-              !Array.isArray(normalizedValue)
-            ) {
-              setHeaders(
-                Object.entries(normalizedValue).map(([key, val]) => ({
-                  key,
-                  value: String(val),
-                })),
-              );
-            }
-            if (field === 'body') {
-              const bodyStr =
-                typeof normalizedValue === 'string'
-                  ? normalizedValue
-                  : JSON.stringify(normalizedValue, null, 2);
-              setRequestBody(bodyStr);
-            }
+          onApplyTransformResponseSuggestion={(transformResponse) => {
+            setTestResultState(null);
+            updateCustomTarget('transformResponse', transformResponse);
           }}
         />
       </div>
@@ -994,7 +995,6 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
-        initialTestInput={savedProviderResponse}
       />
     </div>
   );

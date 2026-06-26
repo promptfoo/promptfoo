@@ -318,6 +318,10 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
   );
 }
 
+export interface ConfigurationChangeSuggestion {
+  transformResponse: string;
+}
+
 export interface ProviderTestResponse {
   testResult: {
     message?: string;
@@ -325,6 +329,7 @@ export interface ProviderTestResponse {
     changes_needed?: boolean;
     changes_needed_reason?: string;
     changes_needed_suggestions?: string[];
+    configuration_change_suggestion?: ConfigurationChangeSuggestion;
   };
   providerResponse: ProviderResponse;
   unalignedProviderResult?: ProviderResponse;

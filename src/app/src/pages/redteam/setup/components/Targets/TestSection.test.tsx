@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSection, { type TestResult } from './TestSection';
@@ -11,207 +11,65 @@ import type { ProviderOptions } from '../../types';
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<TooltipProvider>{ui}</TooltipProvider>);
 
-describe('TestSection', () => {
-  let mockHandleTestTarget: ReturnType<typeof vi.fn<() => void>>;
-  let mockOnApplyConfigSuggestion: ReturnType<
-    typeof vi.fn<(field: string, value: unknown) => void>
-  >;
-  let mockOnDetailsExpandedChange: ReturnType<typeof vi.fn<(expanded: boolean) => void>>;
+describe('TestSection response parser suggestions', () => {
+  let onApplyTransformResponseSuggestion: ReturnType<typeof vi.fn<(value: string) => void>>;
   let baseProps: React.ComponentProps<typeof TestSection>;
 
   beforeEach(() => {
-    mockHandleTestTarget = vi.fn<() => void>();
-    mockOnApplyConfigSuggestion = vi.fn<(field: string, value: unknown) => void>();
-    mockOnDetailsExpandedChange = vi.fn<(expanded: boolean) => void>();
+    onApplyTransformResponseSuggestion = vi.fn<(value: string) => void>();
     baseProps = {
       selectedTarget: {
         id: 'http:custom',
         label: 'My Custom Target',
-        config: {
-          url: 'https://example.com/api',
-        },
+        config: { url: 'https://example.com/api' },
       } as ProviderOptions,
       isTestRunning: false,
       testResult: null,
-      handleTestTarget: mockHandleTestTarget,
+      handleTestTarget: vi.fn(),
       disabled: false,
       detailsExpanded: false,
-      onDetailsExpandedChange: mockOnDetailsExpandedChange,
-      onApplyConfigSuggestion: mockOnApplyConfigSuggestion,
+      onDetailsExpandedChange: vi.fn(),
+      onApplyTransformResponseSuggestion,
     };
   });
 
-  describe('Configuration Change Suggestions', () => {
-    it("should call onApplyConfigSuggestion and mark field as applied on 'Apply' click", async () => {
-      const user = userEvent.setup();
-      const suggestedHeaders = { 'X-Api-Key': 'new-key-123' };
-      const testResultWithSuggestion: TestResult = {
-        success: false,
-        changes_needed: true,
-        message: 'Configuration changes are needed.',
-        configuration_change_suggestion: {
-          headers: suggestedHeaders,
-        },
-      };
+  it('renders and applies the single validated response parser suggestion', async () => {
+    const user = userEvent.setup();
+    const testResult: TestResult = {
+      success: false,
+      changes_needed: true,
+      message: 'The response parser needs an update.',
+      configuration_change_suggestion: { transformResponse: 'json.response' },
+    };
 
-      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithSuggestion} />);
+    renderWithProviders(<TestSection {...baseProps} testResult={testResult} />);
 
-      const suggestionContainer = screen.getByTestId('config-suggestion-headers');
-      expect(within(suggestionContainer).getByText('headers')).toBeInTheDocument();
+    const suggestion = screen.getByTestId('config-suggestion-transformResponse');
+    expect(within(suggestion).getByText('Response parser (transformResponse)')).toBeInTheDocument();
+    expect(within(suggestion).getByText('json.response')).toBeInTheDocument();
 
-      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      await user.click(applyButton);
+    await user.click(
+      within(suggestion).getByRole('button', { name: 'Apply response parser suggestion' }),
+    );
 
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('headers', suggestedHeaders);
+    expect(onApplyTransformResponseSuggestion).toHaveBeenCalledOnce();
+    expect(onApplyTransformResponseSuggestion).toHaveBeenCalledWith('json.response');
+    expect(screen.queryByRole('button', { name: 'Apply All' })).not.toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(
-          within(suggestionContainer).getByRole('button', { name: 'Test' }),
-        ).toBeInTheDocument();
-        expect(
-          within(suggestionContainer).queryByRole('button', { name: 'Apply' }),
-        ).not.toBeInTheDocument();
-      });
+  it('does not render an action for malformed runtime suggestion values', () => {
+    const testResult = {
+      success: false,
+      changes_needed: true,
+      message: 'Malformed analyzer output.',
+      configuration_change_suggestion: { transformResponse: { code: 'process.env' } },
+    } as unknown as TestResult;
 
-      expect(suggestionContainer).toHaveClass('border-emerald-500/50');
-      expect(suggestionContainer).toHaveClass('bg-emerald-500/10');
-    });
+    renderWithProviders(<TestSection {...baseProps} testResult={testResult} />);
 
-    it("should call onApplyConfigSuggestion for each field in configuration_change_suggestion and mark all fields as applied when the user clicks 'Apply All'", async () => {
-      const user = userEvent.setup();
-      const testResultWithMultipleSuggestions: TestResult = {
-        success: false,
-        changes_needed: true,
-        message: 'Configuration changes are needed.',
-        configuration_change_suggestion: {
-          header1: 'value1',
-          body: { key: 'value' },
-          url: 'https://newurl.com',
-        },
-      };
-
-      renderWithProviders(
-        <TestSection {...baseProps} testResult={testResultWithMultipleSuggestions} />,
-      );
-
-      const applyAllButton = screen.getByRole('button', { name: 'Apply All' });
-      await user.click(applyAllButton);
-
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(3);
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('header1', 'value1');
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('body', { key: 'value' });
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('url', 'https://newurl.com');
-
-      await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: 'Test' })).toHaveLength(4);
-      });
-
-      for (const field of ['header1', 'body', 'url']) {
-        const suggestionContainer = screen.getByTestId(`config-suggestion-${field}`);
-        expect(suggestionContainer).toHaveClass('border-emerald-500/50');
-        expect(suggestionContainer).toHaveClass('bg-emerald-500/10');
-      }
-    });
-
-    it('should handle complex nested objects in configuration_change_suggestion values', async () => {
-      const user = userEvent.setup();
-      const nestedObject = {
-        level1: {
-          level2: {
-            level3: 'deepValue',
-          },
-        },
-      };
-      const testResultWithNestedObject: TestResult = {
-        success: false,
-        changes_needed: true,
-        message: 'Configuration changes are needed.',
-        configuration_change_suggestion: {
-          nestedConfig: nestedObject,
-        },
-      };
-
-      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithNestedObject} />);
-
-      const suggestionContainer = screen.getByTestId('config-suggestion-nestedConfig');
-      expect(within(suggestionContainer).getByText('nestedConfig')).toBeInTheDocument();
-      expect(screen.getByText('"deepValue"', { exact: false })).toBeInTheDocument();
-
-      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      await user.click(applyButton);
-
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('nestedConfig', nestedObject);
-    });
-
-    it('should render without errors when configuration_change_suggestion is null', () => {
-      const testResultWithNullSuggestion: TestResult = {
-        success: false,
-        message: 'Test failed.',
-        configuration_change_suggestion: undefined,
-      };
-
-      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithNullSuggestion} />);
-
-      expect(screen.getByText('Test Target Configuration')).toBeInTheDocument();
-    });
-
-    it('should render without errors when configuration_change_suggestion is undefined', () => {
-      const testResultWithUndefinedSuggestion: TestResult = {
-        success: false,
-        message: 'Test failed.',
-        configuration_change_suggestion: undefined,
-      };
-
-      renderWithProviders(
-        <TestSection {...baseProps} testResult={testResultWithUndefinedSuggestion} />,
-      );
-
-      expect(screen.getByText('Test Target Configuration')).toBeInTheDocument();
-    });
-
-    it('should call onApplyConfigSuggestion with invalid JSON in body when Apply is clicked', async () => {
-      const user = userEvent.setup();
-      const invalidJson =
-        '{\n  "messages": [\n    "role": "user",\n    "content": "{{prompt}}"\n  ]\n}';
-      const testResultWithInvalidJson: TestResult = {
-        success: false,
-        changes_needed: true,
-        message: 'Configuration changes are needed.',
-        configuration_change_suggestion: {
-          body: invalidJson,
-        },
-      };
-
-      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithInvalidJson} />);
-
-      const suggestionContainer = screen.getByTestId('config-suggestion-body');
-      expect(within(suggestionContainer).getByText('body')).toBeInTheDocument();
-
-      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      await user.click(applyButton);
-
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
-      expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('body', invalidJson);
-    });
-
-    it('should display configuration suggestions with extremely long values without overflowing the UI', () => {
-      const longValue = 'ThisIsAnExtremelyLongStringValueThatShouldNotOverflowTheUI'.repeat(20);
-      const testResultWithLongValue: TestResult = {
-        success: false,
-        changes_needed: true,
-        message: 'Configuration changes are needed.',
-        configuration_change_suggestion: {
-          long_header: longValue,
-        },
-      };
-
-      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithLongValue} />);
-
-      const longValueElement = screen.getByTestId('config-suggestion-long_header-value');
-      expect(longValueElement).toHaveTextContent(longValue);
-      expect(longValueElement).toHaveClass('break-all');
-    });
+    expect(screen.queryByTestId('config-suggestion-transformResponse')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Apply response parser suggestion' }),
+    ).not.toBeInTheDocument();
   });
 });

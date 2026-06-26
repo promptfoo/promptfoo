@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -12,6 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, CheckCircle, ChevronDown, Info, Play, Send } from 'lucide-react';
+import type { ConfigurationChangeSuggestion } from '@promptfoo/types';
 
 import type { ProviderOptions } from '../../types';
 
@@ -33,7 +34,7 @@ export interface TestResult {
   transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
-  configuration_change_suggestion?: Record<string, unknown>;
+  configuration_change_suggestion?: ConfigurationChangeSuggestion;
 }
 
 interface TestSectionProps {
@@ -44,7 +45,7 @@ interface TestSectionProps {
   disabled: boolean;
   detailsExpanded: boolean;
   onDetailsExpandedChange: (expanded: boolean) => void;
-  onApplyConfigSuggestion?: (field: string, value: unknown) => void;
+  onApplyTransformResponseSuggestion?: (value: string) => void;
 }
 
 interface CodeBlockProps {
@@ -67,9 +68,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200
   </div>
 );
 
-const formatSuggestionValue = (value: unknown): string =>
-  typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-
 const TestSection: React.FC<TestSectionProps> = ({
   selectedTarget,
   isTestRunning,
@@ -78,39 +76,13 @@ const TestSection: React.FC<TestSectionProps> = ({
   disabled,
   detailsExpanded,
   onDetailsExpandedChange,
-  onApplyConfigSuggestion,
+  onApplyTransformResponseSuggestion,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
-  const [appliedFields, setAppliedFields] = useState<Set<string>>(new Set());
-
-  const configSuggestions = useMemo(
-    () => Object.entries(testResult?.configuration_change_suggestion ?? {}),
-    [testResult?.configuration_change_suggestion],
-  );
-  const allSuggestionsApplied =
-    configSuggestions.length > 0 && appliedFields.size === configSuggestions.length;
-
-  useEffect(() => {
-    if (configSuggestions.length >= 0) {
-      setAppliedFields(new Set());
-    }
-  }, [configSuggestions]);
-
-  const handleApplySuggestion = (field: string, value: unknown) => {
-    onApplyConfigSuggestion?.(field, value);
-    setAppliedFields((prev) => new Set(prev).add(field));
-  };
-
-  const handleApplyAll = () => {
-    if (!onApplyConfigSuggestion) {
-      return;
-    }
-
-    configSuggestions.forEach(([field, value]) => {
-      onApplyConfigSuggestion(field, value);
-    });
-    setAppliedFields(new Set(configSuggestions.map(([field]) => field)));
-  };
+  const responseTransformSuggestion =
+    typeof testResult?.configuration_change_suggestion?.transformResponse === 'string'
+      ? testResult.configuration_change_suggestion.transformResponse
+      : undefined;
 
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
@@ -200,60 +172,38 @@ const TestSection: React.FC<TestSectionProps> = ({
                         </div>
                       )}
 
-                    {configSuggestions.length > 0 && (
+                    {responseTransformSuggestion && (
                       <div className="mt-2 rounded-md bg-background/50 p-2">
                         <p className="mb-1.5 font-medium">Configuration Changes</p>
-                        <div className="space-y-2">
-                          {configSuggestions.map(([field, value]) => {
-                            const isApplied = appliedFields.has(field);
-                            return (
-                              <div
-                                key={field}
-                                data-testid={`config-suggestion-${field}`}
-                                className={cn(
-                                  'flex flex-col gap-2 rounded-md border border-border/60 bg-background/80 p-2 sm:flex-row sm:items-start sm:justify-between',
-                                  isApplied && 'border-emerald-500/50 bg-emerald-500/10',
-                                )}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-semibold">{field}</p>
-                                  <pre
-                                    data-testid={`config-suggestion-${field}-value`}
-                                    className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed"
-                                  >
-                                    {formatSuggestionValue(value)}
-                                  </pre>
-                                </div>
-                                {onApplyConfigSuggestion && (
-                                  <Button
-                                    size="sm"
-                                    variant={isApplied ? 'outline' : 'secondary'}
-                                    onClick={
-                                      isApplied
-                                        ? handleTestTarget
-                                        : () => handleApplySuggestion(field, value)
-                                    }
-                                    className="shrink-0"
-                                  >
-                                    {isApplied && <Play className="mr-1.5 size-3.5" />}
-                                    {isApplied ? 'Test' : 'Apply'}
-                                  </Button>
-                                )}
-                              </div>
-                            );
-                          })}
+                        <div
+                          data-testid="config-suggestion-transformResponse"
+                          className="flex flex-col gap-2 rounded-md border border-border/60 bg-background/80 p-2 sm:flex-row sm:items-start sm:justify-between"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold">
+                              Response parser (transformResponse)
+                            </p>
+                            <pre
+                              data-testid="config-suggestion-transformResponse-value"
+                              className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed"
+                            >
+                              {responseTransformSuggestion}
+                            </pre>
+                          </div>
+                          {onApplyTransformResponseSuggestion && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                onApplyTransformResponseSuggestion(responseTransformSuggestion)
+                              }
+                              aria-label="Apply response parser suggestion"
+                              className="shrink-0"
+                            >
+                              Apply
+                            </Button>
+                          )}
                         </div>
-                        {onApplyConfigSuggestion && configSuggestions.length > 1 && (
-                          <Button
-                            size="sm"
-                            variant={allSuggestionsApplied ? 'outline' : 'secondary'}
-                            className="mt-2"
-                            onClick={allSuggestionsApplied ? handleTestTarget : handleApplyAll}
-                          >
-                            {allSuggestionsApplied && <Play className="mr-1.5 size-3.5" />}
-                            {allSuggestionsApplied ? 'Test' : 'Apply All'}
-                          </Button>
-                        )}
                       </div>
                     )}
                   </AlertDescription>

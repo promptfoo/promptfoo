@@ -406,7 +406,7 @@ describe('HttpEndpointConfiguration - Configuration Change Suggestions', () => {
     mockUpdateCustomTarget = vi.fn();
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
-    vi.clearAllMocks();
+    mockCallApi.mockReset();
   });
 
   const renderTarget = (selectedTarget: ProviderOptions = defaultHttpTarget) =>
@@ -421,122 +421,78 @@ describe('HttpEndpointConfiguration - Configuration Change Suggestions', () => {
       />,
     );
 
-  const mockSuggestionsResponse = (suggestion: Record<string, unknown>) => {
+  it('applies a validated response parser suggestion and invalidates the old result', async () => {
     mockCallApi.mockResolvedValue(
       createSuccessfulTestResponse({
         testResult: {
           changes_needed: true,
           message: 'Changes needed',
-          configuration_change_suggestion: suggestion,
+          configuration_change_suggestion: { transformResponse: 'json.response' },
         },
         providerResponse: {},
       }),
     );
-  };
-
-  it('applies all suggested config changes and updates local HTTP form state', async () => {
-    const suggestion = {
-      headers: { 'X-New-Header': 'new-value', 'Content-Type': 'application/json' },
-      body: { new: 'body', prompt: '{{prompt}}' },
-    };
-    mockSuggestionsResponse(suggestion);
-    const user = userEvent.setup();
-
-    renderTarget({
-      ...defaultHttpTarget,
-      config: {
-        ...defaultHttpTarget.config,
-        headers: { 'X-Initial-Header': 'initial-value' },
-        body: JSON.stringify({ initial: 'body' }),
-      },
-    });
-
-    await user.click(screen.getByRole('button', { name: /Test Target/i }));
-
-    expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Apply All/i }));
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', suggestion.headers);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('body', suggestion.body);
-    expect(screen.queryByDisplayValue('X-Initial-Header')).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue('X-New-Header')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('new-value')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Content-Type')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('application/json')).toBeInTheDocument();
-    await waitFor(() => {
-      const editorValues = screen
-        .getAllByTestId('code-editor')
-        .map((editor) => (editor as HTMLTextAreaElement).value);
-      expect(editorValues).toContain(JSON.stringify(suggestion.body, null, 2));
-    });
-  });
-
-  it('normalizes non-string suggested header values before updating config', async () => {
-    const suggestion = {
-      headers: {
-        'X-Number-Header': 123,
-        'X-Boolean-Header': true,
-        'X-Null-Header': null,
-      },
-      url: 'https://newexample.com/api',
-    };
-    mockSuggestionsResponse(suggestion);
     const user = userEvent.setup();
 
     renderTarget();
 
     await user.click(screen.getByRole('button', { name: /Test Target/i }));
     expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Apply response parser suggestion' }));
 
-    const applyButtons = screen.getAllByRole('button', { name: /^Apply$/i });
-    await user.click(applyButtons[0]);
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', {
-      'X-Number-Header': '123',
-      'X-Boolean-Header': 'true',
-      'X-Null-Header': 'null',
+    expect(mockUpdateCustomTarget).toHaveBeenCalledOnce();
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('transformResponse', 'json.response');
+    await waitFor(() => {
+      expect(screen.queryByText('Configuration Changes Needed')).not.toBeInTheDocument();
     });
-    expect(screen.getByDisplayValue('123')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('true')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('null')).toBeInTheDocument();
-
-    await user.click(applyButtons[1]);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', 'https://newexample.com/api');
   });
 
-  it('passes the latest provider response into the response parser test modal', async () => {
-    const mockProviderResponse = {
-      raw: JSON.stringify({ message: 'hello world' }),
-      output: 'hello world',
-    };
-    mockCallApi.mockResolvedValue(
-      createSuccessfulTestResponse({
-        testResult: {
-          success: true,
-          message: 'Target configuration is valid!',
-        },
-        providerResponse: mockProviderResponse,
+  it('ignores a late suggestion after the target changes', async () => {
+    let resolveResponse: (response: Response) => void = () => {};
+    mockCallApi.mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveResponse = resolve;
       }),
     );
     const user = userEvent.setup();
-
-    renderTarget({
-      ...defaultHttpTarget,
-      config: {
-        ...defaultHttpTarget.config,
-        transformResponse: 'json.message',
-      },
-    });
+    const rendered = renderTarget();
 
     await user.click(screen.getByRole('button', { name: /Test Target/i }));
-    await waitFor(() =>
-      expect(mockCallApi).toHaveBeenCalledWith('/providers/test', expect.anything()),
+    expect(mockCallApi).toHaveBeenCalledOnce();
+
+    const changedTarget: ProviderOptions = {
+      ...defaultHttpTarget,
+      config: { ...defaultHttpTarget.config, url: 'https://api.example.com/changed' },
+    };
+    rendered.rerender(
+      <HttpEndpointConfiguration
+        selectedTarget={changedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        bodyError={null}
+        setBodyError={mockSetBodyError}
+        urlError={null}
+        setUrlError={mockSetUrlError}
+      />,
     );
 
-    await user.click(screen.getByRole('button', { name: /^Test$/i }));
+    await act(async () => {
+      resolveResponse(
+        createSuccessfulTestResponse({
+          testResult: {
+            changes_needed: true,
+            message: 'Stale changes',
+            configuration_change_suggestion: { transformResponse: 'json.stale' },
+          },
+          providerResponse: {},
+        }),
+      );
+      await Promise.resolve();
+    });
 
+    expect(screen.queryByText('Stale changes')).not.toBeInTheDocument();
     expect(
-      await screen.findByPlaceholderText('Enter the API response from your endpoint'),
-    ).toHaveValue(mockProviderResponse.raw);
+      screen.queryByRole('button', { name: 'Apply response parser suggestion' }),
+    ).not.toBeInTheDocument();
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 });
