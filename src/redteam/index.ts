@@ -46,6 +46,7 @@ import {
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
+import { pluginIdMatchesStrategyTargets } from './strategies/pluginTargeting';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import {
   extractGoalFromPrompt,
@@ -613,6 +614,31 @@ function containsAgenticStrategy(strategy: string | { id?: string; config?: any 
   }
   const steps = typeof strategy === 'string' ? undefined : strategy.config?.steps;
   return id === 'layer' && Array.isArray(steps) && steps.some(containsAgenticStrategy);
+}
+
+function containsApplicableAgenticStrategy(
+  strategy: string | { id?: string; config?: any },
+  pluginId: string,
+  pluginConfig?: Record<string, unknown>,
+  inheritedTargets?: string[],
+): boolean {
+  const id = typeof strategy === 'string' ? strategy : strategy.id;
+  const config = typeof strategy === 'string' ? undefined : strategy.config;
+  if (config?.numTests === 0) {
+    return false;
+  }
+  const targets = (config?.plugins as string[] | undefined) ?? inheritedTargets;
+  if (!pluginIdMatchesStrategyTargets(pluginId, pluginConfig, id ?? '', targets)) {
+    return false;
+  }
+  if (AGENTIC_STRATEGIES_SET.has(id as any)) {
+    return true;
+  }
+  return id === 'layer' && Array.isArray(config?.steps)
+    ? config.steps.some((step: any) =>
+        containsApplicableAgenticStrategy(step, pluginId, pluginConfig, targets),
+      )
+    : false;
 }
 
 async function applyStrategies(
@@ -1357,6 +1383,9 @@ export async function synthesize({
 
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
+      const deferPluginMinimum = strategies.some((strategy) =>
+        containsApplicableAgenticStrategy(strategy, plugin.id, plugin.config),
+      );
 
       // If plugin has its own language, use that; otherwise use global language
       const languageConfig = plugin.config?.language ?? language;
@@ -1387,14 +1416,14 @@ export async function synthesize({
             ...resolvePluginConfigWithCharLimits(
               plugin.config,
               maxCharsPerMessage,
-              hasAgenticStrategy ? undefined : minCharsPerMessage,
+              deferPluginMinimum ? undefined : minCharsPerMessage,
             ),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
             modifiers: buildRedteamModifiers({
               maxCharsPerMessage,
-              minCharsPerMessage: hasAgenticStrategy ? undefined : minCharsPerMessage,
+              minCharsPerMessage: deferPluginMinimum ? undefined : minCharsPerMessage,
               pluginConfig: plugin.config,
               testGenerationInstructions,
             }),
@@ -1421,7 +1450,7 @@ export async function synthesize({
               `Plugin ${plugin.id}`,
               maxCharsPerMessage,
               minCharsPerMessage,
-              hasAgenticStrategy,
+              deferPluginMinimum,
             );
 
             return {
@@ -1538,6 +1567,9 @@ export async function synthesize({
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
+        const deferPluginMinimum = strategies.some((strategy) =>
+          containsApplicableAgenticStrategy(strategy, plugin.id, plugin.config),
+        );
         const languageConfig = plugin.config?.language ?? language;
         const languages = Array.isArray(languageConfig)
           ? languageConfig
@@ -1552,7 +1584,7 @@ export async function synthesize({
             ...resolvePluginConfigWithCharLimits(
               plugin.config,
               maxCharsPerMessage,
-              hasAgenticStrategy ? undefined : minCharsPerMessage,
+              deferPluginMinimum ? undefined : minCharsPerMessage,
             ),
             ...(lang ? { language: lang } : {}),
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1561,7 +1593,7 @@ export async function synthesize({
             ...resolvedConfig,
             modifiers: buildRedteamModifiers({
               maxCharsPerMessage,
-              minCharsPerMessage: hasAgenticStrategy ? undefined : minCharsPerMessage,
+              minCharsPerMessage: deferPluginMinimum ? undefined : minCharsPerMessage,
               pluginConfig: resolvedConfig,
               testGenerationInstructions,
             }),

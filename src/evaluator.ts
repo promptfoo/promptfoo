@@ -826,13 +826,17 @@ async function renderRunEvalPrompt({
     const isAgenticSeed =
       (strategyId !== undefined && AGENTIC_STRATEGIES_SET.has(strategyId)) ||
       [...AGENTIC_STRATEGIES_SET].some((agenticId) => provider.id().endsWith(agenticId));
-    throwIfTargetPromptViolatesCharLimits(renderedPrompt, {
-      maxCharsPerMessage:
-        testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
-      minCharsPerMessage: isAgenticSeed
-        ? undefined
-        : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
-    });
+    throwIfTargetPromptViolatesCharLimits(
+      renderedPrompt,
+      {
+        maxCharsPerMessage:
+          testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
+        minCharsPerMessage: isAgenticSeed
+          ? undefined
+          : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
+      },
+      { useCliStateFallback: !isAgenticSeed },
+    );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });

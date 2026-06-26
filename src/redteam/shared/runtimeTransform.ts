@@ -170,10 +170,15 @@ export async function applyRuntimeTransforms(
           layerId === 'audio' || layerId === 'image'
             ? { ...testCase.vars, [injectVar]: transcriptBeforeTransform }
             : testCase.vars;
-        const violation = getGeneratedTestCaseLengthViolation(varsToValidate, injectVar, {
-          maxCharsPerMessage: layerConfig.maxCharsPerMessage as number | undefined,
-          minCharsPerMessage: layerConfig.minCharsPerMessage as number | undefined,
-        });
+        const violation = getGeneratedTestCaseLengthViolation(
+          varsToValidate,
+          injectVar,
+          {
+            maxCharsPerMessage: layerConfig.maxCharsPerMessage as number | undefined,
+            minCharsPerMessage: layerConfig.minCharsPerMessage as number | undefined,
+          },
+          { useCliStateFallback: false },
+        );
         if (violation) {
           const limitKey = violation.kind === 'max' ? 'maxCharsPerMessage' : 'minCharsPerMessage';
           const verb = violation.kind === 'max' ? 'exceeds' : 'is below';

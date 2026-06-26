@@ -292,8 +292,13 @@ export function throwIfTargetPromptViolatesCharLimits(
     maxCharsPerMessage,
     minCharsPerMessage,
   }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  options?: { useCliStateFallback?: boolean },
 ): void {
-  const violation = getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
+  const violation = getPromptLengthViolation(
+    prompt,
+    { maxCharsPerMessage, minCharsPerMessage },
+    options,
+  );
   if (!violation) {
     return;
   }
