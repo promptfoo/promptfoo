@@ -59,12 +59,13 @@ const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) =>
   return loadApiProviders(providers);
 };
 
-export async function resolveRedteamTargetProviderConfigs(
+export async function resolveRedteamTargetProviderInputs(
   providers: unknown,
   basePath?: string,
-): Promise<ProvidersConfig> {
-  const { resolveProviderConfigs } = await getProviderModule();
-  return resolveProviderConfigs(providers as ProvidersConfig, { basePath });
+  env?: Record<string, string>,
+): Promise<unknown[]> {
+  const { resolveProviderInputsForValidation } = await getProviderModule();
+  return resolveProviderInputsForValidation(providers as ProvidersConfig, { basePath, env });
 }
 
 let redteamProviderLoader = defaultRedteamProviderLoader;

@@ -12,7 +12,7 @@ import {
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import {
   redteamProviderManager,
-  resolveRedteamTargetProviderConfigs,
+  resolveRedteamTargetProviderInputs,
 } from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -74,20 +74,41 @@ async function getLiveConfigCompatibilityError(
   config: Record<string, unknown>,
 ): Promise<string | undefined> {
   const redteam = isRecord(config.redteam) ? config.redteam : undefined;
-  const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
+  const commandLineOptions = isRecord(config.commandLineOptions)
+    ? config.commandLineOptions
+    : undefined;
+  const strategies = Array.isArray(commandLineOptions?.strategies)
+    ? commandLineOptions.strategies
+    : Array.isArray(redteam?.strategies)
+      ? redteam.strategies
+      : [];
   const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
   if (strategyConfigError) {
     return strategyConfigError;
   }
   const configuredTargets = config.targets ?? config.providers;
-  const resolvedTargets =
-    configuredTargets === undefined
-      ? configuredTargets
-      : await resolveRedteamTargetProviderConfigs(configuredTargets, cliState.basePath);
-  const targets = Array.isArray(resolvedTargets) ? resolvedTargets : [resolvedTargets];
-
-  return targets
+  const targets = Array.isArray(configuredTargets) ? configuredTargets : [configuredTargets];
+  const inlineError = targets
     .flatMap(getInlineTargetInputs)
+    .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
+    .find((error) => error !== undefined);
+  if (inlineError || configuredTargets === undefined) {
+    return inlineError;
+  }
+
+  const requiresResolvedInputs =
+    getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
+  if (!requiresResolvedInputs) {
+    return undefined;
+  }
+
+  const env = isRecord(config.env) ? (config.env as Record<string, string>) : undefined;
+  const resolvedInputs = await resolveRedteamTargetProviderInputs(
+    configuredTargets,
+    cliState.basePath,
+    env,
+  );
+  return resolvedInputs
     .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
     .find((error) => error !== undefined);
 }
@@ -321,11 +342,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   try {
     compatibilityError = await getLiveConfigCompatibilityError(config);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     logger.warn('[Redteam] Failed to resolve target configuration before starting run', {
-      message,
+      error,
     });
-    res.status(400).json({ error: message });
+    res.status(400).json({ error: 'Invalid target provider configuration' });
     return;
   }
   if (compatibilityError) {

@@ -345,6 +345,25 @@ export function resolveProviderConfigs(
 }
 
 /**
+ * Resolves and loads target providers so callers can validate runtime input metadata.
+ * Providers are cleaned up before this function returns.
+ */
+export async function resolveProviderInputsForValidation(
+  providerPaths: ProvidersConfig,
+  options: { basePath?: string; env?: EnvOverrides } = {},
+): Promise<unknown[]> {
+  const renderedProviderPaths = renderEnvOnlyInObject(providerPaths, options.env);
+  const resolvedProviderConfigs = resolveProviderConfigs(renderedProviderPaths, options);
+  const providers = await loadApiProviders(resolvedProviderConfigs, options);
+
+  try {
+    return providers.map((provider) => provider.inputs);
+  } finally {
+    await Promise.allSettled(providers.map((provider) => provider.cleanup?.()));
+  }
+}
+
+/**
  * Helper function to load providers from a file path.
  * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
