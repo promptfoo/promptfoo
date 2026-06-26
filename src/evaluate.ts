@@ -326,6 +326,8 @@ export async function evaluateWithSource(
   options: InternalEvaluateOptions = {},
 ) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
+  const strictConfigEnabled =
+    options.strictConfigEnabled ?? resolveStrictConfigEnabled(testSuiteConfig.env);
 
   if (testSuiteConfig.writeLatestResults) {
     await runDbMigrations();
@@ -361,8 +363,7 @@ export async function evaluateWithSource(
       {
         isRedteam: Boolean(testSuiteConfig.redteam),
         ...options,
-        strictConfigEnabled:
-          options.strictConfigEnabled ?? resolveStrictConfigEnabled(testSuiteConfig.env),
+        strictConfigEnabled,
       },
     ),
   );

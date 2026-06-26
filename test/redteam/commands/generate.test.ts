@@ -165,6 +165,7 @@ vi.mock('../../../src/util/config/load', async (importOriginal) => {
     combineConfigs: vi.fn(),
     resolveConfigs: vi.fn(),
     readConfig: vi.fn(),
+    validateUnknownConfigKeysForConfigPaths: vi.fn(),
   };
 });
 
@@ -447,6 +448,11 @@ describe('doGenerateRedteam', () => {
     vi.clearAllMocks();
     await doGenerateRedteam(options);
 
+    expect(configModule.validateUnknownConfigKeysForConfigPaths).toHaveBeenCalledWith(
+      [configPath],
+      options.envFile,
+    );
+    expect(configModule.resolveConfigs).not.toHaveBeenCalled();
     expect(synthesize).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',

@@ -15,6 +15,7 @@ import {
   ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  enforceUnknownConfigKeyDiagnosticsForConfig,
   logConfigResolutionError,
   maybeReadConfig,
   readConfig,
@@ -2797,6 +2798,47 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     await expect(combineConfigs(['base.json', 'tests.json'])).rejects.toThrow(
       /Unknown top-level config key\(s\) "assert"/,
     );
+  });
+
+  it('applies a config-selected env file when enforcing deferred diagnostics', async () => {
+    const strictEnvPath = '/tmp/promptfoo-strict-config.env';
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    const mockConfig = {
+      commandLineOptions: { envPath: strictEnvPath },
+      providers: ['echo'],
+      prompts: ['hello'],
+      outptPath: '/tmp/results.json',
+    };
+    actualFs.writeFileSync(strictEnvPath, 'PROMPTFOO_STRICT_CONFIG=true');
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    try {
+      const config = await maybeReadConfig('config.json', true);
+
+      expect(() => enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json')).toThrow(
+        /Unknown top-level config key\(s\) "outptPath"/,
+      );
+      expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+    } finally {
+      actualFs.rmSync(strictEnvPath, { force: true });
+    }
+  });
+
+  it('does not load a config-selected env file when there are no deferred diagnostics', async () => {
+    const mockConfig = {
+      commandLineOptions: { envPath: '/tmp/missing-strict-config.env' },
+      providers: ['echo'],
+      prompts: ['hello'],
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const config = await maybeReadConfig('config.json', true);
+
+    expect(() => enforceUnknownConfigKeyDiagnosticsForConfig(config, 'config.json')).not.toThrow();
   });
 
   it('falls back to process strictness when an env override is undefined', () => {

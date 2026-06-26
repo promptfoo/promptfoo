@@ -34,6 +34,7 @@ import {
   ConfigResolutionError,
   logConfigResolutionError,
   resolveConfigs,
+  validateUnknownConfigKeysForConfigPaths,
 } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
@@ -318,7 +319,8 @@ async function doGenerateRedteamInternal(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  // Skip generation when a YAML output already matches the current config hash. Strict unknown-key
+  // validation still runs because environment files are not part of the generation cache key.
   if (
     !options.force &&
     !options.configFromCloud &&
@@ -334,6 +336,7 @@ async function doGenerateRedteamInternal(
     const currentHash = await getConfigHash(configPath, options);
 
     if (storedHash === currentHash) {
+      await validateUnknownConfigKeysForConfigPaths([configPath], options.envFile);
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );

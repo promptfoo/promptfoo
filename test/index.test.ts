@@ -339,6 +339,26 @@ describe('evaluate function', () => {
     );
   });
 
+  it('should snapshot ambient strictness before asynchronous provider resolution', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    loadApiProvidersSpy.mockImplementation(async () => {
+      vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+      return [];
+    });
+
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: true }),
+    );
+  });
+
   it('should not accept internal strict controls through the public evaluate options', async () => {
     await evaluate(
       {

@@ -185,8 +185,29 @@ function getUnknownConfigKeyDiagnostics(
 
 export function enforceUnknownConfigKeyDiagnosticsForConfig(
   config: Partial<UnifiedConfig> | undefined,
+  configPath?: string,
+  explicitEnvPath?: string | string[],
 ): void {
-  enforceUnknownConfigKeyDiagnostics(getUnknownConfigKeyDiagnostics(config), config?.env);
+  const diagnostics = getUnknownConfigKeyDiagnostics(config);
+  if (!diagnostics?.length) {
+    return;
+  }
+  if (!configPath) {
+    enforceUnknownConfigKeyDiagnostics(diagnostics, config?.env);
+    return;
+  }
+
+  const commandLineOptions = normalizeConfiguredCommandLineOptions(
+    config?.commandLineOptions,
+    `configuration file ${configPath}`,
+  );
+  const { strictConfigEnabled } = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    path.dirname(configPath),
+    explicitEnvPath,
+    config?.env,
+  );
+  reportUnknownConfigKeyDiagnostics(diagnostics, strictConfigEnabled);
 }
 
 /**
@@ -231,7 +252,7 @@ function collectUnknownTopLevelKeys(
   return { configPath, unknownTopLevelKeys };
 }
 
-function formatUnknownConfigKeyDiagnostic(diagnostic: UnknownConfigKeyDiagnostic): string {
+export function formatUnknownConfigKeyDiagnostic(diagnostic: UnknownConfigKeyDiagnostic): string {
   const keyList = diagnostic.unknownTopLevelKeys.map((key) => JSON.stringify(key)).join(', ');
   return (
     `Unknown top-level config key(s) ${keyList} in ${JSON.stringify(diagnostic.configPath)}. ` +
@@ -934,6 +955,61 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   return (await combineConfigsWithDiagnostics(configPaths)).config;
 }
 
+function resolveConfiguredEnvStrictness(
+  commandLineOptions: ReturnType<typeof normalizeConfiguredCommandLineOptions>,
+  basePath: string,
+  explicitEnvPath: string | string[] | undefined,
+  configEnv: UnifiedConfig['env'] | undefined,
+): {
+  commandLineOptions: ReturnType<typeof normalizeConfiguredCommandLineOptions>;
+  strictConfigEnabled: boolean;
+} {
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+    const resolvedPaths = envPaths.map((envPath) =>
+      path.isAbsolute(envPath) ? envPath : path.resolve(basePath, envPath),
+    );
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
+    };
+  }
+
+  const hasExplicitEnvPath = Array.isArray(explicitEnvPath)
+    ? explicitEnvPath.length > 0
+    : Boolean(explicitEnvPath);
+  const previousProcessStrictConfig = process.env.PROMPTFOO_STRICT_CONFIG;
+  let strictConfigEnabled: boolean;
+  if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
+    logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+    try {
+      setupEnv(commandLineOptions.envPath);
+      strictConfigEnabled = resolveStrictConfigEnabled(configEnv);
+    } finally {
+      if (previousProcessStrictConfig === undefined) {
+        Reflect.deleteProperty(process.env, 'PROMPTFOO_STRICT_CONFIG');
+      } else {
+        Reflect.set(process.env, 'PROMPTFOO_STRICT_CONFIG', previousProcessStrictConfig);
+      }
+    }
+  } else {
+    strictConfigEnabled = resolveStrictConfigEnabled(configEnv);
+  }
+
+  return { commandLineOptions, strictConfigEnabled };
+}
+
+/** Validate unknown keys on a cache-hit path without instantiating providers. */
+export async function validateUnknownConfigKeysForConfigPaths(
+  configPaths: string[],
+  explicitEnvPath?: string | string[],
+): Promise<void> {
+  const { config } = await combineConfigsWithDiagnostics(configPaths, true);
+  enforceUnknownConfigKeyDiagnosticsForConfig(config, configPaths[0], explicitEnvPath);
+}
+
 /**
  * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
  *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
@@ -1004,40 +1080,14 @@ export async function resolveConfigs(
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
   );
 
-  // Resolve and load config-selected env files before diagnostics or provider/test resolution.
-  if (commandLineOptions?.envPath && basePath) {
-    const envPaths = Array.isArray(commandLineOptions.envPath)
-      ? commandLineOptions.envPath
-      : [commandLineOptions.envPath];
-    const resolvedPaths = envPaths.map((envPath) =>
-      path.isAbsolute(envPath) ? envPath : path.resolve(basePath, envPath),
-    );
-    commandLineOptions = {
-      ...commandLineOptions,
-      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
-    };
-  }
-
-  const hasExplicitEnvPath = Array.isArray(cmdObj.envPath)
-    ? cmdObj.envPath.length > 0
-    : Boolean(cmdObj.envPath);
-  const previousProcessStrictConfig = process.env.PROMPTFOO_STRICT_CONFIG;
-  let strictConfigEnabled: boolean;
-  if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
-    logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-    try {
-      setupEnv(commandLineOptions.envPath);
-      strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
-    } finally {
-      if (previousProcessStrictConfig === undefined) {
-        Reflect.deleteProperty(process.env, 'PROMPTFOO_STRICT_CONFIG');
-      } else {
-        Reflect.set(process.env, 'PROMPTFOO_STRICT_CONFIG', previousProcessStrictConfig);
-      }
-    }
-  } else {
-    strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
-  }
+  const resolvedStrictness = resolveConfiguredEnvStrictness(
+    commandLineOptions,
+    basePath,
+    cmdObj.envPath,
+    fileConfig.env || defaultConfig.env,
+  );
+  commandLineOptions = resolvedStrictness.commandLineOptions;
+  const { strictConfigEnabled } = resolvedStrictness;
   if (unknownConfigKeyDiagnostics.length > 0) {
     reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
   }
