@@ -3,6 +3,10 @@ import { isDeferredMinimumAgenticSeed } from '../../../src/redteam/shared/agenti
 
 describe('isDeferredMinimumAgenticSeed', () => {
   it.each([
+    { strategyId: 'best-of-n' },
+    { strategyId: 'authoritative-markup-injection' },
+    { providerId: 'promptfoo:redteam:best-of-n' },
+    { providerId: 'promptfoo:redteam:authoritative-markup-injection' },
     { strategyId: 'jailbreak:hydra/audio' },
     { strategyId: 'layer/hydra-audio:jailbreak:hydra/audio' },
     { strategyId: 'layer/meta-base64:jailbreak:meta/base64' },

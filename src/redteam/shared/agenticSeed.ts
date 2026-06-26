@@ -11,6 +11,8 @@
 const DEFERRED_MINIMUM_AGENTIC_SEEDS = new Set([
   'crescendo',
   'goat',
+  'best-of-n',
+  'authoritative-markup-injection',
   'indirect-web-pwn',
   'custom',
   'jailbreak',
