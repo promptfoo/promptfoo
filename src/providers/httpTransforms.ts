@@ -1,4 +1,4 @@
-import { parse, tokenizer } from 'acorn';
+import { parse, type Token, tokenizer } from 'acorn';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -8,21 +8,31 @@ import { normalizeResponseTransformResult } from './transformResult';
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
+const MAX_INLINE_TRANSFORM_LENGTH = 128 * 1024;
+
 function normalizeParserSyntax(code: string): string {
   // Acorn does not yet recognize Node's dynamic source-phase import syntax.
-  const tokens = [...tokenizer(code, { ecmaVersion: 'latest' })];
   const replacements: Array<[number, number]> = [];
-  for (let index = 0; index < tokens.length - 3; index++) {
-    const previousLabel = tokens[index - 1]?.type.label;
+  const recentTokens: Token[] = [];
+  for (const token of tokenizer(code, { ecmaVersion: 'latest' })) {
+    recentTokens.push(token);
+    if (recentTokens.length > 5) {
+      recentTokens.shift();
+    }
+    if (recentTokens.length < 4) {
+      continue;
+    }
+    const index = recentTokens.length - 4;
+    const previousLabel = recentTokens[index - 1]?.type.label;
     if (
       previousLabel !== '.' &&
       previousLabel !== '?.' &&
-      tokens[index].type.label === 'import' &&
-      tokens[index + 1].type.label === '.' &&
-      code.slice(tokens[index + 2].start, tokens[index + 2].end) === 'source' &&
-      tokens[index + 3].type.label === '('
+      recentTokens[index].type.label === 'import' &&
+      recentTokens[index + 1].type.label === '.' &&
+      code.slice(recentTokens[index + 2].start, recentTokens[index + 2].end) === 'source' &&
+      recentTokens[index + 3].type.label === '('
     ) {
-      replacements.push([tokens[index].start, tokens[index + 2].end]);
+      replacements.push([recentTokens[index].start, recentTokens[index + 2].end]);
     }
   }
 
@@ -53,22 +63,19 @@ function parseExpression(code: string) {
   }
 }
 
-function isSingleExpressionStatement(code: string): boolean {
+function hasExpressionBeforeTrailingSemicolons(code: string): boolean {
   try {
-    const source = normalizeParserSyntax(code);
-    const program = parse(`function __promptfooTransformContext() { ${source}\n }`, {
-      ecmaVersion: 'latest',
-    });
-    const declaration = program.body[0];
-    const statements =
-      declaration.type === 'FunctionDeclaration'
-        ? declaration.body.body.filter((statement) => statement.type !== 'EmptyStatement')
-        : [];
+    let trailingSemicolonStart: number | undefined;
+    for (const token of tokenizer(code, { ecmaVersion: 'latest' })) {
+      if (token.type.label === ';') {
+        trailingSemicolonStart ??= token.start;
+      } else {
+        trailingSemicolonStart = undefined;
+      }
+    }
     return (
-      program.body.length === 1 &&
-      declaration.type === 'FunctionDeclaration' &&
-      statements.length === 1 &&
-      statements[0].type === 'ExpressionStatement'
+      trailingSemicolonStart !== undefined &&
+      Boolean(parseExpression(code.slice(0, trailingSemicolonStart)))
     );
   } catch {
     return false;
@@ -84,22 +91,30 @@ function isSupportedFunctionExpression(
       ((expression.type === 'ArrowFunctionExpression' && (!expression.async || allowAsync)) ||
         (expression.type === 'FunctionExpression' &&
           expression.id === null &&
-          !expression.async &&
+          (!expression.async || allowAsync) &&
           !expression.generator)),
   );
 }
 
 function getFunctionExpression(code: string, allowAsync = false): string | false | undefined {
+  if (code.length > MAX_INLINE_TRANSFORM_LENGTH) {
+    throw new Error(
+      `Inline HTTP transform exceeds the maximum supported length of ${MAX_INLINE_TRANSFORM_LENGTH} characters`,
+    );
+  }
   let end = code.length;
   while (end > 0 && code[end - 1] === ';') {
     end--;
   }
   const source = code.slice(0, end);
+  if (!source) {
+    return undefined;
+  }
   const expression = parseExpression(source);
   if (isSupportedFunctionExpression(expression, allowAsync)) {
     return source;
   }
-  return expression || isSingleExpressionStatement(code) ? false : undefined;
+  return expression || hasExpressionBeforeTrailingSemicolons(code) ? false : undefined;
 }
 
 export interface TransformResponseContext {
@@ -149,7 +164,7 @@ export async function createTransformResponse(
           'context',
           'process',
           parserIsFunction
-            ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
+            ? `try { return (${trimmedParser}\n)(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
             : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         let resp: ProviderResponse | string;
@@ -210,7 +225,7 @@ export async function createTransformRequest(
         try {
           // Add process parameter for ESM compatibility - allows process.mainModule.require to work
           const functionBody = functionExpression
-            ? `try { return (${expressionTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`
+            ? `try { return (${expressionTransform}\n)(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`
             : `try { return (${expressionTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`;
           transformFn = new Function('prompt', 'vars', 'context', 'process', functionBody);
         } catch (error) {

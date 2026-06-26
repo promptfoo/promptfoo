@@ -173,24 +173,25 @@ describe('createTransformResponse', () => {
     expect(parser({}, '')).toEqual({ output: 'undefined' });
   });
 
-  it.skipIf(!supportsSourcePhaseImports)(
-    'should accept runtime-supported source-phase import syntax',
-    async () => {
-      for (const sourceImport of [
-        'import.source("./unused.wasm")',
-        'import /* phase */ . source /* call */ ("./unused.wasm")',
-      ]) {
-        const responseParser = await createTransformResponse(
-          `() => false ? ${sourceImport} : "response";`,
-        );
-        const requestTransform = await createTransformRequest(
-          `() => false ? ${sourceImport} : "request";`,
-        );
-        expect(responseParser({}, '')).toEqual({ output: 'response' });
-        await expect(requestTransform('hello', {} as any)).resolves.toBe('request');
-      }
-    },
-  );
+  it('should accept runtime-supported source-phase import syntax', async () => {
+    if (!supportsSourcePhaseImports) {
+      return;
+    }
+    for (const sourceImport of [
+      'import.source("./unused.wasm")',
+      'import /* phase */ . source /* call */ ("./unused.wasm")',
+      'import.source("./unused-a.wasm") || import.source("./unused-b.wasm")',
+    ]) {
+      const responseParser = await createTransformResponse(
+        `() => false ? ${sourceImport} : "response";`,
+      );
+      const requestTransform = await createTransformRequest(
+        `() => false ? ${sourceImport} : "request";`,
+      );
+      expect(responseParser({}, '')).toEqual({ output: 'response' });
+      await expect(requestTransform('hello', {} as any)).resolves.toBe('request');
+    }
+  });
 
   it('should preserve multiline function-valued expression semantics', async () => {
     const parser = await createTransformResponse('(\n  () => json.data\n)()');
@@ -202,6 +203,11 @@ describe('createTransformResponse', () => {
     const parser = await createTransformResponse('(((json) => json.data))');
     const result = parser({ data: 'value' }, '');
     expect(result.output).toBe('value');
+  });
+
+  it.each(['// tail', '// tail;'])('should invoke functions ending with %s', async (comment) => {
+    const parser = await createTransformResponse(`(json) => json.data ${comment}`);
+    expect(parser({ data: 'value' }, '')).toEqual({ output: 'value' });
   });
 
   it('should reject bare multi-statement response bodies', async () => {
@@ -243,6 +249,7 @@ describe('createTransformResponse', () => {
   it.each([
     'async (json) => json.data;',
     '(async (json) => json.data);',
+    'async function(json) { return json.data; };',
   ])('should reject serialized async response function %s', async (code) => {
     const parser = await createTransformResponse(code);
     expect(() => parser({ data: 'value' }, '')).toThrow('Failed to transform response');
@@ -409,6 +416,10 @@ describe('createTransformRequest', () => {
     ['unspaced', 'async(prompt) => prompt.toUpperCase();;'],
     ['multiline parameters', 'async (\n prompt\n) => prompt.toUpperCase();'],
     ['redundantly grouped', '(async (prompt) => prompt.toUpperCase());'],
+    [
+      'anonymous function',
+      'async function(prompt) { return await Promise.resolve(prompt.toUpperCase()); };',
+    ],
   ])('should handle %s serialized async request functions', async (_, code) => {
     const transform = await createTransformRequest(code);
     const result = await transform('hello', {} as any);
@@ -450,6 +461,11 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('(\n  () => prompt.toUpperCase()\n)()');
     const result = await transform('hello', {} as any);
     expect(result).toBe('HELLO');
+  });
+
+  it.each(['// tail', '// tail;'])('should invoke functions ending with %s', async (comment) => {
+    const transform = await createTransformRequest(`(prompt) => prompt.toUpperCase() ${comment}`);
+    await expect(transform('hello', {} as any)).resolves.toBe('HELLO');
   });
 
   it('should not invoke arbitrary function-valued expressions', async () => {
@@ -579,5 +595,23 @@ describe('createTransformRequest', () => {
   it('should reject malformed request functions', async () => {
     const transform = await createTransformRequest('(prompt) => { return prompt;');
     await expect(transform('hello', {} as any)).rejects.toThrow('Failed to transform request');
+  });
+
+  it('should bound inline transform parsing', async () => {
+    const maxLength = 128 * 1024;
+    const atLimit = JSON.stringify('x'.repeat(maxLength - 2));
+    const transform = await createTransformRequest(atLimit);
+    await expect(transform('hello', {} as any)).resolves.toHaveLength(maxLength - 2);
+
+    await expect(createTransformResponse('x'.repeat(maxLength + 1))).rejects.toThrow(
+      `maximum supported length of ${maxLength} characters`,
+    );
+    const oversizedArrow = `() => {${';'.repeat(maxLength)}return 'ok';}`;
+    await expect(createTransformRequest(oversizedArrow)).rejects.toThrow(
+      `maximum supported length of ${maxLength} characters`,
+    );
+    await expect(createTransformResponse(`${';'.repeat(maxLength)}/* import */`)).rejects.toThrow(
+      `maximum supported length of ${maxLength} characters`,
+    );
   });
 });
