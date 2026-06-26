@@ -20,7 +20,11 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
+import {
+  getStrategyCompatibilityError,
+  MAX_MAX_CONCURRENCY,
+  synthesize,
+} from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
@@ -58,6 +62,7 @@ type SynthesizeMockResult = {
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
+  vi.mocked(getStrategyCompatibilityError).mockReset().mockReturnValue(undefined);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
   vi.mocked(getCloudDatabaseId).mockReset();
@@ -117,6 +122,7 @@ vi.mock('fs/promises', () => {
   };
 });
 vi.mock('../../../src/redteam', () => ({
+  getStrategyCompatibilityError: vi.fn(),
   MAX_MAX_CONCURRENCY: 20,
   synthesize: vi.fn().mockResolvedValue({
     testCases: [],
@@ -992,6 +998,9 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should reject incompatible target inputs before provider inspection and clean up', async () => {
+    vi.mocked(getStrategyCompatibilityError).mockReturnValueOnce(
+      'Posterior strategy does not support multi-input targets',
+    );
     mockProvider.inputs = {
       context: 'Reference context',
       question: 'User question',
