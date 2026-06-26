@@ -339,6 +339,25 @@ describe('evaluate function', () => {
     );
   });
 
+  it('should not accept internal strict controls through the public evaluate options', async () => {
+    await evaluate(
+      {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [],
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      },
+      {
+        skipStrictAssertionValidation: true,
+        strictConfigEnabled: false,
+      } as never,
+    );
+
+    const receivedOptions = vi.mocked(doEvaluate).mock.calls.at(-1)?.[2];
+    expect(receivedOptions).not.toHaveProperty('skipStrictAssertionValidation');
+    expect(receivedOptions).toEqual(expect.objectContaining({ strictConfigEnabled: true }));
+  });
+
   it('should process different types of prompts correctly', async () => {
     const testSuite = {
       prompts: [

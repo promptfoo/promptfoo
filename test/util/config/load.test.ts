@@ -20,6 +20,7 @@ import {
   readConfig,
   resolveCliProvidersWithConfig,
   resolveConfigs,
+  resolveStrictConfigEnabled,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
@@ -2757,6 +2758,21 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     await expect(readConfig('config.js')).rejects.toThrow(/"outptPath"/);
   });
 
+  it('applies an inherited strict setting materialized during rendering', async () => {
+    const mockConfig = Object.create({
+      env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+      outptPath: '/tmp/ignored.json',
+    }) as UnifiedConfig;
+    Object.assign(mockConfig, {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: [{ vars: { case: 'inherited-env' } }],
+    });
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    await expect(readConfig('config.js')).rejects.toThrow(/"outptPath"/);
+  });
+
   it('applies the effective merged env setting to every config file', async () => {
     const configs: Record<string, UnifiedConfig & { assert?: unknown[] }> = {
       'base.json': {
@@ -2781,6 +2797,16 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     await expect(combineConfigs(['base.json', 'tests.json'])).rejects.toThrow(
       /Unknown top-level config key\(s\) "assert"/,
     );
+  });
+
+  it('falls back to process strictness when an env override is undefined', () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+
+    expect(
+      resolveStrictConfigEnabled({
+        PROMPTFOO_STRICT_CONFIG: undefined,
+      } as UnifiedConfig['env']),
+    ).toBe(true);
   });
 
   it('escapes control characters in strict config errors', async () => {

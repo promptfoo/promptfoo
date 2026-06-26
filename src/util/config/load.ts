@@ -37,7 +37,7 @@ import {
 import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { readFilters, renderEnvOnlyInObject } from '../../util/index';
+import { readFilters, renderEnvOnlyInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
@@ -150,10 +150,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function hasOwn(record: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key);
-}
-
 /**
  * Finds top-level keys that are not part of the unified config shape. This intentionally operates
  * on the parsed object before dereferencing, templating, or schema normalization can remove keys.
@@ -179,35 +175,32 @@ export interface UnknownConfigKeyDiagnostic {
   unknownTopLevelKeys: string[];
 }
 
+const unknownConfigKeyDiagnosticsByConfig = new WeakMap<object, UnknownConfigKeyDiagnostic[]>();
+
+export function getUnknownConfigKeyDiagnostics(
+  config: Partial<UnifiedConfig> | undefined,
+): UnknownConfigKeyDiagnostic[] | undefined {
+  return config ? unknownConfigKeyDiagnosticsByConfig.get(config) : undefined;
+}
+
 /**
  * Resolves strictness from the config currently being loaded, then process.env. In particular,
  * this must not consult cliState.config because watch mode may still hold the previous config.
  */
-function isStrictConfigEnabled(
-  rawConfig: unknown,
-  dereferencedConfig: unknown,
-  renderedConfig: unknown,
-): boolean {
-  const configEnvWithOverride = [rawConfig, dereferencedConfig]
-    .map((config) =>
-      isRecord(config) && hasOwn(config, 'env') && isRecord(config.env) ? config.env : undefined,
-    )
-    .find((env) => env && hasOwn(env, 'PROMPTFOO_STRICT_CONFIG'));
-  if (configEnvWithOverride) {
-    const renderedEnv =
-      isRecord(renderedConfig) && hasOwn(renderedConfig, 'env') ? renderedConfig.env : undefined;
-    const renderedValue =
-      isRecord(renderedEnv) && hasOwn(renderedEnv, 'PROMPTFOO_STRICT_CONFIG')
-        ? renderedEnv.PROMPTFOO_STRICT_CONFIG
-        : configEnvWithOverride.PROMPTFOO_STRICT_CONFIG;
-    return parseEnvBoolean(renderedValue);
-  }
-  return parseEnvBoolean(process.env.PROMPTFOO_STRICT_CONFIG);
+function isStrictConfigEnabled(renderedConfig: unknown): boolean {
+  const renderedEnv =
+    isRecord(renderedConfig) && isRecord(renderedConfig.env)
+      ? (renderedConfig.env as UnifiedConfig['env'])
+      : undefined;
+  return resolveStrictConfigEnabled(renderedEnv);
 }
 
 export function resolveStrictConfigEnabled(env: UnifiedConfig['env'] | undefined): boolean {
-  if (isRecord(env) && hasOwn(env, 'PROMPTFOO_STRICT_CONFIG')) {
-    return parseEnvBoolean((env as Record<string, unknown>).PROMPTFOO_STRICT_CONFIG);
+  if (isRecord(env)) {
+    const override = (env as Record<string, unknown>).PROMPTFOO_STRICT_CONFIG;
+    if (override !== undefined) {
+      return parseEnvBoolean(override);
+    }
   }
   return parseEnvBoolean(process.env.PROMPTFOO_STRICT_CONFIG);
 }
@@ -267,6 +260,16 @@ export function enforceUnknownConfigKeyDiagnostics(
   if (diagnostics?.length && resolveStrictConfigEnabled(env)) {
     failConfigResolution(diagnostics.map(formatUnknownConfigKeyDiagnostic).join('\n'));
   }
+}
+
+/** Load a configured env file before enforcing diagnostics whose strictness depends on it. */
+export function setupEnvAndEnforceUnknownConfigKeyDiagnostics(
+  envPath: string | string[] | undefined,
+  diagnostics: readonly UnknownConfigKeyDiagnostic[] | undefined,
+  env: UnifiedConfig['env'] | undefined,
+): void {
+  setupEnv(envPath);
+  enforceUnknownConfigKeyDiagnostics(diagnostics, env);
 }
 
 /**
@@ -499,7 +502,7 @@ async function readConfigWithDiagnostics(
       if (!deferUnknownKeyValidation) {
         reportUnknownConfigKeyDiagnostics(
           unknownConfigKeyDiagnostics,
-          isStrictConfigEnabled(rawConfig, dereferencedConfig, renderedConfig),
+          isStrictConfigEnabled(renderedConfig),
         );
       }
     }
@@ -550,7 +553,7 @@ async function readConfigWithDiagnostics(
       if (!deferUnknownKeyValidation) {
         reportUnknownConfigKeyDiagnostics(
           unknownConfigKeyDiagnostics,
-          isStrictConfigEnabled(imported, imported, renderedConfig),
+          isStrictConfigEnabled(renderedConfig),
         );
       }
     }
@@ -612,6 +615,7 @@ async function readConfigWithDiagnostics(
     }
     ret.prompts = ['{{prompt}}'];
   }
+  unknownConfigKeyDiagnosticsByConfig.set(ret, unknownConfigKeyDiagnostics);
   return { config: ret, unknownConfigKeyDiagnostics };
 }
 
@@ -918,6 +922,7 @@ async function combineConfigsWithDiagnostics(configPaths: string[]): Promise<Com
     resolveStrictConfigEnabled(combinedConfig.env),
   );
 
+  unknownConfigKeyDiagnosticsByConfig.set(combinedConfig, unknownConfigKeyDiagnostics);
   return { config: combinedConfig, unknownConfigKeyDiagnostics };
 }
 

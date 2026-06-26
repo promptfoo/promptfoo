@@ -610,6 +610,13 @@ describe('API schema red-team coverage', () => {
 
     it('bounds eval mutations, jobs, replay, and bulk operations', () => {
       expect(
+        EvalSchemas.CreateJob.Request.parse({
+          prompts: ['Tell me a joke'],
+          providers: ['echo'],
+          env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+        }).env,
+      ).toEqual({ PROMPTFOO_STRICT_CONFIG: 'true' });
+      expect(
         EvalSchemas.CreateJob.Request.safeParse({
           prompts: ['Tell me a joke'],
           providers: ['echo'],

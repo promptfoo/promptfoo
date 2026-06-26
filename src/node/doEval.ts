@@ -36,6 +36,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   enforceUnknownConfigKeyDiagnostics,
+  getUnknownConfigKeyDiagnostics,
   logConfigResolutionError,
   resolveConfigs,
   resolveStrictConfigEnabled,
@@ -465,6 +466,12 @@ export async function doEval(
         commandLineOptions,
         unknownConfigKeyDiagnostics,
       } = await resolveConfigs(cmdObj, defaultConfig));
+      if (cmdObj.config === undefined) {
+        unknownConfigKeyDiagnostics = [
+          ...(getUnknownConfigKeyDiagnostics(defaultConfig) ?? []),
+          ...(unknownConfigKeyDiagnostics ?? []),
+        ];
+      }
     }
 
     const persistedProviderFilterOptions = resumeEval
@@ -698,8 +705,12 @@ export async function doEval(
 
     // Strip any providerFilter a config file injected via evaluateOptions — only the
     // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    const {
+      providerFilter: _ignoredProviderFilter,
+      skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
+      strictConfigEnabled: _ignoredStrictConfigEnabled,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       showProgressBar:

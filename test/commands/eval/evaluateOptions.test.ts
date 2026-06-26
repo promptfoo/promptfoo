@@ -188,6 +188,26 @@ describe('evaluateOptions behavior', () => {
 
       expect(options.maxEvalTimeMs).toBe(99999);
     });
+
+    it('should not accept internal strict controls from config evaluateOptions', async () => {
+      const internalOptionsConfig = writeTempConfig(tmpDir, 'internal-options.yaml', {
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+        evaluateOptions: {
+          skipStrictAssertionValidation: true,
+          strictConfigEnabled: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['test prompt'],
+        tests: [{ vars: { input: 'test input' } }],
+      });
+
+      const options = (await runEvalAndGetOptions({
+        config: [internalOptionsConfig],
+      })) as EvaluateOptions & Record<string, unknown>;
+
+      expect(options.skipStrictAssertionValidation).toBeUndefined();
+      expect(options.strictConfigEnabled).toBe(true);
+    });
   });
 
   describe('Prioritization of CLI options over config file options', () => {

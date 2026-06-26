@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupEnv } from '../../../../src/util/index';
 
 const mockFilteredEvaluate = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
@@ -77,9 +78,14 @@ vi.mock('../../../../src/models/eval', () => ({
   },
 }));
 
+vi.mock('../../../../src/util/index', () => ({
+  setupEnv: vi.fn(),
+}));
+
 describe('runEvaluation tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(setupEnv).mockReset();
     mockFilteredEvaluate.mockReset().mockResolvedValue({
       id: 'filtered-eval-123',
       toEvaluateSummary: vi.fn().mockResolvedValue({
@@ -89,6 +95,10 @@ describe('runEvaluation tool', () => {
         prompts: [],
       }),
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('result formatting', () => {
@@ -296,6 +306,42 @@ describe('runEvaluation tool', () => {
         expect.anything(),
         expect.objectContaining({ strictConfigEnabled: true }),
       );
+    });
+
+    it('should enforce deferred diagnostics after loading a filtered config envPath', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [{ id: 'test-provider' }],
+          tests: [{ vars: { input: 'test' } }],
+        },
+        commandLineOptions: { envPath: '/tmp/.env.strict' },
+        unknownConfigKeyDiagnostics: [{ configPath: 'test.yaml', unknownTopLevelKeys: ['assert'] }],
+      } as any);
+      vi.mocked(setupEnv).mockImplementation(() => {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+      });
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: 0,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(setupEnv).toHaveBeenCalledWith('/tmp/.env.strict');
+      expect(mockFilteredEvaluate).not.toHaveBeenCalled();
     });
 
     it('should error on mixed numeric and non-numeric filters', async () => {

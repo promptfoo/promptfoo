@@ -27,6 +27,7 @@ const MAX_EXAMPLE_TEXT_LENGTH = 1200;
 const DEFAULT_SELECTION_INDEX = 0;
 const VALIDATION_SPLIT_MIN = 0;
 const VALIDATION_SPLIT_MAX = 0.5;
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
 
 interface PromptOptimizationCandidate {
   hypothesis?: string;
@@ -719,12 +720,22 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
 }
 
 function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
+  const {
+    skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
+    strictConfigEnabled: _ignoredStrictConfigEnabled,
+    ...evaluateOptions
+  } = (config.evaluateOptions ?? {}) as InternalEvaluateOptions;
+  const strictConfigValue =
+    config.env?.PROMPTFOO_STRICT_CONFIG ?? process.env.PROMPTFOO_STRICT_CONFIG;
   return {
-    ...config.evaluateOptions,
+    ...evaluateOptions,
     cache: false,
     eventSource: 'library',
     showProgressBar: false,
     silent: true,
+    strictConfigEnabled:
+      strictConfigValue !== undefined &&
+      TRUE_ENV_VALUES.has(String(strictConfigValue).toLowerCase()),
   };
 }
 

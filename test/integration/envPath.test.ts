@@ -14,6 +14,7 @@ import {
   vi,
 } from 'vitest';
 import { doEval } from '../../src/node/doEval';
+import { clearConfigCache, loadDefaultConfig } from '../../src/util/config/default';
 import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/cache');
@@ -80,10 +81,12 @@ describe('Integration: commandLineOptions.envPath', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSetupEnv.mockReset();
+    clearConfigCache();
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    clearConfigCache();
   });
 
   it('should load environment from config-specified envPath', async () => {
@@ -153,6 +156,39 @@ tests:
     });
 
     await expect(doEval({ config: [tempConfigFile] }, {}, undefined, {})).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
+  });
+
+  it('should retain diagnostics for an auto-discovered cached default config', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: default-config
+      `,
+    );
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig(tempDir);
+    mockSetupEnv.mockImplementation((envPath) => {
+      if (envPath === undefined) {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+      }
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
       /Unknown top-level config key\(s\) "assert"/,
     );
   });
