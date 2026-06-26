@@ -42,6 +42,12 @@ const SAFE_MESSAGE_ROLES = new Set([
 ]);
 const SAFE_RESPONSE_FORMAT_TYPES = new Set(['json_object', 'json_schema', 'text']);
 const SAFE_AUDIO_FORMATS = new Set(['aac', 'flac', 'mp3', 'opus', 'pcm16', 'wav']);
+const SAFE_FINISH_REASONS = new Set([
+  FINISH_REASON_MAP.stop,
+  FINISH_REASON_MAP.length,
+  FINISH_REASON_MAP.tool_calls,
+  FINISH_REASON_MAP.content_filter,
+]);
 const SAFE_AZURE_ERROR_CODES = new Set([
   'content_filter',
   'insufficient_quota',
@@ -83,6 +89,11 @@ function getSafeAzureAudioFormat(format: unknown): string | undefined {
 
 function getSafeAzureTokenCount(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function getSafeAzureFinishReason(value: unknown): string | undefined {
+  const normalized = typeof value === 'string' ? normalizeFinishReason(value) : undefined;
+  return normalized && SAFE_FINISH_REASONS.has(normalized) ? normalized : undefined;
 }
 
 function getAzureChatTokenUsage(usage: unknown, cached: boolean): ProviderResponse['tokenUsage'] {
@@ -140,23 +151,31 @@ function isAzureChatUsageCacheable(usage: unknown): boolean {
     return false;
   }
 
-  const details = record.completion_tokens_details;
-  if (details == null) {
-    return true;
-  }
-  if (typeof details !== 'object' || Array.isArray(details)) {
+  const hasSafeDetails = (details: unknown, fields: readonly string[]) => {
+    if (details == null) {
+      return true;
+    }
+    if (typeof details !== 'object' || Array.isArray(details)) {
+      return false;
+    }
+    const detailRecord = details as Record<string, unknown>;
+    return fields.every(
+      (field) =>
+        detailRecord[field] == null || getSafeAzureTokenCount(detailRecord[field]) !== undefined,
+    );
+  };
+
+  if (
+    !hasSafeDetails(record.completion_tokens_details, [
+      'reasoning_tokens',
+      'accepted_prediction_tokens',
+      'rejected_prediction_tokens',
+      'audio_tokens',
+    ])
+  ) {
     return false;
   }
-  const detailRecord = details as Record<string, unknown>;
-  const detailFields = [
-    'reasoning_tokens',
-    'accepted_prediction_tokens',
-    'rejected_prediction_tokens',
-  ] as const;
-  return detailFields.every(
-    (field) =>
-      !(field in detailRecord) || getSafeAzureTokenCount(detailRecord[field]) !== undefined,
-  );
+  return hasSafeDetails(record.prompt_tokens_details, ['audio_tokens', 'cached_tokens']);
 }
 
 function getAzureChatAudio(
@@ -176,7 +195,7 @@ function getAzureChatAudio(
     typeof record.data !== 'string' ||
     typeof record.transcript !== 'string' ||
     typeof record.expires_at !== 'number' ||
-    !Number.isFinite(record.expires_at) ||
+    !Number.isSafeInteger(record.expires_at) ||
     record.expires_at < 0
   ) {
     return undefined;
@@ -207,6 +226,41 @@ function hasNamedStringPayload(
   );
 }
 
+function getAzureChatToolCalls(value: unknown): Record<string, unknown>[] | undefined {
+  const isValidToolCall = (call: unknown) => {
+    if (!call || typeof call !== 'object' || Array.isArray(call)) {
+      return false;
+    }
+    const record = call as Record<string, unknown>;
+    const hasFunction = record.function != null;
+    const hasCustom = record.custom != null;
+    if (hasFunction === hasCustom) {
+      return false;
+    }
+    const expectedType = hasFunction ? 'function' : 'custom';
+    if (record.type !== undefined && record.type !== expectedType) {
+      return false;
+    }
+    if (record.id !== undefined && typeof record.id !== 'string') {
+      return false;
+    }
+    return hasFunction
+      ? hasNamedStringPayload(record.function, 'arguments', true)
+      : hasNamedStringPayload(record.custom, 'input', false);
+  };
+
+  if (!Array.isArray(value) || value.length === 0 || !value.every(isValidToolCall)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>[];
+}
+
+function getAzureChatFunctionCall(value: unknown): Record<string, unknown> | undefined {
+  return hasNamedStringPayload(value, 'arguments', true)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function getAzureChatCalls(
   message: unknown,
 ): { toolCalls?: Record<string, unknown>[]; functionCall?: Record<string, unknown> } | undefined {
@@ -214,25 +268,35 @@ function getAzureChatCalls(
     return undefined;
   }
   const record = message as Record<string, unknown>;
+  const toolCalls = getAzureChatToolCalls(record.tool_calls);
+  if (toolCalls) {
+    return { toolCalls };
+  }
+  const functionCall = getAzureChatFunctionCall(record.function_call);
+  return functionCall ? { functionCall } : undefined;
+}
+
+function isAzureChatAlternatePayloadCacheable(message: unknown): boolean {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) {
+    return false;
+  }
+  const record = message as Record<string, unknown>;
+  const audio = record.audio;
+  const audioFormat =
+    audio && typeof audio === 'object' && !Array.isArray(audio)
+      ? (audio as Record<string, unknown>).format
+      : undefined;
   const toolCalls = record.tool_calls;
-  if (
-    Array.isArray(toolCalls) &&
-    toolCalls.length > 0 &&
-    toolCalls.every(
-      (call) =>
-        call != null &&
-        typeof call === 'object' &&
-        !Array.isArray(call) &&
-        (hasNamedStringPayload((call as Record<string, unknown>).function, 'arguments', true) ||
-          hasNamedStringPayload((call as Record<string, unknown>).custom, 'input', false)),
-    )
-  ) {
-    return { toolCalls: toolCalls as Record<string, unknown>[] };
-  }
-  if (hasNamedStringPayload(record.function_call, 'arguments', true)) {
-    return { functionCall: record.function_call as Record<string, unknown> };
-  }
-  return undefined;
+  return (
+    (record.content == null || typeof record.content === 'string') &&
+    (audio == null ||
+      (getAzureChatAudio(message) !== undefined &&
+        (audioFormat == null || getSafeAzureAudioFormat(audioFormat) !== undefined))) &&
+    (toolCalls == null ||
+      (Array.isArray(toolCalls) &&
+        (toolCalls.length === 0 || getAzureChatToolCalls(toolCalls) !== undefined))) &&
+    (record.function_call == null || getAzureChatFunctionCall(record.function_call) !== undefined)
+  );
 }
 
 function getAzureChatLogProbs(choice: Record<string, any> | null): number[] | undefined {
@@ -307,7 +371,7 @@ function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boole
       typeof message === 'object' &&
       (typeof message.content === 'string' ||
         (message.content === null &&
-          normalizeFinishReason(choice?.finish_reason) === FINISH_REASON_MAP.content_filter) ||
+          getSafeAzureFinishReason(choice?.finish_reason) === FINISH_REASON_MAP.content_filter) ||
         getAzureChatRefusal(message) !== undefined ||
         getAzureChatAudio(message) !== undefined ||
         (message.content == null && getAzureChatCalls(message) !== undefined)),
@@ -316,8 +380,11 @@ function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boole
 
 function isAzureChatChoiceCacheable(choice: Record<string, any> | null): boolean {
   const message = choice?.message;
+  const finishReason = getSafeAzureFinishReason(choice?.finish_reason);
   return (
-    normalizeFinishReason(choice?.finish_reason) !== FINISH_REASON_MAP.content_filter &&
+    finishReason !== undefined &&
+    finishReason !== FINISH_REASON_MAP.content_filter &&
+    isAzureChatAlternatePayloadCacheable(message) &&
     isAzureChatRefusalCacheable(message) &&
     isAzureChatLogProbsCacheable(choice) &&
     isAzureChatChoiceProcessable(choice)
@@ -380,11 +447,18 @@ function getAzureChatRateLimitResponse(error: HttpRateLimitError): ProviderRespo
     error.kind === 'rate_limit' && retryAfterMs !== undefined
       ? ` [retry after ${Math.round(retryAfterMs / 1000)}s]`
       : '';
+  const codeDetail =
+    error.code === 'insufficient_quota' || error.code === 'rate_limit_exceeded'
+      ? ` (code: ${error.code})`
+      : '';
+  const statusDetail = error.status === 429 ? 'HTTP 429 Too Many Requests' : `HTTP ${error.status}`;
   return {
     error:
       error.kind === 'quota'
-        ? `Quota exceeded: HTTP ${error.status}. Retries will not help — check your billing or daily quota.`
-        : `Rate limit exceeded: HTTP ${error.status}${retryDetail}`,
+        ? `Quota exceeded: ${statusDetail}${codeDetail}. Retries will not help — check your billing or daily quota.`
+        : error.status === 429
+          ? `Rate limit exceeded: ${statusDetail}${codeDetail}${retryDetail}`
+          : `Rate limit indicated by response headers (HTTP ${error.status})${retryDetail}`,
     metadata: {
       rateLimitKind: error.kind,
       http: {
@@ -836,7 +910,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let flaggedOutput = false;
     let output: any = '';
     let logProbs: any;
-    let finishReason: string;
+    let finishReason: string | undefined;
     let isRefusal = false;
     let audio: ProviderResponse['audio'];
 
@@ -873,7 +947,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
         // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
         // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
-        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
+        finishReason = getSafeAzureFinishReason(choice?.finish_reason);
 
         const isFilteredCompletion = finishReason === FINISH_REASON_MAP.content_filter;
         const refusal = isFilteredCompletion ? undefined : getAzureChatRefusal(message);

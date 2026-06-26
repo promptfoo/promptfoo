@@ -23,6 +23,7 @@ import {
 } from '../src/cache';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
@@ -1142,6 +1143,34 @@ describe('fetchWithCache', () => {
       await runPair('silent-first', true);
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(4);
+    });
+
+    it('should isolate in-flight fetches by timeout and effective retry policy', async () => {
+      mockFetchWithRetries.mockResolvedValue(
+        mockFetchWithRetriesResponse(true, { data: 'policy-specific response' }),
+      );
+      const requestOptions = { headers: { 'x-promptfoo-silent': 'true' } };
+
+      const timeoutResults = await Promise.all([
+        fetchWithCache(`${url}?policy=timeout`, requestOptions, 100, 'json', false, 0),
+        fetchWithCache(`${url}?policy=timeout`, requestOptions, 1000, 'json', false, 0),
+      ]);
+      const retryResults = await Promise.all([
+        withFetchRetryContext(0, () =>
+          fetchWithCache(`${url}?policy=retries`, requestOptions, 1000),
+        ),
+        withFetchRetryContext(1, () =>
+          fetchWithCache(`${url}?policy=retries`, requestOptions, 1000),
+        ),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(4);
+      for (const result of [...timeoutResults, ...retryResults]) {
+        expect(result).toMatchObject({
+          cached: false,
+          data: { data: 'policy-specific response' },
+        });
+      }
     });
 
     it('should evict cached responses that fail caller validation', async () => {

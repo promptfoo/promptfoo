@@ -26,3 +26,8 @@ export function withFetchRetryContext<T>(
 export function getFetchRetryContextMaxRetries(): number | undefined {
   return fetchRetryContext.getStore()?.maxRetries;
 }
+
+/** Resolve the retry count used by fetch transport and in-flight deduplication. */
+export function getEffectiveFetchMaxRetries(maxRetries?: number): number {
+  return Math.max(0, maxRetries ?? getFetchRetryContextMaxRetries() ?? 4);
+}

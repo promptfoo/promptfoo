@@ -14,6 +14,7 @@ import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
+import { getEffectiveFetchMaxRetries } from './util/fetch/retryContext';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -466,6 +467,8 @@ function getInflightFetchCacheKey(
   cacheKey: string,
   url: RequestInfo,
   options: RequestInit,
+  timeout: number,
+  maxRetries: number | undefined,
   isResponseCacheable?: (data: unknown) => boolean,
 ) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
@@ -474,7 +477,8 @@ function getInflightFetchCacheKey(
     ? `:validation:${getResponseCacheabilityCheckId(isResponseCacheable)}`
     : '';
   const diagnosticsSuffix = isFetchLoggingSuppressed(url, options) ? ':diagnostics:silent' : '';
-  return `${cacheKey}${signalSuffix}${validationSuffix}${diagnosticsSuffix}`;
+  const policySuffix = `:timeout:${timeout}:retries:${getEffectiveFetchMaxRetries(maxRetries)}`;
+  return `${cacheKey}${signalSuffix}${validationSuffix}${diagnosticsSuffix}${policySuffix}`;
 }
 
 function serializeFetchResponse(
@@ -766,6 +770,8 @@ export async function fetchWithCache<T = unknown>(
     cacheKey,
     url,
     options,
+    timeout,
+    maxRetries,
     cacheOptions.isResponseCacheable,
   );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);

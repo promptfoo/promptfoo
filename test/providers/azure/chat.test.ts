@@ -311,6 +311,32 @@ describe('AzureChatCompletionProvider', () => {
       vi.resetAllMocks();
     });
 
+    it.each([
+      ['stop', 'stop'],
+      [' LENGTH ', 'length'],
+      ['tool_calls', 'tool_calls'],
+      ['function_call', 'tool_calls'],
+    ])('preserves documented finish reason %s as %s', async (rawReason, expectedReason) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: { role: 'assistant', content: 'safe output' },
+              finish_reason: rawReason,
+            },
+          ],
+          usage: {},
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.finishReason).toBe(expectedReason);
+    });
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -457,7 +483,7 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('test prompt');
       expect(result).toEqual({
         error:
-          'Quota exceeded: HTTP 429. Retries will not help — check your billing or daily quota.',
+          'Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.',
         metadata: {
           rateLimitKind: 'quota',
           http: {
@@ -479,7 +505,8 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
       expect(result).toEqual({
-        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        error:
+          'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 7s]',
         metadata: {
           rateLimitKind: 'rate_limit',
           http: {
@@ -510,7 +537,8 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        error:
+          'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 7s]',
         metadata: {
           rateLimitKind: 'rate_limit',
           http: {
@@ -541,7 +569,7 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        error: 'Rate limit exceeded: HTTP 429',
+        error: 'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded)',
         metadata: {
           rateLimitKind: 'rate_limit',
           http: {
@@ -567,7 +595,7 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        error: 'Rate limit exceeded: HTTP 429 Too Many Requests [retry after 7s]',
         metadata: {
           rateLimitKind: 'rate_limit',
           http: {

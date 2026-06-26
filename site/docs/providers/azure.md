@@ -786,8 +786,14 @@ If you encounter this error when using reasoning models:
 API response error (status 400)
 
 Response metadata: {
+  "status": 400,
+  "responseType": "object",
+  "responseKeyCount": 1,
+  "hasError": true,
+  "hasErrorCode": true,
   "errorCode": "unsupported_parameter",
-  "errorParam": "max_tokens"
+  "errorParam": "max_tokens",
+  "hasUsage": false
 }
 ```
 
