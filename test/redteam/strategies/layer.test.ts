@@ -256,6 +256,30 @@ describe('addLayerTestCases', () => {
     expect(mockStrategies[0].action).toHaveBeenCalledTimes(1);
   });
 
+  it('applies plugin targeting even when a layer step cannot be loaded', async () => {
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'test' },
+        metadata: {
+          pluginId: 'harmful:hate',
+          pluginConfig: { inputs: { context: 'Reference context', question: 'User question' } },
+        },
+      },
+    ];
+
+    const result = await addLayerTestCases(
+      testCases,
+      'input',
+      {
+        steps: [{ id: 'unknown-strategy', config: { plugins: ['policy'] } }, 'posterior'],
+      },
+      mockStrategies,
+      mockLoadStrategy,
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it('should respect plugin targeting in steps', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {

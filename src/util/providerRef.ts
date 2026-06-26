@@ -179,11 +179,9 @@ export function loadProviderConfigsFromFile(
 ): ProviderOptions[] {
   const { configs, relativePath } = readProviderConfigFile(providerPath, basePath);
   for (const config of configs) {
+    const descriptor = normalizeProviderRef(config);
     invariant(
-      typeof config === 'object' &&
-        config !== null &&
-        !Array.isArray(config) &&
-        isValidProviderId(config.id),
+      descriptor.kind === 'options' || descriptor.kind === 'map',
       `Provider config in ${relativePath} must have an id`,
     );
   }

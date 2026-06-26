@@ -536,6 +536,12 @@ function addLanguageToPluginMetadata(
     Object.hasOwn(test.metadata, 'pluginConfig') &&
     test.metadata.pluginConfig === undefined
   );
+  const resolvedPluginConfig = resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage);
+  let pluginConfigForMetadata = resolvedPluginConfig;
+  if (plugin.id === 'intent' && resolvedPluginConfig) {
+    const { intent: _intent, ...withoutIntent } = resolvedPluginConfig;
+    pluginConfigForMetadata = withoutIntent;
+  }
 
   // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
   // then fall back to the original plugin.config?.modifiers
@@ -555,7 +561,7 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+          ...pluginConfigForMetadata,
           ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
         },
       }),
@@ -1184,7 +1190,7 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((id) => ({ ...plugin, id })));
     }
   }
 
@@ -1193,9 +1199,7 @@ export async function synthesize({
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
   ) => {
-    mapping.plugins.forEach((p: string) =>
-      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
-    );
+    mapping.plugins.forEach((id: string) => expandedPlugins.push({ ...plugin, id }));
     strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
   };
 

@@ -63,17 +63,34 @@ describe('hasPosteriorStrategy', () => {
     expect(hasAnyPosteriorStrategy(strategies)).toBe(true);
   });
 
+  it('keeps first-wins runtime deduplication for differently configured direct strategies', () => {
+    const strategies = [
+      { id: 'posterior', config: { numTests: 0 } },
+      { id: 'posterior' },
+    ] as RedteamStrategy[];
+
+    expect(hasPosteriorStrategy(strategies)).toBe(false);
+  });
+
   it.each([
-    ['direct Posterior', [{ id: 'posterior', config: { numTests: 0 } }, { id: 'posterior' }]],
     [
-      'unlabelled layer',
+      'active layer last',
       [
         { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
         { id: 'layer', config: { steps: ['posterior'] } },
       ],
+      true,
     ],
-  ])('matches first-wins runtime deduplication for duplicate %s', (_label, strategies) => {
-    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(false);
+    [
+      'disabled layer last',
+      [
+        { id: 'layer', config: { steps: ['posterior'] } },
+        { id: 'layer', config: { numTests: 0, steps: ['posterior'] } },
+      ],
+      false,
+    ],
+  ])('matches config-schema last-wins deduplication for $label', (_label, strategies, expected) => {
+    expect(hasPosteriorStrategy(strategies as RedteamStrategy[])).toBe(expected);
   });
 
   it('ignores unrelated strategies and unsupported aliases', () => {

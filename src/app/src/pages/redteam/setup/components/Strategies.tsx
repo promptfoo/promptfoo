@@ -31,7 +31,6 @@ import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import {
   getStrategyId,
-  hasAnyPosteriorStrategy,
   hasPosteriorStrategy,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
@@ -418,11 +417,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         return POSTERIOR_UNAVAILABLE_MESSAGE;
       }
       const strategy = config.strategies.find((item) => getStrategyId(item) === strategyId);
-      return strategy && hasAnyPosteriorStrategy([strategy])
+      return strategy &&
+        hasPosteriorStrategy([strategy], config.plugins, { includeDisabledStrategies: true })
         ? POSTERIOR_UNAVAILABLE_MESSAGE
         : undefined;
     },
-    [config.strategies, isPosteriorUnavailable],
+    [config.plugins, config.strategies, isPosteriorUnavailable],
   );
 
   // ----------------------------------------------

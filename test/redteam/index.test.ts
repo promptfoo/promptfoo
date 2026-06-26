@@ -1385,6 +1385,35 @@ describe('synthesize', () => {
       );
     });
 
+    it('preserves collection config while expanding direct synthesize inputs', async () => {
+      const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'mock-plugin', action: pluginAction });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'harmful',
+            numTests: 1,
+            config: { excludeStrategies: ['posterior'] },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'posterior' }],
+        inputs: { context: 'Reference context', question: 'User question' },
+        targetIds: ['test-provider'],
+      });
+
+      expect(pluginAction).toHaveBeenCalled();
+      for (const [call] of pluginAction.mock.calls) {
+        expect(call.config).toMatchObject({
+          excludeStrategies: ['posterior'],
+          inputs: { context: 'Reference context', question: 'User question' },
+        });
+      }
+    });
+
     it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
       vi.clearAllMocks();
 
@@ -1398,6 +1427,7 @@ describe('synthesize', () => {
         numTests: 2,
         config: {
           intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
+          excludeStrategies: ['posterior'],
         },
       };
 
@@ -1425,7 +1455,7 @@ describe('synthesize', () => {
           metadata: {
             intent: 'intent2',
             pluginId: 'intent',
-            pluginConfig: undefined,
+            pluginConfig: { excludeStrategies: ['posterior'] },
           },
         },
       ]);
@@ -1465,11 +1495,12 @@ describe('synthesize', () => {
       });
 
       const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
-      expect(intentTestCases.length).toBeGreaterThan(0);
-      intentTestCases.forEach((tc) => {
-        expect(tc.metadata?.pluginConfig).toBeUndefined();
-        expect(tc.metadata?.pluginId).toBe('intent');
+      expect(intentTestCases).toHaveLength(2);
+      expect(intentTestCases[0].metadata?.pluginConfig).toBeUndefined();
+      expect(intentTestCases[1].metadata?.pluginConfig).toEqual({
+        excludeStrategies: ['posterior'],
       });
+      expect(intentTestCases[1].metadata?.pluginConfig).not.toHaveProperty('intent');
 
       const contractsTestCases = result.testCases.filter(
         (tc) => tc.metadata?.pluginId === 'contracts',

@@ -24,6 +24,69 @@ import type { RedteamPluginObject, RedteamStrategyObject, SavedRedteamConfig } f
 
 export { REDTEAM_DEFAULTS };
 
+function normalizePluginId(pluginId: string): string {
+  return pluginId.replace(/^promptfoo:redteam:/, '');
+}
+
+function getRuntimeStrategyKey(strategy: RedteamStrategyObject): string {
+  if (strategy.id === 'layer' && strategy.config) {
+    if (typeof strategy.config.label === 'string' && strategy.config.label.trim()) {
+      return `layer/${strategy.config.label}`;
+    }
+    if (Array.isArray(strategy.config.steps)) {
+      const steps = (strategy.config.steps as Array<string | { id?: string }>).map((step) =>
+        typeof step === 'string' ? step : (step?.id ?? 'unknown'),
+      );
+      return `layer:${steps.join('->')}`;
+    }
+  }
+  return strategy.id;
+}
+
+export function getEffectiveStrategiesForCompatibility(
+  strategies: readonly unknown[],
+): RedteamStrategyObject[] {
+  const configNormalized = new Map<string, RedteamStrategyObject>();
+  for (const [index, value] of strategies.entries()) {
+    const strategy =
+      typeof value === 'string'
+        ? { id: value }
+        : value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            typeof (value as { id?: unknown }).id === 'string'
+          ? (value as RedteamStrategyObject)
+          : undefined;
+    if (!strategy) {
+      continue;
+    }
+
+    let key = strategy.id;
+    try {
+      if (strategy.id === 'layer' && strategy.config?.label) {
+        key = `layer/${strategy.config.label}`;
+      } else if (strategy.id === 'layer' && strategy.config?.steps) {
+        key = `layer:${JSON.stringify(strategy.config.steps)}`;
+      } else if (strategy.config && Object.keys(strategy.config).length > 0) {
+        key = `${strategy.id}:${JSON.stringify(strategy.config)}`;
+      }
+    } catch {
+      key = `${strategy.id}:unserializable:${index}`;
+    }
+    configNormalized.set(key, strategy);
+  }
+
+  const seen = new Set<string>();
+  return [...configNormalized.values()].filter((strategy) => {
+    const key = getRuntimeStrategyKey(strategy);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 export function isExpandablePluginId(pluginId: string): boolean {
   return (
     COLLECTIONS.includes(pluginId as (typeof COLLECTIONS)[number]) ||
@@ -88,11 +151,14 @@ export function pluginConfigMatchesStrategyTargets(
   strategyId: string,
   targetPlugins?: readonly string[],
 ): boolean {
-  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as (typeof STRATEGY_EXEMPT_PLUGINS)[number])) {
+  const normalizedPluginId = normalizePluginId(pluginId);
+  if (
+    STRATEGY_EXEMPT_PLUGINS.includes(normalizedPluginId as (typeof STRATEGY_EXEMPT_PLUGINS)[number])
+  ) {
     return false;
   }
   if (
-    pluginId.startsWith('coding-agent:') &&
+    normalizedPluginId.startsWith('coding-agent:') &&
     CANARY_BREAKING_STRATEGY_IDS.includes(
       strategyId as (typeof CANARY_BREAKING_STRATEGY_IDS)[number],
     )
@@ -111,7 +177,9 @@ export function pluginConfigMatchesStrategyTargets(
   return (
     !targetPlugins ||
     targetPlugins.length === 0 ||
-    targetPlugins.some((target) => target === pluginId || pluginId.startsWith(`${target}:`))
+    targetPlugins.some(
+      (target) => target === normalizedPluginId || normalizedPluginId.startsWith(`${target}:`),
+    )
   );
 }
 
@@ -333,7 +401,19 @@ export function configuredPluginHasApplicablePosteriorForMultiInput(
   pluginConfig: unknown,
   strategy: RedteamStrategyObject,
 ): boolean {
-  const expandedPluginIds = expandConfiguredPlugin(pluginId) ?? [pluginId];
+  const normalizedPluginId = normalizePluginId(pluginId);
+  if (
+    normalizedPluginId === 'intent' &&
+    typeof pluginConfig === 'object' &&
+    pluginConfig !== null &&
+    Array.isArray((pluginConfig as { intent?: unknown }).intent) &&
+    (pluginConfig as { intent: unknown[] }).intent.every(Array.isArray)
+  ) {
+    return false;
+  }
+
+  const expansion = expandConfiguredPlugin(normalizedPluginId);
+  const expandedPluginIds = expansion ?? [normalizedPluginId];
   return expandedPluginIds.some(
     (expandedPluginId) =>
       !MULTI_INPUT_EXCLUDED_PLUGINS.includes(

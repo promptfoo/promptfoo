@@ -1,5 +1,6 @@
 import {
   configuredPluginHasApplicablePosteriorForMultiInput,
+  getEffectiveStrategiesForCompatibility,
   pluginConfigMatchesStrategy,
   REDTEAM_DEFAULTS,
 } from '@promptfoo/redteam/sharedFrontend';
@@ -62,7 +63,7 @@ function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boo
 
 export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
   const visited = new Set<object>();
-  return getEffectiveStrategies(strategies).some((strategy) =>
+  return getEffectiveStrategiesForCompatibility(strategies).some((strategy) =>
     containsPosteriorStrategy(strategy, visited),
   );
 }
@@ -70,10 +71,11 @@ export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]):
 export function hasPosteriorStrategy(
   strategies: readonly RedteamStrategy[],
   plugins?: readonly RedteamPlugin[],
+  options: { includeDisabledStrategies?: boolean } = {},
 ): boolean {
   const visited = new Set<object>();
-  const effectiveStrategies = getEffectiveStrategies(strategies).filter(
-    (strategy) => strategy.config?.numTests !== 0,
+  const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
+    (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
   );
   if (!plugins || plugins.length === 0) {
     return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
@@ -87,30 +89,6 @@ export function hasPosteriorStrategy(
       configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy),
     ),
   );
-}
-
-function getEffectiveStrategies(strategies: readonly RedteamStrategy[]): RedteamStrategyObject[] {
-  const seen = new Set<string>();
-  return strategies
-    .map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy))
-    .filter((strategy) => {
-      let key = strategy.id;
-      if (strategy.id === 'layer' && strategy.config) {
-        if (typeof strategy.config.label === 'string' && strategy.config.label.trim()) {
-          key = `layer/${strategy.config.label}`;
-        } else if (Array.isArray(strategy.config.steps)) {
-          const steps = strategy.config.steps.map((step) =>
-            typeof step === 'string' ? step : (step?.id ?? 'unknown'),
-          );
-          key = `layer:${steps.join('->')}`;
-        }
-      }
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
 }
 
 // Strategies that require configuration before they can be used

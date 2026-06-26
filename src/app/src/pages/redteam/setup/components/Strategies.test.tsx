@@ -336,6 +336,7 @@ describe('Strategies', () => {
     });
 
     it('allows progression when every plugin excludes the layered Posterior step', async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -355,6 +356,14 @@ describe('Strategies', () => {
       expect(
         screen.queryByText('Posterior Attack requires a single-input target'),
       ).not.toBeInTheDocument();
+      await user.click(screen.getByText('Show Advanced Strategies'));
+      const layerCard = screen.getByRole('button', { name: 'Layer' }).parentElement;
+      expect(layerCard).not.toBeNull();
+      expect(
+        within(layerCard!).getByRole('button', {
+          name: 'Generate an example test case using the Layer Strategy.',
+        }),
+      ).toBeEnabled();
     });
 
     it('allows progression but disables preview for a disabled layer containing Posterior', async () => {
