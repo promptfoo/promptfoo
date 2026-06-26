@@ -75,6 +75,47 @@ tests:
       query: 'installation instructions'
       repo: 'nodejs/node'
     assert:
+      # Validate approval policy from the structured Responses API output.
+      - type: javascript
+        metric: approval_policy_enforced
+        value: |
+          const rawOutput = context.providerResponse?.raw?.output;
+          const label = context.provider?.label;
+          const interactions = Array.isArray(rawOutput)
+            ? rawOutput.filter(
+                (item) =>
+                  item &&
+                  typeof item === 'object' &&
+                  (item.type === 'mcp_call' || item.type === 'mcp_approval_request'),
+              )
+            : [];
+          const wellFormed = interactions.every(
+            (item) =>
+              typeof item.name === 'string' &&
+              item.name.length > 0 &&
+              item.server_label === 'deepwiki',
+          );
+          const matchesPolicy = interactions.every((item) => {
+            if (label === 'With Approval Required') {
+              return item.type === 'mcp_approval_request';
+            }
+            if (label === 'No Approval Required') {
+              return item.type === 'mcp_call';
+            }
+            if (label === 'Selective Approval') {
+              return item.type ===
+                (item.name === 'read_wiki_structure' ? 'mcp_call' : 'mcp_approval_request');
+            }
+            return false;
+          });
+          const pass = interactions.length > 0 && wellFormed && matchesPolicy;
+          return {
+            pass,
+            score: pass ? 1 : 0,
+            reason: pass
+              ? `Observed approval behavior for ${label}.`
+              : `Expected approval behavior for ${label}; observed ${JSON.stringify(interactions)}.`,
+          };
       # Response relevance across approval configurations
       - type: contains-any
         value: ['installation', 'Node.js', 'setup']

@@ -11,6 +11,7 @@ import { maybeLoadToolsFromExternalFile } from '../util/index';
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 
 interface OpenAiToolCall {
+  type?: 'function';
   function: { arguments: string; name: string };
 }
 
@@ -21,6 +22,7 @@ function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
   return (
     typeof value === 'object' &&
     value !== null &&
+    (!('type' in value) || value.type === 'function') &&
     'function' in value &&
     typeof value.function === 'object' &&
     value.function !== null &&
@@ -91,6 +93,14 @@ function parseMetadataMcpToolCalls(metadataCalls: unknown): StructuredMcpToolCal
     ) {
       return { error: 'MCP tool call metadata is malformed' };
     }
+    if (
+      'error' in value &&
+      value.error !== undefined &&
+      value.error !== null &&
+      typeof value.error !== 'string'
+    ) {
+      return { error: 'MCP tool call metadata is malformed' };
+    }
     const error =
       'error' in value && typeof value.error === 'string' && value.error ? value.error : undefined;
     calls.push(
@@ -137,8 +147,16 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
     ) {
       return { error: 'MCP tool call response is malformed' };
     }
-    if ('error' in value && value.error) {
-      calls.push({ name: value.name, error: String(value.error) });
+    if (
+      'error' in value &&
+      value.error !== undefined &&
+      value.error !== null &&
+      typeof value.error !== 'string'
+    ) {
+      return { error: 'MCP tool call response is malformed' };
+    }
+    if ('error' in value && typeof value.error === 'string' && value.error) {
+      calls.push({ name: value.name, error: value.error });
       continue;
     }
     if ('status' in value && value.status === 'failed') {
@@ -163,10 +181,16 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
 function getStructuredMcpToolCalls(
   providerResponse: AssertionParams['providerResponse'] | undefined,
 ): StructuredMcpToolCalls | undefined {
-  return (
-    parseMetadataMcpToolCalls(providerResponse?.metadata?.mcpToolCalls) ??
-    parseRawMcpToolCalls(providerResponse?.raw)
-  );
+  const metadataResult = parseMetadataMcpToolCalls(providerResponse?.metadata?.mcpToolCalls);
+  const rawResult = parseRawMcpToolCalls(providerResponse?.raw);
+  if (metadataResult?.error) {
+    return metadataResult;
+  }
+  if (rawResult?.error) {
+    return rawResult;
+  }
+  const calls = [...(metadataResult?.calls ?? []), ...(rawResult?.calls ?? [])];
+  return calls.length > 0 ? { calls } : undefined;
 }
 
 function getSerializedMcpToolCalls(output: unknown): McpToolCallOutcome[] {

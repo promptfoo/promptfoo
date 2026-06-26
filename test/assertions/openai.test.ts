@@ -956,6 +956,53 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      'custom',
+      'computer',
+    ])('rejects an explicit non-function tool-call type: %s', async (toolType) => {
+      const output = [
+        {
+          type: toolType,
+          function: { name: 'getCurrentTemperature', arguments: '{}' },
+        },
+      ];
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('retains compatibility with discriminator-less tool calls', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        test: { vars: {} },
+        providerResponse: {
+          output: [
+            {
+              function: {
+                name: 'getCurrentTemperature',
+                arguments: '{"location":"Paris","unit":"Celsius"}',
+              },
+            },
+          ],
+        },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
       ['missing function', [{}]],
       ['null entry', [null]],
       ['null output', null],
@@ -1894,6 +1941,114 @@ describe('OpenAI assertions', () => {
         pass: true,
         score: 1,
         reason: 'MCP tool call failed for search: actual failure',
+      });
+    });
+
+    it.each([
+      [
+        'a failed raw call',
+        {
+          output: [
+            {
+              type: 'mcp_call',
+              name: 'search',
+              status: 'completed',
+              output: null,
+              error: 'raw failure',
+            },
+          ],
+        },
+        'MCP tool call failed for search: raw failure',
+      ],
+      [
+        'a pending raw approval request',
+        {
+          output: [
+            {
+              type: 'mcp_approval_request',
+              name: 'sensitive',
+              server_label: 'server',
+              arguments: '{}',
+            },
+          ],
+        },
+        'MCP tool call response is awaiting approval',
+      ],
+    ])('does not let success metadata hide %s', async (_name, raw, reason) => {
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: 'MCP Tool Result (search): rendered success',
+              metadata: { mcpToolCalls: [{ name: 'search', status: 'success' }] },
+              raw,
+            },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0, reason });
+      expect(inverse).toMatchObject({ pass: true, score: 1, reason });
+    });
+
+    it.each([
+      [
+        'metadata object',
+        { metadata: { mcpToolCalls: [{ name: 'search', status: 'success', error: {} }] } },
+      ],
+      [
+        'metadata number',
+        { metadata: { mcpToolCalls: [{ name: 'search', status: 'success', error: 0 }] } },
+      ],
+      [
+        'metadata boolean',
+        { metadata: { mcpToolCalls: [{ name: 'search', status: 'success', error: false }] } },
+      ],
+      [
+        'raw object',
+        { raw: { output: [{ type: 'mcp_call', name: 'search', status: 'completed', error: {} }] } },
+      ],
+      [
+        'raw number',
+        { raw: { output: [{ type: 'mcp_call', name: 'search', status: 'completed', error: 0 }] } },
+      ],
+      [
+        'raw boolean',
+        {
+          raw: {
+            output: [{ type: 'mcp_call', name: 'search', status: 'completed', error: false }],
+          },
+        },
+      ],
+    ])('rejects a malformed %s MCP error', async (_name, provenance) => {
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: {
+              output: 'MCP Tool Result (search): rendered success',
+              ...provenance,
+            },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('malformed'),
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: expect.stringContaining('malformed'),
       });
     });
 
