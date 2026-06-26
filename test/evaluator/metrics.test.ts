@@ -493,6 +493,31 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
   });
 
+  it('should score the winner when a metric selector is the only assertion', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('standalone-cost-selection-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: 'hello world',
+        cost: prompt.includes('Cheap') ? 0.001 : 0.01,
+      })),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Cheap prompt'), toPrompt('Expensive prompt')],
+      tests: [{ assert: [{ type: 'select-lowest-cost' }] }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results[0]).toMatchObject({ success: true, score: 1 });
+    expect(results[0].gradingResult).toMatchObject({ pass: true, score: 1 });
+    expect(results[1]).toMatchObject({ success: false, score: 0 });
+    expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+  });
+
   it('should apply select-best to overall pass/fail and stats', async () => {
     // Mock matchesSelectBest to return deterministic results (first wins, second loses)
     const matchers = await import('../../src/matchers/comparison');

@@ -1916,7 +1916,9 @@ function mergeDeterministicComparisonGradingResult(
   const previousPass = existingGradingResult?.pass ?? result.success;
   const nextPass = previousPass && comparisonPassed;
   const newScore = comparisonPassed
-    ? (existingGradingResult?.score ?? result.score)
+    ? existingComponentResults.length === 0
+      ? gradingResult.score
+      : (existingGradingResult?.score ?? result.score)
     : gradingResult.score;
 
   result.gradingResult = {
@@ -1937,9 +1939,7 @@ function mergeDeterministicComparisonGradingResult(
   };
 
   result.success = nextPass;
-  if (!comparisonPassed) {
-    result.score = newScore;
-  }
+  result.score = newScore;
 }
 
 function ensureDefaultTestForExtensions(testSuite: TestSuite) {

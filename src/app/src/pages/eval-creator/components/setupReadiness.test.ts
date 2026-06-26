@@ -709,6 +709,25 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it.each([
+      'select-lowest-cost',
+      'select-lowest-latency',
+    ] as const)('requires multiple outputs for %s comparisons', (type) => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [{ assert: [{ type }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.issues).toContainEqual({
+        id: 'comparisonOutputs',
+        message:
+          'Metric selection needs at least two outputs per test case. Add another provider or prompt.',
+        stepId: 1,
+      });
+    });
+
     it('requires multiple outputs after applying a test provider filter', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
