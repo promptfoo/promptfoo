@@ -70,7 +70,7 @@ print(json.dumps(result))
     fs.rmSync(tempDir, { force: true, recursive: true });
   });
 
-  function callProvider(raw: string, apiKey?: string) {
+  function callProvider(raw: string, apiKey?: string, timeout?: number) {
     const model = 'openai/gpt-4.1';
     const { OPENAI_API_KEY: _openAiApiKey, ...baseEnv } = process.env;
     const result = spawnSync(
@@ -82,6 +82,7 @@ print(json.dumps(result))
       ],
       {
         encoding: 'utf8',
+        timeout,
         env: {
           ...baseEnv,
           ...(apiKey ? { OPENAI_API_KEY: apiKey } : {}),
@@ -117,6 +118,18 @@ print(json.dumps(result))
     return JSON.parse(result.stdout);
   }
 
+  function loadGuideConfig(markdown: string) {
+    const guide = markdown.replace(/\r\n/g, '\n');
+    const fence = String.fromCharCode(96).repeat(3);
+    const marker = fence + 'yaml title="promptfooconfig.yaml"\n';
+    const start = guide.indexOf(marker);
+    const end = guide.indexOf('\n' + fence, start + marker.length);
+    if (start < 0 || end <= start) {
+      throw new Error('CrewAI guide is missing its promptfooconfig.yaml block');
+    }
+    return yaml.load(guide.slice(start + marker.length, end));
+  }
+
   it('parses complete labeled and unlabeled JSON fences through the CrewOutput contract', () => {
     const fence = '```';
     const object = '{"candidates": [], "summary": "No match"}';
@@ -131,6 +144,15 @@ print(json.dumps(result))
         output: { candidates: [], summary: 'No match' },
       });
     }
+  });
+
+  it('rejects an unterminated fence without regex backtracking', () => {
+    const raw = '```' + ' '.repeat(3000) + 'x';
+
+    expect(callProvider(raw, 'test-key', 4000)).toEqual({
+      error: expect.stringContaining("No valid JSON block found in the agent's output"),
+      raw,
+    });
   });
 
   it('rejects trailing content instead of grading a JSON substring', () => {
@@ -150,6 +172,19 @@ print(json.dumps(result))
       error: expect.stringContaining('Duplicate JSON key: summary'),
       raw,
     });
+  });
+
+  it('does not confuse a model-provided error field with an internal provider error', () => {
+    const output = {
+      candidates: [
+        { name: 'Ada', experience: '8 years', skills: ['Python'] },
+        { name: 'Grace', experience: '7 years', skills: ['Python'] },
+      ],
+      summary: 'Two matches',
+      error: 'model-provided metadata',
+    };
+
+    expect(callProvider(JSON.stringify(output), 'test-key')).toEqual({ output });
   });
 
   it('rejects JSON numbers that cannot cross the provider boundary safely', () => {
@@ -318,6 +353,8 @@ print(json.dumps(result))
     expect(evaluateSkills('Full-Stack', ['Python', 'React'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Django', 'React'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['CPython', 'Djangology', 'ReactNative'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['αpythonβ', 'Django', 'React'])).toBe(false);
+    expect(evaluateSkills('Full-Stack', ['Python', '東京django東京', 'React'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React'])).toBe(true);
     expect(evaluateSkills('Data Scientist', ['Python', 'AWS'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning'])).toBe(false);
@@ -325,10 +362,12 @@ print(json.dumps(result))
     expect(evaluateSkills('Data Scientist', ['Pythonista', 'Machine Learningish', 'AWSome'])).toBe(
       false,
     );
+    expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'αawsβ'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'AWS'])).toBe(true);
     expect(evaluateSkills('UX/UI', ['Figma'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Adobe Creative Suite'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Figmaware', 'Adobeish'])).toBe(false);
+    expect(evaluateSkills('UX/UI', ['αfigmaβ', 'Adobe Acrobat'])).toBe(false);
     expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Creative Suite'])).toBe(true);
     expect(evaluateSkills('UX/UI', ['Figma', 'Adobe Acrobat'])).toBe(true);
   });
@@ -338,17 +377,11 @@ print(json.dumps(result))
       path.join(process.cwd(), 'site', 'docs', 'guides', 'evaluate-crewai.md'),
       'utf8',
     );
-    const fence = String.fromCharCode(96).repeat(3);
-    const marker = fence + 'yaml title="promptfooconfig.yaml"\n';
-    const start = guide.indexOf(marker);
-    const end = guide.indexOf('\n' + fence, start + marker.length);
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(end).toBeGreaterThan(start);
-
-    const config = yaml.load(guide.slice(start + marker.length, end)) as {
+    const config = loadGuideConfig(guide) as {
       defaultTest: { assert: Array<{ type: string; value?: Record<string, unknown> }> };
       tests: Array<{ assert: Array<{ type: string; value?: string }> }>;
     };
+    expect(loadGuideConfig(guide.replace(/\r?\n/g, '\r\n'))).toEqual(config);
     const assertion = config.tests[0].assert.find(
       (candidate) => candidate.type === 'python',
     )?.value;
@@ -384,6 +417,12 @@ print(json.dumps(result))
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoRbit', 'ReactNative']))).toBe(
       false,
     );
+    expect(evaluatePythonAssertion(assertion, outputWithSkills(['αruby on railsβ', 'React']))).toBe(
+      false,
+    );
+    expect(
+      evaluatePythonAssertion(assertion, outputWithSkills(['Ruby on Rails', '東京react東京'])),
+    ).toBe(false);
     expect(evaluatePythonAssertion(assertion, outputWithSkills(['RoR', 'React']))).toBe(true);
     expect(evaluatePythonAssertion(assertion, validOutput)).toBe(true);
   });

@@ -54,7 +54,7 @@ tests:
 
           def has_skill(candidate, required_skill):
               return any(
-                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  re.search(rf'(?<![^\W_]){re.escape(required_skill)}(?![^\W_])', skill.lower())
                   for skill in candidate.get('skills', [])
               )
 
@@ -74,7 +74,7 @@ tests:
 
           def has_skill(candidate, required_skill):
               return any(
-                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  re.search(rf'(?<![^\W_]){re.escape(required_skill)}(?![^\W_])', skill.lower())
                   for skill in candidate.get('skills', [])
               )
 
@@ -97,7 +97,7 @@ tests:
 
           def has_skill(candidate, required_skill):
               return any(
-                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  re.search(rf'(?<![^\W_]){re.escape(required_skill)}(?![^\W_])', skill.lower())
                   for skill in candidate.get('skills', [])
               )
 

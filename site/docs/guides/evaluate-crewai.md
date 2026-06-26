@@ -179,7 +179,6 @@ import asyncio
 import json
 import math
 import os
-import re
 import textwrap
 from typing import Any, Dict, NoReturn
 
@@ -188,6 +187,12 @@ from crewai import LLM, Agent, Crew, Task
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
+
+
+class RecruitmentAgentError(Exception):
+    def __init__(self, message: str, raw_output: str = ""):
+        super().__init__(message)
+        self.raw_output = raw_output
 
 
 def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
@@ -221,6 +226,18 @@ def parse_safe_json_int(value: str) -> int | float:
     return parsed
 
 
+def unwrap_json_fence(output_text: str) -> str | None:
+    if not output_text.startswith("```") or not output_text.endswith("```"):
+        return None
+
+    content = output_text[3:-3].lstrip(" \t")
+    if content[:4].lower() == "json" and (
+        len(content) == 4 or content[4].isspace() or content[4] in "{["
+    ):
+        content = content[4:]
+    return content.strip()
+
+
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
@@ -239,7 +256,7 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     )
 
     task = Task(
-        description="Find at least 2 candidates based on the following job requirements: {job_requirements}",
+        description="Return at least 2 candidate entries based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
             A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
@@ -278,34 +295,31 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
+    Raises RecruitmentAgentError when the provider cannot return valid output.
     """
     # Check if API key is set
     if not OPENAI_API_KEY:
-        return {
-            "error": "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
-        }
+        raise RecruitmentAgentError(
+            "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
+        )
 
-    crew = get_recruitment_agent(model)
     try:
+        crew = get_recruitment_agent(model)
+
         # ⚡ Trigger the agent to start working
         output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
 
         if not output_text:
-            return {"error": "CrewAI agent returned an empty response."}
+            raise RecruitmentAgentError("CrewAI agent returned an empty response.")
 
         # Accept either a JSON object or one complete Markdown JSON fence.
-        json_match = re.fullmatch(
-            r"```(?:[ \t]*json)?\s*([\s\S]*?)\s*```",
-            output_text,
-            re.IGNORECASE,
-        )
-        if not json_match and not output_text.startswith("{"):
-            return {
-                "error": "No valid JSON block found in the agent's output.",
-                "raw_output": output_text,
-            }
+        fenced_json = unwrap_json_fence(output_text)
+        if fenced_json is None and not output_text.startswith("{"):
+            raise RecruitmentAgentError(
+                "No valid JSON block found in the agent's output.", output_text
+            )
 
-        json_string = json_match.group(1) if json_match else output_text
+        json_string = fenced_json if fenced_json is not None else output_text
 
         try:
             return json.loads(
@@ -316,14 +330,14 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
                 parse_int=parse_safe_json_int,
             )
         except (json.JSONDecodeError, ValueError) as e:
-            return {
-                "error": f"Failed to parse JSON from agent output: {str(e)}",
-                "raw_output": json_string,
-            }
+            raise RecruitmentAgentError(
+                f"Failed to parse JSON from agent output: {str(e)}", json_string
+            ) from e
 
+    except RecruitmentAgentError:
+        raise
     except Exception as e:
-        # 🔥 Catch and report any error as part of the output
-        return {"error": f"An unexpected error occurred: {str(e)}"}
+        raise RecruitmentAgentError(f"An unexpected error occurred: {str(e)}") from e
 
 
 ````
@@ -343,11 +357,10 @@ def call_api(
         config = options.get("config", {})
         model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
-
-        if "error" in result:
-            return {"error": result["error"], "raw": result.get("raw_output", "")}
         return {"output": result}
 
+    except RecruitmentAgentError as e:
+        return {"error": str(e), "raw": e.raw_output}
     except Exception as e:
         # 🔥 Catch and return any error as part of the output
         return {"error": f"An error occurred in call_api: {str(e)}"}
@@ -429,7 +442,7 @@ tests:
 
           def has_skill(candidate, required_skill):
               return any(
-                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  re.search(rf'(?<![^\W_]){re.escape(required_skill)}(?![^\W_])', skill.lower())
                   for skill in candidate.get('skills', [])
               )
 
@@ -587,18 +600,17 @@ Use the application details fields to describe the following:
 We describe that it’s an **AI recruitment assistant** built using CrewAI that:
 
 - Generates example candidate recommendations from supplied technical role requirements.
-- Evaluates the roles configured in the test cases.
+- Evaluates the configured role prompts with schema and skill checks.
 - Returns structured candidate lists with names, experience, skills, and a summary.
-- Is expected to filter irrelevant or unsafe outputs.
 
 **Key features provided:**
 
-We list out the system’s capabilities, like:
+We list the behaviors exercised by this example:
 
-- Job requirements analysis.
-- Candidate matching and ranking.
-- Structured recruitment recommendations.
-- Summary generation, skill matching, and role-specific filtering.
+- Job-requirements prompting.
+- Structured example candidate and summary generation.
+- Schema checks for the required output fields.
+- Skill-focused assertions for the configured role tests.
 
 **Industry or domain:**
 
