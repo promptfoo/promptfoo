@@ -56,11 +56,55 @@ function getMcpOutputText(output: unknown): string | undefined {
   return undefined;
 }
 
+interface McpToolCallOutcome {
+  error?: string;
+  name: string;
+}
+
+function toMcpToolCallOutcome(value: unknown): McpToolCallOutcome | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const name = 'name' in value && typeof value.name === 'string' ? value.name : 'unknown';
+  const error = 'error' in value && value.error ? String(value.error) : undefined;
+  return error ? { name, error } : { name };
+}
+
+function getStructuredMcpToolCalls(
+  providerResponse: AssertionParams['providerResponse'],
+): McpToolCallOutcome[] {
+  const metadataCalls = providerResponse.metadata?.mcpToolCalls;
+  if (Array.isArray(metadataCalls)) {
+    const outcomes = metadataCalls
+      .map(toMcpToolCallOutcome)
+      .filter((outcome): outcome is McpToolCallOutcome => outcome !== undefined);
+    if (outcomes.length > 0) {
+      return outcomes;
+    }
+  }
+
+  const rawOutput: unknown[] =
+    typeof providerResponse.raw === 'object' &&
+    providerResponse.raw !== null &&
+    'output' in providerResponse.raw &&
+    Array.isArray(providerResponse.raw.output)
+      ? providerResponse.raw.output
+      : [];
+  return rawOutput
+    .filter(
+      (item) =>
+        typeof item === 'object' && item !== null && 'type' in item && item.type === 'mcp_call',
+    )
+    .map(toMcpToolCallOutcome)
+    .filter((outcome): outcome is McpToolCallOutcome => outcome !== undefined);
+}
+
 export const handleIsValidOpenAiToolsCall = async ({
   assertion,
   inverse,
   output,
   provider,
+  providerResponse,
   test,
 }: AssertionParams): Promise<GradingResult> => {
   // Traditional tool calls take precedence so model-controlled arguments cannot
@@ -73,14 +117,44 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolsOutput = (output as { tool_calls: unknown }).tool_calls;
   }
 
-  // Handle textual MCP tool outputs from Responses API.
+  // Prefer machine-readable MCP outcomes. Rendered tool content is untrusted and
+  // may itself contain strings that look like result or error markers.
+  const structuredMcpCalls = hasTraditionalToolCalls
+    ? []
+    : getStructuredMcpToolCalls(providerResponse);
+  if (structuredMcpCalls.length > 0) {
+    const failedCall = structuredMcpCalls.find((call) => call.error !== undefined);
+    if (failedCall) {
+      return applyInverse(
+        {
+          pass: false,
+          score: 0,
+          reason: `MCP tool call failed for ${failedCall.name}: ${failedCall.error}`,
+          assertion,
+        },
+        inverse,
+      );
+    }
+    return applyInverse(
+      {
+        pass: true,
+        score: 1,
+        reason: `MCP tool call succeeded for ${structuredMcpCalls[0].name}`,
+        assertion,
+      },
+      inverse,
+    );
+  }
+
+  // Retain compatibility with serialized MCP output, but only trust a leading
+  // status marker. A later marker can be part of attacker-controlled tool data.
   const outputStr = hasTraditionalToolCalls ? undefined : getMcpOutputText(output);
-  if (outputStr?.includes('MCP Tool Result') || outputStr?.includes('MCP Tool Error')) {
-    // For MCP tools, we validate that the tool call was successful
-    if (outputStr.includes('MCP Tool Error')) {
-      const errorMatch = outputStr.match(/MCP Tool Error \(([^)]+)\): (.+)/);
-      const toolName = errorMatch ? errorMatch[1] : 'unknown';
-      const errorMsg = errorMatch ? errorMatch[2] : 'unknown error';
+  const mcpMatch = outputStr?.match(/^\s*MCP Tool (Result|Error)(?: \(([^)]+)\))?:[ \t]*(.*)/);
+  if (mcpMatch) {
+    const [, status, matchedToolName, detail] = mcpMatch;
+    const toolName = matchedToolName || 'unknown';
+    if (status === 'Error') {
+      const errorMsg = matchedToolName && detail ? detail : 'unknown error';
       return applyInverse(
         {
           pass: false,
@@ -92,9 +166,6 @@ export const handleIsValidOpenAiToolsCall = async ({
       );
     }
 
-    // MCP tool call succeeded
-    const resultMatch = outputStr.match(/MCP Tool Result \(([^)]+)\):/);
-    const toolName = resultMatch ? resultMatch[1] : 'unknown';
     return applyInverse(
       {
         pass: true,

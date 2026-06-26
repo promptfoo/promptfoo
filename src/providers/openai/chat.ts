@@ -644,6 +644,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
+        const mcpToolCalls: Array<{ error?: string; name: string }> = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
@@ -659,9 +660,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (isMcpErrorResult(mcpResult)) {
-                  results.push(
-                    `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`,
-                  );
+                  const error = getMcpErrorMessage(mcpResult);
+                  results.push(`MCP Tool Error (${functionName}): ${error}`);
+                  mcpToolCalls.push({ name: functionName, error });
                 } else {
                   // Normalize MCP content to a readable string
                   const normalizeContent = (content: any): string => {
@@ -698,12 +699,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
                   const content = normalizeContent(mcpResult?.content);
                   results.push(`MCP Tool Result (${functionName}): ${content}`);
+                  mcpToolCalls.push({ name: functionName });
                 }
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                const errorMessage = String(error);
+                results.push(`MCP Tool Error (${functionName}): ${errorMessage}`);
+                mcpToolCalls.push({ name: functionName, error: errorMessage });
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               }
@@ -744,6 +748,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }),
             guardrails: { flagged: contentFiltered },
             metadata: {
+              ...(mcpToolCalls.length > 0 ? { mcpToolCalls } : {}),
               http: {
                 status,
                 statusText,

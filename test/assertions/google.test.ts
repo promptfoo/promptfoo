@@ -374,6 +374,34 @@ describe('Google assertions', () => {
       });
     });
 
+    it('should validate function declarations across all tool groups', async () => {
+      const output = JSON.stringify({
+        toolCall: { functionCalls: [{ args: '{}', name: 'secondTool' }] },
+      });
+      const provider = new GoogleLiveProvider('foo', {
+        config: {
+          tools: [
+            { functionDeclarations: [{ name: 'firstTool' }] },
+            { functionDeclarations: [{ name: 'secondTool' }] },
+          ],
+        },
+      });
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: { type: 'is-valid-function-call' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
+    });
+
     it('should fail for an invalid function call with incorrect arguments', async () => {
       const output = [
         {
@@ -656,10 +684,29 @@ describe('Google assertions', () => {
     });
 
     it.each([
-      ['missing tools', undefined],
-      ['empty tools', []],
-      ['tools without function declarations', [{ googleSearch: {} }]],
-    ])('should not invert %s configuration', async (_name, tools) => {
+      ['missing tools', undefined, 'No function schemas configured in provider'],
+      ['empty tools', [], 'No function schemas configured in provider'],
+      [
+        'tools without function declarations',
+        [{ googleSearch: {} }],
+        'No function schemas configured in provider',
+      ],
+      [
+        'malformed function declarations',
+        [{ functionDeclarations: [{}] }],
+        'Invalid function schema configured in provider',
+      ],
+      [
+        'non-array function declarations',
+        [{ functionDeclarations: {} }],
+        'Invalid function schema configured in provider',
+      ],
+      [
+        'partially malformed function declarations',
+        [{ functionDeclarations: [{ name: 'lookup' }, {}] }],
+        'Invalid function schema configured in provider',
+      ],
+    ])('should not invert %s configuration', async (_name, tools, expectedReason) => {
       const output = JSON.stringify({
         toolCall: { functionCalls: [{ args: '{}', name: 'lookup' }] },
       });
@@ -678,7 +725,7 @@ describe('Google assertions', () => {
       expect(result).toMatchObject({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('No function schemas configured in provider'),
+        reason: expect.stringContaining(expectedReason),
       });
     });
   });

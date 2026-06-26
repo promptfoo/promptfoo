@@ -22,7 +22,15 @@ import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
-import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+import type {
+  CompletionOptions,
+  Content,
+  FunctionCall,
+  FunctionDeclaration,
+  Part,
+  Schema,
+  Tool,
+} from './types';
 
 /**
  * Normalizes safety settings to use the correct Google API field name `threshold`.
@@ -834,6 +842,11 @@ export function normalizeTools(tools: Tool[]): Tool[] {
     // Sanitize function declarations to remove unsupported schema properties
     // This fixes issues like GitHub #6902 where additionalProperties causes API errors
     if (normalizedTool.functionDeclarations) {
+      if (!Array.isArray(normalizedTool.functionDeclarations)) {
+        throw new Error(
+          'Invalid function schema configured in provider: functionDeclarations must be an array',
+        );
+      }
       normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
         ...fd,
         parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
@@ -1233,16 +1246,41 @@ export function validateFunctionCall(
       'No function schemas configured in provider, but output contains a function call',
     );
   }
-  const functionDeclarations = interpolatedFunctions.find(
+  const hasMalformedFunctionDeclarationGroup = interpolatedFunctions.some(
     (tool) =>
       typeof tool === 'object' &&
       tool !== null &&
       'functionDeclarations' in tool &&
-      Array.isArray(tool.functionDeclarations),
-  )?.functionDeclarations;
-  if (!functionDeclarations || functionDeclarations.length === 0) {
+      !Array.isArray(tool.functionDeclarations),
+  );
+  const functionDeclarations: unknown[] = interpolatedFunctions.flatMap(
+    (tool) =>
+      (typeof tool === 'object' &&
+        tool !== null &&
+        'functionDeclarations' in tool &&
+        Array.isArray(tool.functionDeclarations) &&
+        tool.functionDeclarations) ||
+      [],
+  );
+  if (hasMalformedFunctionDeclarationGroup) {
+    throw new FunctionToolCallValidationSetupError(
+      'Invalid function schema configured in provider: functionDeclarations must be arrays of declarations with non-empty names',
+    );
+  }
+  if (functionDeclarations.length === 0) {
     throw new FunctionToolCallValidationSetupError(
       'No function schemas configured in provider, but output contains a function call',
+    );
+  }
+  const isUsableFunctionDeclaration = (declaration: unknown): declaration is FunctionDeclaration =>
+    typeof declaration === 'object' &&
+    declaration !== null &&
+    'name' in declaration &&
+    typeof declaration.name === 'string' &&
+    declaration.name.trim().length > 0;
+  if (!functionDeclarations.every(isUsableFunctionDeclaration)) {
+    throw new FunctionToolCallValidationSetupError(
+      'Invalid function schema configured in provider: functionDeclarations must be arrays of declarations with non-empty names',
     );
   }
 
