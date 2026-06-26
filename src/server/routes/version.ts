@@ -55,8 +55,9 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
  */
 function buildBaseVersionFields() {
   const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
+  const isDocker = getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER');
   const isNpx = isRunningUnderNpx();
-  const updateCommands = getUpdateCommands({ selfHosted, isNpx });
+  const updateCommands = getUpdateCommands({ isDocker, isNpx });
   return {
     currentVersion: VERSION,
     selfHosted,

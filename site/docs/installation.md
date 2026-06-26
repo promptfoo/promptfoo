@@ -73,9 +73,10 @@ For CI, update the configured Node.js version to `24`. For a custom Docker image
 Node.js base image such as `node:24`. After switching runtimes, verify the active version with
 `node --version`, then update promptfoo.
 
-To suppress runtime compatibility notices in both the CLI and Web UI, set
-`PROMPTFOO_DISABLE_RUNTIME_WARNINGS=true`. This does not disable update checks; use
-`PROMPTFOO_DISABLE_UPDATE=true` separately when needed.
+To suppress standalone runtime compatibility reminders in both the CLI and Web UI, set
+`PROMPTFOO_DISABLE_RUNTIME_WARNINGS=true`. Update checks remain independent and may still explain
+when the active Node.js version cannot install an available package update. Use
+`PROMPTFOO_DISABLE_UPDATE=true` separately to disable those checks.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 

@@ -3,7 +3,7 @@
  */
 
 export interface UpdateCommandOptions {
-  selfHosted: boolean;
+  isDocker: boolean;
   isNpx: boolean;
 }
 
@@ -14,9 +14,9 @@ export interface UpdateCommandResult {
 }
 
 export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandResult {
-  const { selfHosted, isNpx } = options;
+  const { isDocker, isNpx } = options;
 
-  if (selfHosted) {
+  if (isDocker) {
     return {
       primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,

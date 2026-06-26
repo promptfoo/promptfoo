@@ -64,6 +64,7 @@ RUN ln -s /app /app/node_modules/promptfoo && \
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
+ENV PROMPTFOO_RUNNING_IN_DOCKER=1
 
 USER promptfoo
 

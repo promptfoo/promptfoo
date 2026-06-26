@@ -193,7 +193,7 @@ describe('checkForUpdates', () => {
   });
 
   it('should preserve Docker pull guidance before and after the Node.js 20 cutoff', async () => {
-    const restoreSelfHosted = mockProcessEnv({ PROMPTFOO_SELF_HOSTED: 'true' });
+    const restoreDocker = mockProcessEnv({ PROMPTFOO_RUNNING_IN_DOCKER: 'true' });
     vi.mocked(fetchWithTimeout)
       .mockResolvedValueOnce({
         ok: true,
@@ -214,7 +214,7 @@ describe('checkForUpdates', () => {
         now: new Date('2026-07-30T00:00:00.000Z'),
       });
     } finally {
-      restoreSelfHosted();
+      restoreDocker();
     }
 
     expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
@@ -227,6 +227,31 @@ describe('checkForUpdates', () => {
       expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
     );
     expect(loggerWarnSpy).not.toHaveBeenCalled();
+  });
+
+  it('should keep package update safeguards in generic self-hosted mode', async () => {
+    const restoreSelfHosted = mockProcessEnv({
+      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      await checkForUpdates({
+        currentNodeVersion: 'v20.20.2',
+        now: new Date('2026-07-30T00:00:00.000Z'),
+      });
+    } finally {
+      restoreSelfHosted();
+    }
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Upgrade to Node.js 22.22.0 or newer'),
+    );
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
   });
 
   it('should let the runtime campaign suppress duplicate post-cutoff guidance', async () => {

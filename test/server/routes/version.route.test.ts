@@ -117,6 +117,42 @@ describe('Version Route', () => {
     expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
 
+  it('should not classify generic self-hosted mode as Docker', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_RUNNING_IN_DOCKER: undefined,
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body.selfHosted).toBe(true);
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({ isDocker: false, isNpx: false });
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should use Docker guidance only when the container signal is set', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body.selfHosted).toBe(true);
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({ isDocker: true, isNpx: false });
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('should block package updates but preserve Docker updates at the cutoff', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));

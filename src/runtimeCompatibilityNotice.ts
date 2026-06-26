@@ -72,7 +72,12 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
 
   const compact = options.nonInteractive ?? isNonInteractive();
   console.warn(
-    formatRuntimeCompatibilityNotice(notice, compact, now, getEnvBool('PROMPTFOO_SELF_HOSTED')),
+    formatRuntimeCompatibilityNotice(
+      notice,
+      compact,
+      now,
+      getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+    ),
   );
 
   telemetry.record('feature_used', {
