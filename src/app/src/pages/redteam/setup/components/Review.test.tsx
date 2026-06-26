@@ -29,6 +29,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return result;
 };
 
+const mockShowToast = vi.hoisted(() => vi.fn());
+
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
   useEmailVerification: vi.fn(() => ({
@@ -44,7 +46,7 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
-    showToast: vi.fn(),
+    showToast: mockShowToast,
   }),
 }));
 
@@ -1551,6 +1553,51 @@ Application Details:
       await waitFor(() => {
         expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
       });
+    });
+
+    it('should surface run compatibility errors without saving or polling an invalid job', async () => {
+      const user = userEvent.setup({ delay: null });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({
+              error: 'Posterior strategy does not support multi-input targets',
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          expect.stringContaining('Posterior strategy does not support multi-input targets'),
+          'error',
+        );
+      });
+      expect(mockSetJob).not.toHaveBeenCalled();
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/undefined');
     });
 
     it('should call clearJob when cancelling a job', async () => {

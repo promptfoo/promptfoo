@@ -10,7 +10,10 @@ import {
   REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
-import { redteamProviderManager } from '../../redteam/providers/shared';
+import {
+  redteamProviderManager,
+  resolveRedteamTargetProviderConfigs,
+} from '../../redteam/providers/shared';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -67,11 +70,21 @@ function getInlineTargetInputs(target: unknown): unknown[] {
   });
 }
 
-function getLiveConfigCompatibilityError(config: Record<string, unknown>): string | undefined {
+async function getLiveConfigCompatibilityError(
+  config: Record<string, unknown>,
+): Promise<string | undefined> {
   const redteam = isRecord(config.redteam) ? config.redteam : undefined;
   const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
+  const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
+  if (strategyConfigError) {
+    return strategyConfigError;
+  }
   const configuredTargets = config.targets ?? config.providers;
-  const targets = Array.isArray(configuredTargets) ? configuredTargets : [configuredTargets];
+  const resolvedTargets =
+    configuredTargets === undefined
+      ? configuredTargets
+      : await resolveRedteamTargetProviderConfigs(configuredTargets, cliState.basePath);
+  const targets = Array.isArray(resolvedTargets) ? resolvedTargets : [resolvedTargets];
 
   return targets
     .flatMap(getInlineTargetInputs)
@@ -111,12 +124,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // In multi-input mode, some plugins don't support dynamic generation
     const hasMultiInput =
       plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs);
+    if (compatibilityError) {
+      res.status(400).json({ error: compatibilityError });
+      return;
+    }
     if (hasMultiInput) {
-      const compatibilityError = getStrategyCompatibilityError([strategy], plugin.config.inputs);
-      if (compatibilityError) {
-        res.status(400).json({ error: compatibilityError });
-        return;
-      }
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
       if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
         logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
@@ -304,7 +317,17 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
-  const compatibilityError = getLiveConfigCompatibilityError(config);
+  let compatibilityError: string | undefined;
+  try {
+    compatibilityError = await getLiveConfigCompatibilityError(config);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('[Redteam] Failed to resolve target configuration before starting run', {
+      message,
+    });
+    res.status(400).json({ error: message });
+    return;
+  }
   if (compatibilityError) {
     res.status(400).json({ error: compatibilityError });
     return;

@@ -597,11 +597,19 @@ export default function Review({
         }),
       });
 
-      const { id } = await response.json();
+      const data = await response.json();
+      if (response.ok === false) {
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : `Request failed (${response.status})`,
+        );
+      }
+      if (typeof data?.id !== 'string') {
+        throw new Error('Server did not return a job ID');
+      }
 
       // Save job ID to persistent store and start polling
-      setJob(id);
-      startPolling(id);
+      setJob(data.id);
+      startPolling(data.id);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
