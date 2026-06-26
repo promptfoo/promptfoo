@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FetchResponseParseError, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { FetchDiagnosticError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -487,6 +488,30 @@ describe('AzureChatCompletionProvider', () => {
       expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(7_000);
     });
 
+    it('drops non-finite rate-limit timing metadata', async () => {
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          code: 'rate_limit_exceeded',
+          retryAfterMs: Number.POSITIVE_INFINITY,
+        }),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'Rate limit exceeded: HTTP 429',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+          },
+        },
+      });
+    });
+
     it('redacts hostile rate-limit status, code, headers, and body', async () => {
       const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
       const rateLimit = new HttpRateLimitError({
@@ -526,6 +551,17 @@ describe('AzureChatCompletionProvider', () => {
       const result = await provider.callApi('secret-transport-prompt-sentinel');
 
       expect(result).toEqual({ error: 'API call error (TypeError)' });
+      expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
+    it('preserves safe typed transport diagnostics', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new FetchDiagnosticError({ errorType: 'Error', status: 503 }),
+      );
+
+      const result = await provider.callApi('secret-transport-prompt-sentinel');
+
+      expect(result).toEqual({ error: 'API call error (HTTP 503)' });
       expect(JSON.stringify(result)).not.toContain('secret-');
     });
 
@@ -712,6 +748,49 @@ describe('AzureChatCompletionProvider', () => {
       expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects success-shaped bodies returned with an HTTP error status', async () => {
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { message: { role: 'assistant', content: 'secret-error-body-output-sentinel' } },
+          ],
+          usage: {},
+        },
+        cached: false,
+        status: 502,
+        statusText: 'secret-status-text-sentinel',
+        deleteFromCache,
+      });
+
+      const result = await provider.callApi('secret-request-prompt-sentinel');
+
+      expect(result.error).toContain('API response error (status 502)');
+      expect(JSON.stringify(result)).not.toContain('secret-');
+      expect(deleteFromCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves allowlisted Azure error code and parameter diagnostics', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          error: {
+            code: 'unsupported_parameter',
+            param: 'max_tokens',
+            message: 'secret-error-message-sentinel',
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('secret-request-prompt-sentinel');
+
+      expect(result.error).toContain('"errorCode": "unsupported_parameter"');
+      expect(result.error).toContain('"errorParam": "max_tokens"');
+      expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
     it('should handle tool calls in response', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -778,6 +857,7 @@ describe('AzureChatCompletionProvider', () => {
       const customHeaders = {
         'X-Test-Header': 'test-value',
         'Another-Header': 'another-value',
+        'X-Promptfoo-Silent': 'false',
       };
 
       const provider = new AzureChatCompletionProvider('test-deployment', {
@@ -790,19 +870,15 @@ describe('AzureChatCompletionProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'api-key': 'test-key',
-            'X-Test-Header': 'test-value',
-            'Another-Header': 'another-value',
-            'x-promptfoo-silent': 'true',
-          }),
-        }),
-        expect.any(Number),
-        'json',
+      const [, requestOptions, , format, cacheOptions] = vi.mocked(fetchWithCache).mock.calls[0];
+      const headers = new Headers(requestOptions?.headers);
+      expect(headers.get('content-type')).toBe('application/json');
+      expect(headers.get('api-key')).toBe('test-key');
+      expect(headers.get('x-test-header')).toBe('test-value');
+      expect(headers.get('another-header')).toBe('another-value');
+      expect(headers.get('x-promptfoo-silent')).toBe('true');
+      expect(format).toBe('json');
+      expect(cacheOptions).toEqual(
         expect.objectContaining({
           bust: undefined,
           isResponseCacheable: expect.any(Function),

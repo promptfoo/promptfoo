@@ -318,7 +318,9 @@ function getSafeErrorType(error: unknown): string {
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
+const responseCacheabilityCheckIds = new WeakMap<(data: unknown) => boolean, number>();
 let nextAbortSignalId = 0;
+let nextResponseCacheabilityCheckId = 0;
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
@@ -450,9 +452,27 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
-function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
+function getResponseCacheabilityCheckId(check: (data: unknown) => boolean) {
+  let checkId = responseCacheabilityCheckIds.get(check);
+  if (checkId === undefined) {
+    checkId = ++nextResponseCacheabilityCheckId;
+    responseCacheabilityCheckIds.set(check, checkId);
+  }
+  return checkId;
+}
+
+function getInflightFetchCacheKey(
+  cacheKey: string,
+  url: RequestInfo,
+  options: RequestInit,
+  isResponseCacheable?: (data: unknown) => boolean,
+) {
   const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  const signalSuffix = signal ? `:signal:${getAbortSignalId(signal)}` : '';
+  const validationSuffix = isResponseCacheable
+    ? `:validation:${getResponseCacheabilityCheckId(isResponseCacheable)}`
+    : '';
+  return `${cacheKey}${signalSuffix}${validationSuffix}`;
 }
 
 function serializeFetchResponse(
@@ -740,7 +760,12 @@ export async function fetchWithCache<T = unknown>(
     }
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(
+    cacheKey,
+    url,
+    options,
+    cacheOptions.isResponseCacheable,
+  );
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   if (!inflightResponse) {
     inflightResponse = (async () => {

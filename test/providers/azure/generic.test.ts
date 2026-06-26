@@ -4,6 +4,10 @@ import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { mockProcessEnv } from '../../util/utils';
 
 describe('AzureGenericProvider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('does not log Azure authentication error details', async () => {
     const provider = new AzureGenericProvider('test-deployment', {
       config: { apiKey: 'initialization-key' },
@@ -22,8 +26,26 @@ describe('AzureGenericProvider', () => {
       'Azure authentication failed. Please check your credentials.',
     );
     expect(JSON.stringify(infoSpy.mock.calls)).not.toContain('secret-auth-sdk-error-sentinel');
+  });
 
-    vi.restoreAllMocks();
+  it('distinguishes invalid credential configuration without logging its values', async () => {
+    const provider = new AzureGenericProvider('test-deployment', {
+      config: {
+        apiKey: 'initialization-key',
+        azureClientId: 'client-id-secret-sentinel',
+        azureClientSecret: 'client-secret-secret-sentinel',
+        azureTenantId: 'tenant-id-secret-sentinel',
+        azureAuthorityHost: 'http://authority-host-secret-sentinel.invalid',
+      },
+    });
+    await provider.ensureInitialized();
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+    await expect(provider.getAzureTokenCredential()).rejects.toThrow(
+      'Invalid Azure credential configuration.',
+    );
+    expect(errorSpy).toHaveBeenCalledWith('Invalid Azure credential configuration.');
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('secret-sentinel');
   });
 
   describe('getApiBaseUrl', () => {

@@ -6,6 +6,45 @@ export interface SystemError extends Error {
   cause?: unknown;
 }
 
+const SAFE_FETCH_ERROR_CODES: ReadonlySet<string> = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+export type FetchDiagnosticErrorType = 'AbortError' | 'Error' | 'TypeError' | 'unknown';
+
+/** Body-free transport diagnostics safe to expose through provider errors. */
+export class FetchDiagnosticError extends Error {
+  readonly errorType: FetchDiagnosticErrorType;
+  readonly status?: number;
+  readonly code?: string;
+
+  constructor(init: { errorType: string; status?: number; code?: string }) {
+    const errorType = ['AbortError', 'Error', 'TypeError'].includes(init.errorType)
+      ? (init.errorType as FetchDiagnosticErrorType)
+      : 'unknown';
+    const candidateStatus = init.status;
+    const status =
+      typeof candidateStatus === 'number' &&
+      Number.isInteger(candidateStatus) &&
+      candidateStatus >= 100 &&
+      candidateStatus <= 599
+        ? candidateStatus
+        : undefined;
+    const code = init.code && SAFE_FETCH_ERROR_CODES.has(init.code) ? init.code : undefined;
+    super(status === undefined ? (code ? `${errorType} (${code})` : errorType) : `HTTP ${status}`);
+    this.name = 'FetchDiagnosticError';
+    this.errorType = errorType;
+    this.status = status;
+    this.code = code;
+  }
+}
+
 /**
  * Body-level error codes that indicate a hard quota/billing failure rather than
  * a transient per-window rate limit. Retrying these will not succeed and just

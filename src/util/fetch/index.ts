@@ -15,6 +15,7 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
+  FetchDiagnosticError,
   HttpRateLimitError,
   isHardQuotaCode,
   type SystemError,
@@ -254,7 +255,9 @@ export async function fetchWithProxy(
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      logger.debug(
+        redactDiagnostics ? '[fetch] Using proxy' : `Using proxy: ${sanitizeUrl(proxyUrl)}`,
+      );
       finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
       finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
@@ -415,12 +418,17 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
+  redactDiagnostics: boolean,
 ): Promise<{ body: unknown; code: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
+    logger.debug(
+      redactDiagnostics
+        ? '[fetch] peekRateLimitBody: clone failed, skipping body code lookup'
+        : `[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`,
+    );
     return { body: undefined, code: undefined };
   }
 
@@ -428,7 +436,11 @@ async function peekRateLimitBody(
   try {
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
   } catch (err) {
-    logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
+    logger.debug(
+      redactDiagnostics
+        ? '[fetch] peekRateLimitBody: body read failed'
+        : `[fetch] peekRateLimitBody: body read failed: ${err}`,
+    );
     return { body: undefined, code: undefined };
   }
 
@@ -565,7 +577,7 @@ async function handleRateLimitedResponse(
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
   const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
+    ? await peekRateLimitBody(response, redactDiagnostics)
     : { body: undefined, code: undefined };
 
   // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
@@ -581,21 +593,14 @@ async function handleRateLimitedResponse(
   }
 
   if (attempt >= maxRetries) {
-    if (isHardRateLimit) {
-      // No retries remain: throw a structured error instead of a bare string
-      // so callers can read Retry-After / reset / code without re-parsing.
-      logger.debug(
-        redactDiagnostics
-          ? `Rate limited: HTTP ${response.status}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`
-          : `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
-      );
-      throw buildHttpRateLimitError(response, body, code);
-    }
-    throw new Error(
+    // Preserve a structured signal for both hard 429s and soft header-only
+    // throttles (for example HTTP 200 with remaining=0).
+    logger.debug(
       redactDiagnostics
-        ? `Rate limited: HTTP ${response.status} after ${maxRetries + 1} attempts`
-        : `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
+        ? `Rate limited: HTTP ${response.status}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`
+        : `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
     );
+    throw buildHttpRateLimitError(response, body, code);
   }
 
   logger.debug(
@@ -621,23 +626,16 @@ function formatFetchErrorMessage(error: unknown): string {
   return message;
 }
 
-const SAFE_FETCH_ERROR_CODES = new Set([
-  'EAI_AGAIN',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ENETUNREACH',
-  'ENOTFOUND',
-  'ETIMEDOUT',
-  'UND_ERR_CONNECT_TIMEOUT',
-]);
-
 function isFetchLoggingSuppressed(options: FetchOptions): boolean {
   return new Headers(options.headers).get('x-promptfoo-silent') === 'true';
 }
 
-function formatSafeFetchErrorMessage(error: unknown): string {
+function toFetchDiagnosticError(error: unknown): FetchDiagnosticError {
+  if (error instanceof FetchDiagnosticError) {
+    return error;
+  }
   if (!(error instanceof Error)) {
-    return 'Unknown error';
+    return new FetchDiagnosticError({ errorType: 'unknown' });
   }
   const name = ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
   const typedError = error as SystemError;
@@ -648,8 +646,10 @@ function formatSafeFetchErrorMessage(error: unknown): string {
     typeof (typedError.cause as { code?: unknown }).code === 'string'
       ? ((typedError.cause as { code: string }).code as string)
       : undefined;
-  const code = [directCode, causeCode].find((value) => value && SAFE_FETCH_ERROR_CODES.has(value));
-  return code ? `${name} (${code})` : name;
+  const directDiagnostic = new FetchDiagnosticError({ errorType: name, code: directCode });
+  return directDiagnostic.code || !causeCode
+    ? directDiagnostic
+    : new FetchDiagnosticError({ errorType: name, code: causeCode });
 }
 
 export async function fetchWithRetries(
@@ -662,6 +662,7 @@ export async function fetchWithRetries(
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
+  let lastDiagnosticError: FetchDiagnosticError | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
   const redactDiagnostics = isFetchLoggingSuppressed(options);
 
@@ -676,11 +677,9 @@ export async function fetchWithRetries(
       );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
-        throw new Error(
-          redactDiagnostics
-            ? `Internal Server Error: HTTP ${response.status}`
-            : `Internal Server Error: ${response.status} ${response.statusText}`,
-        );
+        throw redactDiagnostics
+          ? new FetchDiagnosticError({ errorType: 'Error', status: response.status })
+          : new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
@@ -693,9 +692,7 @@ export async function fetchWithRetries(
       // Don't retry on abort - propagate immediately
       if (error instanceof Error && error.name === 'AbortError') {
         if (redactDiagnostics) {
-          const abortError = new Error('Request aborted');
-          abortError.name = 'AbortError';
-          throw abortError;
+          throw new FetchDiagnosticError({ errorType: 'AbortError' });
         }
         throw error;
       }
@@ -707,9 +704,8 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      const errorMessage = redactDiagnostics
-        ? formatSafeFetchErrorMessage(error)
-        : formatFetchErrorMessage(error);
+      const diagnosticError = redactDiagnostics ? toFetchDiagnosticError(error) : undefined;
+      const errorMessage = diagnosticError?.message ?? formatFetchErrorMessage(error);
 
       if (redactDiagnostics) {
         logger.debug('[fetch] Request failed, retrying', {
@@ -725,7 +721,11 @@ export async function fetchWithRetries(
         await sleep(waitTime);
       }
       lastErrorMessage = errorMessage;
+      lastDiagnosticError = diagnosticError;
     }
+  }
+  if (lastDiagnosticError) {
+    throw lastDiagnosticError;
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
 }

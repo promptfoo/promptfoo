@@ -296,6 +296,7 @@ describe('fetchWithCache', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   afterAll(() => {
@@ -1072,6 +1073,35 @@ describe('fetchWithCache', () => {
       expect(secondResult).toMatchObject({ cached: false, data: poison });
       expect(thirdResult).toMatchObject({ cached: false, data: poison });
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should isolate in-flight fetches that use different validation policies', async () => {
+      const responseData = { choices: [{ message: { content: 'candidate response' } }] };
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, responseData));
+      const requestOptions = { headers: { 'x-promptfoo-silent': 'true' } };
+      const permissiveCheck = vi.fn(() => true);
+      const rejectingCheck = vi.fn(() => false);
+
+      const [permissiveResult, rejectingResult] = await Promise.all([
+        fetchWithCache(url, requestOptions, 1000, 'json', {
+          isResponseCacheable: permissiveCheck,
+        }),
+        fetchWithCache(url, requestOptions, 1000, 'json', {
+          isResponseCacheable: rejectingCheck,
+        }),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(permissiveResult).toMatchObject({ cached: false, data: responseData });
+      expect(rejectingResult).toMatchObject({ cached: false, data: responseData });
+      expect(permissiveCheck).toHaveBeenCalled();
+      expect(rejectingCheck).toHaveBeenCalled();
+
+      const laterRejectingResult = await fetchWithCache(url, requestOptions, 1000, 'json', {
+        isResponseCacheable: rejectingCheck,
+      });
+      expect(laterRejectingResult).toMatchObject({ cached: false, data: responseData });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
 
     it('should evict cached responses that fail caller validation', async () => {

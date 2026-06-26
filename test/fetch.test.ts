@@ -9,7 +9,7 @@ import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
-import { HttpRateLimitError } from '../src/util/fetch/errors';
+import { FetchDiagnosticError, HttpRateLimitError } from '../src/util/fetch/errors';
 import {
   clearAgentCache,
   computeRateLimitWaitMs,
@@ -656,6 +656,28 @@ describe('fetchWithProxy', () => {
         connections: DEFAULT_MAX_CONCURRENCY,
       }),
     );
+  });
+
+  it('does not serialize malformed authenticated proxy URLs for silent requests', async () => {
+    const proxyUrl = 'http://proxy-user:proxy-password-secret-sentinel@%';
+    mockProcessEnv({ HTTPS_PROXY: proxyUrl });
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      await fetchWithProxy('https://example.com/api', {
+        headers: { 'x-promptfoo-silent': 'true' },
+      });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(expect.objectContaining({ uri: proxyUrl }));
+      const diagnostics = JSON.stringify([
+        ...vi.mocked(logger.debug).mock.calls,
+        ...consoleWarn.mock.calls,
+      ]);
+      expect(diagnostics).not.toContain('proxy-password-secret-sentinel');
+      expect(logger.debug).toHaveBeenCalledWith('[fetch] Using proxy');
+    } finally {
+      consoleWarn.mockRestore();
+    }
   });
 
   it('should use proxy URL from environment variables in order of precedence', async () => {
@@ -1409,7 +1431,7 @@ describe('fetchWithRetries', () => {
         1000,
         1,
       ),
-    ).rejects.toThrow('Request failed after 1 retries: TypeError (ECONNREFUSED)');
+    ).rejects.toThrow('TypeError (ECONNREFUSED)');
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
@@ -1417,6 +1439,57 @@ describe('fetchWithRetries', () => {
     expect(serializedLogs).not.toContain('secret-transport-message-sentinel');
     expect(serializedLogs).not.toContain('secret-transport-cause-sentinel');
     expect(serializedLogs).not.toContain('secret-url-password-sentinel');
+  });
+
+  it('redacts authenticated proxy failures for silent requests', async () => {
+    const restoreEnv = mockProcessEnv({
+      HTTPS_PROXY: 'http://proxy-user:proxy-password-secret-sentinel@proxy.invalid',
+    });
+    const error = new TypeError('proxy-password-secret-sentinel', {
+      cause: new Error('proxy-auth-cause-secret-sentinel'),
+    });
+    (error as any).code = 'ECONNREFUSED';
+    vi.mocked(global.fetch).mockRejectedValue(error);
+
+    try {
+      const caught = await fetchWithRetries(
+        'https://example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        0,
+      ).catch((reason) => reason);
+
+      expect(caught).toBeInstanceOf(FetchDiagnosticError);
+      expect(caught).toMatchObject({ code: 'ECONNREFUSED', message: 'TypeError (ECONNREFUSED)' });
+      expect(JSON.stringify(caught)).not.toContain('secret-sentinel');
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain('secret-sentinel');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves body-free HTTP status for silent 5xx failures', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => key === 'PROMPTFOO_RETRY_5XX');
+    vi.mocked(global.fetch).mockResolvedValue(
+      createMockResponse({
+        status: 503,
+        statusText: 'secret-upstream-status-text-sentinel',
+      }),
+    );
+
+    const error = await fetchWithRetries(
+      'https://example.com',
+      { headers: { 'x-promptfoo-silent': 'true' } },
+      1000,
+      0,
+    ).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(FetchDiagnosticError);
+    expect(error).toMatchObject({ status: 503, message: 'HTTP 503' });
+    expect(JSON.stringify(error)).not.toContain('secret-upstream-status-text-sentinel');
+    expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+      'secret-upstream-status-text-sentinel',
+    );
   });
 
   it('should handle non-Error objects in rejection', async () => {
@@ -1620,6 +1693,25 @@ describe('fetchWithRetries', () => {
       }
     });
 
+    it('preserves a structured signal for header-only throttling on HTTP 200', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        createMockResponse({
+          status: 200,
+          headers: new Headers({ 'x-ratelimit-remaining-requests': '0' }),
+          body: { choices: [{ message: { content: 'not returned' } }] },
+        }),
+      );
+
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 0).catch(
+        (caught) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ kind: 'rate_limit', status: 200 });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
     it('fails fast on insufficient_quota without consuming retries', async () => {
       const quotaResponse = rateLimitedJsonResponse({
         body: {
@@ -1727,6 +1819,50 @@ describe('fetchWithRetries', () => {
       const rl = err as HttpRateLimitError;
       expect(rl.kind).toBe('rate_limit');
       expect(rl.code).toBeUndefined();
+    });
+
+    it('redacts silent body-read failures during rate-limit classification', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('secret-rate-body-read-sentinel')),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const error = await fetchWithRetries(
+        'https://example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        0,
+      ).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect((error as HttpRateLimitError).body).toBeUndefined();
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+        'secret-rate-body-read-sentinel',
+      );
+    });
+
+    it('redacts silent clone failures during rate-limit classification', async () => {
+      const response = createMockResponse({ status: 429, statusText: 'Too Many Requests' });
+      response.clone = () => {
+        throw new Error('secret-rate-clone-sentinel');
+      };
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const error = await fetchWithRetries(
+        'https://example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        0,
+      ).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect((error as HttpRateLimitError).body).toBeUndefined();
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+        'secret-rate-clone-sentinel',
+      );
     });
 
     it('classifies via error.type when error.code is missing (Anthropic shape)', async () => {

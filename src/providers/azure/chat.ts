@@ -6,7 +6,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { HttpRateLimitError } from '../../util/fetch/errors';
+import { FetchDiagnosticError, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -41,6 +41,13 @@ const SAFE_MESSAGE_ROLES = new Set([
   'user',
 ]);
 const SAFE_RESPONSE_FORMAT_TYPES = new Set(['json_object', 'json_schema', 'text']);
+const SAFE_AZURE_ERROR_CODES = new Set([
+  'content_filter',
+  'insufficient_quota',
+  'rate_limit_exceeded',
+  'unsupported_parameter',
+]);
+const SAFE_AZURE_ERROR_PARAMS = new Set(['max_completion_tokens', 'max_tokens', 'temperature']);
 const FILTERED_PROMPT_OUTPUT = 'Azure content filtering blocked the prompt.';
 const SAFE_FILTERED_PROMPT_OUTPUTS = new Set([
   "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
@@ -60,13 +67,47 @@ function getSafeErrorType(error: unknown): string {
   return ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
 }
 
-function isAzureChatResponseCacheable(data: unknown): boolean {
+function getAzureChatChoice(data: unknown, requireAssistant: boolean): Record<string, any> | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null;
+  }
+  const response = data as Record<string, any>;
+  if (!Array.isArray(response.choices)) {
+    return null;
+  }
+  const choice = requireAssistant
+    ? response.choices.find((candidate) => candidate?.message?.role === 'assistant')
+    : response.choices[0];
+  return choice && typeof choice === 'object' ? choice : null;
+}
+
+function isAzureChatChoiceProcessable(choice: Record<string, any> | null): boolean {
+  const message = choice?.message;
+  return Boolean(
+    message &&
+      typeof message === 'object' &&
+      (typeof message.content === 'string' ||
+        (message.content == null && (message.tool_calls != null || message.function_call != null))),
+  );
+}
+
+function isAzureChatResponseCacheable(data: unknown, requireAssistant: boolean): boolean {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return false;
   }
   const response = data as Record<string, any>;
-  return !response.error && Array.isArray(response.choices) && response.choices.length > 0;
+  return Boolean(
+    !response.error &&
+      Array.isArray(response.choices) &&
+      !response.choices.some((choice: any) => choice?.content_filter_results?.error) &&
+      isAzureChatChoiceProcessable(getAzureChatChoice(response, requireAssistant)),
+  );
 }
+
+const isAzureDefaultChatResponseCacheable = (data: unknown) =>
+  isAzureChatResponseCacheable(data, false);
+const isAzureDataSourcesChatResponseCacheable = (data: unknown) =>
+  isAzureChatResponseCacheable(data, true);
 
 async function evictAzureChatResponse(deleteFromCache?: () => Promise<void>): Promise<void> {
   try {
@@ -82,7 +123,9 @@ function getAzureChatRateLimitResponse(error: HttpRateLimitError): ProviderRespo
   const resetAt =
     typeof error.resetAt === 'number' && Number.isFinite(error.resetAt) ? error.resetAt : undefined;
   const retryAfterMs =
-    typeof error.retryAfterMs === 'number'
+    typeof error.retryAfterMs === 'number' &&
+    Number.isFinite(error.retryAfterMs) &&
+    error.retryAfterMs >= 0
       ? error.retryAfterMs
       : resetAt === undefined
         ? undefined
@@ -162,6 +205,14 @@ function getAzureChatResponseMetadata(data: unknown, status?: number) {
   }
 
   const response = data as Record<string, any>;
+  const errorCode =
+    typeof response.error?.code === 'string' && SAFE_AZURE_ERROR_CODES.has(response.error.code)
+      ? response.error.code
+      : undefined;
+  const errorParam =
+    typeof response.error?.param === 'string' && SAFE_AZURE_ERROR_PARAMS.has(response.error.param)
+      ? response.error.param
+      : undefined;
 
   return {
     status,
@@ -169,6 +220,8 @@ function getAzureChatResponseMetadata(data: unknown, status?: number) {
     responseKeyCount: Object.keys(response).length,
     hasError: Boolean(response.error),
     hasErrorCode: typeof response.error?.code === 'string',
+    errorCode,
+    errorParam,
     choiceCount: Array.isArray(response.choices) ? response.choices.length : undefined,
     hasUsage: Boolean(response.usage),
   };
@@ -474,6 +527,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let fetchResult!: FetchWithCacheResult<any>;
 
     try {
+      const hasDataSources = !!config.dataSources || !!config.data_sources;
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
@@ -481,24 +535,27 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
           }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+        ...this.authHeaders,
+        ...this.config.headers,
+      });
+      headers.set('x-promptfoo-silent', 'true');
 
       fetchResult = await fetchWithCache(
         url,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.authHeaders,
-            ...this.config.headers,
-            'x-promptfoo-silent': 'true',
-          },
+          headers,
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
         'json',
         {
           bust: context?.bustCache ?? context?.debug,
-          isResponseCacheable: isAzureChatResponseCacheable,
+          isResponseCacheable: hasDataSources
+            ? isAzureDataSourcesChatResponseCacheable
+            : isAzureDefaultChatResponseCacheable,
         },
       );
 
@@ -519,6 +576,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       if (err instanceof HttpRateLimitError) {
         return getAzureChatRateLimitResponse(err);
       }
+      if (err instanceof FetchDiagnosticError) {
+        return { error: `API call error (${err.message})` };
+      }
       return {
         error: `API call error (${getSafeErrorType(err)})`,
       };
@@ -533,10 +593,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let finishReason: string;
 
     try {
-      if (data.error) {
+      const isContentFilterError =
+        data?.error?.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter;
+      if ((fetchResult.status < 200 || fetchResult.status >= 300) && !isContentFilterError) {
+        await evictAzureChatResponse(fetchResult.deleteFromCache);
+        return {
+          error: `API response error (status ${fetchResult.status})\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(data, fetchResult.status), null, 2)}`,
+        };
+      }
+
+      if (data?.error) {
         await evictAzureChatResponse(fetchResult.deleteFromCache);
         // Was the input prompt deemed inappropriate?
-        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+        if (isContentFilterError) {
           flaggedInput = true;
           output = getFilteredPromptOutput(data.error.message);
           finishReason = FINISH_REASON_MAP.content_filter;
@@ -547,12 +616,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       } else {
         const hasDataSources = !!config.dataSources || !!config.data_sources;
-        const choice = hasDataSources
-          ? data.choices.find(
-              (choice: { message: { role: string; content: string } }) =>
-                choice.message.role === 'assistant',
-            )
-          : data.choices[0];
+        const choice = getAzureChatChoice(data, hasDataSources);
+        if (!isAzureChatChoiceProcessable(choice)) {
+          throw new Error('Azure chat response did not contain a processable choice');
+        }
 
         const message = choice?.message;
 
@@ -616,7 +683,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         }
 
-        logProbs = data.choices[0].logprobs?.content?.map(
+        logProbs = choice?.logprobs?.content?.map(
           (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }

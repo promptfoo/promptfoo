@@ -22,9 +22,12 @@ describe('Azure chat redaction integration', () => {
       const mode = [
         'success',
         'malformed',
+        'malformed-choice',
         'structured-error',
+        'server-error',
         'stream',
         'content-filter',
+        'soft-rate-limit',
         'rate-limit',
       ].find((candidate) => body.includes(`${candidate}-prompt-secret-sentinel`));
       if (!mode) {
@@ -47,6 +50,34 @@ describe('Azure chat redaction integration', () => {
               code: 'structured-error-code-secret-sentinel',
               message: 'structured-error-message-secret-sentinel',
             },
+          }),
+        );
+        return;
+      }
+      if (mode === 'malformed-choice') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            choices: [{}],
+            private: 'malformed-choice-body-secret-sentinel',
+          }),
+        );
+        return;
+      }
+      if (mode === 'server-error') {
+        response.statusCode = 502;
+        response.statusMessage = 'server-status-secret-sentinel';
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'server-error-body-secret-sentinel',
+                },
+              },
+            ],
           }),
         );
         return;
@@ -94,6 +125,25 @@ describe('Azure chat redaction integration', () => {
         );
         return;
       }
+      if (mode === 'soft-rate-limit') {
+        response.writeHead(200, {
+          'content-type': 'application/json',
+          'x-ratelimit-remaining-requests': '0',
+        });
+        response.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'soft-rate-limit-body-secret-sentinel',
+                },
+              },
+            ],
+          }),
+        );
+        return;
+      }
 
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(
@@ -121,11 +171,12 @@ describe('Azure chat redaction integration', () => {
     await once(server, 'close');
   });
 
-  const createProvider = (passthrough?: object) =>
+  const createProvider = (passthrough?: object, headers?: Record<string, string>) =>
     new AzureChatCompletionProvider('redaction-test', {
       config: {
         apiBaseUrl,
         apiKey: 'azure-api-key-secret-sentinel',
+        headers,
         passthrough,
       },
     });
@@ -141,6 +192,7 @@ describe('Azure chat redaction integration', () => {
     const getLogs = captureLogs();
     const provider = createProvider();
     const namespace = `azure-redaction-success-${Date.now()}`;
+    const previousRequests = requestCounts.get('success') ?? 0;
 
     const [first, second] = await withCacheEnabled(true, () =>
       withCacheNamespace(namespace, async () => {
@@ -152,7 +204,21 @@ describe('Azure chat redaction integration', () => {
 
     expect(first).toMatchObject({ output: 'safe success output', cached: false });
     expect(second).toMatchObject({ output: 'safe success output', cached: true });
-    expect(requestCounts.get('success')).toBe(1);
+    expect(requestCounts.get('success')).toBe(previousRequests + 1);
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
+  it('cannot disable silent diagnostics with a differently cased custom header', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider(undefined, { 'X-Promptfoo-Silent': 'false' });
+    const previousRequests = requestCounts.get('success') ?? 0;
+
+    const result = await withCacheNamespace(`azure-redaction-header-${Date.now()}`, () =>
+      provider.callApi('success-prompt-secret-sentinel'),
+    );
+
+    expect(result.output).toBe('safe success output');
+    expect(requestCounts.get('success')).toBe(previousRequests + 1);
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 
@@ -185,6 +251,31 @@ describe('Azure chat redaction integration', () => {
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 
+  it('rejects malformed choices and non-2xx success-shaped bodies without caching them', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider();
+    const malformedChoiceResults = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-choice-${Date.now()}`, async () => [
+        await provider.callApi('malformed-choice-prompt-secret-sentinel'),
+        await provider.callApi('malformed-choice-prompt-secret-sentinel'),
+      ]),
+    );
+    const serverErrorResults = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-server-error-${Date.now()}`, async () => [
+        await provider.callApi('server-error-prompt-secret-sentinel'),
+        await provider.callApi('server-error-prompt-secret-sentinel'),
+      ]),
+    );
+
+    expect(requestCounts.get('malformed-choice')).toBe(2);
+    expect(requestCounts.get('server-error')).toBe(2);
+    for (const result of [...malformedChoiceResults, ...serverErrorResults]) {
+      expect(result.error).toMatch(/API response error \(status (200|502)\)/);
+      expect(JSON.stringify(result)).not.toContain('secret-sentinel');
+    }
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
   it('redacts forced streaming and content-filter response diagnostics', async () => {
     const getLogs = captureLogs();
     const streamingProvider = createProvider({ stream: true });
@@ -193,13 +284,20 @@ describe('Azure chat redaction integration', () => {
     const streamResult = await withCacheNamespace(`azure-redaction-stream-${Date.now()}`, () =>
       streamingProvider.callApi('stream-prompt-secret-sentinel'),
     );
-    const filterResult = await withCacheNamespace(`azure-redaction-filter-${Date.now()}`, () =>
-      provider.callApi('content-filter-prompt-secret-sentinel'),
+    const filterResults = await withCacheEnabled(true, () =>
+      withCacheNamespace(`azure-redaction-filter-${Date.now()}`, async () => [
+        await provider.callApi('content-filter-prompt-secret-sentinel'),
+        await provider.callApi('content-filter-prompt-secret-sentinel'),
+      ]),
     );
 
     expect(streamResult.error).toContain('invalid JSON response');
-    expect(filterResult.output).toBe('safe content-filter output');
-    expect(JSON.stringify([streamResult, filterResult])).not.toContain('secret-sentinel');
+    expect(filterResults.map((result) => result.output)).toEqual([
+      'safe content-filter output',
+      'safe content-filter output',
+    ]);
+    expect(requestCounts.get('content-filter')).toBe(2);
+    expect(JSON.stringify([streamResult, filterResults])).not.toContain('secret-sentinel');
     expect(getLogs()).not.toContain('secret-sentinel');
   });
 
@@ -220,6 +318,30 @@ describe('Azure chat redaction integration', () => {
         http: {
           status: 429,
           statusText: 'Too Many Requests',
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('secret-sentinel');
+    expect(getLogs()).not.toContain('secret-sentinel');
+  });
+
+  it('preserves scheduler-visible context for header-only throttling', async () => {
+    const getLogs = captureLogs();
+    const provider = createProvider();
+
+    const result = await withFetchRetryContext(0, () =>
+      withCacheNamespace(`azure-redaction-soft-rate-${Date.now()}`, () =>
+        provider.callApi('soft-rate-limit-prompt-secret-sentinel'),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      error: 'Rate limit exceeded: HTTP 200',
+      metadata: {
+        rateLimitKind: 'rate_limit',
+        http: {
+          status: 200,
+          statusText: 'Rate Limited',
         },
       },
     });
