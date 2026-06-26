@@ -12,20 +12,7 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
-### Scan scope
-
-By default, the action scans the PR diff and traces into surrounding code paths so the scanner can follow data flow into prompts. Set `diffs-only: true` to restrict analysis to the changed hunks only.
-
-### Config: action inputs vs `config-path`
-
-There are two ways to configure a scan, and they don't mix:
-
-- **Action inputs (default).** With `config-path` unset, the action builds a scan config from the inputs (`min-severity`, `diffs-only`, `guidance`, `guidance-file`). This is the path most workflows want.
-- **YAML config file.** Set `config-path: configs/code-scan.yaml` to hand the CLI a checked-in policy file. When `config-path` is set, the YAML supplies every scan setting — the input-driven knobs above are dropped and a warning is emitted if any of them are also set, so the divergence is visible in the action logs.
-
-`api-host` is the one input that's honored in both modes: an explicit `api-host` always overrides `apiHost` from `config-path`. Leave `api-host` unset to let the YAML choose an enterprise or self-hosted endpoint.
-
-> **Security note for `pull_request` workflows.** Anything `config-path` points at in the PR checkout is editable by the PR author. Point `config-path` only at trusted workflow-controlled content (a path from the base branch, a file written by an earlier workflow step, etc.) — never at a policy file the PR itself can edit.
+Without `config-path`, the action generates scan policy from `min-severity`, `diffs-only`, and guidance inputs. With `config-path`, that explicit file supplies scan policy and those individual inputs are ignored with a warning. Keep the selected file workflow-controlled (for example, materialize it from the pull request's base SHA). The workflow-controlled `api-host` input remains pinned to `https://api.promptfoo.app` unless explicitly overridden.
 
 ## Quick Start
 
@@ -47,20 +34,20 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     enable-fork-prs: true
 ```
 
 ## SARIF Output
 
-Grant `security-events: write` in the workflow job permissions, then upload the generated file.
+Grant `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
 The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
-  uses: promptfoo/code-scan-action@v1
+  uses: promptfoo/code-scan-action@v0
   with:
     sarif-output-path: promptfoo-code-scan.sarif
 
@@ -74,7 +61,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ## Contributing
 
-Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.
+Please note that this is a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/code-scan-action) in the main promptfoo repository.
 
 ## License
 
