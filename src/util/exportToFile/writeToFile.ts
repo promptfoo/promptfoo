@@ -39,9 +39,16 @@ export class JsonlFileWriter {
   // writer failures) can attribute it to a specific file. Shared by write() and close() so
   // both rejection paths report the path consistently; the original error is kept as `cause`.
   private wrapStreamError(action: 'write' | 'close', error: Error): Error {
-    return new Error(`Failed to ${action} JSONL output ${this.filePath}: ${error.message}`, {
-      cause: error,
+    const wrapped = new Error(
+      `Failed to ${action} JSONL output ${this.filePath}: ${error.message}`,
+    );
+    Object.defineProperty(wrapped, 'cause', {
+      value: error,
+      configurable: true,
+      enumerable: false,
+      writable: true,
     });
+    return wrapped;
   }
 
   async write(data: unknown): Promise<void> {

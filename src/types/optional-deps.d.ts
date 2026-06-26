@@ -29,3 +29,16 @@ declare module 'ibm-cloud-sdk-core' {
 
 // Optional dependency used by transformers providers through dynamic imports.
 declare module '@huggingface/transformers';
+
+// Optional libSQL node client used through lazy imports in database helpers.
+declare module '@libsql/client/node' {
+  export interface Client {
+    execute(...args: any[]): Promise<any>;
+    batch(...args: any[]): Promise<any>;
+    migrate(...args: any[]): Promise<any>;
+    executeMultiple(...args: any[]): Promise<any>;
+    close(): void | Promise<void>;
+  }
+
+  export function createClient(config: { url: string }): Client;
+}
