@@ -32,7 +32,7 @@ Get started with ElevenLabs in 3 steps:
      - 'Welcome to our customer service. How can I help you today?'
 
    providers:
-     - id: elevenlabs:tts:rachel
+     - id: elevenlabs:tts
 
    tests:
      - description: Generate welcome message
@@ -80,7 +80,7 @@ The ElevenLabs provider supports multiple capabilities:
 
 Generate high-quality voice synthesis with multiple models and voices:
 
-- `elevenlabs:tts:<voice_name>` - TTS with specified voice (e.g., `elevenlabs:tts:rachel`)
+- `elevenlabs:tts:<voice_id>` - TTS with a specified voice ID (for example, `elevenlabs:tts:21m00Tcm4TlvDq8ikWAM`)
 - `elevenlabs:tts` - TTS with default voice
 
 **Models available:**
@@ -94,7 +94,7 @@ Generate high-quality voice synthesis with multiple models and voices:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
@@ -185,17 +185,17 @@ All providers support these common parameters:
 
 ### TTS-Specific Parameters
 
-| Parameter                 | Description                                                 |
-| ------------------------- | ----------------------------------------------------------- |
-| `modelId`                 | TTS model (e.g., `eleven_flash_v2_5`)                       |
-| `voiceId`                 | Voice ID or name (e.g., `21m00Tcm4TlvDq8ikWAM` or `rachel`) |
-| `voiceSettings`           | Voice customization (stability, similarity, style, speed)   |
-| `outputFormat`            | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)           |
-| `seed`                    | Seed for deterministic output                               |
-| `streaming`               | Enable WebSocket streaming for low latency                  |
-| `pronunciationDictionary` | Custom pronunciation rules                                  |
-| `voiceDesign`             | Generate voice from text description                        |
-| `voiceRemix`              | Modify voice characteristics (gender, accent, age)          |
+| Parameter                 | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `modelId`                 | TTS model (e.g., `eleven_flash_v2_5`)                     |
+| `voiceId`                 | Voice ID (for example, `21m00Tcm4TlvDq8ikWAM`)            |
+| `voiceSettings`           | Voice customization (stability, similarity, style, speed) |
+| `outputFormat`            | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)         |
+| `seed`                    | Seed for deterministic output                             |
+| `streaming`               | Enable WebSocket streaming for low latency                |
+| `pronunciationDictionary` | Custom pronunciation rules                                |
+| `voiceDesign`             | Generate voice from text description                      |
+| `voiceRemix`              | Modify voice characteristics (gender, accent, age)        |
 
 ### STT-Specific Parameters
 
@@ -234,11 +234,11 @@ prompts:
   - 'Welcome to ElevenLabs. Our AI voice technology delivers natural-sounding speech.'
 
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
 
-  - id: elevenlabs:tts:clyde
+  - id: elevenlabs:tts:2EiwWnXFnvU5JabPnv8n
     config:
       modelId: eleven_turbo_v2_5
 
@@ -333,7 +333,7 @@ Customize pronunciation for technical terms:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       pronunciationDictionary:
         - word: 'API'
@@ -469,17 +469,17 @@ prompts:
   - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     label: flash-model
     config:
       modelId: eleven_flash_v2_5
-      voiceId: rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM
 
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     label: turbo-model
     config:
       modelId: eleven_turbo_v2_5
-      voiceId: rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM
 
 tests:
   - description: Flash model completes quickly
@@ -599,7 +599,7 @@ voiceSettings:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       cache: true
       cacheTTL: 86400 # 24 hours
@@ -622,7 +622,7 @@ providers:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
 tests:
   - vars:
       shortPrompt: 'Test' # Use during dev
@@ -665,7 +665,7 @@ evaluationCriteria:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       outputFormat: mp3_44100_128 # Good for web
       # outputFormat: pcm_44100      # Better for phone systems
@@ -721,12 +721,12 @@ tests:
 ```yaml
 providers:
   - label: v1-baseline
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
 
   - label: v2-improved
-    id: elevenlabs:tts:rachel
+    id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       modelId: eleven_flash_v2_5
       voiceSettings:
@@ -774,7 +774,7 @@ Solution: Add retry logic and respect rate limits:
 
 ```yaml
 providers:
-  - id: elevenlabs:tts:rachel
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
       retries: 3 # Retry failed requests
       timeout: 30000 # Allow time for retries

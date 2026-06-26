@@ -419,7 +419,10 @@ tests:
       problem: 'Calculate fibonacci sequence up to n terms'
     assert:
       - type: javascript
-        value: 'output.includes("def fibonacci") || output.includes("function fibonacci")'
+        value: |
+          const text = typeof output === 'string' ? output : output.result;
+          return typeof text === 'string' &&
+            (text.includes('def fibonacci') || text.includes('function fibonacci'));
       - type: contains
         value: 'recursive'
 ```

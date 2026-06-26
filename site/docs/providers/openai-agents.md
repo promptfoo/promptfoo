@@ -476,10 +476,11 @@ See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you wa
 
 ## Example: D&D Dungeon Master
 
-Full working example with D&D mechanics, dice rolling, and character management:
+The complete example, including its agent and tool files, is available in
+[examples/openai-agents-basic](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic).
+Its config uses the following file references:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 description: D&D Adventure with AI Dungeon Master
 
 prompts:
