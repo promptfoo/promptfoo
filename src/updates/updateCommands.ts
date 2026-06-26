@@ -18,7 +18,7 @@ export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandR
 
   if (selfHosted) {
     return {
-      primary: 'docker pull promptfoo/promptfoo:latest',
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
     };

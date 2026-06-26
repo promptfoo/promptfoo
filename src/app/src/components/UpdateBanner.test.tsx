@@ -157,6 +157,35 @@ describe('UpdateBanner', () => {
     expect(screen.getByRole('button', { name: 'Remind me later' })).toBeInTheDocument();
   });
 
+  it('should show malformed removal dates verbatim instead of normalizing them', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: false,
+        latestVersion: '1.9.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-invalid-date',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-02-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByText(/Node.js 20 support ends 2026-02-30/i)).toBeInTheDocument();
+  });
+
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-08-01T00:00:00.000Z'));
     mockUseVersionCheck.mockReturnValue({
@@ -211,7 +240,7 @@ describe('UpdateBanner', () => {
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
         },
         updateCommands: {
-          primary: 'docker pull promptfoo/promptfoo:latest',
+          primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
           alternative: null,
         },
       },
@@ -227,7 +256,7 @@ describe('UpdateBanner', () => {
     expect(screen.getByText(/Pull the latest Promptfoo Docker image/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toHaveAttribute(
       'title',
-      'docker pull promptfoo/promptfoo:latest',
+      'docker pull ghcr.io/promptfoo/promptfoo:latest',
     );
   });
 
@@ -362,7 +391,7 @@ describe('UpdateBanner', () => {
         runtimeNotice: null,
         runtimePolicy: { supportEndDate: '2026-07-30' },
         updateCommands: {
-          primary: 'docker pull promptfoo/promptfoo:latest',
+          primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
           alternative: null,
         },
         commandType: 'docker',
@@ -400,7 +429,7 @@ describe('UpdateBanner', () => {
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
         },
         updateCommands: {
-          primary: 'docker pull promptfoo/promptfoo:latest',
+          primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
           alternative: null,
         },
         commandType: 'docker',
@@ -496,6 +525,7 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
+    expect(screen.getByRole('status')).not.toContainElement(copyCommandButton);
 
     await user.click(copyCommandButton);
 

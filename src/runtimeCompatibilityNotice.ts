@@ -25,13 +25,17 @@ export function formatRuntimeCompatibilityNotice(
   notice: RuntimeCompatibilityNotice,
   compact: boolean,
   now: Date = new Date(),
+  isDocker: boolean = false,
 ): string {
   const supportStatus = hasNode20SupportEnded(now) ? 'ended' : 'ends';
+  const upgradeInstruction = isDocker
+    ? 'Pull the latest Promptfoo Docker image, then redeploy the container.'
+    : `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`;
   if (compact) {
     return [
       `Node.js 20 support in promptfoo ${supportStatus} ${NODE_20_SUPPORT_END_DATE_LABEL}.`,
       `Detected ${notice.currentVersion}.`,
-      `Upgrade to Node.js ${notice.minimumVersion} or newer (${notice.recommendedVersion} recommended).`,
+      upgradeInstruction,
       notice.documentationUrl,
     ].join(' ');
   }
@@ -40,7 +44,7 @@ export function formatRuntimeCompatibilityNotice(
     chalk.yellow.bold(`⚠ Node.js 20 support ${supportStatus} ${NODE_20_SUPPORT_END_DATE_LABEL}`),
     '',
     `Detected: ${notice.currentVersion}`,
-    `Upgrade to Node.js ${notice.minimumVersion} or newer. Node.js ${notice.recommendedVersion} is recommended.`,
+    upgradeInstruction,
     '',
     `Upgrade guide: ${notice.documentationUrl}`,
   ].join('\n');
@@ -67,7 +71,9 @@ export function maybeWarnAboutRuntime(options: RuntimeNoticeOptions = {}): boole
   }
 
   const compact = options.nonInteractive ?? isNonInteractive();
-  console.warn(formatRuntimeCompatibilityNotice(notice, compact, now));
+  console.warn(
+    formatRuntimeCompatibilityNotice(notice, compact, now, getEnvBool('PROMPTFOO_SELF_HOSTED')),
+  );
 
   telemetry.record('feature_used', {
     feature: 'runtime_compatibility_notice',

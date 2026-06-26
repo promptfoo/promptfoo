@@ -31,7 +31,7 @@ describe('Version Route', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should return 200 with valid response schema shape', async () => {
@@ -100,7 +100,7 @@ describe('Version Route', () => {
   it('should include all required fields matching UpdateCommandResult shape', async () => {
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
     mockedGetUpdateCommands.mockReturnValue({
-      primary: 'docker pull promptfoo/promptfoo:latest',
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
     });
@@ -124,13 +124,14 @@ describe('Version Route', () => {
 
     const packageResponse = await request(app).get('/api/version');
     expect(packageResponse.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(1);
     expect(packageResponse.body.updateBlockedByRuntime).toBe(
       process.versions.node.startsWith('20.'),
     );
     expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
 
     mockedGetUpdateCommands.mockReturnValue({
-      primary: 'docker pull promptfoo/promptfoo:latest',
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
     });

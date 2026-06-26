@@ -220,11 +220,11 @@ describe('checkForUpdates', () => {
     expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
     expect(loggerInfoSpy).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining('docker pull promptfoo/promptfoo:latest'),
+      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
     );
     expect(loggerInfoSpy).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('docker pull promptfoo/promptfoo:latest'),
+      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
     );
     expect(loggerWarnSpy).not.toHaveBeenCalled();
   });

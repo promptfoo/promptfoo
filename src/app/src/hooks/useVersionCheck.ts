@@ -144,7 +144,7 @@ export function useVersionCheck(): UseVersionCheckResult {
   const [error, setError] = useState<Error | null>(null);
   const [runtimeNoticeDismissal, setRuntimeNoticeDismissal] =
     useState<RuntimeNoticeDismissal | null>(null);
-  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [updateDismissedVersion, setUpdateDismissedVersion] = useState<string | null>(null);
   const [runtimePolicyUpdatedAt, setRuntimePolicyUpdatedAt] = useState(() => Date.now());
   const isMountedRef = useRef(true);
   const runtimePolicyRetryTimerRef = useRef<number | undefined>(undefined);
@@ -180,7 +180,12 @@ export function useVersionCheck(): UseVersionCheckResult {
               ? current
               : stored;
           });
-          setUpdateDismissed(safeLocalStorageGet(STORAGE_KEY) === data.latestVersion);
+          setUpdateDismissedVersion((current) => {
+            const stored = safeLocalStorageGet(STORAGE_KEY);
+            return stored === data.latestVersion || current === data.latestVersion
+              ? data.latestVersion
+              : null;
+          });
           setError(null);
         }
         return true;
@@ -286,7 +291,7 @@ export function useVersionCheck(): UseVersionCheckResult {
   const dismissUpdate = () => {
     if (versionInfo?.latestVersion) {
       safeLocalStorageSet(STORAGE_KEY, versionInfo.latestVersion);
-      setUpdateDismissed(true);
+      setUpdateDismissedVersion(versionInfo.latestVersion);
     }
   };
 
@@ -305,6 +310,7 @@ export function useVersionCheck(): UseVersionCheckResult {
         runtimePolicyUpdatedAt,
       )
     : false;
+  const updateDismissed = updateDismissedVersion === versionInfo?.latestVersion;
   const dismissed = versionInfo?.runtimeNotice ? runtimeNoticeDismissed : updateDismissed;
 
   return {

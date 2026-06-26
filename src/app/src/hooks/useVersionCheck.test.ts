@@ -376,6 +376,7 @@ describe('useVersionCheck', () => {
 
     expect(callApi).toHaveBeenCalledTimes(2);
     expect(result.current.runtimeNoticeDismissed).toBe(false);
+    expect(result.current.error).toBeNull();
   });
 
   it('fails open for a future persisted runtime dismissal', async () => {
@@ -518,6 +519,36 @@ describe('useVersionCheck', () => {
 
     expect(callApi).toHaveBeenCalledTimes(2);
     expect(result.current.versionInfo?.updateBlockedByRuntime).toBe(true);
+  });
+
+  it('preserves an in-memory update dismissal across policy refresh when storage fails', async () => {
+    const timers = useTestTimers();
+    timers.setSystemTime(new Date('2026-07-29T23:59:00.000Z'));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    const versionInfo = {
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      updateAvailable: true,
+      runtimePolicy: { supportEndDate: '2026-07-30' },
+    };
+    mockCallApiResponse(versionInfo);
+
+    const { result } = renderHook(() => useVersionCheck());
+    await act(async () => {});
+
+    act(() => {
+      result.current.dismissUpdate?.();
+    });
+    expect(result.current.updateDismissed).toBe(true);
+
+    await act(async () => {
+      await timers.advanceByAsync(60 * 1000);
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(result.current.updateDismissed).toBe(true);
   });
 
   it('should refetch cutoff policy when runtime warnings are disabled', async () => {

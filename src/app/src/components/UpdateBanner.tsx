@@ -240,7 +240,8 @@ export default function UpdateBanner() {
   return (
     <Alert
       ref={bannerRef}
-      role={activeRuntimeNotice && runtimeSupportEnded ? 'alert' : 'status'}
+      role="group"
+      aria-label={activeRuntimeNotice ? 'Node.js runtime notice' : 'Promptfoo update notice'}
       variant={activeRuntimeNotice ? 'warning' : 'info'}
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
@@ -249,7 +250,11 @@ export default function UpdateBanner() {
         activeRuntimeNotice ? 'dark:bg-amber-950' : 'dark:bg-blue-950',
       )}
     >
-      <div className="flex items-start gap-3 sm:items-center">
+      <div
+        role={activeRuntimeNotice && runtimeSupportEnded ? 'alert' : 'status'}
+        aria-atomic="true"
+        className="flex items-start gap-3 sm:items-center"
+      >
         {activeRuntimeNotice ? (
           <TriangleAlert className="size-4 shrink-0" />
         ) : (

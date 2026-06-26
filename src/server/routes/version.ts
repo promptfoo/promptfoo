@@ -97,8 +97,11 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
     let latestVersion = updateChecksDisabled ? VERSION : versionCache.latestVersion;
 
-    const cacheExpired = now - versionCache.timestamp > CACHE_DURATION;
-    const canRetry = now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
+    // A wall-clock rollback must not pin stale cache or failure-rate-limit state indefinitely.
+    const cacheExpired =
+      now < versionCache.timestamp || now - versionCache.timestamp > CACHE_DURATION;
+    const canRetry =
+      now < versionCache.lastAttempt || now - versionCache.lastAttempt > FAILURE_RETRY_DELAY;
 
     // Fetch if: (no cache OR cache expired) AND we haven't tried recently
     if (!updateChecksDisabled && (!latestVersion || cacheExpired) && canRetry) {

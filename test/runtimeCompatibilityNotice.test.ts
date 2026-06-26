@@ -130,6 +130,24 @@ describe('runtime compatibility CLI notice', () => {
     expect(message).toContain('Upgrade to Node.js 22.22.0 or newer');
   });
 
+  it('uses Docker upgrade guidance for self-hosted CLI runs', () => {
+    vi.mocked(getEnvBool).mockImplementation((name) => name === 'PROMPTFOO_SELF_HOSTED');
+
+    expect(
+      maybeWarnAboutRuntime({
+        currentVersion: 'v20.20.2',
+        now: new Date('2026-06-22T12:00:00.000Z'),
+        nonInteractive: true,
+      }),
+    ).toBe(true);
+
+    const message = vi.mocked(console.warn).mock.calls[0][0] as string;
+    expect(message).toContain(
+      'Pull the latest Promptfoo Docker image, then redeploy the container',
+    );
+    expect(message).not.toContain('Upgrade to Node.js');
+  });
+
   it('can be disabled explicitly and stays silent on newer Node.js versions', () => {
     vi.mocked(getEnvBool).mockReturnValue(true);
     expect(maybeWarnAboutRuntime({ currentVersion: 'v20.20.2' })).toBe(false);
