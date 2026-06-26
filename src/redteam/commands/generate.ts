@@ -596,6 +596,12 @@ async function doGenerateRedteamInternal(
   // Read inputs from the first target/provider
   const targetInputs = testSuite.providers[0]?.inputs;
 
+  const compatibilityError = getStrategyCompatibilityError(strategyObjs, targetInputs);
+  if (compatibilityError) {
+    await cleanupRedteamProvider(testSuite);
+    throw new Error(compatibilityError);
+  }
+
   const explicitMaxConcurrency =
     options.maxConcurrency ??
     redteamConfig?.maxConcurrency ??
@@ -630,12 +636,6 @@ async function doGenerateRedteamInternal(
   if (!parsedConfig.success) {
     const errorMessage = z.prettifyError(parsedConfig.error);
     throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
-  }
-
-  const compatibilityError = getStrategyCompatibilityError(strategyObjs, targetInputs);
-  if (compatibilityError) {
-    await cleanupRedteamProvider(testSuite);
-    throw new Error(compatibilityError);
   }
 
   // Resolve IDs at this orchestration boundary so the context helper stays independent of the
