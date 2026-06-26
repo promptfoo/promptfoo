@@ -41,7 +41,7 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 
 ## SARIF Output
 
-Grant `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
+Grant `contents: read` and `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
 The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
 
 ```yaml
