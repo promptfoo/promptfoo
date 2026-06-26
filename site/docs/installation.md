@@ -37,7 +37,7 @@ npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=2
 
 ## Node.js runtime support
 
-:::warning Node.js 20 support ends July 30, 2026
+:::warning Node.js 20 support ends July 30, 2026 at 00:00 UTC
 
 Node.js 20 has reached upstream end-of-life. Promptfoo releases after the support cutoff will
 require Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.

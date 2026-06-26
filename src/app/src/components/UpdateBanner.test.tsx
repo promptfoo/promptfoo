@@ -116,6 +116,7 @@ describe('UpdateBanner', () => {
 
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.getByText(/Node.js 20 support ends July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/at 00:00 UTC/i)).toBeInTheDocument();
     expect(screen.getByText(/This Promptfoo server is running/i)).toHaveClass(
       'dark:text-amber-200',
     );

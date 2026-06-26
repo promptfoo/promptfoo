@@ -171,7 +171,7 @@ function getRuntimeGuidanceHeading(
   runtimeSupportEnded: boolean,
 ): string {
   return isRuntimeReminder
-    ? `Node.js 20 support ${runtimeSupportEnded ? 'ended' : 'ends'} ${formatRemovalDate(notice.removalDate)}`
+    ? `Node.js 20 support ${runtimeSupportEnded ? 'ended' : 'ends'} ${formatRemovalDate(notice.removalDate)} at 00:00 UTC`
     : 'Upgrade Node.js before updating Promptfoo';
 }
 
