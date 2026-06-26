@@ -1,6 +1,7 @@
 import { serializeContext } from '../assertions/contextUtils';
 import {
   ANSWER_RELEVANCY_GENERATE,
+  CITATION_FAITHFULNESS_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -11,6 +12,7 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
+import { extractJsonObjects } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
@@ -430,6 +432,118 @@ export async function matchesContextFaithfulness(
     reason: pass
       ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
       : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
+    tokensUsed,
+  };
+}
+
+/**
+ * Numbers retrieved passages so the grader can resolve `[N]` citation markers.
+ *
+ * When context is provided as an array, each entry becomes a numbered passage
+ * (`[1] ...`, `[2] ...`). When it is a single string, it is returned unchanged
+ * so callers that already embed `[N]` markers keep working.
+ */
+function numberCitationPassages(context: string | string[]): string {
+  if (Array.isArray(context)) {
+    return context.map((passage, index) => `[${index + 1}] ${passage}`).join('\n\n');
+  }
+  return context;
+}
+
+/**
+ * Checks citation-attribution faithfulness: whether every `[N]` citation marker
+ * in the answer points to a passage that actually supports the specific claim
+ * the marker is attached to.
+ *
+ * This is distinct from {@link matchesContextFaithfulness}, which checks whether
+ * a claim is supported by the context *somewhere*. This matcher catches
+ * misattribution: a claim cited to passage [A] that does not support it, even
+ * when some other passage [B] in the context would.
+ *
+ * The grader returns a binary verdict. A "faithful" verdict scores 1.0 and a
+ * "unfaithful" verdict scores 0.0. With the default threshold of 1.0, only a
+ * faithful answer passes.
+ */
+export async function matchesCitationFaithfulness(
+  query: string,
+  output: string,
+  context: string | string[],
+  threshold: number,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  providerCallContext?: CallApiContextParams,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  const textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    (await getDefaultProviders()).gradingProvider,
+    'citation-faithfulness check',
+  );
+
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
+
+  if (grading?.rubricPrompt) {
+    invariant(
+      typeof grading.rubricPrompt === 'string' || Array.isArray(grading.rubricPrompt),
+      'rubricPrompt must be a string or array',
+    );
+  }
+  const rawPrompt = Array.isArray(grading?.rubricPrompt)
+    ? typeof grading?.rubricPrompt?.[0] === 'string'
+      ? grading?.rubricPrompt?.[0]
+      : grading?.rubricPrompt?.[0]?.content
+    : grading?.rubricPrompt;
+  const citationPrompt = await loadRubricPrompt(rawPrompt, CITATION_FAITHFULNESS_PROMPT);
+
+  const numberedContext = numberCitationPassages(context);
+
+  const promptVars = {
+    question: query,
+    answer: tryParse(output),
+    context: numberedContext,
+    ...(vars || {}),
+  };
+  const promptText = await renderLlmRubricPrompt(citationPrompt, promptVars);
+
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'citation-faithfulness',
+    promptVars,
+    providerCallContext,
+  );
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  if (resp.error || !resp.output) {
+    return fail(resp.error || 'No output', tokensUsed);
+  }
+
+  invariant(typeof resp.output === 'string', 'citation-faithfulness produced malformed response');
+
+  const parsed = extractJsonObjects(resp.output)[0] as
+    | { verdict?: string; reasoning?: string }
+    | undefined;
+  if (!parsed || typeof parsed.verdict !== 'string') {
+    return fail(
+      `citation-faithfulness grader did not return a valid verdict. Raw output: ${resp.output}`,
+      tokensUsed,
+    );
+  }
+
+  const verdict = parsed.verdict.trim().toLowerCase();
+  const faithful = verdict === 'faithful';
+  const score = faithful ? 1 : 0;
+  const pass = score >= threshold - Number.EPSILON;
+  const reasoning =
+    typeof parsed.reasoning === 'string' && parsed.reasoning.trim().length > 0
+      ? parsed.reasoning.trim()
+      : faithful
+        ? 'All citations point to passages that support their claims.'
+        : 'At least one citation does not point to a passage that supports its claim.';
+
+  return {
+    pass,
+    score,
+    reason: reasoning,
     tokensUsed,
   };
 }
