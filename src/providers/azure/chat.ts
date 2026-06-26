@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../cache';
+import { FetchResponseParseError, fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
@@ -6,7 +6,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import { HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -24,6 +24,7 @@ import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
+import type { FetchWithCacheResult } from '../../cache';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -40,6 +41,75 @@ const SAFE_MESSAGE_ROLES = new Set([
   'user',
 ]);
 const SAFE_RESPONSE_FORMAT_TYPES = new Set(['json_object', 'json_schema', 'text']);
+const FILTERED_PROMPT_OUTPUT = 'Azure content filtering blocked the prompt.';
+const SAFE_FILTERED_PROMPT_OUTPUTS = new Set([
+  "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+  "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+]);
+
+function getFilteredPromptOutput(message: unknown): string {
+  return typeof message === 'string' && SAFE_FILTERED_PROMPT_OUTPUTS.has(message)
+    ? message
+    : FILTERED_PROMPT_OUTPUT;
+}
+
+function getSafeErrorType(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'unknown';
+  }
+  return ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
+}
+
+function isAzureChatResponseCacheable(data: unknown): boolean {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return false;
+  }
+  const response = data as Record<string, any>;
+  return !response.error && Array.isArray(response.choices) && response.choices.length > 0;
+}
+
+async function evictAzureChatResponse(deleteFromCache?: () => Promise<void>): Promise<void> {
+  try {
+    await deleteFromCache?.();
+  } catch (error) {
+    logger.debug('[Azure Chat] Failed to evict response from cache', {
+      errorType: getSafeErrorType(error),
+    });
+  }
+}
+
+function getAzureChatRateLimitResponse(error: HttpRateLimitError): ProviderResponse {
+  const resetAt =
+    typeof error.resetAt === 'number' && Number.isFinite(error.resetAt) ? error.resetAt : undefined;
+  const retryAfterMs =
+    typeof error.retryAfterMs === 'number'
+      ? error.retryAfterMs
+      : resetAt === undefined
+        ? undefined
+        : Math.max(resetAt - Date.now(), 0);
+  const retryDetail =
+    error.kind === 'rate_limit' && retryAfterMs !== undefined
+      ? ` [retry after ${Math.round(retryAfterMs / 1000)}s]`
+      : '';
+  return {
+    error:
+      error.kind === 'quota'
+        ? `Quota exceeded: HTTP ${error.status}. Retries will not help — check your billing or daily quota.`
+        : `Rate limit exceeded: HTTP ${error.status}${retryDetail}`,
+    metadata: {
+      rateLimitKind: error.kind,
+      http: {
+        status: error.status,
+        statusText: error.status === 429 ? 'Too Many Requests' : 'Rate Limited',
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+        ...(resetAt === undefined ? {} : { resetAt }),
+        ...(retryAfterMs === undefined
+          ? {}
+          : { headers: { 'retry-after-ms': String(retryAfterMs) } }),
+      },
+    },
+  };
+}
 
 function getAzureChatRequestMetadata(body: any) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
@@ -75,9 +145,10 @@ function getAzureChatRequestMetadata(body: any) {
   };
 }
 
-function getAzureChatResponseMetadata(data: unknown) {
+function getAzureChatResponseMetadata(data: unknown, status?: number) {
   if (typeof data === 'string') {
     return {
+      status,
       responseType: 'string',
       responseLength: data.length,
     };
@@ -85,6 +156,7 @@ function getAzureChatResponseMetadata(data: unknown) {
 
   if (!data || typeof data !== 'object') {
     return {
+      status,
       responseType: typeof data,
     };
   }
@@ -92,6 +164,7 @@ function getAzureChatResponseMetadata(data: unknown) {
   const response = data as Record<string, any>;
 
   return {
+    status,
     responseType: Array.isArray(data) ? 'array' : 'object',
     responseKeyCount: Object.keys(response).length,
     hasError: Boolean(response.error),
@@ -196,7 +269,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     };
 
     // Parse chat prompt
-    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }], {
+      redactErrors: true,
+    });
 
     // Inject system prompt if configured
     if (config.systemPrompt) {
@@ -395,10 +470,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
-    let data;
-    let cached = false;
-    let latencyMs: number | undefined;
-    let deleteFromCache: (() => Promise<void>) | undefined;
+    let data: any;
+    let fetchResult!: FetchWithCacheResult<any>;
 
     try {
       const url = config.dataSources
@@ -409,13 +482,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             this.deploymentName
           }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
 
-      const {
-        data: responseData,
-        cached: isCached,
-        status,
-        latencyMs: fetchLatencyMs,
-        deleteFromCache: deleteCachedResponse,
-      } = await fetchWithCache(
+      fetchResult = await fetchWithCache(
         url,
         {
           method: 'POST',
@@ -423,49 +490,37 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             'Content-Type': 'application/json',
             ...this.authHeaders,
             ...this.config.headers,
+            'x-promptfoo-silent': 'true',
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
+        'json',
+        {
+          bust: context?.bustCache ?? context?.debug,
+          isResponseCacheable: isAzureChatResponseCacheable,
+        },
       );
 
-      cached = isCached;
-      latencyMs = fetchLatencyMs;
-      deleteFromCache = deleteCachedResponse;
-
-      // Handle the response data
-      if (typeof responseData === 'string') {
-        try {
-          data = JSON.parse(responseData);
-        } catch {
-          await deleteFromCache?.();
-          return {
-            error: `API returned invalid JSON response (status ${status})\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(responseData), null, 2)}\n\nRequest metadata: ${JSON.stringify(getAzureChatRequestMetadata(body), null, 2)}`,
-          };
-        }
-      } else {
-        data = responseData;
-      }
+      data = fetchResult.data;
     } catch (err) {
+      if (err instanceof FetchResponseParseError) {
+        const responseMetadata = {
+          status: err.status,
+          responseType: 'string',
+          responseLength: err.responseLength,
+        };
+        return {
+          error: `API returned invalid JSON response (status ${err.status})\n\nResponse metadata: ${JSON.stringify(responseMetadata, null, 2)}\n\nRequest metadata: ${JSON.stringify(getAzureChatRequestMetadata(body), null, 2)}`,
+        };
+      }
       // Preserve the structured rate-limit signal so the scheduler honors
       // the transport-layer fail-fast contract (no retry on hard quotas).
       if (err instanceof HttpRateLimitError) {
-        return {
-          error: formatRateLimitErrorMessage(err),
-          metadata: {
-            rateLimitKind: err.kind,
-            http: {
-              status: err.status,
-              statusText: err.statusText,
-              headers: err.headers ?? {},
-            },
-          },
-        };
+        return getAzureChatRateLimitResponse(err);
       }
       return {
-        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
+        error: `API call error (${getSafeErrorType(err)})`,
       };
     }
 
@@ -479,15 +534,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     try {
       if (data.error) {
-        await deleteFromCache?.();
+        await evictAzureChatResponse(fetchResult.deleteFromCache);
         // Was the input prompt deemed inappropriate?
         if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
           flaggedInput = true;
-          output = data.error.message;
+          output = getFilteredPromptOutput(data.error.message);
           finishReason = FINISH_REASON_MAP.content_filter;
         } else {
           return {
-            error: `API response error: ${data.error.code} ${data.error.message}`,
+            error: `API response error (status ${fetchResult.status})\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(data, fetchResult.status), null, 2)}`,
           };
         }
       } else {
@@ -509,11 +564,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         output = message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results && choice.content_filter_results.error) {
-          const { code, message } = choice.content_filter_results.error;
-          logger.warn(
-            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
-          );
+        if (choice?.content_filter_results?.error) {
+          logger.warn('Azure content filtering system could not complete the request', {
+            hasCode: typeof choice.content_filter_results.error.code === 'string',
+            hasMessage: typeof choice.content_filter_results.error.message === 'string',
+          });
         } else {
           // Was the completion filtered?
           flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
@@ -521,8 +576,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
         if (output == null) {
           // Handle tool_calls and function_call
-          const toolCalls = message.tool_calls;
-          const functionCall = message.function_call;
+          const toolCalls = message?.tool_calls;
+          const functionCall = message?.function_call;
 
           // Process function/tool calls if callbacks are configured or MCP is available
           if (
@@ -568,7 +623,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       return {
         output,
-        tokenUsage: cached
+        tokenUsage: fetchResult.cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {
               total: data.usage?.total_tokens,
@@ -586,8 +641,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                   }
                 : {}),
             },
-        cached,
-        latencyMs,
+        cached: fetchResult.cached,
+        latencyMs: fetchResult.latencyMs,
         logProbs,
         finishReason,
         cost: calculateAzureCost(
@@ -603,9 +658,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         },
       };
     } catch (err) {
-      await deleteFromCache?.();
+      await evictAzureChatResponse(fetchResult.deleteFromCache);
+      logger.debug('[Azure Chat] Failed to process response', {
+        errorType: getSafeErrorType(err),
+      });
       return {
-        error: `API response error: ${String(err)}\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(data), null, 2)}`,
+        error: `API response error (status ${fetchResult.status})\n\nResponse metadata: ${JSON.stringify(getAzureChatResponseMetadata(data, fetchResult.status), null, 2)}`,
       };
     }
   }

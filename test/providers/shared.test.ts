@@ -118,6 +118,25 @@ describe('Shared Provider Functions', () => {
       );
     });
 
+    it('should redact malformed prompt contents from JSON and YAML errors', () => {
+      const invalidJson = '[{"role":"user","content":"secret-json-prompt-sentinel"},]';
+      const invalidYaml = '- role: user\n  content: secret-yaml-prompt-sentinel\n  invalid: [';
+
+      for (const [prompt, expectedMessage] of [
+        [invalidJson, 'Chat Completion prompt is not a valid JSON string'],
+        [invalidYaml, 'Chat Completion prompt is not a valid YAML string'],
+      ]) {
+        try {
+          parseChatPrompt(prompt, [], { redactErrors: true });
+          expect.unreachable('Expected malformed chat prompt to throw');
+        } catch (error) {
+          expect(error).toEqual(new Error(expectedMessage));
+          expect(String(error)).not.toContain('secret-');
+          expect((error as Error).stack).not.toContain('secret-');
+        }
+      }
+    });
+
     it('should return default value for plain text that starts/ends with brackets', () => {
       vi.mocked(getEnvBool).mockClear();
       vi.mocked(getEnvBool).mockImplementation(function () {

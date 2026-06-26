@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../src/cache';
+import { FetchResponseParseError, fetchWithCache } from '../../src/cache';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
@@ -419,16 +419,11 @@ describe('Azure Provider Tests', () => {
         vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
         const result = await provider.callApi('test prompt');
-        expect(result.error).toBe('API call error: API Error');
+        expect(result).toEqual({ error: 'API call error (Error)' });
       });
 
       it('should handle invalid JSON response', async () => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: 'invalid json',
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
+        vi.mocked(fetchWithCache).mockRejectedValueOnce(new FetchResponseParseError(200, 12));
 
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('API returned invalid JSON response');

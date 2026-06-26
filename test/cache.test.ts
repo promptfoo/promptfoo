@@ -21,6 +21,7 @@ import {
   withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -1051,6 +1052,91 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
       expect(jsonResult.data).toEqual({ data: 'json data' });
       expect(textResult.data).toBe('plain text response');
+    });
+
+    it('should validate responses before publishing them to cache', async () => {
+      const poison = { unexpected: 'secret-unvalidated-response-sentinel' };
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, poison));
+      const options = {
+        isResponseCacheable: () => false,
+      };
+      const requestOptions = { headers: { 'x-promptfoo-silent': 'true' } };
+
+      const [firstResult, secondResult] = await Promise.all([
+        fetchWithCache(url, requestOptions, 1000, 'json', options),
+        fetchWithCache(url, requestOptions, 1000, 'json', options),
+      ]);
+      const thirdResult = await fetchWithCache(url, requestOptions, 1000, 'json', options);
+
+      expect(firstResult).toMatchObject({ cached: false, data: poison });
+      expect(secondResult).toMatchObject({ cached: false, data: poison });
+      expect(thirdResult).toMatchObject({ cached: false, data: poison });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should evict cached responses that fail caller validation', async () => {
+      const poison = { unexpected: 'secret-cached-response-sentinel' };
+      const validResponse = {
+        choices: [{ message: { content: 'fresh valid response' } }],
+      };
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, poison))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, validResponse));
+
+      await fetchWithCache(url, {}, 1000, 'json');
+      const options = {
+        isResponseCacheable: (data: unknown) => {
+          return Boolean(
+            data &&
+              typeof data === 'object' &&
+              Array.isArray((data as { choices?: unknown }).choices),
+          );
+        },
+      };
+      const requestOptions = { headers: { 'x-promptfoo-silent': 'true' } };
+      const freshResult = await fetchWithCache(url, requestOptions, 1000, 'json', options);
+      const cachedResult = await fetchWithCache(url, requestOptions, 1000, 'json', options);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(freshResult).toMatchObject({ cached: false, data: validResponse });
+      expect(cachedResult).toMatchObject({ cached: true, data: validResponse });
+    });
+
+    it('should redact response data from cache diagnostics', async () => {
+      const responseSentinel = 'secret-cache-log-response-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { output: responseSentinel }),
+      );
+
+      const requestOptions = { headers: { 'x-promptfoo-silent': 'true' } };
+      await fetchWithCache(url, requestOptions, 1000, 'json', {
+        isResponseCacheable: () => true,
+      });
+      await fetchWithCache(url, requestOptions, 1000, 'json', {
+        isResponseCacheable: () => true,
+      });
+
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(responseSentinel);
+      debugSpy.mockRestore();
+    });
+
+    it('should redact malformed JSON from silent parse errors', async () => {
+      const responseSentinel = 'secret-malformed-cache-response-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, responseSentinel),
+      );
+
+      await expect(
+        fetchWithCache(url, { headers: { 'x-promptfoo-silent': 'true' } }, 1000, 'json'),
+      ).rejects.toMatchObject({
+        name: 'FetchResponseParseError',
+        status: 200,
+        responseLength: responseSentinel.length,
+      });
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(responseSentinel);
+      debugSpy.mockRestore();
     });
 
     it('should respect cache busting', async () => {

@@ -1395,6 +1395,30 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
+  it('should redact transport diagnostics for silent requests', async () => {
+    const error = new TypeError('secret-transport-message-sentinel', {
+      cause: new Error('secret-transport-cause-sentinel'),
+    });
+    (error as any).code = 'ECONNREFUSED';
+    vi.mocked(global.fetch).mockRejectedValue(error);
+
+    await expect(
+      fetchWithRetries(
+        'https://user:secret-url-password-sentinel@example.com',
+        { headers: { 'x-promptfoo-silent': 'true' } },
+        1000,
+        1,
+      ),
+    ).rejects.toThrow('Request failed after 1 retries: TypeError (ECONNREFUSED)');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    const serializedLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+    expect(serializedLogs).not.toContain('secret-transport-message-sentinel');
+    expect(serializedLogs).not.toContain('secret-transport-cause-sentinel');
+    expect(serializedLogs).not.toContain('secret-url-password-sentinel');
+  });
+
   it('should handle non-Error objects in rejection', async () => {
     vi.mocked(global.fetch).mockRejectedValue('String error');
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
+import { FetchResponseParseError, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { mockProcessEnv } from '../../util/utils';
@@ -402,7 +402,7 @@ describe('AzureChatCompletionProvider', () => {
       vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callApi('test prompt');
-      expect(result.error).toBe('API call error: API Error');
+      expect(result).toEqual({ error: 'API call error (Error)' });
     });
 
     it('preserves HttpRateLimitError as a structured error with metadata.rateLimitKind', async () => {
@@ -414,10 +414,17 @@ describe('AzureChatCompletionProvider', () => {
       vi.mocked(fetchWithCache).mockRejectedValueOnce(quota);
 
       const result = await provider.callApi('test prompt');
-      expect(result.error).toContain('Quota exceeded');
-      expect(result.error).toContain('insufficient_quota');
-      expect(result.error).toContain('Retries will not help');
-      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result).toEqual({
+        error:
+          'Quota exceeded: HTTP 429. Retries will not help — check your billing or daily quota.',
+        metadata: {
+          rateLimitKind: 'quota',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+          },
+        },
+      });
     });
 
     it('preserves rate-limit kind for per-window 429s', async () => {
@@ -430,26 +437,133 @@ describe('AzureChatCompletionProvider', () => {
       vi.mocked(fetchWithCache).mockRejectedValueOnce(rateLimit);
 
       const result = await provider.callApi('test prompt');
-      expect(result.error).toContain('Rate limit exceeded');
-      expect(result.error).toContain('retry after 7s');
-      expect(result.error).not.toContain('Retries will not help');
-      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
+      expect(result).toEqual({
+        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            retryAfterMs: 7000,
+            headers: { 'retry-after-ms': '7000' },
+          },
+        },
+      });
+      const { createProviderRateLimitOptions } = await import(
+        '../../../src/scheduler/providerWrapper'
+      );
+      expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(7_000);
+    });
+
+    it('preserves scheduler timing for reset-only rate limits', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          code: 'rate_limit_exceeded',
+          resetAt: 8_000,
+        }),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            retryAfterMs: 7_000,
+            resetAt: 8_000,
+            headers: { 'retry-after-ms': '7000' },
+          },
+        },
+      });
+      const { createProviderRateLimitOptions } = await import(
+        '../../../src/scheduler/providerWrapper'
+      );
+      expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(7_000);
+    });
+
+    it('redacts hostile rate-limit status, code, headers, and body', async () => {
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        statusText: 'secret-status-text-sentinel',
+        code: 'secret-rate-code-sentinel',
+        retryAfterMs: 7000,
+        headers: { 'x-secret-header': 'secret-header-value-sentinel' },
+        body: { error: { message: 'secret-rate-body-sentinel' } },
+      });
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(rateLimit);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'Rate limit exceeded: HTTP 429 [retry after 7s]',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            retryAfterMs: 7000,
+            headers: { 'retry-after-ms': '7000' },
+          },
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
+    it('redacts transport messages and causes', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new TypeError('secret-transport-message-sentinel', {
+          cause: new Error('secret-transport-cause-sentinel'),
+        }),
+      );
+
+      const result = await provider.callApi('secret-transport-prompt-sentinel');
+
+      expect(result).toEqual({ error: 'API call error (TypeError)' });
+      expect(JSON.stringify(result)).not.toContain('secret-');
+    });
+
+    it('redacts malformed prompt contents from thrown errors', async () => {
+      const cases = [
+        {
+          prompt: '[{"role":"user","content":"secret-json-prompt-sentinel"},]',
+          expected: 'Chat Completion prompt is not a valid JSON string',
+        },
+        {
+          prompt: '- role: user\n  content: secret-yaml-prompt-sentinel\n  invalid: [',
+          expected: 'Chat Completion prompt is not a valid YAML string',
+        },
+      ];
+
+      for (const { prompt, expected } of cases) {
+        try {
+          await provider.callApi(prompt);
+          expect.unreachable('Expected malformed prompt to throw');
+        } catch (error) {
+          expect(error).toEqual(new Error(expected));
+          expect(String(error)).not.toContain('secret-');
+          expect((error as Error).stack).not.toContain('secret-');
+        }
+      }
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
     it('should handle invalid JSON response', async () => {
-      const deleteFromCache = vi.fn();
+      const responseBody = 'invalid json with secret-response-body-sentinel';
 
       provider.config.response_format = {
         type: 'secret-response-format-type-sentinel',
       } as any;
 
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: 'invalid json with secret-response-body-sentinel',
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        deleteFromCache,
-      });
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new FetchResponseParseError(200, responseBody.length),
+      );
 
       const result = await provider.callApi(
         JSON.stringify([
@@ -457,16 +571,67 @@ describe('AzureChatCompletionProvider', () => {
         ]),
       );
 
-      expect(result.error).toContain('API returned invalid JSON response');
-      expect(result.error).toContain('Response metadata');
-      expect(result.error).toContain('Request metadata');
-      expect(result.error).toContain('messageCount');
+      expect(result).toEqual({
+        error: `API returned invalid JSON response (status 200)\n\nResponse metadata: ${JSON.stringify(
+          {
+            status: 200,
+            responseType: 'string',
+            responseLength: responseBody.length,
+          },
+          null,
+          2,
+        )}\n\nRequest metadata: ${JSON.stringify(
+          {
+            messageCount: 1,
+            messageRoleCounts: { other: 1 },
+            messageContentLengths: ['secret-user-prompt-sentinel'.length],
+            hasResponseFormat: true,
+            responseFormatType: 'custom',
+            maxTokens: 1024,
+          },
+          null,
+          2,
+        )}`,
+      });
       expect(result.error).not.toContain('Request body');
       expect(result.error).not.toContain('secret-user-prompt-sentinel');
       expect(result.error).not.toContain('secret-response-body-sentinel');
       expect(result.error).not.toContain('secret-message-role-sentinel');
       expect(result.error).not.toContain('secret-response-format-type-sentinel');
-      expect(deleteFromCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('redacts forced streaming response bodies', async () => {
+      const streamBody =
+        'data: {"choices":[{"message":{"content":"secret-stream-body-sentinel"}}]}\n\n';
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new FetchResponseParseError(200, streamBody.length),
+      );
+      provider.config.passthrough = { stream: true };
+
+      const result = await provider.callApi('secret-stream-prompt-sentinel');
+
+      expect(result).toEqual({
+        error: `API returned invalid JSON response (status 200)\n\nResponse metadata: ${JSON.stringify(
+          {
+            status: 200,
+            responseType: 'string',
+            responseLength: streamBody.length,
+          },
+          null,
+          2,
+        )}\n\nRequest metadata: ${JSON.stringify(
+          {
+            messageCount: 1,
+            messageRoleCounts: { user: 1 },
+            messageContentLengths: ['secret-stream-prompt-sentinel'.length],
+            hasResponseFormat: false,
+            maxTokens: 1024,
+          },
+          null,
+          2,
+        )}`,
+      });
+      expect(JSON.stringify(result)).not.toContain('secret-');
     });
 
     it('should avoid caching Azure error payloads returned with success status', async () => {
@@ -487,12 +652,29 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toBe('API response error: server_error temporary upstream failure');
+      expect(result).toEqual({
+        error: `API response error (status 200)\n\nResponse metadata: ${JSON.stringify(
+          {
+            status: 200,
+            responseType: 'object',
+            responseKeyCount: 1,
+            hasError: true,
+            hasErrorCode: true,
+            hasUsage: false,
+          },
+          null,
+          2,
+        )}`,
+      });
+      expect(JSON.stringify(result)).not.toContain('server_error');
+      expect(JSON.stringify(result)).not.toContain('temporary upstream failure');
       expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
-    it('should redact malformed API response bodies from response errors', async () => {
-      const deleteFromCache = vi.fn();
+    it('should keep malformed response errors redacted when cache eviction fails', async () => {
+      const deleteFromCache = vi
+        .fn()
+        .mockRejectedValue(new Error('secret-cache-eviction-error-sentinel'));
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -510,10 +692,23 @@ describe('AzureChatCompletionProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('API response error');
-      expect(result.error).toContain('Response metadata');
+      expect(result).toEqual({
+        error: `API response error (status 200)\n\nResponse metadata: ${JSON.stringify(
+          {
+            status: 200,
+            responseType: 'object',
+            responseKeyCount: 3,
+            hasError: false,
+            hasErrorCode: false,
+            hasUsage: true,
+          },
+          null,
+          2,
+        )}`,
+      });
       expect(result.error).not.toContain('secret-malformed-response-body-sentinel');
       expect(result.error).not.toContain('secret-malformed-response-key-sentinel');
+      expect(result.error).not.toContain('secret-cache-eviction-error-sentinel');
       expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
@@ -603,11 +798,15 @@ describe('AzureChatCompletionProvider', () => {
             'api-key': 'test-key',
             'X-Test-Header': 'test-value',
             'Another-Header': 'another-value',
+            'x-promptfoo-silent': 'true',
           }),
         }),
         expect.any(Number),
-        'text',
-        undefined,
+        'json',
+        expect.objectContaining({
+          bust: undefined,
+          isResponseCacheable: expect.any(Function),
+        }),
       );
     });
   });
@@ -1064,8 +1263,7 @@ describe('AzureChatCompletionProvider', () => {
     it('should detect input content filtering', async () => {
       const mockResponse = {
         error: {
-          message:
-            "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
+          message: 'secret-content-filter-body-sentinel',
           type: null,
           param: 'prompt',
           code: 'content_filter',
@@ -1112,10 +1310,35 @@ describe('AzureChatCompletionProvider', () => {
         flaggedInput: true,
         flaggedOutput: false,
       });
-      expect(result.output).toBe(
-        "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766",
-      );
+      expect(result.output).toBe('Azure content filtering blocked the prompt.');
+      expect(JSON.stringify(result)).not.toContain('secret-content-filter-body-sentinel');
       expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should preserve the known-safe Azure content filter message', async () => {
+      const message =
+        "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766";
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          error: {
+            message,
+            code: 'content_filter',
+            status: 400,
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe(message);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
     });
 
     it('should handle content filtering system errors', async () => {
@@ -1207,8 +1430,14 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('generated text');
       expect(result.finishReason).toBe('stop');
       expect(warnSpy).toHaveBeenCalledWith(
-        'Content filtering system is down or otherwise unable to complete the request in time: content_filter_error The contents are not filtered',
+        'Azure content filtering system could not complete the request',
+        {
+          hasCode: true,
+          hasMessage: true,
+        },
       );
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('content_filter_error');
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('The contents are not filtered');
     });
 
     it('should not flag when no content filtering is triggered', async () => {

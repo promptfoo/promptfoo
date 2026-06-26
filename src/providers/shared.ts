@@ -126,17 +126,26 @@ function looksLikeJson(prompt: string): boolean {
  * @template T The expected return type of the parsed prompt.
  * @param {string} prompt The input prompt string to parse.
  * @param {T} defaultValue The default value to return if parsing fails.
+ * @param options Controls whether parser details and prompt contents are omitted from errors.
  * @returns {T} The parsed prompt or the default value.
  * @throws {Error} If the prompt is invalid YAML or JSON (when required).
  */
-export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
+export function parseChatPrompt<T>(
+  prompt: string,
+  defaultValue: T,
+  options: { redactErrors?: boolean } = {},
+): T {
   const trimmedPrompt = prompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
       // Try YAML - some legacy OpenAI prompts are YAML :(
       return yaml.load(prompt) as T;
     } catch (err) {
-      throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
+      throw new Error(
+        options.redactErrors
+          ? 'Chat Completion prompt is not a valid YAML string'
+          : `Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`,
+      );
     }
   } else {
     try {
@@ -144,7 +153,11 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       return JSON.parse(prompt) as T;
     } catch (err) {
       if (getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') || looksLikeJson(trimmedPrompt)) {
-        throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);
+        throw new Error(
+          options.redactErrors
+            ? 'Chat Completion prompt is not a valid JSON string'
+            : `Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`,
+        );
       }
       // Fall back to the provided default value
       return defaultValue;

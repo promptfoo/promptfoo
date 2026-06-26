@@ -177,6 +177,7 @@ export async function fetchWithProxy(
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
+  const redactDiagnostics = isFetchLoggingSuppressed(options);
 
   if (!finalUrlString) {
     throw new Error('Invalid URL');
@@ -223,7 +224,11 @@ export async function fetchWithProxy(
         finalUrlString = finalUrl.toString();
       }
     } catch (e) {
-      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      if (redactDiagnostics) {
+        logger.debug('[fetch] URL parsing failed');
+      } else {
+        logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+      }
     }
   }
 
@@ -268,7 +273,9 @@ export async function fetchWithProxy(
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
       logger.debug(
-        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+        redactDiagnostics
+          ? `Transient error (HTTP ${response.status}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`
+          : `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
       await sleep(backoffMs);
       continue;
@@ -549,6 +556,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  redactDiagnostics: boolean,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -565,7 +573,9 @@ async function handleRateLimitedResponse(
   // load against an exhausted account.
   if (isHardRateLimit && isHardQuotaCode(code)) {
     logger.debug(
-      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      redactDiagnostics
+        ? `Quota exhausted: HTTP ${response.status}, failing fast.`
+        : `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
     );
     throw buildHttpRateLimitError(response, body, code);
   }
@@ -575,17 +585,23 @@ async function handleRateLimitedResponse(
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
-        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+        redactDiagnostics
+          ? `Rate limited: HTTP ${response.status}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`
+          : `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
       throw buildHttpRateLimitError(response, body, code);
     }
     throw new Error(
-      `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
+      redactDiagnostics
+        ? `Rate limited: HTTP ${response.status} after ${maxRetries + 1} attempts`
+        : `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
     );
   }
 
   logger.debug(
-    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+    redactDiagnostics
+      ? `Rate limited: HTTP ${response.status}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`
+      : `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
   await handleRateLimit(response);
 }
@@ -605,6 +621,37 @@ function formatFetchErrorMessage(error: unknown): string {
   return message;
 }
 
+const SAFE_FETCH_ERROR_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+function isFetchLoggingSuppressed(options: FetchOptions): boolean {
+  return new Headers(options.headers).get('x-promptfoo-silent') === 'true';
+}
+
+function formatSafeFetchErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Unknown error';
+  }
+  const name = ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
+  const typedError = error as SystemError;
+  const directCode = typeof typedError.code === 'string' ? typedError.code : undefined;
+  const causeCode =
+    typedError.cause &&
+    typeof typedError.cause === 'object' &&
+    typeof (typedError.cause as { code?: unknown }).code === 'string'
+      ? ((typedError.cause as { code: string }).code as string)
+      : undefined;
+  const code = [directCode, causeCode].find((value) => value && SAFE_FETCH_ERROR_CODES.has(value));
+  return code ? `${name} (${code})` : name;
+}
+
 export async function fetchWithRetries(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -616,6 +663,7 @@ export async function fetchWithRetries(
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const redactDiagnostics = isFetchLoggingSuppressed(options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -628,11 +676,15 @@ export async function fetchWithRetries(
       );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
-        throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          redactDiagnostics
+            ? `Internal Server Error: HTTP ${response.status}`
+            : `Internal Server Error: ${response.status} ${response.statusText}`,
+        );
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(response, url, i, maxRetries, redactDiagnostics);
         continue;
       }
 
@@ -640,6 +692,11 @@ export async function fetchWithRetries(
     } catch (error) {
       // Don't retry on abort - propagate immediately
       if (error instanceof Error && error.name === 'AbortError') {
+        if (redactDiagnostics) {
+          const abortError = new Error('Request aborted');
+          abortError.name = 'AbortError';
+          throw abortError;
+        }
         throw error;
       }
 
@@ -650,9 +707,19 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = redactDiagnostics
+        ? formatSafeFetchErrorMessage(error)
+        : formatFetchErrorMessage(error);
 
-      logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      if (redactDiagnostics) {
+        logger.debug('[fetch] Request failed, retrying', {
+          attempt: i + 1,
+          maxAttempts: maxRetries + 1,
+          error: errorMessage,
+        });
+      } else {
+        logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
+      }
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleep(waitTime);

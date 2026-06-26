@@ -7,4 +7,6 @@ export type CacheOptions = {
   bust?: boolean;
   /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
   repeatIndex?: number;
+  /** Validate response data before publishing it to or reading it from cache */
+  isResponseCacheable?: (data: unknown) => boolean;
 };

@@ -112,8 +112,8 @@ export class AzureGenericProvider implements ApiProvider {
       // Fallback to Azure CLI
       const credential = new AzureCliCredential();
       return credential;
-    } catch (err) {
-      logger.error(`Error loading @azure/identity: ${err}`);
+    } catch {
+      logger.error('Error loading @azure/identity');
       throw new Error(
         'The @azure/identity package is required for Azure authentication. Please install it with: npm install @azure/identity',
       );
@@ -143,8 +143,8 @@ export class AzureGenericProvider implements ApiProvider {
       try {
         const token = await this.getAccessToken();
         return { Authorization: 'Bearer ' + token };
-      } catch (err) {
-        logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
+      } catch {
+        logger.info('Azure authentication failed. Please check your credentials.');
         throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.

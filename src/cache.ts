@@ -283,6 +283,38 @@ type PreparedFetchResponse = {
   cacheable: boolean;
 };
 
+export class FetchResponseParseError extends Error {
+  constructor(
+    readonly status: number,
+    readonly responseLength: number,
+  ) {
+    super('Failed to parse response as JSON');
+    this.name = 'FetchResponseParseError';
+  }
+}
+
+function passesResponseCacheabilityCheck(
+  data: unknown,
+  isResponseCacheable: CacheOptions['isResponseCacheable'],
+): boolean {
+  try {
+    return isResponseCacheable ? isResponseCacheable(data) : true;
+  } catch {
+    return false;
+  }
+}
+
+function isFetchLoggingSuppressed(options: RequestInit): boolean {
+  return new Headers(options.headers).get('x-promptfoo-silent') === 'true';
+}
+
+function getSafeErrorType(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'unknown';
+  }
+  return ['AbortError', 'Error', 'TypeError'].includes(error.name) ? error.name : 'Error';
+}
+
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
@@ -290,6 +322,9 @@ let nextAbortSignalId = 0;
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
+
+  // Internal logging controls do not change the upstream request identity.
+  headers.delete('x-promptfoo-silent');
 
   if (isPromptfooCloudApiHost(url)) {
     const token = cloudConfig.getApiKey();
@@ -465,6 +500,7 @@ async function fetchAndReadBody(
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
   const maxBodyRetries = isIdempotent ? 2 : 0;
+  const redactDiagnostics = isFetchLoggingSuppressed(options);
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -481,10 +517,19 @@ async function fetchAndReadBody(
           attempt: bodyAttempt + 1,
           maxRetries: maxBodyRetries,
           backoffMs,
-          error: (err as Error)?.message?.slice(0, 200),
+          ...(redactDiagnostics
+            ? { errorType: getSafeErrorType(err) }
+            : { error: (err as Error)?.message?.slice(0, 200) }),
         });
         await sleep(backoffMs);
         continue;
+      }
+      if (redactDiagnostics) {
+        const error = new Error('Response body read failed');
+        if (err instanceof Error && err.name === 'AbortError') {
+          error.name = 'AbortError';
+        }
+        throw error;
       }
       throw err;
     }
@@ -500,61 +545,92 @@ async function prepareFetchResponse(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   format: 'json' | 'text',
+  cacheOptions: CacheOptions,
 ): Promise<PreparedFetchResponse> {
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
   const responseText = result.respText;
   const fetchLatencyMs = result.fetchLatencyMs;
   const headers = Object.fromEntries(response.headers.entries());
+  const redactDiagnostics = isFetchLoggingSuppressed(options);
 
+  let parsedData: unknown;
   try {
-    const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-    const serializedResponse = serializeFetchResponse(
-      parsedData,
-      response.status,
-      response.statusText,
-      headers,
-      fetchLatencyMs,
+    parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+  } catch (err) {
+    if (redactDiagnostics) {
+      throw new FetchResponseParseError(response.status, responseText.length);
+    }
+    throw new Error(
+      `Error parsing response from ${url}: ${(err as Error).message}. Received text: ${responseText}`,
     );
+  }
 
-    if (!response.ok) {
-      return {
-        response:
-          responseText === ''
-            ? serializeFetchResponse(
-                `Empty Response: ${response.status}: ${response.statusText}`,
-                response.status,
-                response.statusText,
-                headers,
-                fetchLatencyMs,
-              )
-            : serializedResponse,
-        cacheable: false,
-      };
+  const serializedResponse = serializeFetchResponse(
+    parsedData,
+    response.status,
+    response.statusText,
+    headers,
+    fetchLatencyMs,
+  );
+
+  if (!response.ok) {
+    return {
+      response:
+        responseText === ''
+          ? serializeFetchResponse(
+              `Empty Response: ${response.status}: ${response.statusText}`,
+              response.status,
+              response.statusText,
+              headers,
+              fetchLatencyMs,
+            )
+          : serializedResponse,
+      cacheable: false,
+    };
+  }
+
+  if (format === 'json' && (parsedData as { error?: unknown })?.error) {
+    if (redactDiagnostics) {
+      logger.debug('[Cache] Not caching response because it contains an error', {
+        status: response.status,
+      });
+    } else {
+      logger.debug(
+        `Not caching ${url} because it contains an 'error' key: ${(parsedData as { error: unknown }).error}`,
+      );
     }
+    return {
+      response: serializedResponse,
+      cacheable: false,
+    };
+  }
 
-    if (format === 'json' && parsedData?.error) {
-      logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
-      return {
-        response: serializedResponse,
-        cacheable: false,
-      };
-    }
+  if (!passesResponseCacheabilityCheck(parsedData, cacheOptions.isResponseCacheable)) {
+    logger.debug('[Cache] Not caching response rejected by caller validation', {
+      status: response.status,
+    });
+    return {
+      response: serializedResponse,
+      cacheable: false,
+    };
+  }
 
+  if (redactDiagnostics) {
+    logger.debug('[Cache] Storing response', {
+      status: response.status,
+      responseLength: responseText.length,
+      latencyMs: fetchLatencyMs,
+    });
+  } else {
     logger.debug(
       `Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
     );
-    return {
-      response: serializedResponse,
-      cacheable: true,
-    };
-  } catch (err) {
-    throw new Error(
-      `Error parsing response from ${url}: ${
-        (err as Error).message
-      }. Received text: ${responseText}`,
-    );
   }
+  return {
+    response: serializedResponse,
+    cacheable: true,
+  };
 }
 
 /**
@@ -635,6 +711,9 @@ export async function fetchWithCache<T = unknown>(
         },
       };
     } catch {
+      if (isFetchLoggingSuppressed(options)) {
+        throw new FetchResponseParseError(resp.status, respText.length);
+      }
       throw new Error(`Error parsing response as JSON: ${respText}`);
     }
   }
@@ -643,8 +722,22 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
-    return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
+    const cachedResult = deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
+    if (passesResponseCacheabilityCheck(cachedResult.data, cacheOptions.isResponseCacheable)) {
+      if (isFetchLoggingSuppressed(options)) {
+        logger.debug('[Cache] Returning cached response', { cacheKey });
+      } else {
+        logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
+      }
+      return cachedResult;
+    }
+
+    logger.debug('[Cache] Ignoring cached response rejected by caller validation', { cacheKey });
+    try {
+      await cache.del(cacheKey);
+    } catch {
+      logger.debug('[Cache] Failed to evict rejected cached response', { cacheKey });
+    }
   }
 
   const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
@@ -658,6 +751,7 @@ export async function fetchWithCache<T = unknown>(
         maxRetries,
         isIdempotent,
         format,
+        cacheOptions,
       );
       if (preparedResponse.cacheable) {
         await cache.set(cacheKey, preparedResponse.response);
