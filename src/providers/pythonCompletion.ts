@@ -222,7 +222,7 @@ export class PythonProvider implements ApiProvider {
     this.initializationPromise = (async () => {
       try {
         this.config = await processConfigFileReferences(
-          this.config,
+          this.options?.config ?? {},
           this.options?.config.basePath || '',
         );
 

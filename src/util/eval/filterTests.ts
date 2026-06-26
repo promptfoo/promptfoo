@@ -212,9 +212,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         }
 
         if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(metadata)}`,
-          );
+          logger.debug('Test metadata does not match filter', {
+            testDescription: test.description || 'unnamed test',
+            expectedMetadata: { [key]: value },
+            metadata,
+          });
           return false;
         }
       }

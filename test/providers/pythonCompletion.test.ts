@@ -1056,5 +1056,31 @@ describe('PythonProvider', () => {
 
       await provider.shutdown();
     });
+
+    it('should reprocess the original config rather than processed state after shutdown', async () => {
+      let configReads = 0;
+      // The processor returns a new plain object, so this getter distinguishes the original
+      // source config from the already-processed value stored on the provider.
+      const sourceConfig = {
+        basePath: process.cwd(),
+        get settings() {
+          configReads += 1;
+          return { version: configReads };
+        },
+      };
+      const provider = new PythonProvider('script.py', {
+        config: sourceConfig,
+      });
+
+      await provider.initialize();
+      expect(provider.config.settings).toEqual({ version: 1 });
+      await provider.shutdown();
+      await provider.initialize();
+
+      expect(configReads).toBe(2);
+      expect(provider.config.settings).toEqual({ version: 2 });
+
+      await provider.shutdown();
+    });
   });
 });

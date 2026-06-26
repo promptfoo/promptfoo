@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
@@ -96,6 +96,10 @@ describe('filterTests', () => {
     vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('should return all tests if no options provided', async () => {
     const result = await filterTests(mockTestSuite, {});
     expect(result).toEqual(mockTestSuite.tests);
@@ -144,6 +148,29 @@ describe('filterTests', () => {
       const result = await filterTests(testSuite, { metadata: ['type=unit', 'env=dev'] });
 
       expect(result.map((test) => test.vars?.id)).toEqual(['inherited']);
+    });
+
+    it('should pass metadata mismatch details through sanitized logger context', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const secret = 'SYNTHETIC-DEFAULT-SECRET';
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        defaultTest: { metadata: { apiKey: secret, tier: 'silver' } },
+        tests: [{ description: 'inherited metadata test' }],
+      };
+
+      await filterTests(testSuite, { metadata: 'tier=gold' });
+
+      const mismatchCall = debugSpy.mock.calls.find(
+        ([message]) => message === 'Test metadata does not match filter',
+      );
+      expect(mismatchCall?.[0]).not.toContain(secret);
+      expect(mismatchCall?.[1]).toEqual({
+        testDescription: 'inherited metadata test',
+        expectedMetadata: { tier: 'gold' },
+        metadata: { apiKey: secret, tier: 'silver' },
+      });
     });
 
     describe('multiple metadata filters', () => {

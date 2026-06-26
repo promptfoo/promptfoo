@@ -712,7 +712,28 @@ describe('evaluateOptions behavior', () => {
       await doEval({ table: false, write: false, config: [tempConfig] }, {}, undefined, {});
 
       const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       expect(testSuite.tests?.map((test) => test.vars?.id)).toEqual([2]);
+      expect(
+        (initialEval.config.tests as TestSuite['tests'])?.map((test) => test.vars?.id),
+      ).toEqual([2]);
+      expect(initialEval.runtimeOptions?.testSelectionApplied).toBe(true);
+
+      const resumeEval = new Eval(initialEval.config, {
+        id: 'eval-resume-configured-test-filters',
+        persisted: true,
+        runtimeOptions: initialEval.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tests?.map((test) => test.vars?.id)).toEqual([2]);
+      } finally {
+        findByIdSpy.mockRestore();
+      }
     });
 
     it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
@@ -745,8 +766,30 @@ describe('evaluateOptions behavior', () => {
       const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
       expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['two']);
+      expect(
+        (evalRecord.config.tests as TestSuite['tests'])?.map((test) => test.vars?.input),
+      ).toEqual(['two']);
       expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
+      expect(evalRecord.runtimeOptions?.testSelectionApplied).toBe(true);
       expect(options.filterRange).toBeUndefined();
+
+      const resumeEval = new Eval(evalRecord.config, {
+        id: 'eval-resume-snapshotted-filter-range',
+        persisted: true,
+        runtimeOptions: evalRecord.runtimeOptions,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      evaluateMock.mockClear();
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const resumedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(resumedSuite.tests?.map((test) => test.vars?.input)).toEqual(['two']);
+        expect(resumedOptions.filterRange).toBeUndefined();
+      } finally {
+        findByIdSpy.mockRestore();
+      }
     });
 
     it('should suppress the implicit default test when filters remove explicit tests', async () => {

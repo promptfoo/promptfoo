@@ -607,6 +607,7 @@ export async function doEval(
     const filterFirstN = cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN;
     const filterMetadata = cmdObj.filterMetadata ?? commandLineOptions?.filterMetadata;
     const filterPattern = cmdObj.filterPattern ?? commandLineOptions?.filterPattern;
+    const persistedTestSelectionApplied = resumeEval?.runtimeOptions?.testSelectionApplied === true;
     const hasActiveTestFilter =
       filterRange !== undefined ||
       filterFailing !== undefined ||
@@ -643,6 +644,10 @@ export async function doEval(
         ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
       if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
+      }
+      if (hasActiveTestFilter) {
+        config.tests = testSuite.tests;
+        config.scenarios = testSuite.scenarios;
       }
     }
 
@@ -779,6 +784,7 @@ export async function doEval(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
+      ...(hasActiveTestFilter ? { testSelectionApplied: true } : {}),
     };
 
     // Create or load eval record
@@ -855,7 +861,8 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+        filterRange:
+          hasScenarios || (resumeEval && !persistedTestSelectionApplied) ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });
