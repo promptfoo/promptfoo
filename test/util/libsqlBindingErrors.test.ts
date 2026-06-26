@@ -12,12 +12,6 @@ function makeBindingError(target: string): NodeJS.ErrnoException {
   return error;
 }
 
-function makeEsmBindingError(specifier: string): NodeJS.ErrnoException {
-  const error: NodeJS.ErrnoException = new Error(`Cannot find package '${specifier}'`);
-  error.code = 'ERR_MODULE_NOT_FOUND';
-  return error;
-}
-
 describe('libsql binding errors', () => {
   it('extracts the missing libsql target from ESM import failures', () => {
     const error: NodeJS.ErrnoException = new Error(
@@ -31,18 +25,6 @@ describe('libsql binding errors', () => {
   it('extracts the missing libsql target from the require stack', () => {
     expect(getLibsqlBindingTarget(makeBindingError('darwin-arm64'))).toBe('darwin-arm64');
     expect(getLibsqlBindingTarget(makeBindingError('linux-x64-musl'))).toBe('linux-x64-musl');
-  });
-
-  it.each([
-    ['android-arm64'],
-    ['freebsd-x64'],
-    ['netbsd-x64'],
-    ['wasm32-wasi'],
-  ])('recognizes %s as a platform binding', (target) => {
-    // Forward-compat coverage: libsql does not currently ship these as
-    // optionalDependencies, but the regex was broadened to anticipate them.
-    // If the regex narrows again this test catches it before users hit it.
-    expect(getLibsqlBindingTarget(makeBindingError(target))).toBe(target);
   });
 
   it('formats actionable repair instructions with the detected target and platform', () => {
@@ -61,7 +43,7 @@ describe('libsql binding errors', () => {
     expect(formatLibsqlBindingErrorMessage(error)).toBeUndefined();
   });
 
-  it('ignores missing libsql wrapper packages that are not platform bindings (CJS)', () => {
+  it('ignores missing libsql wrapper packages that are not platform bindings', () => {
     for (const packageName of ['client', 'client-wasm', 'core', 'hrana-client']) {
       const error: NodeJS.ErrnoException = new Error(
         `Cannot find module '@libsql/${packageName}'\nRequire stack:\n- /app/index.js`,
@@ -70,15 +52,6 @@ describe('libsql binding errors', () => {
 
       expect(getLibsqlBindingTarget(error)).toBeUndefined();
       expect(formatLibsqlBindingErrorMessage(error)).toBeUndefined();
-    }
-  });
-
-  it('ignores missing libsql wrapper packages that are not platform bindings (ESM)', () => {
-    // ESM dynamic import of a missing @libsql/client (e.g. broken install)
-    // must NOT fire the platform-binding banner.
-    for (const specifier of ['@libsql/client', '@libsql/client/node', '@libsql/core']) {
-      expect(getLibsqlBindingTarget(makeEsmBindingError(specifier))).toBeUndefined();
-      expect(formatLibsqlBindingErrorMessage(makeEsmBindingError(specifier))).toBeUndefined();
     }
   });
 

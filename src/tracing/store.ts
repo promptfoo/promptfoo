@@ -429,10 +429,11 @@ export class TraceStore {
         };
       });
 
-      logger.debug(
-        `[TraceStore] Pruned traces older than ${retentionDays} days: ` +
-          `${tracesDeleted} trace(s), ${spansDeleted} span(s)`,
-      );
+      logger.debug('[TraceStore] Pruned traces older than retention period', {
+        retentionDays,
+        tracesDeleted,
+        spansDeleted,
+      });
     } catch (error) {
       logger.error(`[TraceStore] Failed to delete old traces: ${error}`);
       throw error;

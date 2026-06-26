@@ -1,7 +1,9 @@
+import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { createClient } from '@libsql/client/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDb,
@@ -165,12 +167,6 @@ describe('database', () => {
     });
 
     it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
-      // Regression: serializeTopLevelOperations used to enqueue every root
-      // client method against operationQueue unconditionally. If the
-      // transaction callback called a helper that issued root db.run/select
-      // (instead of using the tx handle), that operation queued behind the
-      // outer transaction — which was still waiting for the callback to
-      // resolve — and the promise never settled.
       const db = await getDb();
       await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
 
@@ -233,6 +229,59 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
+    it('logs a successful file-backed WAL checkpoint', async () => {
+      vi.mocked(getEnvBool).mockReturnValue(false);
+
+      await getDb();
+      await closeDb();
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Successfully checkpointed WAL file before closing',
+        expect.objectContaining({ busy: 0 }),
+      );
+      expect(isDbOpen()).toBe(false);
+    });
+
+    it('warns when a file-backed WAL checkpoint is incomplete', async () => {
+      vi.mocked(getEnvBool).mockReturnValue(false);
+
+      const db = await getDb();
+      await db.run('PRAGMA wal_autocheckpoint = 0');
+      await db.run('PRAGMA busy_timeout = 50');
+      await db.run('CREATE TABLE wal_checkpoint_test (id INTEGER PRIMARY KEY)');
+      await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
+
+      const reader = createClient({ url: pathToFileURL(getDbPath()).toString() });
+      let readerTransactionOpen = false;
+      try {
+        await reader.execute('BEGIN');
+        readerTransactionOpen = true;
+        await reader.execute('SELECT * FROM wal_checkpoint_test');
+        await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
+
+        await closeDb();
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          'WAL checkpoint incomplete before closing database',
+          expect.objectContaining({
+            busy: 1,
+            log: expect.any(Number),
+            checkpointed: expect.any(Number),
+          }),
+        );
+        expect(logger.debug).not.toHaveBeenCalledWith(
+          'Successfully checkpointed WAL file before closing',
+          expect.anything(),
+        );
+        expect(isDbOpen()).toBe(false);
+      } finally {
+        if (readerTransactionOpen) {
+          await reader.execute('ROLLBACK');
+        }
+        reader.close();
+      }
+    });
+
     it('should close database connection and reset instances', async () => {
       const _db = await getDb();
       expect(isDbOpen()).toBe(true);

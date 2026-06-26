@@ -260,14 +260,21 @@ export async function closeDb() {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
-          await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-          logger.debug('Successfully checkpointed WAL file before closing');
-        } catch (err) {
-          // Checkpoint failure means committed WAL pages were not flushed to the
-          // main DB file. They'll be replayed on next open under normal
-          // conditions, but if the WAL is later truncated out of band the data
-          // is lost — surface this as a real warning rather than a debug log.
-          logger.warn(`Could not checkpoint WAL file before close: ${err}`);
+          const result = await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+          const row = result.rows[0];
+          const checkpointStatus = {
+            busy: Number(row?.busy),
+            log: row?.log,
+            checkpointed: row?.checkpointed,
+          };
+
+          if (checkpointStatus.busy === 0) {
+            logger.debug('Successfully checkpointed WAL file before closing', checkpointStatus);
+          } else {
+            logger.warn('WAL checkpoint incomplete before closing database', checkpointStatus);
+          }
+        } catch (error) {
+          logger.warn('Could not checkpoint WAL file before close', { error });
         }
       }
 

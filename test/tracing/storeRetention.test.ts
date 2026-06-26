@@ -83,7 +83,7 @@ describe('getTraceSpans', () => {
     await db.delete(tracesTable).run();
   });
 
-  it('returns spans for a stored trace (regression: db was a Promise before)', async () => {
+  it('returns spans for a stored trace', async () => {
     const eval_ = await EvalFactory.create({ numResults: 0 });
     const db = await getDb();
 

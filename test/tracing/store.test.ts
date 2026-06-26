@@ -704,7 +704,12 @@ describe('TraceStore', () => {
       expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
       expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);
       expect(logger.debug).toHaveBeenCalledWith(
-        '[TraceStore] Pruned traces older than 30 days: 2 trace(s), 3 span(s)',
+        '[TraceStore] Pruned traces older than retention period',
+        {
+          retentionDays: 30,
+          tracesDeleted: 2,
+          spansDeleted: 3,
+        },
       );
     });
 

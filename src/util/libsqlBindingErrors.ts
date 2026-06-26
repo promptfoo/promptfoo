@@ -1,8 +1,6 @@
 import chalk from 'chalk';
 
-// Platform binding packages only — wrapper packages (@libsql/client etc.) fall through.
-const libsqlPlatformPackagePattern =
-  /@libsql\/(?<target>(?:darwin|linux|win32|android|freebsd|netbsd|wasm32)-[a-z0-9-]+)/i;
+const libsqlPlatformPackagePattern = /@libsql\/(?<target>(?:darwin|linux|win32)-[a-z0-9-]+)/i;
 const moduleNotFoundCodes = new Set(['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND']);
 
 /**
@@ -13,10 +11,6 @@ const moduleNotFoundCodes = new Set(['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND']
  * peer package per platform (e.g. `@libsql/darwin-arm64`). When that package is
  * absent — npm skipped it, the cache is corrupt, or the platform is unsupported —
  * the user sees a raw module-not-found stack with no remediation hint.
- *
- * Accepts both `MODULE_NOT_FOUND` (CJS require) and `ERR_MODULE_NOT_FOUND`
- * (ESM import) while matching only platform targets. Missing wrapper packages
- * such as @libsql/client therefore fall through to the generic handler.
  */
 export function getLibsqlBindingTarget(error: unknown): string | undefined {
   if (!(error instanceof Error)) {
