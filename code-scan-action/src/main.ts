@@ -58,6 +58,7 @@ function formatError(error: unknown): string {
 }
 
 const DEFAULT_MINIMUM_SEVERITY = 'medium';
+const DEFAULT_API_HOST = 'https://api.promptfoo.app';
 
 /**
  * Resolve the effective minimum severity from the two supported inputs.
@@ -116,7 +117,7 @@ function getActionInputs(): ActionInputs {
   warnIgnoredInputsWhenConfigPathSet(configPath);
 
   return {
-    apiHost: core.getInput('api-host'),
+    apiHost: core.getInput('api-host').trim() || DEFAULT_API_HOST,
     minimumSeverity: configPath ? DEFAULT_MINIMUM_SEVERITY : resolveMinimumSeverityInput(),
     configPath,
     diffsOnly: configPath ? false : resolveDiffsOnlyInput(),

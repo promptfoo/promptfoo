@@ -1162,6 +1162,14 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
 
+    it('uses the trusted default host when api-host is explicitly empty', async () => {
+      mockActionInputs({ 'api-host': '', 'config-path': './trusted/policy.yaml' });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--api-host', 'https://api.promptfoo.app');
+    });
+
     it.each([
       'relative/policy.yaml',
       path.resolve('/test/workspace/policy.yaml'),
