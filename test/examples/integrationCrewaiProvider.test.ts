@@ -152,13 +152,19 @@ print(json.dumps(result))
     });
   });
 
-  it('rejects non-finite JSON numbers before crossing the provider boundary', () => {
+  it('rejects JSON numbers that cannot cross the provider boundary safely', () => {
     for (const [value, reason] of [
       ['NaN', 'Invalid JSON constant: NaN'],
       ['Infinity', 'Invalid JSON constant: Infinity'],
       ['-Infinity', 'Invalid JSON constant: -Infinity'],
       ['1e999', 'JSON number is outside the finite range: 1e999'],
       ['-1e999', 'JSON number is outside the finite range: -1e999'],
+      ['9007199254740992', "JSON integer is outside JavaScript's safe range: 9007199254740992"],
+      ['-9007199254740992', "JSON integer is outside JavaScript's safe range: -9007199254740992"],
+      [
+        '1' + '0'.repeat(400),
+        "JSON integer is outside JavaScript's safe range: " + '1' + '0'.repeat(400),
+      ],
     ]) {
       const raw = `{"candidates": [], "summary": "No match", "score": ${value}}`;
       expect(callProvider(raw, 'test-key')).toEqual({

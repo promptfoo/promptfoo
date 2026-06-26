@@ -32,6 +32,13 @@ def parse_finite_json_float(value: str) -> float:
     return parsed
 
 
+def parse_safe_json_int(value: str) -> int:
+    parsed = int(value)
+    if abs(parsed) > (1 << 53) - 1:
+        raise ValueError(f"JSON integer is outside JavaScript's safe range: {value}")
+    return parsed
+
+
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
@@ -124,6 +131,7 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
                 object_pairs_hook=reject_duplicate_json_keys,
                 parse_constant=reject_invalid_json_constant,
                 parse_float=parse_finite_json_float,
+                parse_int=parse_safe_json_int,
             )
         except (json.JSONDecodeError, ValueError) as e:
             return {
