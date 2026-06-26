@@ -26,6 +26,7 @@ import {
   MAX_MAX_CONCURRENCY,
   synthesize,
 } from '../../../src/redteam/index';
+import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
@@ -1150,6 +1151,76 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).not.toHaveBeenCalled();
     expect(mockProvider.cleanup).not.toHaveBeenCalled();
+  });
+
+  it('loads unresolved dynamic inputs before returning a matching cached config', async () => {
+    const configPath = 'test-config.yaml';
+    const outputPath = 'redteam.yaml';
+    const configContent = 'prompts: [test]\nproviders: [file:///workspace/provider.mjs]\n';
+    const configHash = createHash('md5').update(`${VERSION}:${configContent}`).digest('hex');
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => filePath === configPath || filePath === outputPath,
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath === configPath) {
+        return configContent;
+      }
+      if (filePath === outputPath) {
+        return yaml.dump({ metadata: { configHash }, tests: [{ vars: { input: 'cached' } }] });
+      }
+      throw new Error(`Unexpected read: ${String(filePath)}`);
+    });
+    vi.mocked(getStrategyCompatibilityError).mockImplementation((_strategies, inputs) => {
+      if (inputs && typeof inputs === 'object' && 'compatibilityProbe' in inputs) {
+        return 'Posterior compatibility probe';
+      }
+      return inputs && typeof inputs === 'object' && Object.keys(inputs).length > 1
+        ? 'Posterior strategy does not support multi-input targets'
+        : undefined;
+    });
+    const resolveInputs = vi
+      .spyOn(redteamProviderShared, 'resolveRedteamTargetProviderInputMetadata')
+      .mockResolvedValueOnce({ inputs: [undefined], hasUnresolved: true })
+      .mockResolvedValueOnce({
+        inputs: [{ context: 'Reference context', question: 'User question' }],
+        hasUnresolved: false,
+      });
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
+      async (_cmdObj, defaultConfig) => {
+        const hooks = configModule.getResolveConfigsHooks(defaultConfig);
+        await hooks?.beforeProviderLoad?.({
+          providers: ['file:///workspace/provider.mjs'],
+          redteam: { strategies: ['posterior'] },
+          env: undefined,
+          basePath: '.',
+        });
+        throw new Error('Expected compatibility preflight to reject');
+      },
+    );
+
+    try {
+      await expect(
+        doGenerateRedteam({
+          cache: true,
+          config: configPath,
+          defaultConfig: {},
+          output: outputPath,
+          write: false,
+        }),
+      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
+
+      expect(resolveInputs).toHaveBeenNthCalledWith(
+        2,
+        ['file:///workspace/provider.mjs'],
+        '.',
+        undefined,
+        undefined,
+        { loadDynamicProviders: true },
+      );
+      expect(synthesize).not.toHaveBeenCalled();
+    } finally {
+      resolveInputs.mockRestore();
+    }
   });
 
   it('should return a compatible cached config before provider construction', async () => {

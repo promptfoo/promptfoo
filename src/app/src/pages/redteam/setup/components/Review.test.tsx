@@ -2250,6 +2250,43 @@ Application Details:
       });
     });
 
+    it('keeps tracking the run when cancellation is rejected', async () => {
+      const user = userEvent.setup({ delay: null });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
+        }
+        if (url === '/redteam/run') {
+          return { ok: true, json: async () => ({ id: 'still-running' }) } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'not cancelled' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel/i }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith('Failed to cancel job', 'error');
+      });
+      expect(mockClearJob).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+
     it('should handle job recovery failure when server job returns 404', async () => {
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {

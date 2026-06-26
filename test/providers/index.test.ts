@@ -25,6 +25,7 @@ import {
 } from '../../src/providers/huggingface';
 import {
   getProviderIds,
+  isProviderInputMetadataUnresolved,
   loadApiProvider,
   loadApiProviders,
   resolveProviderConfigs,
@@ -2536,6 +2537,33 @@ inputs:
         { id: 'sequence', config: { inputs: ['First {{prompt}}', 'Second {{prompt}}'] } },
       ]),
     ).resolves.toEqual([undefined]);
+  });
+
+  it('defers dynamic provider inputs unless runtime loading is explicitly requested', async () => {
+    const cleanup = vi.fn();
+    class DynamicProvider {
+      inputs = { context: 'Reference context', question: 'User question' };
+      cleanup = cleanup;
+      id() {
+        return 'dynamic-provider';
+      }
+      async callApi() {
+        return { output: 'ok' };
+      }
+    }
+    vi.mocked(importModule).mockResolvedValue(DynamicProvider);
+    const providerPath = 'file:///workspace/dynamic-provider.mjs';
+
+    const staticInputs = await resolveProviderInputsForValidation([providerPath]);
+    expect(staticInputs).toHaveLength(1);
+    expect(isProviderInputMetadataUnresolved(staticInputs[0])).toBe(true);
+    expect(importModule).not.toHaveBeenCalled();
+
+    await expect(
+      resolveProviderInputsForValidation([providerPath], { loadDynamicProviders: true }),
+    ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
+    expect(importModule).toHaveBeenCalledWith('/workspace/dynamic-provider.mjs');
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it.each([

@@ -60,7 +60,7 @@ import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { getStrategyCompatibilityError, MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
-import { resolveRedteamTargetProviderInputs } from '../providers/shared';
+import { resolveRedteamTargetProviderInputMetadata } from '../providers/shared';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { getRedteamGenerationContextFromProviders } from '../remoteGenerationContextFromProviders';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
@@ -409,8 +409,21 @@ async function doGenerateRedteamInternal(
       const requiresResolvedInputs =
         getStrategyCompatibilityError(strategies, { compatibilityProbe: true }) !== undefined;
       if (requiresResolvedInputs) {
-        const resolvedInputs = await resolveRedteamTargetProviderInputs(providers, basePath, env);
-        const compatibilityError = resolvedInputs
+        let resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+          providers,
+          basePath,
+          env,
+        );
+        if (cachedRedteamConfig && resolvedInputs.hasUnresolved) {
+          resolvedInputs = await resolveRedteamTargetProviderInputMetadata(
+            providers,
+            basePath,
+            env,
+            undefined,
+            { loadDynamicProviders: true },
+          );
+        }
+        const compatibilityError = resolvedInputs.inputs
           .map((inputs) => getStrategyCompatibilityError(strategies, inputs))
           .find((error) => error !== undefined);
         if (compatibilityError) {

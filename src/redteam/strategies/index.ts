@@ -37,7 +37,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
-import { pluginMatchesStrategyTargets } from './util';
+import { pluginConfigMatchesStrategy, pluginMatchesStrategyTargets } from './util';
 
 import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { Strategy } from './types';
@@ -99,7 +99,12 @@ export function isStrategyApplicable(
   testCase: TestCaseWithPlugin,
   strategy: RedteamStrategyObject,
 ): boolean {
-  return pluginMatchesStrategyTargets(testCase, strategy.id, strategy.config?.plugins);
+  const pluginId = testCase.metadata?.pluginId;
+  return Boolean(
+    pluginId &&
+      pluginMatchesStrategyTargets(testCase, strategy.id, strategy.config?.plugins) &&
+      pluginConfigMatchesStrategy(pluginId, testCase.metadata?.pluginConfig, strategy),
+  );
 }
 
 export const Strategies: Strategy[] = [

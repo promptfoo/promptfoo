@@ -19,7 +19,7 @@ import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import {
   redteamProviderManager,
-  resolveRedteamTargetProviderInputs,
+  resolveRedteamTargetProviderInputMetadata,
 } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
@@ -31,7 +31,9 @@ import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
-const mockedResolveRedteamTargetProviderInputs = vi.mocked(resolveRedteamTargetProviderInputs);
+const mockedResolveRedteamTargetProviderInputMetadata = vi.mocked(
+  resolveRedteamTargetProviderInputMetadata,
+);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
@@ -39,6 +41,24 @@ const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 const debugSpy = vi.spyOn(logger, 'debug');
+
+async function resolveActualTargetProviderInputs(
+  providers: unknown,
+  basePath?: string,
+  env?: Record<string, string>,
+  filter?: string,
+  options: { loadDynamicProviders?: boolean } = {},
+) {
+  const { isProviderInputMetadataUnresolved, resolveProviderInputsForValidation } =
+    await vi.importActual<typeof import('../../../src/providers')>('../../../src/providers');
+  const inputs = await resolveProviderInputsForValidation(providers as any, {
+    basePath,
+    env,
+    ...(filter === undefined ? {} : { filter }),
+    loadDynamicProviders: options.loadDynamicProviders,
+  });
+  return { inputs, hasUnresolved: inputs.some(isProviderInputMetadataUnresolved) };
+}
 
 describe('Redteam Routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -270,6 +290,31 @@ describe('Redteam Routes', () => {
         expect(response.body.error).toBe(
           `Strategy ${strategy.id} is not compatible with plugin coding-agent:secret-env-read`,
         );
+        expect(mockPluginFactory.action).not.toHaveBeenCalled();
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
+      it('rejects explicit plugin targeting mismatches before generating probes', async () => {
+        const mockPluginFactory = {
+          key: 'pii:direct',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'probe' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'pii:direct', config: {} },
+            strategy: {
+              id: 'layer',
+              config: { plugins: ['harmful'], steps: ['base64'] },
+            },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(400);
+        expect(mockPluginFactory.action).not.toHaveBeenCalled();
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
       });
 
       it('should NOT exclude multi-input excluded plugins when plugin has no multi-input config', async () => {
@@ -591,7 +636,10 @@ describe('Redteam Routes', () => {
     beforeEach(() => {
       vi.resetAllMocks();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
-      mockedResolveRedteamTargetProviderInputs.mockResolvedValue([]);
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValue({
+        inputs: [],
+        hasUnresolved: false,
+      });
     });
 
     afterEach(() => {
@@ -766,18 +814,8 @@ describe('Redteam Routes', () => {
       targets,
     }) => {
       let resolveRun: ((value: undefined) => void) | undefined;
-      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
-        async (providers, basePath, env, filter) => {
-          const { resolveProviderInputsForValidation } =
-            await vi.importActual<typeof import('../../../src/providers')>(
-              '../../../src/providers',
-            );
-          return resolveProviderInputsForValidation(providers as any, {
-            basePath,
-            env,
-            ...(filter === undefined ? {} : { filter }),
-          });
-        },
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
       );
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
@@ -845,18 +883,8 @@ describe('Redteam Routes', () => {
       },
     ])('should preflight $label before replacing the active job', async ({ strategyConfig }) => {
       let resolveRun: ((value: undefined) => void) | undefined;
-      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
-        async (providers, basePath, env, filter) => {
-          const { resolveProviderInputsForValidation } =
-            await vi.importActual<typeof import('../../../src/providers')>(
-              '../../../src/providers',
-            );
-          return resolveProviderInputsForValidation(providers as any, {
-            basePath,
-            env,
-            ...(filter === undefined ? {} : { filter }),
-          });
-        },
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
       );
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
@@ -917,18 +945,8 @@ describe('Redteam Routes', () => {
           resolveRun = resolve;
         }),
       );
-      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
-        async (providers, basePath, env, filter) => {
-          const { resolveProviderInputsForValidation } =
-            await vi.importActual<typeof import('../../../src/providers')>(
-              '../../../src/providers',
-            );
-          return resolveProviderInputsForValidation(providers as any, {
-            basePath,
-            env,
-            ...(filter === undefined ? {} : { filter }),
-          });
-        },
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
+        resolveActualTargetProviderInputs,
       );
 
       try {
@@ -970,9 +988,10 @@ describe('Redteam Routes', () => {
           resolveRun = resolve;
         }),
       );
-      mockedResolveRedteamTargetProviderInputs.mockResolvedValueOnce([
-        { context: 'Reference context', question: 'User question' },
-      ]);
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [{ context: 'Reference context', question: 'User question' }],
+        hasUnresolved: false,
+      });
 
       const firstResponse = await request(app)
         .post('/api/redteam/run')
@@ -992,11 +1011,56 @@ describe('Redteam Routes', () => {
       expect(incompatibleResponse.body.error).toBe(
         'Posterior strategy does not support multi-input targets',
       );
-      expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledWith(
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
         ['promptfoo://provider/00000000-0000-0000-0000-000000000000'],
         undefined,
         undefined,
         undefined,
+        { loadDynamicProviders: true },
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it('loads dynamic input metadata before replacing the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [{ context: 'Reference context', question: 'User question' }],
+        hasUnresolved: false,
+      });
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const replacementResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///workspace/dynamic-provider.mjs'],
+            redteam: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(replacementResponse.status).toBe(400);
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
+        ['file:///workspace/dynamic-provider.mjs'],
+        undefined,
+        undefined,
+        undefined,
+        { loadDynamicProviders: true },
       );
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
       expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
@@ -1017,7 +1081,10 @@ describe('Redteam Routes', () => {
           inputs: { context: 'Reference context', question: 'User question' },
         },
       ];
-      mockedResolveRedteamTargetProviderInputs.mockResolvedValueOnce([undefined]);
+      mockedResolveRedteamTargetProviderInputMetadata.mockResolvedValueOnce({
+        inputs: [undefined],
+        hasUnresolved: false,
+      });
 
       const response = await request(app)
         .post('/api/redteam/run')
@@ -1030,25 +1097,28 @@ describe('Redteam Routes', () => {
         });
 
       expect(response.status).toBe(200);
-      expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledWith(
+      expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledWith(
         targets,
         undefined,
         undefined,
         'selected-single',
+        { loadDynamicProviders: false },
       );
     });
 
     it('should let the newest overlapping run request win after async preflight', async () => {
-      let resolveFirstPreflight: ((inputs: unknown[]) => void) | undefined;
+      let resolveFirstPreflight:
+        | ((value: { inputs: unknown[]; hasUnresolved: boolean }) => void)
+        | undefined;
       let resolveRun: ((value: undefined) => void) | undefined;
-      mockedResolveRedteamTargetProviderInputs
+      mockedResolveRedteamTargetProviderInputMetadata
         .mockImplementationOnce(
           () =>
             new Promise((resolve) => {
               resolveFirstPreflight = resolve;
             }),
         )
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce({ inputs: [], hasUnresolved: false });
       mockedDoRedteamRun.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveRun = resolve;
@@ -1064,7 +1134,7 @@ describe('Redteam Routes', () => {
         .send({ config: { ...config, purpose: 'older' } })
         .then((response) => response);
       await vi.waitFor(() => {
-        expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledTimes(1);
+        expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledTimes(1);
       });
 
       const newerResponse = await request(app)
@@ -1078,7 +1148,7 @@ describe('Redteam Routes', () => {
         hasPendingRun: false,
       });
 
-      resolveFirstPreflight!([]);
+      resolveFirstPreflight!({ inputs: [], hasUnresolved: false });
       const olderResponse = await firstResponsePromise;
       expect(olderResponse.status).toBe(409);
       expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
@@ -1092,8 +1162,10 @@ describe('Redteam Routes', () => {
     });
 
     it('should cancel a run that is still awaiting compatibility preflight', async () => {
-      let resolvePreflight: ((inputs: unknown[]) => void) | undefined;
-      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
+      let resolvePreflight:
+        | ((value: { inputs: unknown[]; hasUnresolved: boolean }) => void)
+        | undefined;
+      mockedResolveRedteamTargetProviderInputMetadata.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
             resolvePreflight = resolve;
@@ -1110,7 +1182,7 @@ describe('Redteam Routes', () => {
         })
         .then((response) => response);
       await vi.waitFor(() => {
-        expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledOnce();
+        expect(mockedResolveRedteamTargetProviderInputMetadata).toHaveBeenCalledOnce();
       });
 
       const pendingStatusResponse = await request(app).get('/api/redteam/status');
@@ -1131,7 +1203,7 @@ describe('Redteam Routes', () => {
         jobId: null,
       });
 
-      resolvePreflight!([]);
+      resolvePreflight!({ inputs: [], hasUnresolved: false });
       const runResponse = await runResponsePromise;
       expect(runResponse.status).toBe(409);
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
@@ -1146,7 +1218,7 @@ describe('Redteam Routes', () => {
 
     it('should not expose provider resolution details in validation errors', async () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-      mockedResolveRedteamTargetProviderInputs.mockRejectedValueOnce(
+      mockedResolveRedteamTargetProviderInputMetadata.mockRejectedValueOnce(
         new Error("ENOENT: open '/tmp/private-provider.yaml'"),
       );
 

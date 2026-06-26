@@ -369,6 +369,7 @@ async function resolveConfiguredProviderInputs(
   configEnv?: EnvOverrides,
   basePath?: string,
   visitedProviderFiles: ReadonlySet<string> = new Set(),
+  loadDynamicProviders = false,
 ): Promise<unknown> {
   const mergedEnv =
     configEnv || providerOptions.env ? { ...configEnv, ...providerOptions.env } : undefined;
@@ -401,12 +402,32 @@ async function resolveConfiguredProviderInputs(
       configEnv,
       basePath,
       nextVisitedProviderFiles,
+      loadDynamicProviders,
     );
   }
 
   if (!isCloudProvider(renderedProviderPath)) {
     for (const factory of await getProviderFactories(renderedProviderPath)) {
       if (factory.test(renderedProviderPath)) {
+        if (
+          configuredInputs === undefined &&
+          (/\.(?:[cm]?[jt]s)$/.test(renderedProviderPath) ||
+            renderedProviderPath.startsWith('package:'))
+        ) {
+          if (!loadDynamicProviders) {
+            return UNRESOLVED_PROVIDER_INPUTS;
+          }
+          const provider = await loadApiProvider(renderedProviderPath, {
+            basePath,
+            env: mergedEnv,
+            options: renderedOptions,
+          });
+          try {
+            return getConfiguredProviderInputs(provider);
+          } finally {
+            await provider.cleanup?.();
+          }
+        }
         return configuredInputs;
       }
     }
@@ -433,6 +454,7 @@ async function resolveConfiguredProviderInputs(
     configEnv,
     basePath,
     visitedProviderFiles,
+    loadDynamicProviders,
   );
 }
 
@@ -441,6 +463,11 @@ const SIMPLE_ENV_TEMPLATE =
 const MAX_PROVIDER_VALIDATION_DEPTH = 1000;
 const MAX_PROVIDER_VALIDATION_NODES = 10_000;
 const PROVIDER_VALIDATION_COMPLEXITY_ERROR = 'Provider configuration is too complex to validate';
+const UNRESOLVED_PROVIDER_INPUTS = Symbol('unresolved provider inputs');
+
+export function isProviderInputMetadataUnresolved(value: unknown): boolean {
+  return value === UNRESOLVED_PROVIDER_INPUTS;
+}
 
 /**
  * Render direct environment lookups and literal default filters during provider validation.
@@ -584,12 +611,18 @@ function getRenderedProviderConfigs(
 }
 
 /**
- * Resolves target input metadata without instantiating providers. Validation must not start
- * executable or MCP targets before the real run owns their lifecycle.
+ * Resolves target input metadata without instantiating providers by default. Callers replacing an
+ * active run or reusing cached tests may opt into loading dynamic JS/package providers; those
+ * instances are cleaned up before this function returns.
  */
 export async function resolveProviderInputsForValidation(
   providerPaths: ProvidersConfig,
-  options: { basePath?: string; env?: EnvOverrides; filter?: string } = {},
+  options: {
+    basePath?: string;
+    env?: EnvOverrides;
+    filter?: string;
+    loadDynamicProviders?: boolean;
+  } = {},
 ): Promise<unknown[]> {
   const configEnv = getValidationEnv(options.env);
   const renderedProviderPaths = getRenderedProviderConfigs(providerPaths, configEnv);
@@ -623,6 +656,8 @@ export async function resolveProviderInputsForValidation(
             {},
             configEnv,
             options.basePath,
+            new Set(),
+            options.loadDynamicProviders,
           );
         case 'options':
         case 'map':
@@ -631,6 +666,8 @@ export async function resolveProviderInputsForValidation(
             descriptor.loadOptions,
             configEnv,
             options.basePath,
+            new Set(),
+            options.loadDynamicProviders,
           );
         case 'file':
           throw new Error(`Unresolved provider config file: ${descriptor.loadProviderPath}`);
