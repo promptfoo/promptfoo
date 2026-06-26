@@ -10,6 +10,7 @@
 
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getGeneratedTestCaseLengthViolation } from './promptLength';
 
 import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin } from '../../types';
@@ -164,6 +165,20 @@ export async function applyRuntimeTransforms(
             pluginId: testCase.metadata.pluginId,
           },
         };
+        const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, {
+          maxCharsPerMessage: layerConfig.maxCharsPerMessage as number | undefined,
+          minCharsPerMessage: layerConfig.minCharsPerMessage as number | undefined,
+        });
+        if (violation) {
+          const limitKey = violation.kind === 'max' ? 'maxCharsPerMessage' : 'minCharsPerMessage';
+          const verb = violation.kind === 'max' ? 'exceeds' : 'is below';
+          return {
+            prompt: originalPrompt,
+            originalPrompt,
+            error: 'Transform ' + layerId + ' output ' + verb + ' ' + limitKey + '=' +
+              violation.limit + ': ' + violation.length + ' characters',
+          };
+        }
       } else {
         logger.warn(`[RuntimeTransform] Layer ${layerId} returned no test cases`);
       }

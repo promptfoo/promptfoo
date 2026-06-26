@@ -63,8 +63,13 @@ export async function addLayerTestCases(
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     const stepObj = typeof step === 'string' ? { id: step } : step;
+    const {
+      maxCharsPerMessage: _inheritedMaxCharsPerMessage,
+      minCharsPerMessage: _inheritedMinCharsPerMessage,
+      ...inheritedStepConfig
+    } = config || {};
     const stepConfig = {
-      ...(config || {}),
+      ...inheritedStepConfig,
       ...(stepObj.config || {}),
     };
 
@@ -90,25 +95,9 @@ export async function addLayerTestCases(
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
       const { steps: _steps, ...layerConfig } = config || {};
-      // Runtime enforcement happens after every per-turn transform. A trailing step's
-      // explicit limit therefore becomes the attack provider's effective limit.
-      const trailingCharLimits = remainingSteps.reduceRight<Record<string, unknown>>(
-        (limits, remainingStep) => {
-          const remainingConfig =
-            typeof remainingStep === 'string' ? undefined : remainingStep.config;
-          for (const key of ['maxCharsPerMessage', 'minCharsPerMessage'] as const) {
-            if (limits[key] === undefined && remainingConfig?.[key] !== undefined) {
-              limits[key] = remainingConfig[key];
-            }
-          }
-          return limits;
-        },
-        {},
-      );
       const attackProviderConfig = {
         ...layerConfig,
         ...(stepObj.config || {}),
-        ...trailingCharLimits,
       };
 
       logger.debug(`layer strategy: configuring attack provider`, {

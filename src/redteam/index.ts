@@ -483,7 +483,9 @@ function filterGeneratedTestCasesByCharLimits<T extends TestCase>(
     const charLimits = ignoreMinCharsPerMessage
       ? { ...resolvedCharLimits, minCharsPerMessage: undefined }
       : resolvedCharLimits;
-    const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, charLimits);
+    const violation = getGeneratedTestCaseLengthViolation(testCase.vars, injectVar, charLimits, {
+      useCliStateFallback: !ignoreMinCharsPerMessage,
+    });
     if (!violation) {
       return true;
     }

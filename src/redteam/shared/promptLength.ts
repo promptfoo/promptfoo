@@ -40,12 +40,22 @@ function getCharsPerMessageLimit(limit: number | undefined): number | undefined 
   return limit;
 }
 
-function getMaxCharsPerMessage(limit?: number): number | undefined {
-  return getCharsPerMessageLimit(limit ?? cliState.config?.redteam?.maxCharsPerMessage);
+function getMaxCharsPerMessage(
+  limit?: number,
+  { useCliStateFallback = true }: { useCliStateFallback?: boolean } = {},
+): number | undefined {
+  return getCharsPerMessageLimit(
+    limit ?? (useCliStateFallback ? cliState.config?.redteam?.maxCharsPerMessage : undefined),
+  );
 }
 
-function getMinCharsPerMessage(limit?: number): number | undefined {
-  return getCharsPerMessageLimit(limit ?? cliState.config?.redteam?.minCharsPerMessage);
+function getMinCharsPerMessage(
+  limit?: number,
+  { useCliStateFallback = true }: { useCliStateFallback?: boolean } = {},
+): number | undefined {
+  return getCharsPerMessageLimit(
+    limit ?? (useCliStateFallback ? cliState.config?.redteam?.minCharsPerMessage : undefined),
+  );
 }
 
 function parseChatMessages(prompt: string): ChatMessage[] | undefined {
@@ -120,9 +130,10 @@ function getPromptLengthViolation(
     maxCharsPerMessage,
     minCharsPerMessage,
   }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  options?: { useCliStateFallback?: boolean },
 ): PromptLengthViolation | undefined {
-  const maxChars = getMaxCharsPerMessage(maxCharsPerMessage);
-  const minChars = getMinCharsPerMessage(minCharsPerMessage);
+  const maxChars = getMaxCharsPerMessage(maxCharsPerMessage, options);
+  const minChars = getMinCharsPerMessage(minCharsPerMessage, options);
   if (!maxChars && !minChars) {
     return undefined;
   }
@@ -174,8 +185,9 @@ export function getGeneratedPromptLengthViolation(
     maxCharsPerMessage,
     minCharsPerMessage,
   }: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  options?: { useCliStateFallback?: boolean },
 ): PromptLengthViolation | undefined {
-  return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage });
+  return getPromptLengthViolation(prompt, { maxCharsPerMessage, minCharsPerMessage }, options);
 }
 
 function getStringRecordValues(value: unknown): string[] | undefined {
@@ -217,9 +229,10 @@ function getGeneratedPromptValues(vars: PromptVars | undefined, injectVar: strin
 function getFirstGeneratedPromptLengthViolation(
   prompts: string[],
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  options?: { useCliStateFallback?: boolean },
 ): PromptLengthViolation | undefined {
   return prompts
-    .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits))
+    .map((prompt) => getGeneratedPromptLengthViolation(prompt, charLimits, options))
     .find((candidate) => candidate !== undefined);
 }
 
@@ -227,10 +240,12 @@ export function getGeneratedTestCaseLengthViolation(
   vars: PromptVars | undefined,
   injectVar: string,
   charLimits: { maxCharsPerMessage?: number; minCharsPerMessage?: number },
+  options?: { useCliStateFallback?: boolean },
 ): PromptLengthViolation | undefined {
   return getFirstGeneratedPromptLengthViolation(
     getGeneratedPromptValues(vars, injectVar),
     charLimits,
+    options,
   );
 }
 

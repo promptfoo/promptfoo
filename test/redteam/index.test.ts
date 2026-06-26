@@ -330,6 +330,9 @@ describe('synthesize', () => {
     });
 
     it('does not apply the final minimum to an agentic strategy seed', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+      cliState.config = { redteam: { minCharsPerMessage: 10 } };
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: vi.fn().mockResolvedValue([{ vars: { query: 'seed' } }]),
         key: 'mockPlugin',
@@ -342,29 +345,33 @@ describe('synthesize', () => {
       );
       vi.spyOn(Strategies, 'find').mockReturnValue({ action: strategyAction, id: 'goat' });
 
-      const result = await synthesize({
-        minCharsPerMessage: 10,
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [{ id: 'goat' }],
-        targetIds: ['test-provider'],
-      });
+      try {
+        const result = await synthesize({
+          minCharsPerMessage: 10,
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'goat' }],
+          targetIds: ['test-provider'],
+        });
 
-      expect(strategyAction).toHaveBeenCalledWith(
-        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
-        'query',
-        expect.any(Object),
-        'goat',
-      );
-      expect(result.testCases).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ vars: { query: 'long enough final attack' } }),
-        ]),
-      );
-      expect(result.testCases).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
-      );
+        expect(strategyAction).toHaveBeenCalledWith(
+          expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+          'query',
+          expect.any(Object),
+          'goat',
+        );
+        expect(result.testCases).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ vars: { query: 'long enough final attack' } }),
+          ]),
+        );
+        expect(result.testCases).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ vars: { query: 'seed' } })]),
+        );
+      } finally {
+        cliState.config = originalConfig;
+      }
     });
 
     it('preserves effective limits when a plugin intentionally omits pluginConfig', async () => {

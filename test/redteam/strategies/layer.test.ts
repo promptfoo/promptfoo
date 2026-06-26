@@ -209,6 +209,11 @@ describe('addLayerTestCases', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].vars?.input).toContain('[Translated to Spanish]');
+    expect(mockStrategies[0].action).toHaveBeenCalledWith(
+      expect.any(Array),
+      'input',
+      expect.not.objectContaining({ minCharsPerMessage: expect.anything() }),
+    );
   });
 
   it('should validate layer step limits against multi-input values', async () => {
@@ -508,7 +513,7 @@ describe('addLayerTestCases', () => {
       expect(result[0].metadata?.strategyConfig).toEqual({ minCharsPerMessage: 100 });
     });
 
-    it('carries trailing per-turn limits into attack provider effective config', async () => {
+    it('keeps trailing per-turn limits on their owning runtime layer', async () => {
       const result = await addLayerTestCases(
         [{ vars: { input: 'test' }, metadata: { pluginId: 'test-plugin' } }],
         'input',
@@ -522,12 +527,15 @@ describe('addLayerTestCases', () => {
 
       expect(result[0].provider).toEqual(
         expect.objectContaining({
-          config: expect.objectContaining({ minCharsPerMessage: 42 }),
+          config: expect.objectContaining({ minCharsPerMessage: 10 }),
         }),
       );
       expect(result[0].metadata?.strategyConfig).toEqual(
-        expect.objectContaining({ minCharsPerMessage: 42 }),
+        expect.objectContaining({ minCharsPerMessage: 10 }),
       );
+      expect(
+        (result[0].provider as { config?: { _perTurnLayers?: unknown[] } }).config?._perTurnLayers,
+      ).toEqual([{ id: 'audio', config: { minCharsPerMessage: 42 } }]);
     });
 
     it('should detect hydra as attack provider and configure per-turn layers', async () => {
