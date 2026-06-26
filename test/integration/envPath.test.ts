@@ -15,6 +15,7 @@ import {
 } from 'vitest';
 import { doEval } from '../../src/node/doEval';
 import { clearConfigCache, loadDefaultConfig } from '../../src/util/config/default';
+import { resolveConfigs } from '../../src/util/config/load';
 import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/cache');
@@ -201,7 +202,53 @@ tests:
       /Unknown top-level config key/,
     );
     expect(mockSetupEnv).toHaveBeenCalledWith(tempEnvFile);
-    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('false');
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+  });
+
+  it('should not leak config-specified strictness into later resolutions', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=false');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        tests:
+          - assert:
+              - type: contains
+                value: hello
+      `,
+    );
+    mockSetupEnv.mockImplementation((envPath) => {
+      if (envPath === tempEnvFile) {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+      }
+    });
+
+    const firstResolution = await resolveConfigs({ config: [tempConfigFile] }, {});
+    expect(firstResolution.strictConfigEnabled).toBe(false);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
+
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        prompts:
+          - hello
+        providers:
+          - echo
+        tests:
+          - assert:
+              - type: contains
+                value: hello
+      `,
+    );
+    const secondResolution = await resolveConfigs({ config: [tempConfigFile] }, {});
+    expect(secondResolution.strictConfigEnabled).toBe(true);
+    expect(process.env.PROMPTFOO_STRICT_CONFIG).toBe('true');
   });
 
   it('should retain diagnostics for an auto-discovered cached default config', async () => {

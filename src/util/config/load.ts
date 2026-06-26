@@ -1021,11 +1021,23 @@ export async function resolveConfigs(
   const hasExplicitEnvPath = Array.isArray(cmdObj.envPath)
     ? cmdObj.envPath.length > 0
     : Boolean(cmdObj.envPath);
+  const previousProcessStrictConfig = process.env.PROMPTFOO_STRICT_CONFIG;
+  let strictConfigEnabled: boolean;
   if (!hasExplicitEnvPath && commandLineOptions?.envPath) {
     logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-    setupEnv(commandLineOptions.envPath);
+    try {
+      setupEnv(commandLineOptions.envPath);
+      strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
+    } finally {
+      if (previousProcessStrictConfig === undefined) {
+        Reflect.deleteProperty(process.env, 'PROMPTFOO_STRICT_CONFIG');
+      } else {
+        Reflect.set(process.env, 'PROMPTFOO_STRICT_CONFIG', previousProcessStrictConfig);
+      }
+    }
+  } else {
+    strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
   }
-  const strictConfigEnabled = resolveStrictConfigEnabled(fileConfig.env || defaultConfig.env);
   if (unknownConfigKeyDiagnostics.length > 0) {
     reportUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, strictConfigEnabled);
   }
