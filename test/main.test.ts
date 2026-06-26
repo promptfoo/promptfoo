@@ -533,6 +533,20 @@ describe('shutdownGracefully', () => {
     expect(mockDispatcherDestroy).toHaveBeenCalled();
   });
 
+  it('should continue cleanup when database close times out', async () => {
+    mockCloseDbIfOpen.mockImplementation(() => new Promise(() => {}));
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+
+    await vi.runAllTimersAsync();
+    await shutdownPromise;
+  });
+
   it('should handle dispatcher.destroy() timeout', async () => {
     // Make dispatcher.destroy() hang forever
     mockDispatcherDestroy.mockImplementation(() => new Promise(() => {}));

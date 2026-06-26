@@ -233,7 +233,7 @@ export const shutdownGracefully = async (): Promise<void> => {
     });
   }
 
-  await closeDbIfOpen();
+  await withTimeout(closeDbIfOpen(), 'closeDbIfOpen()');
 
   logger.debug('Closing logger file transports');
   try {

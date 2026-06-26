@@ -1,9 +1,9 @@
-import { pathToFileURL } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { createClient } from '@libsql/client/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDb,
@@ -16,11 +16,53 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
-import { removeTempDir } from '../util/utils';
 
 vi.mock('../../src/envars');
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
+
+const execFileAsync = promisify(execFile);
+const WAL_PROBE_RESULT_PREFIX = 'PROMPTFOO_WAL_PROBE_RESULT=';
+
+interface WalCheckpointProbeResult {
+  elapsedMs: number;
+  isDbOpen: boolean;
+  logs: Array<{
+    context?: Record<string, unknown>;
+    level: 'debug' | 'warn';
+    message: string;
+  }>;
+  rowCount: number;
+}
+
+async function runWalCheckpointProbe(
+  tempConfigDir: string,
+  holdReader: boolean,
+): Promise<WalCheckpointProbeResult> {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', 'tsx', 'test/database/fixtures/walCheckpointProbe.ts'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        IS_TESTING: 'false',
+        LOG_LEVEL: 'error',
+        PROMPTFOO_CONFIG_DIR: tempConfigDir,
+        PROMPTFOO_DISABLE_WAL_MODE: 'false',
+        PROMPTFOO_WAL_HOLD_READER: String(holdReader),
+      },
+    },
+  );
+  const resultLine = stdout.split(/\r?\n/).find((line) => line.startsWith(WAL_PROBE_RESULT_PREFIX));
+
+  if (!resultLine) {
+    throw new Error(`WAL checkpoint probe did not return a result: ${stdout}`);
+  }
+
+  return JSON.parse(resultLine.slice(WAL_PROBE_RESULT_PREFIX.length));
+}
 
 describe('database', () => {
   let tempConfigDir: string;
@@ -42,7 +84,7 @@ describe('database', () => {
 
   afterEach(async () => {
     await closeDb();
-    removeTempDir(tempConfigDir);
+    fs.rmSync(tempConfigDir, { force: true, recursive: true });
   });
 
   describe('getDbPath', () => {
@@ -231,55 +273,41 @@ describe('database', () => {
 
   describe('closeDb', () => {
     it('logs a successful file-backed WAL checkpoint', async () => {
-      vi.mocked(getEnvBool).mockReturnValue(false);
+      const result = await runWalCheckpointProbe(tempConfigDir, false);
 
-      await getDb();
-      await closeDb();
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        'Successfully checkpointed WAL file before closing',
-        expect.objectContaining({ busy: 0 }),
+      expect(result.logs).toContainEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({ busy: 0 }),
+          level: 'debug',
+          message: 'Successfully checkpointed WAL file before closing',
+        }),
       );
-      expect(isDbOpen()).toBe(false);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.rowCount).toBe(1);
     });
 
     it('warns when a file-backed WAL checkpoint is incomplete', async () => {
-      vi.mocked(getEnvBool).mockReturnValue(false);
+      const result = await runWalCheckpointProbe(tempConfigDir, true);
 
-      const db = await getDb();
-      await db.run('PRAGMA wal_autocheckpoint = 0');
-      await db.run('CREATE TABLE wal_checkpoint_test (id INTEGER PRIMARY KEY)');
-      await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
-
-      const reader = createClient({ url: pathToFileURL(getDbPath()).toString() });
-      let readerTransactionOpen = false;
-      try {
-        await reader.execute('BEGIN');
-        readerTransactionOpen = true;
-        await reader.execute('SELECT * FROM wal_checkpoint_test');
-        await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
-
-        await closeDb();
-
-        expect(logger.warn).toHaveBeenCalledWith(
-          'WAL checkpoint incomplete before closing database',
-          expect.objectContaining({
+      expect(result.logs).toContainEqual(
+        expect.objectContaining({
+          context: expect.objectContaining({
             busy: 1,
             log: expect.any(Number),
             checkpointed: expect.any(Number),
           }),
-        );
-        expect(logger.debug).not.toHaveBeenCalledWith(
-          'Successfully checkpointed WAL file before closing',
-          expect.anything(),
-        );
-        expect(isDbOpen()).toBe(false);
-      } finally {
-        if (readerTransactionOpen) {
-          await reader.execute('ROLLBACK');
-        }
-        reader.close();
-      }
+          level: 'warn',
+          message: 'WAL checkpoint incomplete before closing database',
+        }),
+      );
+      expect(
+        result.logs.some(
+          (entry) => entry.message === 'Successfully checkpointed WAL file before closing',
+        ),
+      ).toBe(false);
+      expect(result.isDbOpen).toBe(false);
+      expect(result.rowCount).toBe(2);
+      expect(result.elapsedMs).toBeLessThan(3_000);
     });
 
     it('should close database connection and reset instances', async () => {
