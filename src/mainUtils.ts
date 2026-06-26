@@ -97,6 +97,8 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
   if (envPath) {
     loadEnvPathOnce(envPath, false, true);
   }
+
+  telemetry.initialize();
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {

@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
+const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -34,7 +35,11 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
+  default: {
+    initialize: mockTelemetryInitialize,
+    record: mockTelemetryRecord,
+    shutdown: mockTelemetryShutdown,
+  },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -72,12 +77,14 @@ describe('setupEnvFilesFromArgv', () => {
   beforeEach(async () => {
     await loadMainModule();
     mockSetupEnv.mockReset();
+    mockTelemetryInitialize.mockReset();
   });
 
   it('should load env files before command actions run', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should support repeated and comma-separated env file args', () => {
@@ -92,6 +99,7 @@ describe('setupEnvFilesFromArgv', () => {
     setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should recognize the --env-path alias', () => {
