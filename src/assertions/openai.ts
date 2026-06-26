@@ -1,3 +1,5 @@
+import { types as nodeUtilTypes } from 'node:util';
+
 import { createFunctionCallValidator, type OpenAiFunction } from '../providers/openai/util';
 import {
   type AssertionParams,
@@ -15,6 +17,14 @@ interface OpenAiToolCall {
 
 /** Allows Promptfoo's manual assertion tool to opt into its legacy rendered-MCP input contract. */
 const PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT = Symbol.for('promptfoo.trustedMcpRenderedOutput');
+
+function isProxyValue(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    nodeUtilTypes.isProxy(value)
+  );
+}
 
 function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
   const type = readOwnDataProperty(value, 'type');
@@ -93,6 +103,33 @@ function readOwnDataProperty(
     return 'value' in descriptor ? { ok: true, value: descriptor.value } : { ok: false };
   } catch {
     return { ok: false };
+  }
+}
+
+function materializeDenseArray(value: unknown[]): unknown[] | undefined {
+  try {
+    if (isProxyValue(value)) {
+      return undefined;
+    }
+    const indexCount = Object.keys(value).filter((key) => {
+      const index = Number(key);
+      return Number.isInteger(index) && index >= 0 && index < value.length && String(index) === key;
+    }).length;
+    if (indexCount !== value.length) {
+      return undefined;
+    }
+
+    const copy: unknown[] = [];
+    for (let index = 0; index < value.length; index++) {
+      const item = readOwnDataProperty(value, String(index));
+      if (!item.ok) {
+        return undefined;
+      }
+      copy.push(item.value);
+    }
+    return copy;
+  } catch {
+    return undefined;
   }
 }
 
@@ -323,8 +360,14 @@ function getTraditionalToolCalls(
   output: unknown,
 ): { hasCalls: boolean; ok: true; output: unknown } | { error: string; ok: false } {
   try {
+    if (isProxyValue(output)) {
+      return { error: 'OpenAI tools response is malformed', ok: false };
+    }
     if (Array.isArray(output)) {
-      return { hasCalls: true, ok: true, output };
+      const calls = materializeDenseArray(output);
+      return calls
+        ? { hasCalls: true, ok: true, output: calls }
+        : { error: 'OpenAI tools response is malformed', ok: false };
     }
     if (typeof output !== 'object' || output === null) {
       return { hasCalls: false, ok: true, output };
@@ -333,9 +376,19 @@ function getTraditionalToolCalls(
     if (!toolCalls.ok) {
       return { error: 'OpenAI tools response is malformed', ok: false };
     }
-    return toolCalls.value === undefined
-      ? { hasCalls: false, ok: true, output }
-      : { hasCalls: true, ok: true, output: toolCalls.value };
+    if (toolCalls.value === undefined) {
+      return { hasCalls: false, ok: true, output };
+    }
+    if (isProxyValue(toolCalls.value)) {
+      return { error: 'OpenAI tools response is malformed', ok: false };
+    }
+    if (Array.isArray(toolCalls.value)) {
+      const calls = materializeDenseArray(toolCalls.value);
+      return calls
+        ? { hasCalls: true, ok: true, output: calls }
+        : { error: 'OpenAI tools response is malformed', ok: false };
+    }
+    return { hasCalls: true, ok: true, output: toolCalls.value };
   } catch {
     return { error: 'OpenAI tools response is malformed', ok: false };
   }

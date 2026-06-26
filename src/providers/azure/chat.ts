@@ -465,7 +465,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         const functionCall = message?.function_call;
         const hasToolCalls = Array.isArray(toolCalls) ? toolCalls.length > 0 : Boolean(toolCalls);
         const hasCalls = hasToolCalls || Boolean(functionCall);
-        const shouldProcessCalls = hasCalls && (config.functionToolCallbacks || this.mcpClient);
+        const hasAssistantContent = output != null;
+        const shouldProcessCalls =
+          hasCalls &&
+          Boolean(this.mcpClient || (!hasAssistantContent && config.functionToolCallbacks));
+        let callsWereProcessed = false;
 
         if (shouldProcessCalls) {
           // Combine all calls into a single array for processing
@@ -479,21 +483,25 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
           const callbackResult = await this.functionCallbackHandler.processCallsDetailed(
             allCalls.length === 1 ? allCalls[0] : allCalls,
-            config.functionToolCallbacks,
+            hasAssistantContent ? undefined : config.functionToolCallbacks,
           );
           if (callbackResult.hasProcessedCalls) {
+            callsWereProcessed = true;
             output = callbackResult.output;
             mcpToolCalls = callbackResult.mcpToolCalls;
             mcpToolCallsComplete = callbackResult.mcpToolCallsComplete;
-          } else {
-            output = output ?? toolCalls ?? functionCall;
+          } else if (!hasAssistantContent) {
+            output = toolCalls ?? functionCall;
           }
-        } else if (output == null) {
+        } else if (!hasAssistantContent) {
           // No callbacks configured, return raw tool/function calls.
           output = toolCalls ?? functionCall;
-        } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
+        }
+        if (
+          hasAssistantContent &&
+          !callsWereProcessed &&
+          (config.response_format?.type === 'json_schema' ||
+            config.response_format?.type === 'json_object')
         ) {
           try {
             output = JSON.parse(output);

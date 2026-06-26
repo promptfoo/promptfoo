@@ -1140,6 +1140,82 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       }
     });
 
+    it('emits empty incomplete provenance when an ordinary callback rejects before an MCP call', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { function: { name: 'ordinary_tool', arguments: '{}' } },
+                  { function: { name: 'read_file', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const ordinaryCallback = vi.fn().mockRejectedValue(new Error('callback failed'));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          functionToolCallbacks: { ordinary_tool: ordinaryCallback },
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'ordinary_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'read_file',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+        },
+      });
+      const callTool = vi.fn().mockResolvedValue({ content: 'ok' });
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool,
+      };
+
+      const providerResponse = await provider.callApi('Read the file');
+
+      expect(ordinaryCallback).toHaveBeenCalledOnce();
+      expect(callTool).not.toHaveBeenCalled();
+      expect(providerResponse.metadata).toMatchObject({
+        mcpToolCalls: [],
+        mcpToolCallsComplete: false,
+      });
+      for (const type of [
+        'is-valid-openai-tools-call',
+        'not-is-valid-openai-tools-call',
+      ] as const) {
+        await expect(
+          runAssertion({
+            assertion: { type },
+            prompt: 'Read the file',
+            provider,
+            providerResponse,
+            test: { vars: {} },
+          }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'MCP tool call provenance does not cover every tool call in the response',
+        });
+      }
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {

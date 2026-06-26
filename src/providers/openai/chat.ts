@@ -642,6 +642,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
+      const emittedFunctionCalls = [
+        ...(message.function_call ? [message.function_call] : []),
+        ...(Array.isArray(message.tool_calls) ? message.tool_calls : []),
+      ];
+      const mcpTools =
+        emittedFunctionCalls.length > 0 && this.mcpClient ? this.mcpClient.getAllTools() : [];
+      const hasEmittedMcpCall = emittedFunctionCalls.some((functionCall) => {
+        const functionName =
+          'name' in functionCall && typeof functionCall.name === 'string'
+            ? functionCall.name
+            : 'function' in functionCall && typeof functionCall.function?.name === 'string'
+              ? functionCall.function.name
+              : undefined;
+        return mcpTools.some((tool) => tool.name === functionName);
+      });
       const mcpToolCalls: Array<{
         error?: string;
         name: string;
@@ -649,6 +664,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }> = [];
       const emittedCallCount = (message.function_call ? 1 : 0) + (message.tool_calls?.length ?? 0);
       let mcpToolCallsComplete = (functionCalls?.length ?? 0) === emittedCallCount;
+      const getMcpToolCallMetadata = () =>
+        mcpToolCalls.length > 0 || (hasEmittedMcpCall && !mcpToolCallsComplete)
+          ? { mcpToolCalls, mcpToolCallsComplete }
+          : {};
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
         let hasSuccessfulCallback = false;
@@ -657,7 +676,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
           // Try MCP first if available
           if (this.mcpClient) {
-            const mcpTools = this.mcpClient.getAllTools();
             const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
               try {
@@ -760,7 +778,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }),
             guardrails: { flagged: contentFiltered },
             metadata: {
-              ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
+              ...getMcpToolCallMetadata(),
               http: {
                 status,
                 statusText,
@@ -801,7 +819,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }),
           guardrails: { flagged: contentFiltered },
           metadata: {
-            ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
+            ...getMcpToolCallMetadata(),
             http: {
               status,
               statusText,
@@ -824,7 +842,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }),
         guardrails: { flagged: contentFiltered },
         metadata: {
-          ...(mcpToolCalls.length > 0 ? { mcpToolCalls, mcpToolCallsComplete } : {}),
+          ...getMcpToolCallMetadata(),
           http: {
             status,
             statusText,

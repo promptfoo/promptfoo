@@ -375,6 +375,43 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
   });
 
+  it('parses structured assistant content when neither MCP nor ordinary callbacks handle it', async () => {
+    const ordinaryCallback = vi.fn().mockResolvedValue('callback output');
+    (provider as any).config.functionToolCallbacks = { ordinary_tool: ordinaryCallback };
+    (provider as any).config.response_format = { type: 'json_object' };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"answer":42}',
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: { name: 'ordinary_tool', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const response = await provider.callApi('Use a tool');
+
+    expect(response.output).toEqual({ answer: 42 });
+    expect(response.metadata?.mcpToolCalls).toBeUndefined();
+    expect(ordinaryCallback).not.toHaveBeenCalled();
+    expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+  });
+
   it('preserves unmatched raw tool calls for assertion validation', async () => {
     (provider as any).config.tools = [
       {

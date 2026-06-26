@@ -982,6 +982,102 @@ describe('OpenAI assertions', () => {
     });
 
     it.each([
+      ['direct output', () => new Array(1)],
+      ['nested tool_calls', () => ({ tool_calls: new Array(1) })],
+    ] as const)('rejects a sparse traditional tools array from %s', async (_source, getOutput) => {
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: { output: getOutput() },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'OpenAI tools response is malformed',
+      });
+      expect(inverse).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'OpenAI tools response is malformed',
+      });
+    });
+
+    it('does not trust array method overrides while validating traditional tool calls', async () => {
+      const every = vi.fn(() => true);
+      const forEach = vi.fn();
+      const output = Object.assign([{}], { every, forEach });
+      const [positive, inverse] = await Promise.all(
+        (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map((type) =>
+          runAssertion({
+            assertion: { type },
+            prompt: 'Some prompt',
+            provider: mockProvider,
+            test: { vars: {} },
+            providerResponse: { output },
+          }),
+        ),
+      );
+
+      expect(positive).toMatchObject({ pass: false, score: 0 });
+      expect(inverse).toMatchObject({ pass: true, score: 1 });
+      expect(every).not.toHaveBeenCalled();
+      expect(forEach).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'direct output',
+      'nested tool_calls',
+    ] as const)('rejects a Proxy traditional tools array from %s without rejecting', async (source) => {
+      const getOutput = () => {
+        const calls = new Proxy(
+          [
+            {
+              type: 'function',
+              function: { name: 'getCurrentTemperature', arguments: '{}' },
+            },
+          ],
+          {
+            get() {
+              throw new Error('hostile tools array');
+            },
+            getOwnPropertyDescriptor() {
+              throw new Error('hostile tools array');
+            },
+            ownKeys() {
+              throw new Error('hostile tools array');
+            },
+          },
+        );
+        return source === 'direct output' ? calls : { tool_calls: calls };
+      };
+
+      for (const [type, expectedPass] of [
+        ['is-valid-openai-tools-call', false],
+        ['not-is-valid-openai-tools-call', true],
+      ] as const) {
+        const result = await runAssertion({
+          assertion: { type },
+          prompt: 'Some prompt',
+          provider: mockProvider,
+          test: { vars: {} },
+          providerResponse: { output: getOutput() },
+        });
+        expect(result).toMatchObject({
+          pass: expectedPass,
+          score: expectedPass ? 1 : 0,
+          reason: 'OpenAI tools response is malformed',
+        });
+      }
+    });
+
+    it.each([
       'custom',
       'computer',
     ])('rejects an explicit non-function tool-call type: %s', async (toolType) => {
