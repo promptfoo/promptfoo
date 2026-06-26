@@ -44,7 +44,7 @@ function hasTargetPromptCharLimits(test: AtomicTestCase | undefined): boolean {
   return limits.maxCharsPerMessage !== undefined || limits.minCharsPerMessage !== undefined;
 }
 
-function isMcpProviderWithTools(provider: ApiProvider): provider is McpProviderWithTools {
+export function isMcpProviderWithTools(provider: ApiProvider): provider is McpProviderWithTools {
   return provider instanceof MCPProvider && typeof provider.getAvailableTools === 'function';
 }
 

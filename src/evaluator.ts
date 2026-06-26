@@ -28,7 +28,10 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import {
+  isMcpProviderWithTools,
+  maybeWrapMcpProviderForRedteam,
+} from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import {
   getTargetPromptCharLimits,
@@ -827,16 +830,18 @@ async function renderRunEvalPrompt({
       providerId: provider.id(),
       strategyId,
     });
+    const isMcpTarget = isMcpProviderWithTools(provider);
     throwIfTargetPromptViolatesCharLimits(
       renderedPrompt,
       {
         maxCharsPerMessage:
           testSuite?.redteam?.maxCharsPerMessage ?? testCharLimits.maxCharsPerMessage,
-        minCharsPerMessage: isAgenticSeed
-          ? undefined
-          : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
+        minCharsPerMessage:
+          isAgenticSeed || isMcpTarget
+            ? undefined
+            : (testSuite?.redteam?.minCharsPerMessage ?? testCharLimits.minCharsPerMessage),
       },
-      { useCliStateFallback: !isAgenticSeed },
+      { useCliStateFallback: !isAgenticSeed && !isMcpTarget },
     );
   }
   const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);

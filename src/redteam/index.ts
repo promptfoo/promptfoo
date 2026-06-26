@@ -36,6 +36,7 @@ import {
   remoteGenerationContextPayload,
   resolveRedteamGenerationContext,
 } from './remoteGenerationContext';
+import { isDeferredMinimumAgenticSeed } from './shared/agenticSeed';
 import {
   getGeneratedTestCaseLengthViolation,
   getMaxCharsPerMessageModifierValue,
@@ -634,7 +635,7 @@ function containsApplicableAgenticStrategy(
   if (!pluginIdMatchesStrategyTargets(pluginId, pluginConfig, id ?? '', targets)) {
     return false;
   }
-  if (AGENTIC_STRATEGIES_SET.has(id as any)) {
+  if (isDeferredMinimumAgenticSeed({ strategyId: id })) {
     return true;
   }
   return id === 'layer' && Array.isArray(config?.steps)
