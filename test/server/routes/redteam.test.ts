@@ -1072,6 +1072,12 @@ describe('Redteam Routes', () => {
         .send({ config: { ...config, purpose: 'newer' } });
       expect(newerResponse.status).toBe(200);
 
+      const statusWhileOlderPreflightIsPending = await request(app).get('/api/redteam/status');
+      expect(statusWhileOlderPreflightIsPending.body).toMatchObject({
+        hasRunningJob: true,
+        hasPendingRun: false,
+      });
+
       resolveFirstPreflight!([]);
       const olderResponse = await firstResponsePromise;
       expect(olderResponse.status).toBe(409);
@@ -1117,6 +1123,13 @@ describe('Redteam Routes', () => {
       const cancelResponse = await request(app).post('/api/redteam/cancel');
       expect(cancelResponse.status).toBe(200);
       expect(cancelResponse.body.message).toBe('Pending run cancelled');
+
+      const cancelledStatusResponse = await request(app).get('/api/redteam/status');
+      expect(cancelledStatusResponse.body).toMatchObject({
+        hasRunningJob: false,
+        hasPendingRun: false,
+        jobId: null,
+      });
 
       resolvePreflight!([]);
       const runResponse = await runResponsePromise;

@@ -379,11 +379,7 @@ async function doGenerateRedteamInternal(
         config: [configPath],
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
-      },
-      options.defaultConfig || {},
-      undefined,
-      {
-        beforeProviderLoad: async ({ providers, redteam, env, basePath }) => {
+        _beforeProviderLoad: async ({ providers, redteam, env, basePath }) => {
           const strategies = getEffectiveStrategyObjects(redteam, options.strategies);
           const strategyConfigError = getStrategyCompatibilityError(strategies, undefined);
           if (strategyConfigError) {
@@ -405,6 +401,7 @@ async function doGenerateRedteamInternal(
           }
         },
       },
+      options.defaultConfig || {},
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;

@@ -71,8 +71,8 @@ export class ConfigResolutionError extends Error {
   }
 }
 
-interface ResolveConfigsHooks {
-  beforeProviderLoad?: (context: {
+interface ResolveConfigsCommandOptions extends Partial<CommandLineOptions> {
+  _beforeProviderLoad?: (context: {
     providers: TestSuiteConfig['providers'];
     redteam: UnifiedConfig['redteam'];
     env: UnifiedConfig['env'];
@@ -769,10 +769,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
  *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
  */
 export async function resolveConfigs(
-  cmdObj: Partial<CommandLineOptions>,
+  cmdObj: ResolveConfigsCommandOptions,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
-  hooks: ResolveConfigsHooks = {},
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -944,7 +943,7 @@ export async function resolveConfigs(
     );
   }
 
-  await hooks.beforeProviderLoad?.({
+  await cmdObj._beforeProviderLoad?.({
     providers: filteredProviderConfigs,
     redteam: config.redteam,
     env: config.env,

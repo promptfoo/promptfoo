@@ -47,17 +47,26 @@ export type { Strategy };
 export const INTERNAL_PER_TURN_LAYERS_ERROR =
   'Strategy config field "_perTurnLayers" is reserved for internal layer composition; configure per-turn transforms with a layer strategy';
 
-function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
+function hasUserConfiguredPerTurnLayers(
+  strategy: unknown,
+  ancestors: ReadonlySet<object> = new Set(),
+): boolean {
   if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
     return false;
   }
+  if (ancestors.has(strategy)) {
+    return false;
+  }
+
+  const nextAncestors = new Set(ancestors);
+  nextAncestors.add(strategy);
 
   const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
   if (config && Object.prototype.hasOwnProperty.call(config, '_perTurnLayers')) {
     return true;
   }
   return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some(hasUserConfiguredPerTurnLayers)
+    ? config.steps.some((step) => hasUserConfiguredPerTurnLayers(step, nextAncestors))
     : false;
 }
 
@@ -66,7 +75,7 @@ export function getStrategyCompatibilityError(
   inputs: unknown,
   options: { includeDisabledStrategies?: boolean } = {},
 ): string | undefined {
-  if (strategies.some(hasUserConfiguredPerTurnLayers)) {
+  if (strategies.some((strategy) => hasUserConfiguredPerTurnLayers(strategy))) {
     return INTERNAL_PER_TURN_LAYERS_ERROR;
   }
 

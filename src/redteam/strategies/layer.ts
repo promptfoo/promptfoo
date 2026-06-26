@@ -11,8 +11,16 @@ function getApplicablePerTurnLayer(
   testCase: TestCaseWithPlugin,
   layer: LayerConfig,
   inheritedTargets?: string[],
+  ancestors: ReadonlySet<object> = new Set(),
 ): LayerConfig | undefined {
   const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+  if (typeof layer === 'object' && ancestors.has(layer)) {
+    return undefined;
+  }
+  const nextAncestors = new Set(ancestors);
+  if (typeof layer === 'object') {
+    nextAncestors.add(layer);
+  }
   const targets = (layerObj.config?.plugins as string[] | undefined) ?? inheritedTargets;
 
   if (!pluginMatchesStrategyTargets(testCase, layerObj.id, targets)) {
@@ -30,7 +38,7 @@ function getApplicablePerTurnLayer(
     ? (layerObj.config.steps as LayerConfig[])
     : [];
   const applicableSteps = steps
-    .map((step) => getApplicablePerTurnLayer(testCase, step, targets))
+    .map((step) => getApplicablePerTurnLayer(testCase, step, targets, nextAncestors))
     .filter((step): step is LayerConfig => step !== undefined);
 
   return applicableSteps.length > 0

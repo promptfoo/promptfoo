@@ -585,6 +585,14 @@ describe('loadApiProvider', () => {
     expect(provider.inputs).toEqual(inputs);
   });
 
+  it('keeps sequence prompt arrays private to the sequence provider', async () => {
+    const provider = await loadApiProvider('sequence', {
+      options: { config: { inputs: ['First {{prompt}}', 'Second {{prompt}}'] } },
+    });
+
+    expect(provider.inputs).toBeUndefined();
+  });
+
   it('loadApiProvider with openai:completion', async () => {
     const provider = await loadApiProvider('openai:completion');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
@@ -2490,6 +2498,44 @@ inputs:
       ),
     ).resolves.toEqual([{ context: 'Reference context', question: 'User question' }]);
     expect(getProviderFromCloud).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000000');
+  });
+
+  it.each([
+    {
+      label: 'empty local metadata over cloud metadata',
+      localInputs: {} as Record<string, string>,
+      cloudInputs: { context: 'Cloud context', question: 'Cloud question' },
+    },
+    {
+      label: 'local metadata over empty cloud metadata',
+      localInputs: { context: 'Local context', question: 'Local question' },
+      cloudInputs: {} as Record<string, string>,
+    },
+  ])('matches runtime and preflight precedence for $label', async ({
+    localInputs,
+    cloudInputs,
+  }) => {
+    const providerId = 'promptfoo://provider/00000000-0000-0000-0000-000000000009';
+    vi.mocked(getProviderFromCloud)
+      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs })
+      .mockResolvedValueOnce({ id: 'echo', inputs: cloudInputs });
+
+    const configuredProvider = { id: providerId, config: { inputs: localInputs } };
+    const provider = await loadApiProvider(providerId, {
+      options: configuredProvider,
+    });
+    const preflightInputs = await resolveProviderInputsForValidation([configuredProvider]);
+
+    expect(provider.inputs).toEqual(localInputs);
+    expect(preflightInputs).toEqual([localInputs]);
+  });
+
+  it('ignores sequence prompt arrays during provider preflight', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        { id: 'sequence', config: { inputs: ['First {{prompt}}', 'Second {{prompt}}'] } },
+      ]),
+    ).resolves.toEqual([undefined]);
   });
 
   it.each([
