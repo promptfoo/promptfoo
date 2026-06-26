@@ -89,52 +89,66 @@ describe('runtime notice state', () => {
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
-  it('expires an abandoned lease without unlinking an active prior generation', () => {
+  it('keeps a transition exclusive across a lease generation boundary', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+    vi.setSystemTime(new Date('2026-06-22T12:00:29.999Z'));
     const noticeId = 'node20-removal-2026-07-30';
-    let priorLeasePath = '';
-    let priorLeaseInode = 0;
     let nextLeaseResult: string | undefined;
 
     expect(
       withRuntimeNoticeStateLock(noticeId, () => {
         const noticeDirectory = path.join(configDirectory, 'notices');
-        priorLeasePath = path.join(
-          noticeDirectory,
-          fs.readdirSync(noticeDirectory).find((entry) => entry.includes('.lock.'))!,
-        );
-        priorLeaseInode = fs.statSync(priorLeasePath).ino;
-        vi.setSystemTime(new Date('2026-06-22T12:00:30.001Z'));
+        expect(
+          fs.readdirSync(noticeDirectory).filter((entry) => entry.includes('.lock.')),
+        ).toHaveLength(2);
+        vi.setSystemTime(new Date('2026-06-22T12:00:30.000Z'));
 
-        nextLeaseResult = withRuntimeNoticeStateLock(noticeId, () => {
-          expect(fs.statSync(priorLeasePath).ino).toBe(priorLeaseInode);
-          expect(
-            fs.readdirSync(noticeDirectory).filter((entry) => entry.includes('.lock.')),
-          ).toHaveLength(2);
-          return 'claimed';
-        });
-        expect(fs.statSync(priorLeasePath).ino).toBe(priorLeaseInode);
+        nextLeaseResult = withRuntimeNoticeStateLock(noticeId, () => 'claimed');
         return 'original';
       }),
     ).toBe('original');
 
-    expect(nextLeaseResult).toBe('claimed');
+    expect(nextLeaseResult).toBeUndefined();
+    expect(withRuntimeNoticeStateLock(noticeId, () => 'claimed')).toBe('claimed');
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 
-  it('uses a distinct lease generation after a clock rollback', () => {
+  it('ignores abandoned lease files after the protected generations pass', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const initialTime = new Date('2026-06-22T12:00:00.000Z');
+    vi.setSystemTime(initialTime);
+    const noticeId = 'node20-removal-2026-07-30';
+    const noticeDirectory = path.join(configDirectory, 'notices');
+    fs.mkdirSync(noticeDirectory, { recursive: true });
+    const generation = Math.floor(initialTime.getTime() / 30_000);
+    const abandonedLocks = [generation, generation + 1].map((value) =>
+      path.join(noticeDirectory, `${noticeId}.last-shown.lock.${value}`),
+    );
+    for (const lockPath of abandonedLocks) {
+      fs.writeFileSync(lockPath, 'abandoned\n');
+    }
+
+    expect(withRuntimeNoticeStateLock(noticeId, () => 'claimed')).toBeUndefined();
+
+    vi.setSystemTime(new Date(initialTime.getTime() + 60_000));
+    expect(withRuntimeNoticeStateLock(noticeId, () => 'claimed')).toBe('claimed');
+    expect(fs.readdirSync(noticeDirectory).sort()).toEqual(
+      abandonedLocks.map((lockPath) => path.basename(lockPath)).sort(),
+    );
+  });
+
+  it('keeps a transition exclusive across an adjacent clock rollback', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-06-22T12:01:00.000Z'));
     const noticeId = 'node20-removal-2026-07-30';
     let rollbackResult: string | undefined;
 
     withRuntimeNoticeStateLock(noticeId, () => {
-      vi.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+      vi.setSystemTime(new Date('2026-06-22T12:00:59.999Z'));
       rollbackResult = withRuntimeNoticeStateLock(noticeId, () => 'claimed');
     });
 
-    expect(rollbackResult).toBe('claimed');
+    expect(rollbackResult).toBeUndefined();
     expect(fs.readdirSync(path.join(configDirectory, 'notices'))).toEqual([]);
   });
 });

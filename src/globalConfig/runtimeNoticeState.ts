@@ -43,29 +43,38 @@ export function writeRuntimeNoticeLastShownAt(noticeId: string, lastShownAt: str
 
 /**
  * Run a synchronous state transition while holding an exclusive per-notice lease. A concurrent
- * caller returns undefined instead of duplicating the transition. The time-scoped filename means
- * an abandoned lease stops contending after a bounded interval without unlinking another process's
- * newly acquired lock.
+ * caller returns undefined instead of duplicating the transition. Each caller reserves the current
+ * and following generation so a lease cannot expire at a bucket boundary. Abandoned leases stop
+ * contending after a bounded interval without unlinking another process's newly acquired lock.
  */
 export function withRuntimeNoticeStateLock<T>(noticeId: string, callback: () => T): T | undefined {
   const leaseGeneration = Math.floor(Date.now() / RUNTIME_NOTICE_LOCK_LEASE_MS);
-  const lockPath = `${getRuntimeNoticeStatePath(noticeId, true)}.lock.${leaseGeneration}`;
-  let lockDescriptor: number;
+  const statePath = getRuntimeNoticeStatePath(noticeId, true);
+  const acquiredLocks: { descriptor: number; path: string }[] = [];
 
   try {
-    lockDescriptor = fs.openSync(lockPath, 'wx', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      return undefined;
+    for (const generation of [leaseGeneration, leaseGeneration + 1]) {
+      const lockPath = `${statePath}.lock.${generation}`;
+      let lockDescriptor: number;
+
+      try {
+        lockDescriptor = fs.openSync(lockPath, 'wx', 0o600);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          return undefined;
+        }
+        throw error;
+      }
+
+      acquiredLocks.push({ descriptor: lockDescriptor, path: lockPath });
+      fs.writeFileSync(lockDescriptor, `${process.pid}\n`);
     }
-    throw error;
-  }
 
-  try {
-    fs.writeFileSync(lockDescriptor, `${process.pid}\n`);
     return callback();
   } finally {
-    fs.closeSync(lockDescriptor);
-    fs.rmSync(lockPath, { force: true });
+    for (const lock of acquiredLocks.reverse()) {
+      fs.closeSync(lock.descriptor);
+      fs.rmSync(lock.path, { force: true });
+    }
   }
 }
