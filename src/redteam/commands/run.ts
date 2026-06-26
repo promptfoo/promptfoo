@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { type Command, InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
@@ -13,11 +14,21 @@ import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
 import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
-import type { Command } from 'commander';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
 type RedteamRunCliOptions = Omit<RedteamRunOptions, 'tags'> & { tag?: Record<string, string> };
+
+function parsePositiveSafeInteger(value: string): number {
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new InvalidArgumentError('must be a positive integer');
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new InvalidArgumentError('must be a positive integer');
+  }
+  return parsed;
+}
 
 function applyCloudRunOverrides(config: Record<string, unknown>, opts: RedteamRunOptions) {
   if (opts.description) {
@@ -114,11 +125,15 @@ export function redteamRunCommand(program: Command) {
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option('-d, --description <text>', 'Custom description/name for this scan run')
-    .option('--max-chars-per-message <number>', 'Maximum characters per generated message', (val) =>
-      Number.parseInt(val, 10),
+    .option(
+      '--max-chars-per-message <number>',
+      'Maximum characters per generated message',
+      parsePositiveSafeInteger,
     )
-    .option('--min-chars-per-message <number>', 'Minimum characters per generated message', (val) =>
-      Number.parseInt(val, 10),
+    .option(
+      '--min-chars-per-message <number>',
+      'Minimum characters per generated message',
+      parsePositiveSafeInteger,
     )
     .option(
       '--tag <key=value>',

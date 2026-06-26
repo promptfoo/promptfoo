@@ -80,6 +80,18 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     vi.clearAllMocks();
   });
 
+  it('enforces configured limits when retry context has no strategy metadata', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      minCharsPerMessage: 100,
+    });
+
+    const response = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    expect(response.error).toContain('minCharsPerMessage=100');
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should pass abortSignal to fetchWithProxy', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',

@@ -325,8 +325,6 @@ Use `redteam.maxCharsPerMessage` to cap each generated user message and `redteam
 
 ```yaml
 redteam:
-  minCharsPerMessage: 120
-  maxCharsPerMessage: 280
   plugins:
     - harmful:hate
     - id: 'contracts'

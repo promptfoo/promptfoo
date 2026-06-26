@@ -63,6 +63,18 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     vi.clearAllMocks();
   });
 
+  it('enforces configured limits when context has no strategy metadata', async () => {
+    const provider = new AuthoritativeMarkupInjectionProvider({
+      injectVar: 'input',
+      minCharsPerMessage: 100,
+    });
+
+    await expect(
+      provider.callApi('test prompt', createMockContext(mockTargetProvider)),
+    ).rejects.toThrow('minCharsPerMessage=100');
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should pass abortSignal to fetchWithProxy', async () => {
     const provider = new AuthoritativeMarkupInjectionProvider({
       injectVar: 'input',

@@ -95,7 +95,28 @@ export async function addLayerTestCases(
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
       const { steps: _steps, ...layerConfig } = config || {};
+      // A trailing per-turn transform may impose the final target-prompt limit.
+      // Preserve the layer/attack-provider precedence, but carry a trailing limit
+      // when no earlier scope declares that key so runtime target checks can see it.
+      const trailingCharLimits = remainingSteps.reduce<{
+        maxCharsPerMessage?: number;
+        minCharsPerMessage?: number;
+      }>((limits, step) => {
+        if (typeof step === 'string' || !step.config) {
+          return limits;
+        }
+        return {
+          ...limits,
+          ...(typeof step.config.maxCharsPerMessage === 'number'
+            ? { maxCharsPerMessage: step.config.maxCharsPerMessage }
+            : {}),
+          ...(typeof step.config.minCharsPerMessage === 'number'
+            ? { minCharsPerMessage: step.config.minCharsPerMessage }
+            : {}),
+        };
+      }, {});
       const attackProviderConfig = {
+        ...trailingCharLimits,
         ...layerConfig,
         ...(stepObj.config || {}),
       };

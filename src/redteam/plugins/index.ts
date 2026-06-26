@@ -89,6 +89,7 @@ export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
+  handlesCharLimitRetries?: (params: PluginActionParams) => boolean;
 }
 
 type PluginClass<T extends PluginConfig> = new (
@@ -324,6 +325,10 @@ function withCharLimitRetries(pluginFactory: PluginFactory): PluginFactory {
   return {
     ...pluginFactory,
     action: async (params: PluginActionParams) => {
+      if (pluginFactory.handlesCharLimitRetries?.(params)) {
+        return pluginFactory.action(params);
+      }
+
       const maxCharsPerMessage = getMaxCharsPerMessageFromConfig(params.config);
       const minCharsPerMessage = getMinCharsPerMessageFromConfig(params.config);
       if (!maxCharsPerMessage && !minCharsPerMessage) {
@@ -473,6 +478,10 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
+    // RedteamPluginBase.generateTests already owns constrained retries for local generation.
+    // Remote generation still needs the factory-level retry wrapper.
+    handlesCharLimitRetries: () =>
+      (PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote(),
     action: async ({
       provider,
       purpose,

@@ -646,6 +646,45 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should write message length limits to a newly generated redteam config', async () => {
+    vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      purpose: 'Test purpose',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      output: 'redteam.yaml',
+      minCharsPerMessage: 100,
+      maxCharsPerMessage: 200,
+    });
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redteam: expect.objectContaining({
+          minCharsPerMessage: 100,
+          maxCharsPerMessage: 200,
+        }),
+        tests: expect.any(Array),
+      }),
+      'redteam.yaml',
+      expect.any(Array),
+    );
+  });
+
   it('should properly handle numTests for both string and object-style plugins', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',

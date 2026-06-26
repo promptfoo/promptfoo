@@ -246,16 +246,18 @@ describe('RunOptionsContent', () => {
       expect(setValue).toHaveBeenCalledWith(String(REDTEAM_DEFAULTS.NUM_TESTS));
     });
 
-    it('should not persist fractional minCharsPerMessage', async () => {
+    it('should clear a pasted fractional minCharsPerMessage on blur', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const minCharsPerMessageInput = screen.getByLabelText('Min chars per message');
 
       await user.clear(minCharsPerMessageInput);
-      await user.type(minCharsPerMessageInput, '1.5');
+      await user.paste('1.5');
       await user.tab();
 
-      expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 1.5);
+      expect(mockUpdateConfig).toHaveBeenCalledWith('minCharsPerMessage', undefined);
+      expect(mockUpdateConfig).not.toHaveBeenCalledWith('minCharsPerMessage', 15);
+      expect(minCharsPerMessageInput).toHaveValue(null);
     });
 
     it('should not persist minCharsPerMessage above maxCharsPerMessage', async () => {

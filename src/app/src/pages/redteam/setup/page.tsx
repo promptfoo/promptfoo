@@ -78,6 +78,20 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
+const normalizeImportedPositiveInteger = (
+  value: unknown,
+  fieldName: 'minCharsPerMessage' | 'maxCharsPerMessage',
+): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof parsed !== 'number' || !Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`redteam.${fieldName} must be a positive integer`);
+  }
+  return parsed;
+};
+
 const TAB_CONFIG = [
   { value: '0', label: 'Target Type', icon: Crosshair },
   { value: '1', label: 'Target Config', icon: Settings },
@@ -367,8 +381,14 @@ export default function RedTeamSetupPage() {
         provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
-        maxCharsPerMessage: yamlConfig.redteam?.maxCharsPerMessage,
-        minCharsPerMessage: yamlConfig.redteam?.minCharsPerMessage,
+        maxCharsPerMessage: normalizeImportedPositiveInteger(
+          yamlConfig.redteam?.maxCharsPerMessage,
+          'maxCharsPerMessage',
+        ),
+        minCharsPerMessage: normalizeImportedPositiveInteger(
+          yamlConfig.redteam?.minCharsPerMessage,
+          'minCharsPerMessage',
+        ),
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition,
         testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',

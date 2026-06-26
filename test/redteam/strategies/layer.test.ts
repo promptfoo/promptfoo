@@ -513,6 +513,25 @@ describe('addLayerTestCases', () => {
       expect(result[0].metadata?.strategyConfig).toEqual({ minCharsPerMessage: 100 });
     });
 
+    it('propagates trailing per-turn limits for final target enforcement', async () => {
+      const result = await addLayerTestCases(
+        [{ vars: { input: 'test' }, metadata: { pluginId: 'test-plugin' } }],
+        'input',
+        { steps: ['jailbreak:hydra', { id: 'base64', config: { minCharsPerMessage: 100 } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({ minCharsPerMessage: 100 }),
+        }),
+      );
+      expect(result[0].metadata?.strategyConfig).toEqual(
+        expect.objectContaining({ minCharsPerMessage: 100 }),
+      );
+    });
+
     it('keeps trailing per-turn limits on their owning runtime layer', async () => {
       const result = await addLayerTestCases(
         [{ vars: { input: 'test' }, metadata: { pluginId: 'test-plugin' } }],

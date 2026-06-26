@@ -289,7 +289,23 @@ function validateScopedCharsPerMessageLimits(
   seen = new WeakSet<object>(),
 ): void {
   for (const [index, scope] of scopes.entries()) {
-    if (typeof scope === 'string' || !isRecord(scope) || seen.has(scope)) {
+    if (typeof scope === 'string') {
+      continue;
+    }
+    if (!isRecord(scope) || typeof scope.id !== 'string') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'layer steps must be strategy ids or strategy objects',
+        path: [...pathPrefix, index],
+      });
+      continue;
+    }
+    if (seen.has(scope)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'layer steps must not contain cycles',
+        path: [...pathPrefix, index],
+      });
       continue;
     }
     seen.add(scope);

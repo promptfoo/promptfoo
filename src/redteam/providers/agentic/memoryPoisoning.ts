@@ -95,18 +95,21 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       const totalTokenUsage = createEmptyTokenUsage();
 
+      // Validate every known prompt before making any target calls.
+      const charLimits = getTargetPromptCharLimits(context);
+      throwIfTargetPromptViolatesCharLimits(scenario.memory, charLimits);
+      throwIfTargetPromptViolatesCharLimits(prompt, charLimits);
+      throwIfTargetPromptViolatesCharLimits(scenario.followUp, charLimits);
+
       // Send the memory message to the provider.
-      throwIfTargetPromptViolatesCharLimits(scenario.memory, getTargetPromptCharLimits(context));
       const memoryResponse = await targetProvider.callApi(scenario.memory, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, memoryResponse);
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
-      throwIfTargetPromptViolatesCharLimits(prompt, getTargetPromptCharLimits(context));
       const testResponse = await targetProvider.callApi(prompt, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, testResponse);
 
       // Send the follow up question to the provider.
-      throwIfTargetPromptViolatesCharLimits(scenario.followUp, getTargetPromptCharLimits(context));
       const response = await targetProvider.callApi(scenario.followUp, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, response);
 

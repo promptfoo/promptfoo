@@ -995,6 +995,7 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          redteam: updatedRedteamConfig,
           tests: redteamTests,
         },
         'redteam.yaml',

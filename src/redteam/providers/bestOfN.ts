@@ -39,6 +39,8 @@ interface BestOfNConfig {
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
+  maxCharsPerMessage?: number;
+  minCharsPerMessage?: number;
 }
 
 export default class BestOfNProvider implements ApiProvider {
@@ -55,6 +57,8 @@ export default class BestOfNProvider implements ApiProvider {
       nSteps?: number;
       maxCandidatesPerStep?: number;
       targetId?: string;
+      maxCharsPerMessage?: number;
+      minCharsPerMessage?: number;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -68,6 +72,12 @@ export default class BestOfNProvider implements ApiProvider {
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
       targetId: options.targetId,
+      ...(options.maxCharsPerMessage !== undefined && {
+        maxCharsPerMessage: options.maxCharsPerMessage,
+      }),
+      ...(options.minCharsPerMessage !== undefined && {
+        minCharsPerMessage: options.minCharsPerMessage,
+      }),
     };
   }
 
@@ -167,11 +177,9 @@ export default class BestOfNProvider implements ApiProvider {
           );
 
           try {
-            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
-            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptViolatesCharLimits(
               renderedPrompt,
-              getTargetPromptCharLimits(context),
+              getTargetPromptCharLimits(context, this.config),
             );
             const response = await targetProvider.callApi(renderedPrompt, context, options);
             const sessionId = getSessionId(response, context);

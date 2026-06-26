@@ -173,6 +173,27 @@ describe('Plugins', () => {
   });
 
   describe('max chars retries', () => {
+    it('should not nest factory retries around local plugin retries', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.spyOn(mockProvider, 'callApi').mockResolvedValue({
+        output: 'Prompt: short',
+        error: undefined,
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { minCharsPerMessage: 100 },
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(3);
+    });
+
     it('should retry oversized local PII generations', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;

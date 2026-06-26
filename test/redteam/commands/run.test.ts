@@ -390,6 +390,23 @@ describe('redteamRunCommand', () => {
     });
   });
 
+  it.each([
+    '1.5',
+    '1e3',
+    '12junk',
+    '0',
+    '-1',
+  ])('should reject malformed message length limit %s', (value) => {
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+    runCommand!.exitOverride();
+
+    expect(() => runCommand!.parseOptions(['--min-chars-per-message', value])).toThrow(
+      'must be a positive integer',
+    );
+    expect(doRedteamRun).not.toHaveBeenCalled();
+  });
+
   describe('--tag flag for run-specific eval tags', () => {
     it('should document the repeatable --tag option in help text', () => {
       const runCommand = program.commands.find((cmd) => cmd.name() === 'run');

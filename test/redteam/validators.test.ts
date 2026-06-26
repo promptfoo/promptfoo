@@ -406,6 +406,21 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject malformed and cyclic layered strategy steps without throwing', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        strategies: [{ id: 'layer', config: { steps: [null] } }],
+      }).success,
+    ).toBe(false);
+
+    const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
+      id: 'layer',
+      config: { steps: [] },
+    };
+    cyclicLayer.config.steps.push(cyclicLayer);
+    expect(RedteamConfigSchema.safeParse({ strategies: [cyclicLayer] }).success).toBe(false);
+  });
+
   it('should preserve layered strategy step targets in message length ranges', () => {
     expect(
       RedteamConfigSchema.safeParse({
