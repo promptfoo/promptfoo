@@ -68,6 +68,7 @@ interface JobStatusResponse {
   hasRunningJob: boolean;
   hasPendingRun?: boolean;
   jobId?: string;
+  statusUnavailable?: boolean;
 }
 
 interface IntentEntry {
@@ -156,6 +157,7 @@ export default function Review({
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
+  const pollGenerationRef = useRef(0);
   const runRequestRef = useRef(0);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -278,7 +280,12 @@ export default function Review({
 
     const recoverJob = async () => {
       // Check what the server thinks is running
-      const { hasRunningJob, hasPendingRun, jobId: serverJobId } = await checkForRunningJob();
+      const {
+        hasRunningJob,
+        hasPendingRun,
+        jobId: serverJobId,
+        statusUnavailable,
+      } = await checkForRunningJob();
 
       if (hasRunningJob && serverJobId) {
         // Server has a running job - reconnect to it
@@ -310,7 +317,7 @@ export default function Review({
           showToast('Failed to reconnect to running job.', 'error');
           clearJob();
         }
-      } else if (hasPendingRun) {
+      } else if (hasPendingRun || statusUnavailable) {
         setIsRunning(true);
         startPendingRunPolling();
       } else if (savedJobId) {
@@ -449,29 +456,45 @@ export default function Review({
   const checkForRunningJob = useCallback(async (): Promise<JobStatusResponse> => {
     try {
       const response = await callApi('/redteam/status');
+      if (!response.ok) {
+        throw new Error(`Status request failed (${response.status})`);
+      }
       const data = await response.json();
       return data;
     } catch (error) {
       console.error('Error checking job status:', error);
-      return { hasRunningJob: false };
+      return { hasRunningJob: false, statusUnavailable: true };
     }
   }, []);
 
   const startPolling = useCallback(
     (jobId: string) => {
+      const pollGeneration = ++pollGenerationRef.current;
+
       // Clear any existing interval
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
 
+      let inFlight = false;
       const interval = window.setInterval(async () => {
+        if (inFlight || pollGeneration !== pollGenerationRef.current) {
+          return;
+        }
+        inFlight = true;
         try {
           const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
           if (!statusResponse.ok) {
             // Job not found - likely server restarted
             window.clearInterval(interval);
-            pollIntervalRef.current = null;
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
             setIsRunning(false);
             clearJob();
             showToast('Job was interrupted. Please try again.', 'error');
@@ -479,6 +502,9 @@ export default function Review({
           }
 
           const status = (await statusResponse.json()) as Job;
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
 
           if (status.logs) {
             setLogs(status.logs);
@@ -486,7 +512,10 @@ export default function Review({
 
           if (status.status === 'complete' || status.status === 'error') {
             window.clearInterval(interval);
-            pollIntervalRef.current = null;
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
             setIsRunning(false);
             clearJob();
 
@@ -515,6 +544,8 @@ export default function Review({
           }
         } catch (error) {
           console.error('Error polling job status:', error);
+        } finally {
+          inFlight = false;
         }
       }, 1000);
 
@@ -524,35 +555,64 @@ export default function Review({
   );
 
   const startPendingRunPolling = useCallback(() => {
+    const pollGeneration = ++pollGenerationRef.current;
     if (pollIntervalRef.current) {
       window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
 
+    let inFlight = false;
     const interval = window.setInterval(async () => {
-      const { hasRunningJob, hasPendingRun, jobId } = await checkForRunningJob();
-      if (hasRunningJob && jobId) {
-        setJob(jobId);
-        startPolling(jobId);
-      } else if (!hasPendingRun) {
-        window.clearInterval(interval);
-        pollIntervalRef.current = null;
-        setIsRunning(false);
-        clearJob();
+      if (inFlight || pollGeneration !== pollGenerationRef.current) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } =
+          await checkForRunningJob();
+        if (pollGeneration !== pollGenerationRef.current) {
+          return;
+        }
+        if (statusUnavailable) {
+          return;
+        }
+        if (hasRunningJob && jobId) {
+          setJob(jobId);
+          startPolling(jobId);
+        } else if (!hasPendingRun) {
+          window.clearInterval(interval);
+          if (pollIntervalRef.current === interval) {
+            pollIntervalRef.current = null;
+          }
+          pollGenerationRef.current += 1;
+          setIsRunning(false);
+          clearJob();
+        }
+      } finally {
+        inFlight = false;
       }
     }, 1000);
 
     pollIntervalRef.current = interval;
   }, [checkForRunningJob, clearJob, setJob, startPolling]);
 
-  const reconnectToRunningJob = async (): Promise<boolean> => {
-    const { hasRunningJob, jobId } = await checkForRunningJob();
-    if (!hasRunningJob || !jobId) {
+  const reconnectToActiveRun = async (runRequest: number): Promise<boolean> => {
+    const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } = await checkForRunningJob();
+    if (runRequest !== runRequestRef.current) {
       return false;
     }
-    setIsRunning(true);
-    setJob(jobId);
-    startPolling(jobId);
-    return true;
+    if (hasRunningJob && jobId) {
+      setIsRunning(true);
+      setJob(jobId);
+      startPolling(jobId);
+      return true;
+    }
+    if (hasPendingRun || statusUnavailable) {
+      setIsRunning(true);
+      startPendingRunPolling();
+      return true;
+    }
+    return false;
   };
 
   const handleRunWithSettings = async (replaceRunningJob = false) => {
@@ -598,6 +658,7 @@ export default function Review({
     }
 
     // Clear any existing polling interval before starting a new job
+    pollGenerationRef.current += 1;
     if (pollIntervalRef.current) {
       window.clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -654,7 +715,10 @@ export default function Review({
       }
       if (response.ok === false) {
         if (response.status === 409) {
-          setIsRunning(false);
+          const recoveredActiveRun = await reconnectToActiveRun(runRequest);
+          if (isCurrentRequest() && !recoveredActiveRun) {
+            setIsRunning(false);
+          }
           return;
         }
         throw new Error(
@@ -674,7 +738,10 @@ export default function Review({
         return;
       }
       console.error('Error running redteam:', error);
-      const recoveredExistingJob = replaceRunningJob && (await reconnectToRunningJob());
+      const recoveredExistingJob = replaceRunningJob && (await reconnectToActiveRun(runRequest));
+      if (!isCurrentRequest()) {
+        return;
+      }
       if (!recoveredExistingJob) {
         setIsRunning(false);
       }
@@ -693,6 +760,7 @@ export default function Review({
       });
 
       runRequestRef.current += 1;
+      pollGenerationRef.current += 1;
 
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
@@ -715,6 +783,7 @@ export default function Review({
 
   useEffect(() => {
     return () => {
+      pollGenerationRef.current += 1;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }

@@ -97,6 +97,16 @@ describe('validateStrategies', () => {
 });
 
 describe('getStrategyCompatibilityError', () => {
+  it('handles cyclic layer aliases without overflowing the stack', () => {
+    const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
+      id: 'layer',
+      config: { steps: [] },
+    };
+    cyclicLayer.config.steps.push(cyclicLayer);
+
+    expect(getStrategyCompatibilityError([cyclicLayer], undefined)).toBeUndefined();
+  });
+
   it.each([
     [{ id: 'posterior', config: { numTests: 0 } }],
     [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],

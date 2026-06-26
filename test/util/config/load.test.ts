@@ -1560,29 +1560,6 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
-  it('runs provider preflight after filtering and before provider construction', async () => {
-    const beforeProviderLoad = vi.fn(async ({ providers }) => {
-      expect(loadApiProviders).not.toHaveBeenCalled();
-      expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
-    });
-
-    await resolveConfigs(
-      { filterTargets: 'selected' },
-      {
-        prompts: ['{{prompt}}'],
-        providers: [
-          { id: 'echo', label: 'selected' },
-          { id: 'echo', label: 'excluded' },
-        ],
-      },
-      undefined,
-      { beforeProviderLoad },
-    );
-
-    expect(beforeProviderLoad).toHaveBeenCalledOnce();
-    expect(loadApiProviders).toHaveBeenCalledOnce();
-  });
-
   it('should load scenarios and tests from external files', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
@@ -2098,6 +2075,30 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+  });
+
+  it('runs provider preflight after filtering and before provider construction', async () => {
+    const beforeProviderLoad = vi.fn(async ({ providers }) => {
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
+    });
+
+    await resolveConfigs(
+      {
+        filterTargets: 'selected',
+        _beforeProviderLoad: beforeProviderLoad,
+      },
+      {
+        prompts: ['{{prompt}}'],
+        providers: [
+          { id: 'echo', label: 'selected' },
+          { id: 'echo', label: 'excluded' },
+        ],
+      },
+    );
+
+    expect(beforeProviderLoad).toHaveBeenCalledOnce();
+    expect(loadApiProviders).toHaveBeenCalledOnce();
   });
 });
 

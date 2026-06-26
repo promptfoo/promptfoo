@@ -976,28 +976,26 @@ describe('doGenerateRedteam', () => {
         ? 'Posterior strategy does not support multi-input targets'
         : undefined,
     );
-    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(
-      async (cmdObj, _defaultConfig, _type, hooks) => {
-        expect(cmdObj).toMatchObject({
-          filterProviders: 'selected',
-          filterTargets: 'selected',
-        });
-        await hooks?.beforeProviderLoad?.({
-          providers: [
-            {
-              id: 'echo',
-              config: {
-                inputs: { context: 'Reference context', question: 'User question' },
-              },
+    vi.mocked(configModule.resolveConfigs).mockImplementationOnce(async (cmdObj) => {
+      expect(cmdObj).toMatchObject({
+        filterProviders: 'selected',
+        filterTargets: 'selected',
+      });
+      await cmdObj._beforeProviderLoad?.({
+        providers: [
+          {
+            id: 'echo',
+            config: {
+              inputs: { context: 'Reference context', question: 'User question' },
             },
-          ],
-          redteam: { strategies: ['posterior'] },
-          env: undefined,
-          basePath: '/mock/path',
-        });
-        throw new Error('Expected compatibility preflight to reject');
-      },
-    );
+          },
+        ],
+        redteam: { strategies: ['posterior'] },
+        env: undefined,
+        basePath: '/mock/path',
+      });
+      throw new Error('Expected compatibility preflight to reject');
+    });
 
     await expect(
       doGenerateRedteam({

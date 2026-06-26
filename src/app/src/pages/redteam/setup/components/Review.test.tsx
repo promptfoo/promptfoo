@@ -1458,6 +1458,49 @@ Application Details:
       );
     });
 
+    it('should keep polling after a transient pending-run status failure', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          if (statusCalls <= 2) {
+            throw new Error('Temporary status failure');
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              hasRunningJob: true,
+              hasPendingRun: false,
+              jobId: 'recovered-after-error',
+            }),
+          } as Response;
+        }
+        if (url === '/eval/job/recovered-after-error') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: ['Started'] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(
+        () => {
+          expect(mockSetJob).toHaveBeenCalledWith('recovered-after-error');
+          expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+        },
+        { timeout: 3500 },
+      );
+    });
+
     it('should show completed state when returning to completed job', async () => {
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {
@@ -1742,6 +1785,116 @@ Application Details:
         ok: false,
         status: 409,
         json: async () => ({ error: 'Run request superseded by a newer request' }),
+      } as Response);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      });
+      expect(mockSetJob).not.toHaveBeenCalled();
+    });
+
+    it('should follow a newer cross-tab run after a current request is superseded', async () => {
+      const user = userEvent.setup({ delay: null });
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls < 3
+                ? { hasRunningJob: false, hasPendingRun: false }
+                : { hasRunningJob: false, hasPendingRun: true },
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: 'Run request superseded by a newer request' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it('should ignore stale replacement recovery after cancellation', async () => {
+      const user = userEvent.setup({ delay: null });
+      let statusCalls = 0;
+      let resolveRecoveryStatus: ((response: Response) => void) | undefined;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          if (statusCalls === 1) {
+            return {
+              ok: true,
+              json: async () => ({ hasRunningJob: false }),
+            } as Response;
+          }
+          if (statusCalls === 2) {
+            return {
+              ok: true,
+              json: async () => ({ hasRunningJob: true, jobId: 'existing-job' }),
+            } as Response;
+          }
+          return new Promise<Response>((resolve) => {
+            resolveRecoveryStatus = resolve;
+          });
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'Invalid replacement' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: true,
+            json: async () => ({ message: 'Pending run cancelled' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel existing & run new/i }));
+      await waitFor(() => expect(resolveRecoveryStatus).toBeDefined());
+      await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+      await waitFor(() => expect(mockClearJob).toHaveBeenCalled());
+
+      resolveRecoveryStatus!({
+        ok: true,
+        json: async () => ({ hasRunningJob: true, jobId: 'existing-job' }),
       } as Response);
 
       await waitFor(() => {

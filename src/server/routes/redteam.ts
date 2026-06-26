@@ -307,7 +307,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 let latestRunRequest = 0;
-let pendingRunRequests = 0;
+let pendingRunRequest: number | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
@@ -318,7 +318,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
   const runRequest = ++latestRunRequest;
-  pendingRunRequests += 1;
+  pendingRunRequest = runRequest;
   let compatibilityError: string | undefined;
   let preflightError: unknown;
   try {
@@ -326,7 +326,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   } catch (error) {
     preflightError = error;
   } finally {
-    pendingRunRequests -= 1;
+    if (pendingRunRequest === runRequest) {
+      pendingRunRequest = null;
+    }
   }
   if (runRequest !== latestRunRequest) {
     res.status(409).json({ error: 'Run request superseded by a newer request' });
@@ -409,8 +411,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
-  const hadPendingRun = pendingRunRequests > 0;
+  const hadPendingRun = pendingRunRequest !== null;
   latestRunRequest += 1;
+  pendingRunRequest = null;
   if (!currentJobId) {
     if (hadPendingRun) {
       res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Pending run cancelled' }));
@@ -506,7 +509,7 @@ redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void>
   res.json(
     RedteamSchemas.Status.Response.parse({
       hasRunningJob: currentJobId !== null,
-      hasPendingRun: pendingRunRequests > 0,
+      hasPendingRun: pendingRunRequest !== null,
       jobId: currentJobId,
     }),
   );

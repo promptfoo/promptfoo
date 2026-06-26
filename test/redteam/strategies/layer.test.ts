@@ -721,6 +721,34 @@ describe('addLayerTestCases', () => {
       );
     });
 
+    it('should ignore cyclic nested per-turn layer aliases', async () => {
+      const cyclicLayer: { id: string; config: { steps: unknown[] } } = {
+        id: 'layer',
+        config: { steps: [] },
+      };
+      cyclicLayer.config.steps.push(cyclicLayer);
+
+      const result = await addLayerTestCases(
+        [
+          {
+            vars: { input: 'canary task' },
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        'input',
+        { steps: ['jailbreak:hydra', cyclicLayer] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra');
+      expect(result[0].provider).toEqual(
+        expect.objectContaining({
+          config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
+        }),
+      );
+    });
+
     it('should consume nested plugin targeting before applying per-turn layers at runtime', async () => {
       const [testCase] = await addLayerTestCases(
         [

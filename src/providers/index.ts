@@ -151,7 +151,7 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
-      inputs: options.inputs ?? cloudProvider.inputs,
+      inputs: getConfiguredProviderInputs(options) ?? getConfiguredProviderInputs(cloudProvider),
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
@@ -213,7 +213,9 @@ export async function loadApiProvider(
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
       ret.delay = options.delay;
-      ret.inputs = options.inputs ?? renderedConfig?.inputs ?? ret.inputs;
+      ret.inputs =
+        getConfiguredProviderInputs({ inputs: options.inputs, config: renderedConfig }) ??
+        ret.inputs;
       ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;
     }
@@ -348,8 +350,13 @@ export function resolveProviderConfigs(
   return results;
 }
 
-function getConfiguredProviderInputs(options: Pick<ProviderOptions, 'inputs' | 'config'>): unknown {
-  return options.inputs ?? options.config?.inputs;
+function getConfiguredProviderInputs(
+  options: Pick<ProviderOptions, 'inputs' | 'config'>,
+): ProviderOptions['inputs'] {
+  const inputs = options.inputs ?? options.config?.inputs;
+  return inputs !== null && typeof inputs === 'object' && !Array.isArray(inputs)
+    ? (inputs as NonNullable<ProviderOptions['inputs']>)
+    : undefined;
 }
 
 async function resolveConfiguredProviderInputs(
