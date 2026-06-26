@@ -5,7 +5,7 @@ description: Configure Hyperbolic's OpenAI-compatible API to access DeepSeek, Qw
 
 # Hyperbolic
 
-The `hyperbolic` provider supports [Hyperbolic's API](https://docs.hyperbolic.xyz), which provides access to various LLM, image generation, audio generation, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai). This lets you integrate into existing applications that use the OpenAI SDK.
+The `hyperbolic` provider supports [Hyperbolic's serverless inference API](https://docs.hyperbolic.ai/inference/overview), which provides text, image, audio, and vision-language models through an [OpenAI-compatible API format](/docs/providers/openai).
 
 ## Setup
 
@@ -39,39 +39,18 @@ hyperbolic:audio:<model_name>
 
 ## Available Models
 
-Hyperbolic changes its hosted catalog over time. Check the
-[supported models page](https://docs.hyperbolic.xyz/docs/supported-models) before copying an ID.
-The examples later on this page use model IDs listed there at the time of this audit.
+Hyperbolic changes its hosted catalog over time. Check the current
+[text model catalog](https://docs.hyperbolic.ai/inference/text-apis) and the model list available
+to your account before copying an ID. The text example on this page uses an ID in that catalog.
 
 ### Text Models (LLMs)
 
-#### DeepSeek Models
+- `hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct` - Text and code generation
+- `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - General text generation
 
-Use the supported models page to find currently hosted DeepSeek IDs.
-
-#### Qwen Models
-
-- `hyperbolic:qwen/Qwen2.5-Coder-32B` - Text and code generation
-
-#### Meta Llama Models
-
-Use the supported models page to find currently hosted Llama IDs.
-
-#### Other Models
-
-Use the supported models page to find other hosted text models.
-
-### Vision-Language Models (VLMs)
-
-- `hyperbolic:qwen/Qwen2.5-VL-72B-Instruct` - Vision-language model
-
-### Image Generation Models
-
-- `hyperbolic:image:SDXL1.0-base` - Image generation
-
-### Audio Generation Models
-
-- `hyperbolic:audio:Melo-TTS` - Text-to-speech model
+For vision-language models, confirm a current multimodal ID in your account's model list. For
+image and audio model IDs, use Hyperbolic's current [image API](https://docs.hyperbolic.ai/inference/image-apis)
+and [audio API](https://docs.hyperbolic.ai/inference/audio-apis) documentation.
 
 ## Configuration
 
@@ -79,7 +58,7 @@ Configure the provider in your promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: hyperbolic:deepseek-ai/DeepSeek-R1
+  - id: hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct
     config:
       temperature: 0.1
       top_p: 0.9
@@ -139,7 +118,7 @@ providers:
 prompts:
   - file://prompts/coding_assistant.json
 providers:
-  - id: hyperbolic:qwen/Qwen2.5-Coder-32B
+  - id: hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct
     config:
       temperature: 0.1
       max_tokens: 4096
@@ -154,79 +133,6 @@ tests:
         value: 'def lcs'
       - type: contains
         value: 'dynamic programming'
-```
-
-### Image Generation Example
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts:
-  - 'A futuristic city skyline at sunset with flying cars'
-providers:
-  - id: hyperbolic:image:SDXL1.0-base
-    config:
-      width: 1024
-      height: 1024
-      cfg_scale: 7.0
-      steps: 30
-      negative_prompt: 'blurry, low quality'
-
-tests:
-  - assert:
-      - type: javascript
-        value: output.startsWith('data:image/')
-```
-
-### Audio Generation Example
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts:
-  - 'Welcome to Hyperbolic AI. We are excited to help you build amazing applications.'
-providers:
-  - id: hyperbolic:audio:Melo-TTS
-    config:
-      voice: 'alloy'
-      speed: 1.0
-
-tests:
-  - assert:
-      - type: javascript
-        value: context.providerResponse?.audio?.format === 'wav'
-```
-
-### Vision-Language Model Example
-
-```yaml
-prompts:
-  - |
-    [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "text",
-            "text": "What's in this image?"
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://example.com/image.jpg"
-            }
-          }
-        ]
-      }
-    ]
-providers:
-  - id: hyperbolic:qwen/Qwen2.5-VL-72B-Instruct
-    config:
-      temperature: 0.1
-      max_tokens: 1024
-
-tests:
-  - assert:
-      - type: contains
-        value: 'image shows'
 ```
 
 Example prompt template (`prompts/coding_assistant.json`):
@@ -246,33 +152,23 @@ Example prompt template (`prompts/coding_assistant.json`):
 
 ## Cost Information
 
-Pricing changes independently of promptfoo. Check Hyperbolic's current model catalog before
+Pricing changes independently of Promptfoo. Check Hyperbolic's current API documentation before
 adding cost assertions.
 
 ### Text Models
 
-See the supported models page for current text-model pricing.
+See the [text model catalog](https://docs.hyperbolic.ai/inference/text-apis) for current pricing.
 
 ### Image Models
 
-See the supported models page for current image-model pricing.
+See the [image API documentation](https://docs.hyperbolic.ai/inference/image-apis) for current pricing.
 
 ### Audio Models
 
-See the supported models page for current audio-model pricing.
-
-## Getting Started
-
-Test your setup with working examples:
-
-```bash
-npx promptfoo@latest init --example provider-hyperbolic
-```
-
-This includes tested configurations for text generation, image creation, audio synthesis, and vision tasks.
+See the [audio API documentation](https://docs.hyperbolic.ai/inference/audio-apis) for current pricing.
 
 ## Notes
 
-- **Model availability varies** - Check the supported models page for current access requirements
+- **Model availability varies** - Check Hyperbolic's current API documentation and your account's model list
 - All endpoints use OpenAI-compatible format for easy integration
 - VLM models support multimodal inputs (text + images)
