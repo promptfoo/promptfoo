@@ -8,8 +8,8 @@ import {
   storeBlob,
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
-import { sanitizeBlobMimeType } from '../../blobs/mimeTypes';
-import { getDb } from '../../database';
+import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from '../../blobs/mimeTypes';
+import { getDb, signalEvaluationChanged } from '../../database';
 import {
   blobAssetsTable,
   blobReferencesTable,
@@ -88,6 +88,7 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 
     const result = await storeBlob(data, mimeType, refContext);
+    await signalEvaluationChanged(evalId);
     res.json(BlobsSchemas.Upload.Response.parse(result));
   } catch (error) {
     sendError(res, 500, 'Failed to store blob', error);
@@ -541,10 +542,14 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
     // Do not redirect legacy active-content metadata to a provider URL whose response headers
-    // this server cannot sanitize. Stream it through the inert MIME boundary below instead.
+    // this server cannot sanitize. Fallback metadata may itself be the sanitized remnant of a
+    // legacy unsafe provider object, so stream it through the inert MIME boundary below too.
     const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
     const presigned =
-      assetMimeType === asset.mimeType.trim().toLowerCase() ? await getBlobUrl(hash) : null;
+      assetMimeType !== BLOB_MIME_TYPE_FALLBACK &&
+      assetMimeType === asset.mimeType.trim().toLowerCase()
+        ? await getBlobUrl(hash)
+        : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;

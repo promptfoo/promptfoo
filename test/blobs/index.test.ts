@@ -342,13 +342,22 @@ describe('storeBlob failure and MIME boundaries', () => {
     expect(deleteCalls).toEqual([]);
   });
 
-  it('rolls back newly created bytes when reference persistence fails', async () => {
+  it('does not delete bytes another store may have referenced when persistence fails', async () => {
     setStoreProvider(false);
+
+    await expect(storeBlob(Buffer.from('bytes'), 'image/png', { evalId })).resolves.toBeDefined();
 
     await expect(
       storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
     ).rejects.toThrow();
-    expect(deleteCalls).toEqual([hash]);
+    // A content-addressed provider can report two concurrent first writes as non-deduplicated.
+    // The failed transaction cannot prove exclusive ownership of the shared bytes.
+    expect(deleteCalls).toEqual([]);
+
+    const db = await getDb();
+    await expect(
+      db.select().from(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId)).get(),
+    ).resolves.toMatchObject({ blobHash: hash });
   });
 
   it('downgrades unsafe provider metadata on deduplication and reads', async () => {

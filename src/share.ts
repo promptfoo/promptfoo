@@ -17,7 +17,11 @@ import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import { persistTraceMetadata } from './models/evalResult';
-import { MAX_TRACES_PER_APPEND_REQUEST } from './types/api/eval';
+import {
+  MAX_SPANS_PER_APPEND_REQUEST,
+  MAX_SPANS_PER_TRACE,
+  MAX_TRACES_PER_APPEND_REQUEST,
+} from './types/api/eval';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -632,6 +636,41 @@ async function uploadTraceBlobRefsForShare(
   }
 }
 
+function segmentTraceForShare(trace: EvalTraces[number]): EvalTraces {
+  if (trace.spans.length === 0) {
+    return [trace];
+  }
+
+  const emptyTraceSize = getResultSize({ ...trace, spans: [] });
+  const maxTraceSize = TARGET_SHARE_CHUNK_SIZE - 2; // Account for the enclosing request array.
+  const segments: EvalTraces = [];
+  let segmentSpans: typeof trace.spans = [];
+  let segmentSize = emptyTraceSize;
+
+  for (const span of trace.spans) {
+    const separatorSize = segmentSpans.length > 0 ? 1 : 0;
+    const spanSize = getResultSize(span);
+    if (
+      segmentSpans.length > 0 &&
+      (segmentSpans.length >= MAX_SPANS_PER_TRACE ||
+        segmentSize + separatorSize + spanSize > maxTraceSize)
+    ) {
+      segments.push({ ...trace, spans: segmentSpans });
+      segmentSpans = [];
+      segmentSize = emptyTraceSize;
+    }
+
+    segmentSize += (segmentSpans.length > 0 ? 1 : 0) + spanSize;
+    segmentSpans.push(span);
+  }
+
+  if (segmentSpans.length > 0) {
+    segments.push({ ...trace, spans: segmentSpans });
+  }
+
+  return segments;
+}
+
 async function sendTraceChunksForShare(
   traces: EvalTraces,
   url: string,
@@ -642,9 +681,10 @@ async function sendTraceChunksForShare(
     return [];
   }
 
+  const traceSegments = traces.flatMap(segmentTraceForShare);
   const tracesPerChunk = Math.min(
     MAX_TRACES_PER_APPEND_REQUEST,
-    Math.max(1, Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traces))),
+    Math.max(1, Math.floor(TARGET_SHARE_CHUNK_SIZE / findLargestItemSize(traceSegments))),
   );
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
@@ -653,8 +693,27 @@ async function sendTraceChunksForShare(
   const targetUrl = `${url}/${evalId}/traces`;
   const acceptedTraces: EvalTraces = [];
 
-  for (let offset = 0; offset < traces.length; offset += tracesPerChunk) {
-    const chunk = traces.slice(offset, offset + tracesPerChunk);
+  let offset = 0;
+  while (offset < traceSegments.length) {
+    const chunkOffset = offset;
+    const chunk: EvalTraces = [];
+    const chunkTraceIds = new Set<string>();
+    let spanCount = 0;
+    while (offset < traceSegments.length && chunk.length < tracesPerChunk) {
+      const nextTrace = traceSegments[offset];
+      if (chunk.length > 0 && spanCount + nextTrace.spans.length > MAX_SPANS_PER_APPEND_REQUEST) {
+        break;
+      }
+      // The receiver rejects duplicate trace IDs within one request. Consecutive segments from
+      // one oversized trace therefore travel in separate, idempotent append requests.
+      if (chunkTraceIds.has(nextTrace.traceId)) {
+        break;
+      }
+      chunk.push(nextTrace);
+      chunkTraceIds.add(nextTrace.traceId);
+      spanCount += nextTrace.spans.length;
+      offset += 1;
+    }
     let acceptedCount = 0;
     try {
       await sendChunkWithRetry(
@@ -675,14 +734,14 @@ async function sendTraceChunksForShare(
       if (error instanceof UnsupportedShareEndpointError) {
         logger.warn(
           'The self-hosted server does not support the remaining trace data. Upgrade the server to transfer all traces.',
-          { acceptedTraceCount: acceptedTraces.length },
+          { acceptedTraceSegmentCount: acceptedTraces.length },
         );
         return acceptedTraces;
       }
       // Trace transfer is best-effort. Keep trying later chunks, but never interpolate an
       // untrusted remote response body into normal-level logs.
       logger.warn('Failed to upload a trace chunk; later trace chunks will still be attempted.', {
-        chunkOffset: offset,
+        chunkOffset,
         errorType: error instanceof Error ? error.name : typeof error,
       });
     }

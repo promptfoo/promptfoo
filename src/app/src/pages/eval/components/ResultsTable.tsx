@@ -17,7 +17,14 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import {
+  getMediaRefreshKey,
+  markMediaLoadFailed,
+  markMediaLoadSucceeded,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+} from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
@@ -131,8 +138,17 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   }
 
   return (
-    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
-      <source src={audioUrl} type={`audio/${format}`} />
+    <audio
+      key={`storage-audio-${getMediaRefreshKey(audioUrl)}`}
+      controls
+      style={{ maxWidth: '100%', height: '32px' }}
+      onLoadedData={(event) => markMediaLoadSucceeded(audioUrl, event.currentTarget)}
+    >
+      <source
+        src={audioUrl}
+        type={`audio/${format}`}
+        onError={(event) => markMediaLoadFailed(audioUrl, event.currentTarget)}
+      />
       Your browser does not support the audio element.
     </audio>
   );
@@ -354,24 +370,39 @@ function renderMediaVariableCell({
       : null;
   const imageSrc =
     mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
+  const videoSrc =
+    normalizedValue.startsWith('data:') ||
+    normalizedValue.startsWith('http') ||
+    normalizedValue.startsWith('/api/')
+      ? normalizedValue
+      : `data:${mediaType}/${format};base64,${value}`;
 
   const mediaElement =
     mediaType === 'audio' && audioSource ? (
-      <audio controls style={{ maxWidth: '100%' }}>
-        <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+      <audio
+        key={`variable-audio-${getMediaRefreshKey(audioSource.src)}`}
+        controls
+        style={{ maxWidth: '100%' }}
+        onLoadedData={(event) => markMediaLoadSucceeded(audioSource.src, event.currentTarget)}
+      >
+        <source
+          src={audioSource.src}
+          type={audioSource.type || 'audio/mpeg'}
+          onError={(event) => markMediaLoadFailed(audioSource.src, event.currentTarget)}
+        />
         Your browser does not support the audio element.
       </audio>
     ) : mediaType === 'video' ? (
-      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+      <video
+        key={`variable-video-${getMediaRefreshKey(videoSrc)}`}
+        controls
+        style={{ maxWidth: '100%', maxHeight: '200px' }}
+        onLoadedData={(event) => markMediaLoadSucceeded(videoSrc, event.currentTarget)}
+      >
         <source
-          src={
-            normalizedValue.startsWith('data:') ||
-            normalizedValue.startsWith('http') ||
-            normalizedValue.startsWith('/api/')
-              ? normalizedValue
-              : `data:${mediaType}/${format};base64,${value}`
-          }
+          src={videoSrc}
           type={`video/${format || 'mp4'}`}
+          onError={(event) => markMediaLoadFailed(videoSrc, event.currentTarget)}
         />
         Your browser does not support the video element.
       </video>
@@ -381,6 +412,7 @@ function renderMediaVariableCell({
         lightboxOpen,
         lightboxImage,
         maxTextLength,
+        mediaRefreshKey: getMediaRefreshKey(imageSrc),
         toggleLightbox,
         alt: 'Input image',
       })
@@ -1295,6 +1327,7 @@ function renderImageCellContent({
   lightboxOpen,
   lightboxImage,
   maxTextLength,
+  mediaRefreshKey,
   toggleLightbox,
 }: {
   imgSrc: string;
@@ -1303,11 +1336,13 @@ function renderImageCellContent({
   lightboxOpen: boolean;
   lightboxImage: string | null;
   maxTextLength: number;
+  mediaRefreshKey: string;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   return (
     <>
       <img
+        key={`variable-image-${mediaRefreshKey}`}
         src={imgSrc}
         alt={alt}
         style={{
@@ -1317,6 +1352,8 @@ function renderImageCellContent({
           objectFit: 'contain',
           cursor: 'pointer',
         }}
+        onError={(event) => markMediaLoadFailed(imgSrc, event.currentTarget)}
+        onLoad={(event) => markMediaLoadSucceeded(imgSrc, event.currentTarget)}
         onClick={() => toggleLightbox(imgSrc)}
       />
       {lightboxOpen && lightboxImage === imgSrc && (
@@ -1377,6 +1414,7 @@ function renderResultsTableCell({
     injectVarName,
   });
   const imgSrc = renderedImgSrc || rawImgSrc;
+  const mediaRefreshKey = getMediaRefreshKey(imgSrc);
   const cellContent = imgSrc
     ? renderImageCellContent({
         imgSrc,
@@ -1389,6 +1427,7 @@ function renderResultsTableCell({
         lightboxOpen,
         lightboxImage,
         maxTextLength,
+        mediaRefreshKey,
         toggleLightbox,
       })
     : renderedCellContent;

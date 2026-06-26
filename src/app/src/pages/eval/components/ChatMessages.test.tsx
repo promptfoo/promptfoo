@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import ChatMessages, { type Message } from './ChatMessages';
 
 const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
@@ -195,5 +195,102 @@ describe('ChatMessages', () => {
     expect(videoElement).toBeInTheDocument();
     expect(videoElement).toHaveClass('max-w-full');
     expect(videoElement.parentElement).toHaveClass('w-full', 'max-w-[500px]');
+  });
+
+  it('remounts a failed blob image when the eval row refreshes', () => {
+    const blobHash = 'b'.repeat(64);
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: 'Blob image',
+        image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+      },
+    ];
+    const initialRefresh = {};
+    const { rerender } = render(
+      <ChatMessages messages={messages} mediaRefreshToken={initialRefresh} />,
+    );
+    const firstImage = screen.getByAltText('Input');
+    fireEvent.error(firstImage);
+
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+
+    const refreshedImage = screen.getByAltText('Input');
+    expect(refreshedImage).not.toBe(firstImage);
+    expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${blobHash}`);
+  });
+
+  it('retries when a blob failure arrives after the eval row refresh', () => {
+    vi.useFakeTimers();
+    try {
+      const blobHash = 'c'.repeat(64);
+      const messages: Message[] = [
+        {
+          role: 'user',
+          content: 'Late blob failure',
+          image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+        },
+      ];
+      const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      const image = screen.getByAltText('Input');
+
+      rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      fireEvent.error(image);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      expect(image.getAttribute('src')).toContain('promptfoo_media_retry=');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let a pending retry overwrite a newly rendered blob source', () => {
+    vi.useFakeTimers();
+    try {
+      const firstHash = 'e'.repeat(64);
+      const secondHash = 'f'.repeat(64);
+      const createMessages = (hash: string): Message[] => [
+        {
+          role: 'user',
+          content: 'Changing blob image',
+          image: { blobRef: { uri: `promptfoo://blob/${hash}` } },
+        },
+      ];
+      const { rerender } = render(
+        <ChatMessages messages={createMessages(firstHash)} mediaRefreshToken={{}} />,
+      );
+      const firstImage = screen.getByAltText('Input');
+      fireEvent.error(firstImage);
+
+      rerender(<ChatMessages messages={createMessages(secondHash)} mediaRefreshToken={{}} />);
+      const secondImage = screen.getByAltText('Input');
+      expect(secondImage).not.toBe(firstImage);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      expect(secondImage).toHaveAttribute('src', `/api/blobs/${secondHash}`);
+      expect(secondImage.getAttribute('src')).not.toContain(firstHash);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps successfully resolved media mounted when the eval row refreshes', () => {
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: 'Inline image',
+        image: { data: FAKE_IMAGE_DATA_URL },
+      },
+    ];
+    const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    const firstImage = screen.getByAltText('Input');
+
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+
+    expect(screen.getByAltText('Input')).toBe(firstImage);
   });
 });

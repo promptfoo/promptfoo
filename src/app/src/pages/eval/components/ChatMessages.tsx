@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
 
 import { cn } from '@app/lib/utils';
-import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import {
+  getMediaRefreshKey,
+  markMediaLoadFailed,
+  markMediaLoadSucceeded,
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+} from '@app/utils/media';
 import invariant from '@promptfoo/util/invariant';
 import { Crosshair, Swords } from 'lucide-react';
 
@@ -24,7 +31,15 @@ export interface LoadingMessage extends BaseMessage {
 
 export type Message = LoadedMessage | LoadingMessage;
 
-const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
+const ChatMessage = ({
+  message,
+  index,
+  mediaRefreshToken,
+}: {
+  message: Message;
+  index: number;
+  mediaRefreshToken?: unknown;
+}) => {
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
   const roleLabel = {
@@ -66,8 +81,18 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
         return (
           <div>
-            <audio controls className="w-full max-w-[500px]" data-testid="audio">
-              <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+            <audio
+              key={`message-audio-${getMediaRefreshKey(audioSource.src)}`}
+              controls
+              className="w-full max-w-[500px]"
+              data-testid="audio"
+              onLoadedData={(event) => markMediaLoadSucceeded(audioSource.src, event.currentTarget)}
+            >
+              <source
+                src={audioSource.src}
+                type={audioSource.type || 'audio/mpeg'}
+                onError={(event) => markMediaLoadFailed(audioSource.src, event.currentTarget)}
+              />
               Your browser does not support the audio element.
             </audio>
           </div>
@@ -80,31 +105,39 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         }
 
         return (
-          <div
-            role="img"
-            aria-label={`${roleLabel} message image`}
+          <img
+            key={`message-image-${getMediaRefreshKey(imageSrc)}`}
+            src={imageSrc}
+            alt={`${roleLabel} message image`}
             data-testid="image"
-            className="min-h-[180px] w-[min(500px,70vw)] max-w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
-            style={{ backgroundImage: `url(${imageSrc})` }}
+            className="min-h-[180px] w-[min(500px,70vw)] max-w-full object-contain object-left sm:min-h-[300px]"
+            onError={(event) => markMediaLoadFailed(imageSrc, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(imageSrc, event.currentTarget)}
           />
         );
       }
       case 'video': {
+        const normalizedVideo = normalizeMediaText(loadedMessage.content);
+        const videoSrc =
+          normalizedVideo.startsWith('data:') ||
+          normalizedVideo.startsWith('http') ||
+          normalizedVideo.startsWith('/api/')
+            ? normalizedVideo
+            : `data:video/mp4;base64,${loadedMessage.content}`;
         return (
           <div className="flex w-full max-w-[500px] justify-center">
             <video
+              key={`message-video-${getMediaRefreshKey(videoSrc)}`}
               controls
               className="max-w-full"
               style={{ maxHeight: '200px' }}
               data-testid="video"
+              onLoadedData={(event) => markMediaLoadSucceeded(videoSrc, event.currentTarget)}
             >
               <source
-                src={
-                  loadedMessage?.content.startsWith('data:')
-                    ? loadedMessage?.content
-                    : `data:video/mp4;base64,${loadedMessage?.content}`
-                }
+                src={videoSrc}
                 type="video/mp4"
+                onError={(event) => markMediaLoadFailed(videoSrc, event.currentTarget)}
               />
               Your browser does not support the video element.
             </video>
@@ -124,18 +157,35 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
               {hasAudio && (
                 <div className="mb-2">
                   <audio
+                    key={`transcript-audio-${getMediaRefreshKey(audioSource?.src)}`}
                     controls
                     style={{ width: '100%', maxWidth: '400px', height: '36px' }}
                     data-testid="audio-with-transcript"
+                    onLoadedData={(event) =>
+                      markMediaLoadSucceeded(audioSource?.src, event.currentTarget)
+                    }
                   >
-                    <source src={audioSource?.src} type={audioSource?.type || 'audio/mpeg'} />
+                    <source
+                      src={audioSource?.src}
+                      type={audioSource?.type || 'audio/mpeg'}
+                      onError={(event) =>
+                        markMediaLoadFailed(audioSource?.src, event.currentTarget)
+                      }
+                    />
                     Your browser does not support the audio element.
                   </audio>
                 </div>
               )}
               {hasImage && (
                 <div className="mb-2">
-                  <img src={imageSrc} alt="Input" className="max-w-full max-h-[300px] rounded-lg" />
+                  <img
+                    key={`transcript-image-${getMediaRefreshKey(imageSrc)}`}
+                    src={imageSrc}
+                    alt="Input"
+                    className="max-w-full max-h-[300px] rounded-lg"
+                    onError={(event) => markMediaLoadFailed(imageSrc, event.currentTarget)}
+                    onLoad={(event) => markMediaLoadSucceeded(imageSrc, event.currentTarget)}
+                  />
                 </div>
               )}
               <p className={textClasses}>{loadedMessage.content}</p>
@@ -152,6 +202,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
     message?.content,
     (message as LoadedMessage)?.audio,
     (message as LoadedMessage)?.image,
+    mediaRefreshToken,
     textClasses,
   ]);
 
@@ -201,12 +252,15 @@ interface ChatMessagesProps {
   messages: Message[];
   displayTurnCount?: boolean;
   maxTurns?: number;
+  /** Changes when the backing eval row refreshes after an out-of-band blob upload. */
+  mediaRefreshToken?: unknown;
 }
 
 export default function ChatMessages({
   messages,
   displayTurnCount = false,
   maxTurns = 1,
+  mediaRefreshToken,
 }: ChatMessagesProps) {
   if (!messages || messages.length === 0) {
     return null;
@@ -220,7 +274,14 @@ export default function ChatMessages({
   return (
     <div className="flex flex-col gap-4 p-4 bg-[#F8F9FA] dark:bg-black/20">
       {messages.map((message, index) => {
-        const msg = <ChatMessage key={index} message={message} index={index} />;
+        const msg = (
+          <ChatMessage
+            key={index}
+            message={message}
+            index={index}
+            mediaRefreshToken={mediaRefreshToken}
+          />
+        );
         const shouldDisplayTurnCount = displayTurnCount && index % 2 === 0;
 
         return shouldDisplayTurnCount ? (

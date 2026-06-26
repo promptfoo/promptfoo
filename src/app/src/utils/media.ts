@@ -10,6 +10,97 @@ const STORAGE_REF_PREFIX = 'storageRef:';
 const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{32,64})/gi;
 const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
 
+const blobMediaRefreshVersions = new Map<string, number>();
+const retryingBlobMediaElements = new WeakSet<RetryableMediaElement>();
+const pendingBlobMediaRetryTimers = new WeakMap<RetryableMediaElement, number>();
+const BLOB_MEDIA_RETRY_DELAY_MS = 250;
+
+type RetryableMediaElement = HTMLImageElement | HTMLSourceElement;
+
+function isBlobMediaSource(source: string | undefined): source is string {
+  return Boolean(source?.includes('/api/blobs/'));
+}
+
+function clearBlobMediaRetry(element: RetryableMediaElement): void {
+  const retryTimer = pendingBlobMediaRetryTimers.get(element);
+  if (retryTimer !== undefined) {
+    window.clearTimeout(retryTimer);
+  }
+  pendingBlobMediaRetryTimers.delete(element);
+  retryingBlobMediaElements.delete(element);
+}
+
+function getRetriedMediaSource(source: string): string {
+  const separator = source.includes('?') ? '&' : '?';
+  return `${source}${separator}promptfoo_media_retry=${Date.now()}`;
+}
+
+/**
+ * Returns a stable DOM key for a media source. Blob load failures advance the source version so
+ * the next eval refresh remounts only media that previously failed.
+ */
+export function getMediaRefreshKey(source: string | undefined): string {
+  if (!isBlobMediaSource(source)) {
+    return 'stable';
+  }
+  const version = blobMediaRefreshVersions.get(source) ?? 0;
+  // Include the source so React never reuses a failed node for a different content hash while a
+  // bounded retry is still pending for the old source.
+  return `${source}:${version}`;
+}
+
+/**
+ * Records a failed blob load and schedules one bounded retry. The retry closes the race where the
+ * blob-arrival signal renders before an older in-flight request reports its 404. A later eval
+ * refresh remains the normal retry path when the blob has not arrived yet.
+ */
+export function markMediaLoadFailed(
+  source: string | undefined,
+  element: RetryableMediaElement,
+): void {
+  if (!isBlobMediaSource(source)) {
+    return;
+  }
+
+  blobMediaRefreshVersions.set(source, (blobMediaRefreshVersions.get(source) ?? 0) + 1);
+  if (retryingBlobMediaElements.has(element)) {
+    return;
+  }
+  retryingBlobMediaElements.add(element);
+
+  const retryTimer = window.setTimeout(() => {
+    pendingBlobMediaRetryTimers.delete(element);
+    if (!element.isConnected) {
+      retryingBlobMediaElements.delete(element);
+      return;
+    }
+    element.src = getRetriedMediaSource(source);
+    if (element instanceof HTMLSourceElement) {
+      (element.parentElement as HTMLMediaElement | null)?.load();
+    }
+  }, BLOB_MEDIA_RETRY_DELAY_MS);
+  pendingBlobMediaRetryTimers.set(element, retryTimer);
+}
+
+export function markMediaLoadSucceeded(
+  source: string | undefined,
+  loadedElement: HTMLImageElement | HTMLMediaElement,
+): void {
+  if (!isBlobMediaSource(source)) {
+    return;
+  }
+
+  const element =
+    loadedElement instanceof HTMLMediaElement
+      ? loadedElement.querySelector<HTMLSourceElement>('source')
+      : loadedElement;
+  if (!element) {
+    return;
+  }
+
+  clearBlobMediaRetry(element);
+}
+
 /** Number of items to fetch per page in the media library */
 export const MEDIA_PAGE_SIZE = 30;
 

@@ -22,12 +22,13 @@ vi.mock('../../../src/database');
 // Import after mocking
 import { getBlobByHash, getBlobUrl, storeBlob } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
-import { getDb } from '../../../src/database';
+import { getDb, signalEvaluationChanged } from '../../../src/database';
 
 const mockedIsBlobStorageEnabled = vi.mocked(isBlobStorageEnabled);
 const mockedGetBlobUrl = vi.mocked(getBlobUrl);
 const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
+const mockedSignalEvaluationChanged = vi.mocked(signalEvaluationChanged);
 
 const mockedStoreBlob = vi.mocked(storeBlob);
 describe('Blobs Routes', () => {
@@ -108,6 +109,7 @@ describe('Blobs Routes', () => {
         promptIdx: 2,
         testIdx: 1,
       });
+      expect(mockedSignalEvaluationChanged).toHaveBeenCalledWith(evalId);
     });
 
     it('downgrades a non-media (text/html) MIME to octet-stream before storage', async () => {
@@ -454,6 +456,27 @@ describe('Blobs Routes', () => {
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
       expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+    });
+
+    it('should not redirect fallback metadata that may hide legacy active content', async () => {
+      setupDbWithAssetAndReference(
+        {
+          hash: validHash,
+          mimeType: 'application/octet-stream',
+          sizeBytes: 2048,
+          provider: 's3',
+        },
+        { evalId: 'eval-normalized-svg' },
+      );
+      mockedGetBlobUrl.mockResolvedValue('https://storage.example/normalized-legacy-svg');
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
+
+      const response = await api.get(`/api/blobs/${validHash}`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('application/octet-stream');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
     });
 
     it('should use blob metadata MIME type when available', async () => {

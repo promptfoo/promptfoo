@@ -41,6 +41,17 @@ export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
+/**
+ * Emits a scoped view-server refresh without invalidating eval aggregates. Blob bytes and
+ * references are stored outside the eval table payload, but a late out-of-band upload still needs
+ * to make mounted media nodes retry their URL.
+ */
+export async function signalEvaluationChanged(evalId: string): Promise<void> {
+  // Keep this lazy to avoid a static cycle: signal.ts imports getDbSignalPath from this module.
+  const { updateSignalFile } = await import('./signal');
+  updateSignalFile(evalId);
+}
+
 async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
   // Enable foreign key constraints (required for referential integrity)
   await client.execute('PRAGMA foreign_keys = ON');

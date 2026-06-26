@@ -6,6 +6,9 @@ import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import {
+  getMediaRefreshKey,
+  markMediaLoadFailed,
+  markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
@@ -344,9 +347,12 @@ function renderMediaNode({
   if (primaryRenderedImageSrc) {
     return (
       <img
+        key={`primary-image-${getMediaRefreshKey(primaryRenderedImageSrc)}`}
         src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
+        onError={(event) => markMediaLoadFailed(primaryRenderedImageSrc, event.currentTarget)}
+        onLoad={(event) => markMediaLoadSucceeded(primaryRenderedImageSrc, event.currentTarget)}
         onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
@@ -356,8 +362,20 @@ function renderMediaNode({
     if (outputAudioSource) {
       return (
         <div className="audio-output">
-          <audio controls style={{ width: '100%' }} data-testid="audio-player">
-            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+          <audio
+            key={`audio-${getMediaRefreshKey(outputAudioSource.src)}`}
+            controls
+            style={{ width: '100%' }}
+            data-testid="audio-player"
+            onLoadedData={(event) =>
+              markMediaLoadSucceeded(outputAudioSource.src, event.currentTarget)
+            }
+          >
+            <source
+              src={outputAudioSource.src}
+              type={outputAudioSource.type || 'audio/mpeg'}
+              onError={(event) => markMediaLoadFailed(outputAudioSource.src, event.currentTarget)}
+            />
             Your browser does not support the audio element.
           </audio>
           {output.audio.transcript && (
@@ -385,12 +403,18 @@ function renderMediaNode({
       return (
         <div className="video-output">
           <video
+            key={`video-${getMediaRefreshKey(videoSource.src)}`}
             controls
             style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
             poster={videoSource.poster}
             data-testid="video-player"
+            onLoadedData={(event) => markMediaLoadSucceeded(videoSource.src, event.currentTarget)}
           >
-            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+            <source
+              src={videoSource.src}
+              type={videoSource.type || 'video/mp4'}
+              onError={(event) => markMediaLoadFailed(videoSource.src, event.currentTarget)}
+            />
             Your browser does not support the video element.
           </video>
           <div
@@ -498,11 +522,13 @@ function renderStructuredImages({
       addImageSrcComparisonKeys(renderedImageSrcs, src);
       return (
         <img
-          key={`img-${idx}`}
+          key={`img-${getMediaRefreshKey(src)}-${idx}`}
           src={src}
           alt={output.prompt || 'Generated image'}
           loading="lazy"
           style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+          onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
+          onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
           onClick={() => toggleLightbox(src)}
         />
       );
@@ -1017,8 +1043,20 @@ function renderResponseAudioPlayer(
 
   return (
     <div className="response-audio" style={{ marginBottom: '8px' }}>
-      <audio controls style={{ width: '100%', height: '32px' }} data-testid="response-audio-player">
-        <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
+      <audio
+        key={`response-audio-${getMediaRefreshKey(responseAudioSource.src)}`}
+        controls
+        style={{ width: '100%', height: '32px' }}
+        data-testid="response-audio-player"
+        onLoadedData={(event) =>
+          markMediaLoadSucceeded(responseAudioSource.src, event.currentTarget)
+        }
+      >
+        <source
+          src={responseAudioSource.src}
+          type={responseAudioSource.type || 'audio/mpeg'}
+          onError={(event) => markMediaLoadFailed(responseAudioSource.src, event.currentTarget)}
+        />
         Your browser does not support the audio element.
       </audio>
     </div>
@@ -1358,9 +1396,12 @@ function EvalOutputCell({
     () => ({
       img: ({ src, alt }: { src?: string; alt?: string }) => (
         <img
+          key={`markdown-image-${getMediaRefreshKey(src)}-${src}`}
           loading="lazy"
           src={src}
           alt={alt}
+          onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
+          onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
           onClick={() => toggleLightbox(src)}
           style={{ cursor: 'pointer' }}
         />

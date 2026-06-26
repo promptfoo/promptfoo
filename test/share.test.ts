@@ -1005,6 +1005,108 @@ describe('createShareableUrl', () => {
       expect(traceBodies.map((body) => body.length)).toEqual([2, 1, 1]);
     });
 
+    it('keeps every trace request within the aggregate span limit', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const traces = Array.from({ length: 1_000 }, (_, traceIndex) => ({
+        traceId: `t${traceIndex}`,
+        evaluationId: mockEval.id as string,
+        testCaseId: '',
+        spans: Array.from({ length: 21 }, (_, spanIndex) => ({
+          spanId: String(spanIndex),
+          name: '',
+          startTime: spanIndex,
+        })),
+      }));
+      mockEval.getTraces = vi.fn().mockResolvedValue(traces);
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      });
+
+      const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      const traceBodies = mockFetch.mock.calls
+        .filter(([url]) => /\/traces$/.test(url as string))
+        .map(([, options]) => JSON.parse(options.body));
+      expect(traceBodies.length).toBeGreaterThan(1);
+      expect(traceBodies.flat()).toHaveLength(traces.length);
+      expect(
+        traceBodies.every(
+          (body) =>
+            body.reduce(
+              (total: number, trace: { spans: unknown[] }) => total + trace.spans.length,
+              0,
+            ) <= 20_000,
+        ),
+      ).toBe(true);
+    });
+
+    it('segments a trace that exceeds the per-trace span limit', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const trace = {
+        traceId: 'oversized-local-trace',
+        evaluationId: mockEval.id as string,
+        testCaseId: 'oversized-test',
+        spans: Array.from({ length: 10_001 }, (_, spanIndex) => ({
+          spanId: `span-${spanIndex}`,
+          name: 'span',
+          startTime: spanIndex,
+        })),
+      };
+      mockEval.getTraces = vi.fn().mockResolvedValue([trace]);
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      });
+
+      const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      const traceBodies = mockFetch.mock.calls
+        .filter(([url]) => /\/traces$/.test(url as string))
+        .map(([, options]) => JSON.parse(options.body));
+      expect(traceBodies).toHaveLength(2);
+      expect(traceBodies.map((body) => body[0].spans.length)).toEqual([10_000, 1]);
+      expect(traceBodies[0][0].traceId).toBe(traceBodies[1][0].traceId);
+    });
+
+    it('segments a trace whose spans exceed the target request size', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const trace = {
+        traceId: 'large-span-payload',
+        evaluationId: mockEval.id as string,
+        testCaseId: 'large-span-test',
+        spans: Array.from({ length: 1_000 }, (_, spanIndex) => ({
+          spanId: `span-${spanIndex}`,
+          name: 'span',
+          startTime: spanIndex,
+          attributes: { padding: 'x'.repeat(1_000) },
+        })),
+      };
+      mockEval.getTraces = vi.fn().mockResolvedValue([trace]);
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: mockEval.id }),
+      });
+
+      const result = await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(result).toBe(`https://promptfoo.app/eval/${mockEval.id}`);
+      const traceRequests = mockFetch.mock.calls.filter(([url]) => /\/traces$/.test(url as string));
+      const traceBodies = traceRequests.map(([, options]) => JSON.parse(options.body));
+      expect(traceBodies.length).toBeGreaterThan(1);
+      expect(traceBodies.flatMap((body) => body[0].spans)).toHaveLength(trace.spans.length);
+      expect(
+        traceRequests.every(
+          ([, options]) => Buffer.byteLength(options.body, 'utf8') <= 0.9 * 1024 * 1024,
+        ),
+      ).toBe(true);
+    });
+
     it('does not expose a remote trace error body in warning logs', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const secret = 'sk-secret-value-that-must-not-appear';

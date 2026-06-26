@@ -521,6 +521,7 @@ export default function EvalOutputPromptDialog({
                     messages={parsedMessages}
                     displayTurnCount={parsedMessages.length > 2}
                     maxTurns={Math.ceil(parsedMessages.length / 2)}
+                    mediaRefreshToken={traceRefreshToken}
                   />
                 )}
                 {redteamHistoryMessages.length > 0 && (
@@ -529,6 +530,7 @@ export default function EvalOutputPromptDialog({
                       messages={redteamHistoryMessages}
                       displayTurnCount={redteamHistoryMessages.length > 2}
                       maxTurns={Math.ceil(redteamHistoryMessages.length / 2)}
+                      mediaRefreshToken={traceRefreshToken}
                     />
                   </div>
                 )}

@@ -53,7 +53,9 @@ export async function storeBlob(
   },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
-  const result = await provider.store(data, mimeType);
+  // Keep provider metadata inert too. The result is sanitized again for legacy/deduplicated
+  // objects whose stored metadata predates this boundary.
+  const result = await provider.store(data, sanitizeBlobMimeType(mimeType));
   const safeMimeType = sanitizeBlobMimeType(result.ref.mimeType);
   const normalizedResult: BlobStoreResult = {
     ...result,
@@ -62,52 +64,37 @@ export async function storeBlob(
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
-  try {
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(blobAssetsTable)
-        .values({
-          hash: normalizedResult.ref.hash,
-          sizeBytes: normalizedResult.ref.sizeBytes,
-          mimeType: normalizedResult.ref.mimeType,
-          provider: normalizedResult.ref.provider,
-        })
-        .onConflictDoUpdate({
-          target: blobAssetsTable.hash,
-          set: { mimeType: normalizedResult.ref.mimeType },
-        })
-        .run();
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(blobAssetsTable)
+      .values({
+        hash: normalizedResult.ref.hash,
+        sizeBytes: normalizedResult.ref.sizeBytes,
+        mimeType: normalizedResult.ref.mimeType,
+        provider: normalizedResult.ref.provider,
+      })
+      .onConflictDoUpdate({
+        target: blobAssetsTable.hash,
+        set: { mimeType: normalizedResult.ref.mimeType },
+      })
+      .run();
 
-      if (refContext?.evalId) {
-        await tx
-          .insert(blobReferencesTable)
-          .values({
-            id: randomUUID(),
-            blobHash: normalizedResult.ref.hash,
-            evalId: refContext.evalId,
-            testIdx: refContext.testIdx,
-            promptIdx: refContext.promptIdx,
-            location: refContext.location,
-            kind: refContext.kind,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
-  } catch (error) {
-    // A deduplicated object predates this transaction and may still be referenced elsewhere.
-    if (!result.deduplicated) {
-      try {
-        await provider.deleteByHash(result.ref.hash);
-      } catch (cleanupError) {
-        logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
-          error: cleanupError,
-          hash: result.ref.hash,
-        });
-      }
+    if (refContext?.evalId) {
+      await tx
+        .insert(blobReferencesTable)
+        .values({
+          id: randomUUID(),
+          blobHash: normalizedResult.ref.hash,
+          evalId: refContext.evalId,
+          testIdx: refContext.testIdx,
+          promptIdx: refContext.promptIdx,
+          location: refContext.location,
+          kind: refContext.kind,
+        })
+        .onConflictDoNothing()
+        .run();
     }
-    throw error;
-  }
+  });
 
   return normalizedResult;
 }
