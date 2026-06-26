@@ -454,7 +454,7 @@ spec:
     spec:
       containers:
         - name: promptfoo
-          image: promptfoo/promptfoo:latest
+          image: ghcr.io/promptfoo/promptfoo:latest
           volumeMounts:
             - name: config
               mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
