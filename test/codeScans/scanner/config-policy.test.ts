@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type ScannerRequestModule = typeof import('../../../src/codeScan/scanner/request');
+
 describe('scanner config policy boundary', () => {
   let repoPath: string;
 
@@ -88,7 +90,7 @@ describe('scanner config policy boundary', () => {
       displayScanResults: vi.fn(),
     }));
     vi.doMock('../../../src/codeScan/scanner/request', async () => {
-      const actual = await vi.importActual<typeof import('../../../src/codeScan/scanner/request')>(
+      const actual = await vi.importActual<ScannerRequestModule>(
         '../../../src/codeScan/scanner/request',
       );
       return {
