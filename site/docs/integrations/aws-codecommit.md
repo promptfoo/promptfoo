@@ -39,7 +39,7 @@ env:
 phases:
   install:
     runtime-versions:
-      nodejs: 20
+      nodejs: 24
     commands:
       - npm install -g promptfoo
   build:
@@ -78,7 +78,7 @@ If you want a custom pass-rate threshold instead of `--fail-on-error`, write the
 phases:
   install:
     runtime-versions:
-      nodejs: 20
+      nodejs: 24
     commands:
       - npm install -g promptfoo
   build:
@@ -117,7 +117,7 @@ env:
 phases:
   install:
     runtime-versions:
-      nodejs: 20
+      nodejs: 24
     commands:
       - npm install -g promptfoo
       - apt-get update && apt-get install -y jq
