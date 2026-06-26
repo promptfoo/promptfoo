@@ -48,7 +48,12 @@ import {
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
-import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
+import {
+  getStrategyCompatibilityError,
+  loadStrategy,
+  Strategies,
+  validateStrategies,
+} from './strategies/index';
 import { hasPosteriorStrategy, POSTERIOR_MULTI_INPUT_ERROR } from './strategies/posterior';
 import { pluginMatchesStrategyTargets } from './strategies/util';
 import {
@@ -66,6 +71,8 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from './types';
+
+export { getStrategyCompatibilityError };
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 

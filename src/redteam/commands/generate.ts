@@ -55,10 +55,9 @@ import {
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
+import { getStrategyCompatibilityError, MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { getStrategyCompatibilityError } from '../strategies/index';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
