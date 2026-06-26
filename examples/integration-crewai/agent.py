@@ -11,7 +11,7 @@ from crewai import LLM, Agent, Crew, Task
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-def get_recruitment_agent(model: str = "gpt-4.1") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent's goal: find the best Ruby on Rails + React candidates.
@@ -38,7 +38,7 @@ def get_recruitment_agent(model: str = "gpt-4.1") -> Crew:
             - "name" must be a string representing the candidate's name.
             - "experience" must be a string summarizing the candidate's relevant experience.
             - "skills" must be an array of strings listing the candidate's skills.
-            - "summary" must be a short string explaining the recommendation.
+            The top-level "summary" value must be a short string explaining the recommendation.
 
             Example of the expected final output:
             {
@@ -60,7 +60,7 @@ def get_recruitment_agent(model: str = "gpt-4.1") -> Crew:
     return crew
 
 
-async def run_recruitment_agent(prompt, model="gpt-4.1"):
+async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -68,34 +68,26 @@ async def run_recruitment_agent(prompt, model="gpt-4.1"):
     # Check if API key is set
     if not OPENAI_API_KEY:
         return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
+            "error": "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
         }
 
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={"job_requirements": prompt})
-
-        # The result might be a string, or an object with a 'raw' attribute.
-        output_text = ""
-        if result:
-            if hasattr(result, "raw") and result.raw:
-                output_text = result.raw
-            elif isinstance(result, str):
-                output_text = result
+        output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
 
         if not output_text:
             return {"error": "CrewAI agent returned an empty response."}
 
-        # Use regex to find the JSON block, even with markdown
-        json_match = re.search(r"```json\s*([\s\S]*?)\s*```|({[\s\S]*})", output_text)
-        if not json_match:
+        # Accept either a JSON object or one complete Markdown JSON fence.
+        json_match = re.fullmatch(r"```json\s*([\s\S]*?)\s*```", output_text)
+        if not json_match and not output_text.startswith("{"):
             return {
                 "error": "No valid JSON block found in the agent's output.",
                 "raw_output": output_text,
             }
 
-        json_string = json_match.group(1) or json_match.group(2)
+        json_string = json_match.group(1) if json_match else output_text
 
         try:
             return json.loads(json_string)
@@ -120,7 +112,7 @@ def call_api(
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "gpt-4.1")
+        model = config.get("model", "openai/gpt-4.1")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:

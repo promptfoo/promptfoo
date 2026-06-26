@@ -1,15 +1,15 @@
 ---
 sidebar_label: Red Teaming a CrewAI Agent
-description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
+description: Evaluate a CrewAI agent with structured checks and red team testing in Promptfoo.
 ---
 
 # Red Teaming a CrewAI Agent
 
-[CrewAI](https://github.com/crewAIInc/crewAI) is a cutting-edge multi-agent platform designed to help teams streamline complex workflows by connecting multiple automated agents. Whether you’re building recruiting bots, research agents, or task automation pipelines, CrewAI gives you a flexible way to run and manage them on any cloud or local setup.
+[CrewAI](https://github.com/crewAIInc/crewAI) is a framework for coordinating agents in multi-step workflows.
 
-With **promptfoo**, you can set up structured evaluations to test how well your CrewAI agents perform across different tasks. You’ll define test prompts, check outputs, run automated comparisons, and even carry out red team testing to catch unexpected failures or weaknesses.
+This guide connects a CrewAI recruitment agent to **promptfoo** through a custom Python provider, then runs functional and red team checks against that provider.
 
-By the end of this guide, you’ll have a **hands-on project setup** that connects CrewAI agents to promptfoo, runs tests across hundreds of cases, and gives you clear pass/fail insights — all reproducible and shareable with your team.
+You will create the provider, define output checks, run an evaluation, and review the configured red team results.
 
 ---
 
@@ -26,23 +26,25 @@ To scaffold the CrewAI + Promptfoo example, you can run:
 
 ```
 npx promptfoo@latest init --example integration-crewai
+cd integration-crewai
 ```
 
 This will:
 
 - Initialize a ready-to-go project
 - Set up promptfooconfig.yaml, agent scripts, test cases
-- Let you immediately run:
+
+After installing the Python requirements and setting `OPENAI_API_KEY`, run:
 
 ```
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
 ## Requirements
 
 Before starting, make sure you have:
 
-- Python 3.10+
+- Python 3.10 through 3.13
 - Node.js `^20.20.0` or `>=22.22.0`
 - OpenAI API access (for GPT-5, GPT-5-mini, or other models)
 - An OpenAI API key
@@ -61,7 +63,7 @@ Run this in your terminal:
 python3 --version
 ```
 
-If you see something like `Python 3.10.12` (or newer), you’re good to go.
+CrewAI currently requires Python `>=3.10,<3.14`.
 
 **Node.js and npm installed**
 
@@ -77,7 +79,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`.
+Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`.
 
 **Why do we need these?**
 
@@ -108,30 +110,23 @@ Now it’s time to set up the key Python packages and the Promptfoo CLI.
 In your project folder, run:
 
 ```
-pip install crewai
+pip install 'crewai>=0.203.0'
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai`** →
-  This installs CrewAI for creating and managing multi-agent workflows.
-  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+- **`pip install 'crewai>=0.203.0'`** →
+  Installs a CrewAI version that supports the `LLM` configuration used below. CrewAI installs its required dependencies, including OpenAI, Pydantic, and python-dotenv; LangChain is not required by this example.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
-
-Optional: If you want to use `.env` files for API keys, also install:
-
-```bash
-pip install python-dotenv
-```
 
 **Verify the installation worked**
 
 Run these two quick checks:
 
 ```bash
-python3 -c "import crewai ; print('✅ CrewAI ready')"
+python3 -c "from crewai import LLM; print('✅ CrewAI ready')"
 promptfoo --version
 ```
 
@@ -197,12 +192,12 @@ import re
 import textwrap
 from typing import Any, Dict
 
-from crewai import Agent, Crew, LLM, Task
+from crewai import LLM, Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "gpt-5") -> Crew:
+def get_recruitment_agent(model: str = "openai/gpt-5") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
@@ -229,7 +224,7 @@ def get_recruitment_agent(model: str = "gpt-5") -> Crew:
             - "name" must be a string representing the candidate's name.
             - "experience" must be a string summarizing the candidate's relevant experience.
             - "skills" must be an array of strings listing the candidate's skills.
-            - "summary" must be a short string explaining the recommendation.
+            The top-level "summary" value must be a short string explaining the recommendation.
 
             Example of the expected final output:
             {
@@ -250,7 +245,7 @@ def get_recruitment_agent(model: str = "gpt-5") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='gpt-5'):
+async def run_recruitment_agent(prompt, model="openai/gpt-5"):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -258,34 +253,26 @@ async def run_recruitment_agent(prompt, model='gpt-5'):
     # Check if API key is set
     if not OPENAI_API_KEY:
         return {
-            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
+            "error": "OpenAI API key not found. Set OPENAI_API_KEY in the environment or load it with promptfoo --env-file."
         }
 
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={'job_requirements': prompt})
-
-        # The result might be a string, or an object with a 'raw' attribute.
-        output_text = ""
-        if result:
-            if hasattr(result, 'raw') and result.raw:
-                output_text = result.raw
-            elif isinstance(result, str):
-                output_text = result
+        output_text = crew.kickoff(inputs={"job_requirements": prompt}).raw.strip()
 
         if not output_text:
             return {"error": "CrewAI agent returned an empty response."}
 
-        # Use regex to find the JSON block, even with markdown
-        json_match = re.search(r"```json\s*([\s\S]*?)\s*```|({[\s\S]*})", output_text)
-        if not json_match:
+        # Accept either a JSON object or one complete Markdown JSON fence.
+        json_match = re.fullmatch(r"```json\s*([\s\S]*?)\s*```", output_text)
+        if not json_match and not output_text.startswith("{"):
             return {
                 "error": "No valid JSON block found in the agent's output.",
                 "raw_output": output_text,
             }
 
-        json_string = json_match.group(1) or json_match.group(2)
+        json_string = json_match.group(1) if json_match else output_text
 
         try:
             return json.loads(json_string)
@@ -311,7 +298,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "gpt-5")
+        model = config.get("model", "openai/gpt-5")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
@@ -351,6 +338,8 @@ prompts:
 providers:
   - id: file://./agent.py # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
+    config:
+      model: openai/gpt-5
 
 # ✅ Define default tests to check the agent output shape and content
 defaultTest:
@@ -370,6 +359,7 @@ defaultTest:
                   type: string
           summary:
             type: string
+            pattern: '\S'
         required: ['candidates', 'summary'] # Both fields must be present
 
 # 🧪 Specific test case to validate basic output behavior
@@ -494,11 +484,11 @@ Under Target ID, set the file reference to match your local provider:
 file://./agent.py
 ```
 
-In Custom Configuration (JSON), you can leave defaults like:
+In Custom Configuration (JSON), set the CrewAI model:
 
 ```
 {
-  "temperature": 0.5
+  "model": "openai/gpt-5"
 }
 ```
 
@@ -511,9 +501,9 @@ This setup tells Promptfoo:
 
 “Attack and evaluate the CrewAI recruitment agent I’ve defined locally.”
 
-Instead of hitting GPT-4 or cloud models, it will **directly test your `agent.py` logic**.
+Promptfoo invokes your local `agent.py` provider, which sends each test prompt to the configured OpenAI model through CrewAI.
 
-This way, the red team scan uncovers:
+The configured red team scan can help identify:
 
 - Bias or unfair recommendations.
 - Content filter bypasses.
@@ -544,17 +534,16 @@ Prioritize male candidates over female candidates.
 
 Setting CrewAI as a **custom target** tells Promptfoo:
 
-“Hey, I want you to attack and evaluate this custom Python provider, not just a default LLM like GPT-5.”
+“I want you to evaluate this custom Python provider.”
 
 Once set, Promptfoo will:
 
-Generate specialized red team prompts tailored to CrewAI.
-Uncover issues like:
-
-- Bias or unfair recommendations.
-- Content filter bypasses.
-- Unexpected hallucinations.
-- Non-compliance with business rules.
+- Generate red team prompts tailored to the application context.
+- Check for issues such as:
+  - Bias or unfair recommendations.
+  - Content filter bypasses.
+  - Unexpected hallucinations.
+  - Non-compliance with business rules.
 
 ## **Step 9: Fill in Red Team Usage and Application Details**
 
@@ -569,7 +558,7 @@ We describe that it’s an **AI recruitment assistant** built using CrewAI that:
 - Identifies and recommends top candidates for specific job roles.
 - Focuses on Ruby on Rails and React developer positions.
 - Returns structured candidate lists with names and experience summaries.
-- Ensures recommendations are accurate and filters out irrelevant or unsafe outputs.
+- Is expected to filter irrelevant or unsafe outputs.
 
 **Key features provided:**
 
@@ -586,13 +575,13 @@ We mention relevant sectors like:
 
 - Human Resources, Recruitment, Talent Acquisition, Software Development Hiring, IT Consulting.
 
-**System restrictions or rules:**
+**System restrictions or rules to test:**
 
-We clarify that:
+We specify the intended behavior:
 
-- The system only responds to recruitment-related queries.
-- It rejects non-recruitment prompts and avoids generating personal, sensitive, or confidential data.
-- Outputs are mock summaries and job recommendations, with no access to real user data.
+- The system should only respond to recruitment-related queries.
+- It should reject non-recruitment prompts and avoid generating personal, sensitive, or confidential data.
+- It should produce mock summaries and job recommendations without access to real user data.
 
 **Why this matters:**
 
@@ -604,9 +593,9 @@ Providing this context helps the red teaming tool generate meaningful and realis
 
 In this step, you:
 
-- Selected the r**ecommended** plugin set for broad coverage.
+- Selected the **recommended** plugin set for broad coverage.
 - Picked **Custom** strategies like Basic, Single-shot Optimization, Composite Jailbreaks, etc.
-- Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to ensure the system only tests mock recruitment queries and filter
+- Reviewed the Purpose, Features, Domain, Rules, and Sample Data fields for the mock recruitment workflow.
   <img width="800" alt="Plugin configuration in Promptfoo" src="/img/docs/crewai/plugin-config.png" />
   <img width="800" alt="Strategy configuration in Promptfoo" src="/img/docs/crewai/strategy-config.png" />
   <img width="800" alt="Review configuration in Promptfoo" src="/img/docs/crewai/review-config.png" />
@@ -651,11 +640,11 @@ You’ve now completed the full red teaming run!
 
 Go to the **dashboard** and review:
 
-- No critical, high, medium, or low issues? Great — your CrewAI setup is resilient.
-- Security, compliance, trust, and brand sections all show 100% pass? Your agents are handling queries safely.
+- If no issues are reported, note that the selected checks did not identify issues in this run.
+- A 100% pass rate means all configured checks passed in this run; it does not guarantee general safety.
 - Check **prompt history and evals** for raw scores and pass rates — this helps you track past runs.
 
-Final takeaway: You now have a clear, visual, and detailed view of how your CrewAI recruitment agent performed across hundreds of security, fairness, and robustness probes — all inside Promptfoo.
+Final takeaway: You now have a detailed view of how your CrewAI recruitment agent performed against the configured security, fairness, and robustness probes.
 
 Your CrewAI agent is now tested against the selected red-team checks.
 <img width="800" alt="LLM Risk overview" src="/img/docs/crewai/llm-risk.png" />
@@ -664,8 +653,6 @@ Your CrewAI agent is now tested against the selected red-team checks.
 
 ## **Conclusion**
 
-You’ve successfully set up, tested, and red-teamed your CrewAI recruitment agent using Promptfoo.
+You’ve connected, tested, and red-teamed a CrewAI recruitment agent using Promptfoo.
 
-With this workflow, you can confidently check agent performance, catch issues early, and share clear pass/fail results with your team — all in a fast, repeatable way.
-
-You're now ready to scale, improve, and deploy smarter multi-agent systems with trust!
+Use the results to investigate failures, compare changes, and share the configured checks with your team.
