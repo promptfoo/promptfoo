@@ -180,6 +180,43 @@ describe('checkForUpdates', () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
+  it('should preserve Docker pull guidance before and after the Node.js 20 cutoff', async () => {
+    const restoreSelfHosted = mockProcessEnv({ PROMPTFOO_SELF_HOSTED: 'true' });
+    vi.mocked(fetchWithTimeout)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latestVersion: '1.1.0' }),
+      } as never)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latestVersion: '1.1.0' }),
+      } as never);
+
+    try {
+      await checkForUpdates({
+        currentNodeVersion: 'v20.20.2',
+        now: new Date('2026-07-29T23:59:59.999Z'),
+      });
+      await checkForUpdates({
+        currentNodeVersion: 'v20.20.2',
+        now: new Date('2026-07-30T00:00:00.000Z'),
+      });
+    } finally {
+      restoreSelfHosted();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledTimes(2);
+    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('docker pull promptfoo/promptfoo:latest'),
+    );
+    expect(loggerInfoSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('docker pull promptfoo/promptfoo:latest'),
+    );
+    expect(loggerWarnSpy).not.toHaveBeenCalled();
+  });
+
   it('should let the runtime campaign suppress duplicate post-cutoff guidance', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   getRuntimeCompatibilityNotice,
+  getRuntimeNoticeReminderIntervalMs,
   isLatestUpdateBlockedByRuntime,
   isUpdateBlockedByRuntime,
   parseNodeMajor,
+  shouldShowRuntimeNotice,
 } from '../src/runtimeCompatibility';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('runtime compatibility policy', () => {
   it('detects Node.js 20 and returns the dated compatibility notice', () => {
@@ -56,5 +60,36 @@ describe('runtime compatibility policy', () => {
     expect(isUpdateBlockedByRuntime('docker', 'v20.20.2', cutoff)).toBe(false);
     expect(isUpdateBlockedByRuntime('npm', 'v20.20.2', cutoff)).toBe(true);
     expect(isUpdateBlockedByRuntime('npx', 'v20.20.2', cutoff)).toBe(true);
+  });
+
+  it('reminds weekly before the final phase and daily starting exactly 14 days before cutoff', () => {
+    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-01T00:00:00.000Z'))).toBe(
+      7 * DAY_MS,
+    );
+    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-15T23:59:59.999Z'))).toBe(
+      7 * DAY_MS,
+    );
+    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-07-16T00:00:00.000Z'))).toBe(DAY_MS);
+    expect(getRuntimeNoticeReminderIntervalMs(new Date('2026-08-01T00:00:00.000Z'))).toBe(DAY_MS);
+  });
+
+  it('shows again at the active cadence boundary and fails open for malformed or future state', () => {
+    const weeklyBoundary = new Date('2026-07-02T00:00:00.000Z');
+
+    expect(
+      shouldShowRuntimeNotice('2026-06-25T00:00:00.000Z', new Date(weeklyBoundary.getTime() - 1)),
+    ).toBe(false);
+    expect(shouldShowRuntimeNotice('2026-06-25T00:00:00.000Z', weeklyBoundary)).toBe(true);
+    expect(shouldShowRuntimeNotice('invalid', weeklyBoundary)).toBe(true);
+    expect(shouldShowRuntimeNotice('2026-08-01T00:00:00.000Z', weeklyBoundary)).toBe(true);
+  });
+
+  it('lets the daily final-phase cadence shorten an in-flight weekly snooze', () => {
+    expect(
+      shouldShowRuntimeNotice('2026-07-13T00:00:00.000Z', new Date('2026-07-15T23:59:59.999Z')),
+    ).toBe(false);
+    expect(
+      shouldShowRuntimeNotice('2026-07-13T00:00:00.000Z', new Date('2026-07-16T00:00:00.000Z')),
+    ).toBe(true);
   });
 });

@@ -3,9 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import { type RuntimeCompatibilityNotice, useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import { hasRuntimeSupportEnded, parseUtcMidnight } from '@app/utils/runtimeCompatibility';
+import {
+  getRuntimeNoticeReminderIntervalDays,
+  hasRuntimeSupportEnded,
+  parseUtcMidnight,
+} from '@app/utils/runtimeCompatibility';
 import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
 
 function formatRemovalDate(removalDate: string): string {
@@ -21,6 +25,28 @@ function formatRemovalDate(removalDate: string): string {
     timeZone: 'UTC',
     year: 'numeric',
   }).format(new Date(timestamp));
+}
+
+function getReminderLabel(reminderIntervalDays: 1 | 7): string {
+  return reminderIntervalDays === 1 ? 'Remind me tomorrow' : 'Remind me in 7 days';
+}
+
+function RuntimeUpgradeMessage({
+  notice,
+  isDocker,
+}: {
+  notice: RuntimeCompatibilityNotice;
+  isDocker: boolean;
+}) {
+  if (isDocker) {
+    return <>Pull the latest Promptfoo Docker image to upgrade its bundled Node.js runtime.</>;
+  }
+  return (
+    <>
+      This Promptfoo server is running {notice.currentVersion}. Upgrade to Node.js{' '}
+      {notice.minimumVersion} or newer; Node.js {notice.recommendedVersion} is recommended.
+    </>
+  );
 }
 
 export default function UpdateBanner() {
@@ -58,10 +84,13 @@ export default function UpdateBanner() {
     !isUpdateDismissed &&
     !!versionInfo?.updateAvailable &&
     !updateBlockedByRuntime;
+  const shouldShowDockerAction =
+    !!activeRuntimeNotice &&
+    versionInfo?.commandType === 'docker' &&
+    !!versionInfo.updateAvailable &&
+    !updateBlockedByRuntime;
   const shouldShowBanner = !loading && !error && (shouldShowRuntimeNotice || shouldShowUpdate);
-  const dismissLabel = activeRuntimeNotice
-    ? 'Dismiss Node.js runtime notice'
-    : "Don't remind me of this version";
+  const dismissLabel = "Don't remind me of this version";
 
   useEffect(() => {
     if (!shouldShowBanner) {
@@ -167,7 +196,7 @@ export default function UpdateBanner() {
   const handleDismiss = () => {
     if (activeRuntimeNotice) {
       recordEvent('feature_used', {
-        action: 'dismissed',
+        action: 'remind_later',
         feature: 'runtime_compatibility_notice',
         noticeId: activeRuntimeNotice.id,
         runtimeMajor: activeRuntimeNotice.currentMajor,
@@ -222,9 +251,10 @@ export default function UpdateBanner() {
               {formatRemovalDate(activeRuntimeNotice.removalDate)}
             </span>
             <span className="text-sm text-muted-foreground">
-              This Promptfoo server is running {activeRuntimeNotice.currentVersion}. Upgrade to
-              Node.js {activeRuntimeNotice.minimumVersion} or newer; Node.js{' '}
-              {activeRuntimeNotice.recommendedVersion} is recommended.
+              <RuntimeUpgradeMessage
+                notice={activeRuntimeNotice}
+                isDocker={versionInfo.commandType === 'docker'}
+              />
             </span>
           </div>
         ) : (
@@ -263,40 +293,52 @@ export default function UpdateBanner() {
             </a>
           </Button>
         )}
-        {!activeRuntimeNotice && versionInfo?.updateCommands?.primary && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyCommand}
-            title={versionInfo.updateCommands.primary}
-            className="gap-1.5 text-xs"
-          >
-            {copied ? (
-              <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Copy className="size-3" />
-            )}
-            {versionInfo.commandType === 'docker'
-              ? 'Copy Docker Command'
-              : versionInfo.commandType === 'npx'
-                ? 'Copy npx Command'
-                : 'Copy Update Command'}
-          </Button>
-        )}
-        <button
-          type="button"
-          onClick={handleDismiss}
-          aria-label={dismissLabel}
-          title={dismissLabel}
-          className={cn(
-            'inline-flex size-6 items-center justify-center rounded-md',
-            'text-current opacity-70 hover:opacity-100',
-            'hover:bg-black/10 dark:hover:bg-white/10',
-            'cursor-pointer transition-colors',
+        {(!activeRuntimeNotice || shouldShowDockerAction) &&
+          versionInfo?.updateCommands?.primary && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyCommand}
+              title={versionInfo.updateCommands.primary}
+              className="gap-1.5 text-xs"
+            >
+              {copied ? (
+                <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Copy className="size-3" />
+              )}
+              {versionInfo.commandType === 'docker'
+                ? 'Copy Docker Command'
+                : versionInfo.commandType === 'npx'
+                  ? 'Copy npx Command'
+                  : 'Copy Update Command'}
+            </Button>
           )}
-        >
-          <X className="size-4" />
-        </button>
+        {activeRuntimeNotice ? (
+          <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
+            {getReminderLabel(
+              getRuntimeNoticeReminderIntervalDays(
+                activeRuntimeNotice.removalDate,
+                runtimePolicyUpdatedAt,
+              ),
+            )}
+          </Button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label={dismissLabel}
+            title={dismissLabel}
+            className={cn(
+              'inline-flex size-6 items-center justify-center rounded-md',
+              'text-current opacity-70 hover:opacity-100',
+              'hover:bg-black/10 dark:hover:bg-white/10',
+              'cursor-pointer transition-colors',
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
     </Alert>
   );

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
-import { parseUtcMidnight } from '@app/utils/runtimeCompatibility';
+import {
+  FINAL_RUNTIME_NOTICE_PHASE_MS,
+  getRuntimeNoticeReminderIntervalDays,
+  parseUtcMidnight,
+} from '@app/utils/runtimeCompatibility';
 
 export interface RuntimeCompatibilityNotice {
   id: string;
@@ -49,9 +53,19 @@ interface UseVersionCheckResult {
 }
 
 const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
-const RUNTIME_NOTICE_STORAGE_KEY = 'promptfoo:runtime-notice:dismissed';
+const RUNTIME_NOTICE_STORAGE_PREFIX = 'promptfoo:runtime-notice:lastDismissedAt:';
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_TIMER_DELAY_MS = 2_147_000_000;
 const REFRESH_RETRY_MS = 5 * 60 * 1000;
+
+interface RuntimeNoticeDismissal {
+  noticeId: string;
+  dismissedAt: number;
+}
+
+function getRuntimeNoticeStorageKey(noticeId: string): string {
+  return `${RUNTIME_NOTICE_STORAGE_PREFIX}${noticeId}`;
+}
 
 // localStorage can throw (Safari private mode, disabled storage, exceeded quota). Dismissals are
 // best-effort, so swallow failures instead of letting a click handler or background refresh throw.
@@ -72,22 +86,64 @@ function safeLocalStorageSet(key: string, value: string): void {
   }
 }
 
-function getRuntimePolicyRefreshDelay(supportEndDate: string): number | null {
+function readRuntimeNoticeDismissal(noticeId: string): RuntimeNoticeDismissal | null {
+  const stored = safeLocalStorageGet(getRuntimeNoticeStorageKey(noticeId));
+  const dismissedAt = stored ? Date.parse(stored) : Number.NaN;
   const now = Date.now();
-  const removalTimestamp = parseUtcMidnight(supportEndDate);
-  if (removalTimestamp === null || removalTimestamp <= now) {
+  if (
+    Number.isNaN(dismissedAt) ||
+    new Date(dismissedAt).toISOString() !== stored ||
+    dismissedAt > now
+  ) {
     return null;
   }
-  return Math.min(removalTimestamp - now, MAX_TIMER_DELAY_MS);
+  return { noticeId, dismissedAt };
+}
+
+function isRuntimeNoticeSnoozed(
+  notice: RuntimeCompatibilityNotice,
+  dismissal: RuntimeNoticeDismissal | null,
+  now: number,
+): boolean {
+  return (
+    dismissal?.noticeId === notice.id &&
+    dismissal.dismissedAt <= now &&
+    now - dismissal.dismissedAt <
+      getRuntimeNoticeReminderIntervalDays(notice.removalDate, now) * DAY_MS
+  );
+}
+
+function getRuntimePolicyRefreshDelay(
+  supportEndDate: string,
+  notice: RuntimeCompatibilityNotice | null | undefined,
+  dismissal: RuntimeNoticeDismissal | null,
+): number | null {
+  const now = Date.now();
+  const removalTimestamp = parseUtcMidnight(supportEndDate);
+  const pendingBoundaries: number[] = [];
+  if (removalTimestamp !== null) {
+    pendingBoundaries.push(removalTimestamp);
+  }
+  if (notice && removalTimestamp !== null) {
+    pendingBoundaries.push(removalTimestamp - FINAL_RUNTIME_NOTICE_PHASE_MS);
+  }
+  if (notice && dismissal?.noticeId === notice.id && dismissal.dismissedAt <= now) {
+    pendingBoundaries.push(
+      dismissal.dismissedAt +
+        getRuntimeNoticeReminderIntervalDays(notice.removalDate, now) * DAY_MS,
+    );
+  }
+
+  const nextBoundary = Math.min(...pendingBoundaries.filter((timestamp) => timestamp > now));
+  return Number.isFinite(nextBoundary) ? Math.min(nextBoundary - now, MAX_TIMER_DELAY_MS) : null;
 }
 
 export function useVersionCheck(): UseVersionCheckResult {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [dismissedRuntimeNoticeId, setDismissedRuntimeNoticeId] = useState(() =>
-    safeLocalStorageGet(RUNTIME_NOTICE_STORAGE_KEY),
-  );
+  const [runtimeNoticeDismissal, setRuntimeNoticeDismissal] =
+    useState<RuntimeNoticeDismissal | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [runtimePolicyUpdatedAt, setRuntimePolicyUpdatedAt] = useState(() => Date.now());
   const isMountedRef = useRef(true);
@@ -113,6 +169,16 @@ export function useVersionCheck(): UseVersionCheckResult {
         if (isMountedRef.current) {
           setRuntimePolicyUpdatedAt(Date.now());
           setVersionInfo(data);
+          setRuntimeNoticeDismissal((current) => {
+            const noticeId = data.runtimeNotice?.id;
+            if (!noticeId) {
+              return null;
+            }
+            return (
+              readRuntimeNoticeDismissal(noticeId) ??
+              (current?.noticeId === noticeId ? current : null)
+            );
+          });
           setUpdateDismissed(safeLocalStorageGet(STORAGE_KEY) === data.latestVersion);
           setError(null);
         }
@@ -143,13 +209,13 @@ export function useVersionCheck(): UseVersionCheckResult {
   }, [checkVersion, clearRuntimePolicyRetry]);
 
   useEffect(() => {
-    const supportEndDate =
-      versionInfo?.runtimePolicy?.supportEndDate ?? versionInfo?.runtimeNotice?.removalDate;
+    const notice = versionInfo?.runtimeNotice;
+    const supportEndDate = versionInfo?.runtimePolicy?.supportEndDate ?? notice?.removalDate;
     if (!supportEndDate) {
       return;
     }
 
-    const delay = getRuntimePolicyRefreshDelay(supportEndDate);
+    const delay = getRuntimePolicyRefreshDelay(supportEndDate, notice, runtimeNoticeDismissal);
     if (delay === null) {
       return;
     }
@@ -180,12 +246,16 @@ export function useVersionCheck(): UseVersionCheckResult {
     return () => {
       window.clearTimeout(refreshTimer);
     };
-  }, [checkVersion, clearRuntimePolicyRetry, versionInfo]);
+  }, [checkVersion, clearRuntimePolicyRetry, runtimeNoticeDismissal, versionInfo]);
 
   const dismissRuntimeNotice = () => {
     if (versionInfo?.runtimeNotice) {
-      safeLocalStorageSet(RUNTIME_NOTICE_STORAGE_KEY, versionInfo.runtimeNotice.id);
-      setDismissedRuntimeNoticeId(versionInfo.runtimeNotice.id);
+      const dismissedAt = Date.now();
+      safeLocalStorageSet(
+        getRuntimeNoticeStorageKey(versionInfo.runtimeNotice.id),
+        new Date(dismissedAt).toISOString(),
+      );
+      setRuntimeNoticeDismissal({ noticeId: versionInfo.runtimeNotice.id, dismissedAt });
     }
   };
 
@@ -204,7 +274,13 @@ export function useVersionCheck(): UseVersionCheckResult {
     }
   };
 
-  const runtimeNoticeDismissed = versionInfo?.runtimeNotice?.id === dismissedRuntimeNoticeId;
+  const runtimeNoticeDismissed = versionInfo?.runtimeNotice
+    ? isRuntimeNoticeSnoozed(
+        versionInfo.runtimeNotice,
+        runtimeNoticeDismissal,
+        runtimePolicyUpdatedAt,
+      )
+    : false;
   const dismissed = versionInfo?.runtimeNotice ? runtimeNoticeDismissed : updateDismissed;
 
   return {

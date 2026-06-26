@@ -111,15 +111,46 @@ describe('UpdateBanner', () => {
       'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
     );
 
-    await user.click(screen.getByRole('button', { name: 'Dismiss Node.js runtime notice' }));
+    await user.click(screen.getByRole('button', { name: 'Remind me in 7 days' }));
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(mockRecordEvent).toHaveBeenCalledWith(
       'feature_used',
       expect.objectContaining({
-        action: 'dismissed',
+        action: 'remind_later',
         feature: 'runtime_compatibility_notice',
       }),
     );
+  });
+
+  it('should show the daily reminder label exactly at the final-phase boundary', () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse('2026-07-16T00:00:00.000Z'));
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: false,
+        latestVersion: '1.9.0',
+        currentVersion: '1.9.0',
+        runtimeNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+      runtimePolicyUpdatedAt: Date.parse('2026-07-16T00:00:00.000Z'),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.getByRole('button', { name: 'Remind me tomorrow' })).toBeInTheDocument();
   });
 
   it('should not offer an incompatible latest update when the runtime blocks it', () => {
@@ -188,6 +219,11 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Node.js 20 support ended July 30, 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pull the latest Promptfoo Docker image/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Docker Command/i })).toHaveAttribute(
+      'title',
+      'docker pull promptfoo/promptfoo:latest',
+    );
   });
 
   it('should show a compatible promptfoo update after the runtime notice is dismissed', () => {
