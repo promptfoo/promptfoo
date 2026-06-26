@@ -408,11 +408,11 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 
 #### Available Models
 
-| Model                                        | Description        |
-| -------------------------------------------- | ------------------ |
-| `google:video:veo-3.1-generate-preview`      | Veo 3.1 model      |
-| `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model |
-| `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model |
+| Model                                        | Description                                                |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `google:video:veo-3.1-generate-preview`      | Veo 3.1 model                                              |
+| `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model                                         |
+| `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model; no reference images or video extension |
 
 #### Basic Usage
 
@@ -440,18 +440,18 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Description                                                                                                 |
-| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------- |
-| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                              |
-| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                               |
-| `durationSeconds`  | number | Video duration: 4, 6, or 8 seconds                                                                          |
-| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                       |
-| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                    |
-| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                                              |
-| `image`            | string | Source image for image-to-video generation                                                                  |
-| `lastImage`        | string | End frame for interpolation (requires `image`)                                                              |
-| `extendVideoId`    | string | Operation ID from a previous Vertex Veo generation (Veo 3.1 only)                                           |
-| `sourceVideo`      | string | Source video input. In Google AI Studio use base64 or `file://`; in Vertex you can also use an operation ID |
+| Option             | Type   | Description                                                                                            |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------ |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                         |
+| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                          |
+| `durationSeconds`  | number | Video duration: 4, 6, or 8 seconds                                                                     |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                  |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                                                               |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                       |
+| `image`            | string | Source image for image-to-video generation                                                             |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                                                         |
+| `extendVideoId`    | string | Previous Vertex Veo operation ID (Veo 3.1 and 3.1 Fast, not Lite)                                      |
+| `sourceVideo`      | string | Source video input for Veo 3.1 and 3.1 Fast, not Lite. Use base64, `file://`, or a Vertex operation ID |
 
 #### Image-to-Video Generation
 
@@ -515,7 +515,7 @@ tests:
 
 #### Reference Images
 
-Use up to 3 reference images to guide video style (Veo 3.1 only):
+Use up to 3 reference images to guide video style (Veo 3.1 and 3.1 Fast, not Lite):
 
 ```yaml
 providers:
