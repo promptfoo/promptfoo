@@ -445,20 +445,41 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
 
   React.useEffect(() => {
     if (isSelectFilter) {
-      setSelectValue(
-        Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
+      const nextSelectValue = Array.isArray(value)
+        ? (value[0] ?? '')
+        : typeof value === 'string'
+          ? value
+          : '';
+      const nextMultiSelectValues = Array.isArray(value)
+        ? value
+        : typeof value === 'string' && value
+          ? [value]
+          : [];
+
+      setSelectValue((previousValue) =>
+        previousValue === nextSelectValue ? previousValue : nextSelectValue,
       );
-      setMultiSelectValues(
-        Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
+      setMultiSelectValues((previousValues) =>
+        isSameFilterValue(previousValues, nextMultiSelectValues)
+          ? previousValues
+          : nextMultiSelectValues,
       );
     } else {
-      setTextValue(typeof value === 'string' ? value : '');
+      const nextTextValue = typeof value === 'string' ? value : '';
+      setTextValue((previousValue) =>
+        previousValue === nextTextValue ? previousValue : nextTextValue,
+      );
     }
   }, [isSelectFilter, value]);
 
   React.useEffect(() => {
-    setOperator(initialOperator);
-    setIsMultiSelectOpen(initialOperator === 'isAny');
+    setOperator((previousOperator) =>
+      previousOperator === initialOperator ? previousOperator : initialOperator,
+    );
+    setIsMultiSelectOpen((previousOpenState) => {
+      const nextOpenState = initialOperator === 'isAny';
+      return previousOpenState === nextOpenState ? previousOpenState : nextOpenState;
+    });
   }, [initialOperator]);
 
   const setFilterValue = React.useCallback(
