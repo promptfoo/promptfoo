@@ -288,17 +288,19 @@ describe('addCommonOptionsRecursively', () => {
       name: () => commandName,
       parent: null,
     });
+    const actionCommand = { setOptionValue: vi.fn() };
 
     // Test verbose option
-    preActionFn(createMockCommand({ verbose: true }));
+    preActionFn(createMockCommand({ verbose: true }), actionCommand);
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
 
     // Test env-file option
-    preActionFn(createMockCommand({ envFile: '.env.test' }));
+    preActionFn(createMockCommand({ envFile: '.env.test' }), actionCommand);
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.test');
+    expect(actionCommand.setOptionValue).toHaveBeenCalledWith('envPath', '.env.test');
 
     // Test both options together
-    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
+    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }), actionCommand);
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
@@ -357,6 +359,20 @@ describe('addCommonOptionsRecursively', () => {
     );
 
     expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('forwards an ancestor-owned env option to the action command', async () => {
+    const action = vi.fn();
+    const actionCommand = program.command('forward-env').action(action);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['forward-env', '--env-file', '.env.local'], { from: 'user' });
+
+    expect(action).toHaveBeenCalledWith(
+      expect.objectContaining({ envPath: '.env.local' }),
+      actionCommand,
+    );
   });
 
   it('should record telemetry once for nested subcommands', async () => {

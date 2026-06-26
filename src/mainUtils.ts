@@ -182,6 +182,10 @@ export function addCommonOptionsRecursively(command: Command) {
     const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
       loadEnvPathOnce(envPath, true);
+      // The common option exists at every command level, and Commander may assign a value
+      // supplied after a subcommand to an ancestor while leaving the action command's local
+      // default empty. Forward the normalized value so action schemas preserve CLI precedence.
+      actionCommand.setOptionValue('envPath', envPath);
     }
 
     if (thisCommand === actionCommand) {
