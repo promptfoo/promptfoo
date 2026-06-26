@@ -319,8 +319,8 @@ export function getTargetPromptCharLimits(
 } {
   const getLimit = (key: 'maxCharsPerMessage' | 'minCharsPerMessage'): number | undefined => {
     const configuredLimit =
-      providerCharLimits?.[key] ??
       cliState.config?.redteam?.[key] ??
+      providerCharLimits?.[key] ??
       (context?.test?.metadata?.strategyConfig as Record<string, unknown> | undefined)?.[key] ??
       (context?.test?.metadata?.pluginConfig as Record<string, unknown> | undefined)?.[key];
     return typeof configuredLimit === 'number' &&

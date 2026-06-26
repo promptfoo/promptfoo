@@ -1,8 +1,8 @@
 import logger from '../logger';
 import { MCPProvider } from '../providers/mcp';
-import { AGENTIC_STRATEGIES_SET } from './constants/strategies';
 import { materializeMcpValue } from './mcpMaterialization';
 import { redteamProviderManager } from './providers/shared';
+import { isDeferredMinimumAgenticSeed } from './shared/agenticSeed';
 import {
   getTargetPromptCharLimits,
   isTargetPromptCharLimitError,
@@ -94,11 +94,10 @@ function maybeWrapTargetProviderForCharLimits(
   provider: ApiProvider,
   test: AtomicTestCase | undefined,
 ): ApiProvider {
-  const strategyId =
-    typeof test?.metadata?.strategyId === 'string' ? test.metadata.strategyId : undefined;
-  const isAgenticSeedProvider =
-    (strategyId !== undefined && AGENTIC_STRATEGIES_SET.has(strategyId)) ||
-    [...AGENTIC_STRATEGIES_SET].some((agenticId) => provider.id().endsWith(agenticId));
+  // Use only the active provider here. Agentic metadata also accompanies the
+  // underlying target provider, which still needs this wrapper for the final
+  // generated target call.
+  const isAgenticSeedProvider = isDeferredMinimumAgenticSeed({ providerId: provider.id() });
   if (!isRedteamTest(test) || !hasTargetPromptCharLimits(test) || isAgenticSeedProvider) {
     return provider;
   }

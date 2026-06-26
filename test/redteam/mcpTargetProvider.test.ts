@@ -277,6 +277,72 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.callApi).not.toHaveBeenCalled();
   });
 
+  it('does not wrap normalized layered agentic seed providers', () => {
+    const test = {
+      metadata: {
+        strategyId: 'layer/hydra-audio:jailbreak:hydra/audio',
+        strategyConfig: { minCharsPerMessage: 5 },
+      },
+    };
+    const hydra = {
+      id: () => 'promptfoo:redteam:hydra',
+      callApi: vi.fn(),
+    };
+    const meta = {
+      id: () => 'promptfoo:redteam:iterative:meta/tree',
+      callApi: vi.fn(),
+    };
+
+    expect(maybeWrapMcpProviderForRedteam(hydra, test)).toBe(hydra);
+    expect(maybeWrapMcpProviderForRedteam(meta, test)).toBe(meta);
+  });
+
+  it('wraps the final target even when layered agentic metadata is present', async () => {
+    const target = {
+      id: () => 'openai:test',
+      callApi: vi.fn().mockResolvedValue({ output: 'ok' }),
+    };
+    const test = {
+      metadata: {
+        strategyId: 'layer/meta-base64:jailbreak:meta/base64',
+        strategyConfig: { minCharsPerMessage: 5 },
+      },
+    };
+    const wrappedTarget = maybeWrapMcpProviderForRedteam(target, test);
+
+    await expect(
+      wrappedTarget.callApi('tiny', {
+        prompt: { raw: '{{prompt}}', label: 'prompt' },
+        test,
+        vars: {},
+      }),
+    ).rejects.toThrow('minCharsPerMessage=5');
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('blocks short mischievous-user target turns', async () => {
+    const target = {
+      id: () => 'openai:test',
+      callApi: vi.fn().mockResolvedValue({ output: 'ok' }),
+    };
+    const test = {
+      metadata: {
+        strategyId: 'mischievous-user',
+        strategyConfig: { minCharsPerMessage: 5 },
+      },
+    };
+    const wrappedTarget = maybeWrapMcpProviderForRedteam(target, test);
+
+    await expect(
+      wrappedTarget.callApi('tiny', {
+        prompt: { raw: '{{prompt}}', label: 'prompt' },
+        test,
+        vars: {},
+      }),
+    ).rejects.toThrow('minCharsPerMessage=5');
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
   it('enforces limits after MCP materializes the underlying call', async () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',

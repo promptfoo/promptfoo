@@ -810,6 +810,75 @@ describe('runEval', () => {
     expect(results[0].error).toContain('minCharsPerMessage=7');
   });
 
+  it.each([
+    {
+      providerId: 'promptfoo:redteam:hydra',
+      strategyId: 'layer/hydra-audio:jailbreak:hydra/audio',
+    },
+    {
+      providerId: 'promptfoo:redteam:iterative:meta/tree',
+      strategyId: 'layer/meta-base64:jailbreak:meta/base64',
+    },
+    {
+      providerId: 'promptfoo:redteam:iterative:tree/base64',
+      strategyId: 'layer/tree-rot13:jailbreak:tree/rot13',
+    },
+  ])('defers the minimum for normalized layered agentic seeds ($strategyId)', async ({
+    providerId,
+    strategyId,
+  }) => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'success' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: { id: () => providerId, callApi },
+      prompt: { raw: '{{prompt}}', label: 'test-label' },
+      test: {
+        vars: { prompt: 'tiny' },
+        metadata: { strategyId, strategyConfig: { minCharsPerMessage: 5 } },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { minCharsPerMessage: 5 },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(callApi).toHaveBeenCalled();
+    expect(results[0].error).toBeUndefined();
+  });
+
+  it('does not defer the minimum for mischievous-user seeds', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: { id: () => 'promptfoo:redteam:mischievous-user', callApi },
+      prompt: { raw: '{{prompt}}', label: 'test-label' },
+      test: {
+        vars: { prompt: 'tiny' },
+        metadata: {
+          strategyId: 'mischievous-user',
+          strategyConfig: { minCharsPerMessage: 5 },
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { minCharsPerMessage: 5 },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(callApi).not.toHaveBeenCalled();
+    expect(results[0].error).toContain('minCharsPerMessage=5');
+  });
+
   it('should not enforce redteam maxCharsPerMessage for non-redteam evals', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'success' });
 
