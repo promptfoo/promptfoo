@@ -28,6 +28,7 @@ import {
   loadApiProvider,
   loadApiProviders,
   resolveProviderConfigs,
+  resolveProviderInputsForValidation,
 } from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
@@ -2399,5 +2400,34 @@ prompts:
 
     expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
     expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
+  });
+
+  it('should render environment variables and return runtime provider inputs', async () => {
+    mockFsReadFileSync.mockReturnValue(`
+id: echo
+inputs:
+  context: Reference context
+  question: User question
+`);
+    const basePath = path.join(path.sep, 'test');
+
+    const result = await resolveProviderInputsForValidation(
+      ['file://{{env.PROVIDER_DIR}}/provider.yaml'],
+      {
+        basePath,
+        env: { PROVIDER_DIR: 'targets' },
+      },
+    );
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'targets', 'provider.yaml'),
+      'utf8',
+    );
+    expect(result).toEqual([
+      {
+        context: 'Reference context',
+        question: 'User question',
+      },
+    ]);
   });
 });

@@ -48,7 +48,7 @@ function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
   }
 
   const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
-  if (config && Object.hasOwn(config, '_perTurnLayers')) {
+  if (config && Object.prototype.hasOwnProperty.call(config, '_perTurnLayers')) {
     return true;
   }
   return id === 'layer' && Array.isArray(config?.steps)

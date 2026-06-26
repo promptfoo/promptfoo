@@ -19,7 +19,7 @@ import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import {
   redteamProviderManager,
-  resolveRedteamTargetProviderConfigs,
+  resolveRedteamTargetProviderInputs,
 } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
@@ -31,7 +31,7 @@ import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
-const mockedResolveRedteamTargetProviderConfigs = vi.mocked(resolveRedteamTargetProviderConfigs);
+const mockedResolveRedteamTargetProviderInputs = vi.mocked(resolveRedteamTargetProviderInputs);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
@@ -581,10 +581,7 @@ describe('Redteam Routes', () => {
     beforeEach(() => {
       vi.resetAllMocks();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
-      mockedResolveRedteamTargetProviderConfigs.mockImplementation(
-        async (providers) =>
-          providers as Awaited<ReturnType<typeof resolveRedteamTargetProviderConfigs>>,
-      );
+      mockedResolveRedteamTargetProviderInputs.mockResolvedValue([]);
     });
 
     afterEach(() => {
@@ -808,6 +805,48 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('should preflight command-line strategy overrides before replacing the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: [
+              {
+                id: 'echo',
+                inputs: { context: 'Reference context', question: 'User question' },
+              },
+            ],
+            redteam: { strategies: ['basic'] },
+            commandLineOptions: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
     it('should resolve referenced target inputs before replacing the active job', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-redteam-target-'));
       const providerPath = path.join(tempDir, 'providers.yaml');
@@ -828,13 +867,13 @@ describe('Redteam Routes', () => {
           resolveRun = resolve;
         }),
       );
-      mockedResolveRedteamTargetProviderConfigs.mockImplementationOnce(
-        async (providers, basePath) => {
-          const { resolveProviderConfigs } =
+      mockedResolveRedteamTargetProviderInputs.mockImplementationOnce(
+        async (providers, basePath, env) => {
+          const { resolveProviderInputsForValidation } =
             await vi.importActual<typeof import('../../../src/providers')>(
               '../../../src/providers',
             );
-          return resolveProviderConfigs(providers as any, { basePath });
+          return resolveProviderInputsForValidation(providers as any, { basePath, env });
         },
       );
 
@@ -868,6 +907,70 @@ describe('Redteam Routes', () => {
       } finally {
         fs.rmSync(tempDir, { force: true, recursive: true });
       }
+    });
+
+    it('should preflight hydrated cloud target inputs before replacing the active job', async () => {
+      let resolveRun: ((value: undefined) => void) | undefined;
+      mockedDoRedteamRun.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRun = resolve;
+        }),
+      );
+      mockedResolveRedteamTargetProviderInputs.mockResolvedValueOnce([
+        { context: 'Reference context', question: 'User question' },
+      ]);
+
+      const firstResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'first' } });
+      expect(firstResponse.status).toBe(200);
+
+      const incompatibleResponse = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['promptfoo://provider/00000000-0000-0000-0000-000000000000'],
+            redteam: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(incompatibleResponse.status).toBe(400);
+      expect(incompatibleResponse.body.error).toBe(
+        'Posterior strategy does not support multi-input targets',
+      );
+      expect(mockedResolveRedteamTargetProviderInputs).toHaveBeenCalledWith(
+        ['promptfoo://provider/00000000-0000-0000-0000-000000000000'],
+        undefined,
+        undefined,
+      );
+      expect(mockedDoRedteamRun).toHaveBeenCalledOnce();
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+
+      resolveRun!(undefined);
+      await vi.waitFor(async () => {
+        const statusResponse = await request(app).get('/api/redteam/status');
+        expect(statusResponse.body).toMatchObject({ hasRunningJob: false, jobId: null });
+      });
+    });
+
+    it('should not expose provider resolution details in validation errors', async () => {
+      mockedResolveRedteamTargetProviderInputs.mockRejectedValueOnce(
+        new Error("ENOENT: open '/tmp/private-provider.yaml'"),
+      );
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            targets: ['file:///tmp/private-provider.yaml'],
+            redteam: { strategies: ['posterior'] },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Invalid target provider configuration' });
+      expect(JSON.stringify(response.body)).not.toContain('/tmp/private-provider.yaml');
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
 
     it('should reject user-configured internal per-turn layers before replacing the active job', async () => {
