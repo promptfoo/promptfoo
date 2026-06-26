@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
@@ -1419,6 +1421,40 @@ Application Details:
       expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
     });
 
+    it('should recover a running job when effects are replayed in StrictMode', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'strict-mode-job' }),
+          } as Response;
+        }
+        if (url === '/eval/job/strict-mode-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: ['Still running'] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <StrictMode>
+          <EvalHistoryProvider>
+            <TooltipProvider delayDuration={0}>
+              <Review
+                navigateToPlugins={vi.fn()}
+                navigateToStrategies={vi.fn()}
+                navigateToPurpose={vi.fn()}
+              />
+            </TooltipProvider>
+          </EvalHistoryProvider>
+        </StrictMode>,
+      );
+
+      await waitFor(() => expect(mockSetJob).toHaveBeenCalledWith('strict-mode-job'));
+    });
+
     it('should reconnect when a pending preflight becomes a running job', async () => {
       let statusCalls = 0;
       vi.mocked(callApi).mockImplementation(async (url: string) => {
@@ -1456,6 +1492,43 @@ Application Details:
         },
         { timeout: 2500 },
       );
+    });
+
+    it('should wait for a pending replacement instead of following the old running job', async () => {
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? { hasRunningJob: true, hasPendingRun: true, jobId: 'old-job' }
+                : { hasRunningJob: true, hasPendingRun: false, jobId: 'replacement-job' },
+          } as Response;
+        }
+        if (url === '/eval/job/replacement-job') {
+          return {
+            ok: true,
+            json: async () => ({ status: 'in-progress', logs: ['Replacement started'] }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => expect(mockSetJob).toHaveBeenCalledWith('replacement-job'), {
+        timeout: 2500,
+      });
+      expect(mockSetJob).not.toHaveBeenCalledWith('old-job');
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/old-job');
     });
 
     it('should keep polling after a transient pending-run status failure', async () => {
@@ -1583,6 +1656,79 @@ Application Details:
 
       // Should clear job since it completed while away
       expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should recover a saved completed job after a transient status failure', async () => {
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-completed-job',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: true,
+      });
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          throw new Error('Temporary status failure');
+        }
+        if (url === '/eval/job/saved-completed-job') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'saved-eval-id',
+              logs: ['Completed while away'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-completed-job');
+        expect(screen.getByRole('link', { name: /view report/i })).toHaveAttribute(
+          'href',
+          '/reports?evalId=saved-eval-id',
+        );
+      });
+    });
+
+    it('should ignore a deferred mount recovery after unmount', async () => {
+      let resolveStatus: ((response: Response) => void) | undefined;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return new Promise<Response>((resolve) => {
+            resolveStatus = resolve;
+          });
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      const { unmount } = renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(resolveStatus).toBeDefined());
+      unmount();
+
+      await act(async () => {
+        resolveStatus!({
+          ok: true,
+          json: async () => ({ hasRunningJob: true, jobId: 'late-recovery-job' }),
+        } as Response);
+      });
+
+      expect(mockSetJob).not.toHaveBeenCalled();
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/late-recovery-job');
     });
 
     it('should call setJob when starting a new job', async () => {
@@ -1834,6 +1980,82 @@ Application Details:
         expect(screen.getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
       });
+    });
+
+    it('should prompt before superseding another tab pending run', async () => {
+      const user = userEvent.setup({ delay: null });
+      let statusCalls = 0;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          statusCalls += 1;
+          return {
+            ok: true,
+            json: async () =>
+              statusCalls === 1
+                ? { hasRunningJob: false, hasPendingRun: false }
+                : { hasRunningJob: false, hasPendingRun: true },
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+
+      expect(
+        await screen.findByRole('button', { name: /cancel existing & run new/i }),
+      ).toBeInTheDocument();
+      expect(callApi).not.toHaveBeenCalledWith('/redteam/run', expect.anything());
+    });
+
+    it('should ignore a deferred run response after unmount', async () => {
+      const user = userEvent.setup({ delay: null });
+      let resolveRun: ((response: Response) => void) | undefined;
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false, hasPendingRun: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return new Promise<Response>((resolve) => {
+            resolveRun = resolve;
+          });
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      const { unmount } = renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+      await user.click(await screen.findByRole('button', { name: /run now/i }));
+      await waitFor(() => expect(resolveRun).toBeDefined());
+      unmount();
+
+      await act(async () => {
+        resolveRun!({ ok: true, json: async () => ({ id: 'late-run-job' }) } as Response);
+      });
+
+      expect(mockSetJob).not.toHaveBeenCalled();
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/late-run-job');
     });
 
     it('should ignore stale replacement recovery after cancellation', async () => {

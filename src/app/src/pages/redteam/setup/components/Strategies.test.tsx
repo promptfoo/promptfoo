@@ -4,7 +4,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -305,6 +305,34 @@ describe('Strategies', () => {
       expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
       expect(screen.getByText('Posterior Attack requires a single-input target')).toBeVisible();
       expect(screen.getByText(/Remove Posterior Attack from.*Layer steps/)).toBeVisible();
+    });
+
+    it('allows progression but disables preview for a disabled layer containing Posterior', async () => {
+      const user = userEvent.setup();
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: { stateful: false },
+            inputs: { context: 'Reference context', question: 'User question' },
+          },
+          strategies: [{ id: 'layer', config: { numTests: 0, steps: ['posterior'] } }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+      await user.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+      const layerCard = screen.getByRole('button', { name: 'Layer' }).parentElement;
+      expect(layerCard).not.toBeNull();
+      expect(
+        within(layerCard!).getByRole('button', {
+          name: 'Posterior Attack supports single-input targets only.',
+        }),
+      ).toBeDisabled();
     });
   });
 

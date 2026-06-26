@@ -1,6 +1,6 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/redteam/types';
+import type { RedteamStrategy, RedteamStrategyObject } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
@@ -9,34 +9,72 @@ export function getStrategyId(strategy: RedteamStrategy): string {
 }
 
 function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
-  if (strategy === 'posterior') {
-    return true;
-  }
-  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
-    return false;
-  }
-  if (visited.has(strategy)) {
-    return false;
-  }
-  visited.add(strategy);
+  const pending = [strategy];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === 'posterior') {
+      return true;
+    }
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      continue;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
 
-  const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
-  if (id === 'posterior') {
-    return true;
+    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
+    if (id === 'posterior') {
+      return true;
+    }
+    if (id === 'layer' && Array.isArray(config?.steps)) {
+      for (let i = config.steps.length - 1; i >= 0; i--) {
+        pending.push(config.steps[i]);
+      }
+    }
   }
-  return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some((step) => containsPosteriorStrategy(step, visited))
-    : false;
+  return false;
+}
+
+export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
+  const visited = new Set<object>();
+  return getEffectiveStrategies(strategies).some((strategy) =>
+    containsPosteriorStrategy(strategy, visited),
+  );
 }
 
 export function hasPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
   const visited = new Set<object>();
-  return strategies.some((strategy) => {
-    if (strategy && typeof strategy === 'object' && strategy.config?.numTests === 0) {
+  return getEffectiveStrategies(strategies).some((strategy) => {
+    if (strategy.config?.numTests === 0) {
       return false;
     }
     return containsPosteriorStrategy(strategy, visited);
   });
+}
+
+function getEffectiveStrategies(strategies: readonly RedteamStrategy[]): RedteamStrategyObject[] {
+  const seen = new Set<string>();
+  return strategies
+    .map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy))
+    .filter((strategy) => {
+      let key = strategy.id;
+      if (strategy.id === 'layer' && strategy.config) {
+        if (typeof strategy.config.label === 'string' && strategy.config.label.trim()) {
+          key = `layer/${strategy.config.label}`;
+        } else if (Array.isArray(strategy.config.steps)) {
+          const steps = strategy.config.steps.map((step) =>
+            typeof step === 'string' ? step : (step?.id ?? 'unknown'),
+          );
+          key = `layer:${steps.join('->')}`;
+        }
+      }
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
 }
 
 // Strategies that require configuration before they can be used

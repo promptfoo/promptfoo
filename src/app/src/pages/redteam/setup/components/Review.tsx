@@ -71,6 +71,8 @@ interface JobStatusResponse {
   statusUnavailable?: boolean;
 }
 
+type JobRecoveryResult = 'running' | 'finished' | 'missing' | 'unavailable' | 'stale';
+
 interface IntentEntry {
   display: string;
   isMultiStep: boolean;
@@ -266,17 +268,15 @@ export default function Review({
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
 
-  // Track if recovery has been attempted to prevent duplicate runs
-  const hasAttemptedRecovery = useRef(false);
-
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (!_hasHydrated || hasAttemptedRecovery.current) {
+    if (!_hasHydrated) {
       return;
     }
-    hasAttemptedRecovery.current = true;
+    const recoveryRequest = runRequestRef.current;
+    const isCurrentRecovery = () => recoveryRequest === runRequestRef.current;
 
     const recoverJob = async () => {
       // Check what the server thinks is running
@@ -286,60 +286,36 @@ export default function Review({
         jobId: serverJobId,
         statusUnavailable,
       } = await checkForRunningJob();
+      if (!isCurrentRecovery()) {
+        return;
+      }
 
-      if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
+      if (hasPendingRun) {
+        setIsRunning(true);
+        startPendingRunPolling(savedJobId ?? undefined);
+      } else if (hasRunningJob && serverJobId) {
+        const result = await recoverJobById(serverJobId, recoveryRequest);
+        if (!isCurrentRecovery()) {
+          return;
+        }
+        if (result === 'missing' || result === 'unavailable') {
+          showToast('Could not reconnect to running job.', 'error');
           clearJob();
         }
-      } else if (hasPendingRun || statusUnavailable) {
+      } else if (savedJobId) {
+        const result = await recoverJobById(savedJobId, recoveryRequest);
+        if (!isCurrentRecovery()) {
+          return;
+        }
+        if (result === 'unavailable' && statusUnavailable) {
+          setIsRunning(true);
+          startPendingRunPolling(savedJobId);
+        } else if (result === 'missing' || result === 'unavailable') {
+          clearJob();
+        }
+      } else if (statusUnavailable) {
         setIsRunning(true);
         startPendingRunPolling();
-      } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
-            }
-          }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
-        }
-        clearJob();
       }
     };
 
@@ -554,62 +530,117 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
-  const startPendingRunPolling = useCallback(() => {
-    const pollGeneration = ++pollGenerationRef.current;
-    if (pollIntervalRef.current) {
-      window.clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-
-    let inFlight = false;
-    const interval = window.setInterval(async () => {
-      if (inFlight || pollGeneration !== pollGenerationRef.current) {
-        return;
-      }
-      inFlight = true;
+  const recoverJobById = useCallback(
+    async (jobId: string, requestGeneration: number): Promise<JobRecoveryResult> => {
       try {
-        const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } =
-          await checkForRunningJob();
-        if (pollGeneration !== pollGenerationRef.current) {
-          return;
+        const jobResponse = await callApi(`/eval/job/${jobId}`);
+        if (requestGeneration !== runRequestRef.current) {
+          return 'stale';
         }
-        if (statusUnavailable) {
-          return;
+        if (!jobResponse.ok) {
+          return 'missing';
         }
-        if (hasRunningJob && jobId) {
+        const job = (await jobResponse.json()) as Job;
+        if (requestGeneration !== runRequestRef.current) {
+          return 'stale';
+        }
+
+        setLogs(job.logs || []);
+        if (job.status === 'in-progress') {
+          setIsRunning(true);
           setJob(jobId);
           startPolling(jobId);
-        } else if (!hasPendingRun) {
-          window.clearInterval(interval);
-          if (pollIntervalRef.current === interval) {
-            pollIntervalRef.current = null;
-          }
-          pollGenerationRef.current += 1;
-          setIsRunning(false);
-          clearJob();
+          return 'running';
         }
-      } finally {
-        inFlight = false;
-      }
-    }, 1000);
 
-    pollIntervalRef.current = interval;
-  }, [checkForRunningJob, clearJob, setJob, startPolling]);
+        setIsRunning(false);
+        if (job.status === 'complete' && job.evalId) {
+          setEvalId(job.evalId);
+          showToast('Your evaluation completed!', 'success');
+        } else if (job.status === 'error') {
+          showToast('Previous job failed. Check logs for details.', 'error');
+        }
+        clearJob();
+        return 'finished';
+      } catch (error) {
+        console.error('Failed to recover job:', error);
+        return 'unavailable';
+      }
+    },
+    [clearJob, setJob, showToast, startPolling],
+  );
+
+  const startPendingRunPolling = useCallback(
+    (fallbackJobId?: string) => {
+      const pollGeneration = ++pollGenerationRef.current;
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      let inFlight = false;
+      const interval = window.setInterval(async () => {
+        if (inFlight || pollGeneration !== pollGenerationRef.current) {
+          return;
+        }
+        inFlight = true;
+        try {
+          const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } =
+            await checkForRunningJob();
+          if (pollGeneration !== pollGenerationRef.current) {
+            return;
+          }
+          if (statusUnavailable) {
+            return;
+          }
+          if (hasPendingRun) {
+            return;
+          }
+          if (hasRunningJob && jobId) {
+            setJob(jobId);
+            startPolling(jobId);
+          } else {
+            if (fallbackJobId) {
+              const result = await recoverJobById(fallbackJobId, runRequestRef.current);
+              if (pollGeneration !== pollGenerationRef.current || result === 'running') {
+                return;
+              }
+              if (result === 'unavailable' || result === 'stale') {
+                return;
+              }
+            }
+            window.clearInterval(interval);
+            if (pollIntervalRef.current === interval) {
+              pollIntervalRef.current = null;
+            }
+            pollGenerationRef.current += 1;
+            setIsRunning(false);
+            clearJob();
+          }
+        } finally {
+          inFlight = false;
+        }
+      }, 1000);
+
+      pollIntervalRef.current = interval;
+    },
+    [checkForRunningJob, clearJob, recoverJobById, setJob, startPolling],
+  );
 
   const reconnectToActiveRun = async (runRequest: number): Promise<boolean> => {
     const { hasRunningJob, hasPendingRun, jobId, statusUnavailable } = await checkForRunningJob();
     if (runRequest !== runRequestRef.current) {
       return false;
     }
+    if (hasPendingRun || statusUnavailable) {
+      setIsRunning(true);
+      startPendingRunPolling();
+      return true;
+    }
     if (hasRunningJob && jobId) {
       setIsRunning(true);
       setJob(jobId);
       startPolling(jobId);
-      return true;
-    }
-    if (hasPendingRun || statusUnavailable) {
-      setIsRunning(true);
-      startPendingRunPolling();
       return true;
     }
     return false;
@@ -646,12 +677,12 @@ export default function Review({
     }
 
     if (!replaceRunningJob) {
-      const { hasRunningJob } = await checkForRunningJob();
+      const { hasRunningJob, hasPendingRun } = await checkForRunningJob();
       if (!isCurrentRequest()) {
         return;
       }
 
-      if (hasRunningJob) {
+      if (hasRunningJob || hasPendingRun) {
         setIsJobStatusDialogOpen(true);
         return;
       }
@@ -783,6 +814,7 @@ export default function Review({
 
   useEffect(() => {
     return () => {
+      runRequestRef.current += 1;
       pollGenerationRef.current += 1;
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);

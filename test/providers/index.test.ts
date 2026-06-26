@@ -2615,6 +2615,102 @@ inputs:
     ).rejects.toThrow('Could not identify provider');
   });
 
+  it('does not evaluate Nunjucks expressions during provider validation', async () => {
+    await expect(
+      resolveProviderInputsForValidation([
+        {
+          id: `{{ env.CANARY.constructor.constructor("return 'echo'")() }}`,
+          env: { CANARY: 'x' },
+        },
+      ]),
+    ).rejects.toThrow('Could not identify provider');
+  });
+
+  it('redacts rendered environment values from provider validation errors', async () => {
+    const secretProviderId = 'private-provider-name-from-env';
+
+    const error = await resolveProviderInputsForValidation(['{{ env.PRIVATE_PROVIDER_ID }}'], {
+      env: { PRIVATE_PROVIDER_ID: secretProviderId },
+    }).catch((error) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('[redacted]');
+    expect(error.message).not.toContain(secretProviderId);
+  });
+
+  it('uses config environment state during provider validation', async () => {
+    const previousConfig = cliState.config;
+    cliState.config = { env: { TARGET_PROVIDER: 'echo' } };
+
+    try {
+      await expect(
+        resolveProviderInputsForValidation([
+          {
+            id: '{{ env.TARGET_PROVIDER }}',
+            inputs: { question: 'User question' },
+          },
+        ]),
+      ).resolves.toEqual([{ question: 'User question' }]);
+    } finally {
+      cliState.config = previousConfig;
+    }
+  });
+
+  it('renders a cloud provider id with cloud environment metadata', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER }}',
+      env: { TARGET_PROVIDER: 'echo' },
+      inputs: { question: 'User question' },
+    });
+
+    await expect(
+      resolveProviderInputsForValidation(
+        'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+      ),
+    ).resolves.toEqual([{ question: 'User question' }]);
+  });
+
+  it('redacts unknown cloud provider ids from validation errors', async () => {
+    const secretProviderId = 'private-cloud-provider-id';
+    vi.mocked(getProviderFromCloud).mockResolvedValueOnce({
+      id: '{{ env.TARGET_PROVIDER }}',
+      env: { TARGET_PROVIDER: secretProviderId },
+    });
+
+    const error = await resolveProviderInputsForValidation(
+      'promptfoo://provider/00000000-0000-0000-0000-000000000001',
+    ).catch((error) => error);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('[redacted]');
+    expect(error.message).not.toContain(secretProviderId);
+  });
+
+  it('rejects an own __proto__ provider map before cloud lookup', async () => {
+    const provider = JSON.parse(
+      '{"__proto__":{"id":"promptfoo://provider/00000000-0000-0000-0000-000000000001","inputs":{"question":"prompt"}}}',
+    );
+
+    await expect(resolveProviderInputsForValidation([provider])).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
+    expect(getProviderFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('rejects deeply nested provider metadata with a controlled error', async () => {
+    const config: Record<string, unknown> = {};
+    let current = config;
+    for (let i = 0; i < 1500; i++) {
+      const child: Record<string, unknown> = {};
+      current.child = child;
+      current = child;
+    }
+
+    await expect(resolveProviderInputsForValidation([{ id: 'echo', config }])).rejects.toThrow(
+      'Provider configuration is too complex to validate',
+    );
+  });
+
   it('rejects malformed scalar provider config files', async () => {
     mockFsReadFileSync.mockReturnValue('echo');
 

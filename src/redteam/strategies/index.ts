@@ -47,27 +47,30 @@ export type { Strategy };
 export const INTERNAL_PER_TURN_LAYERS_ERROR =
   'Strategy config field "_perTurnLayers" is reserved for internal layer composition; configure per-turn transforms with a layer strategy';
 
-function hasUserConfiguredPerTurnLayers(
-  strategy: unknown,
-  ancestors: ReadonlySet<object> = new Set(),
-): boolean {
-  if (!strategy || typeof strategy !== 'object' || Array.isArray(strategy)) {
-    return false;
-  }
-  if (ancestors.has(strategy)) {
-    return false;
-  }
+function hasUserConfiguredPerTurnLayers(strategy: unknown): boolean {
+  const pending = [strategy];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      continue;
+    }
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
 
-  const nextAncestors = new Set(ancestors);
-  nextAncestors.add(strategy);
-
-  const { config, id } = strategy as { config?: Record<string, unknown>; id?: unknown };
-  if (config && Object.prototype.hasOwnProperty.call(config, '_perTurnLayers')) {
-    return true;
+    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
+    if (config && Object.prototype.hasOwnProperty.call(config, '_perTurnLayers')) {
+      return true;
+    }
+    if (id === 'layer' && Array.isArray(config?.steps)) {
+      for (let i = config.steps.length - 1; i >= 0; i--) {
+        pending.push(config.steps[i]);
+      }
+    }
   }
-  return id === 'layer' && Array.isArray(config?.steps)
-    ? config.steps.some((step) => hasUserConfiguredPerTurnLayers(step, nextAncestors))
-    : false;
+  return false;
 }
 
 export function getStrategyCompatibilityError(
