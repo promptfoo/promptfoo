@@ -2,9 +2,11 @@ import * as path from 'path';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { z } from 'zod';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
+  EvalCommandSchema,
   EvalRunError,
   evalCommand,
   showRedteamProviderLabelMissingWarning,
@@ -416,9 +418,31 @@ describe('evalCommand', () => {
       new Error('Cloud config is not enabled'),
     );
 
-    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
-      `Failed to load cloud eval config "${cloudConfigUuid}". Cloud config is not enabled. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
-    );
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toMatchObject({
+      name: 'ConfigResolutionError',
+      message: `Failed to load cloud eval config "${cloudConfigUuid}". Cloud config is not enabled. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
+    });
+  });
+
+  it('should format invalid cloud configs as handled resolution errors', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const validationError = z
+      .object({ providers: z.string() })
+      .safeParse({ providers: ['echo'] }).error;
+
+    vi.mocked(getEvalConfigFromCloud).mockRejectedValueOnce(validationError);
+
+    const result = doEval({ config: [cloudConfigUuid] }, defaultConfig, defaultConfigPath, {});
+    await expect(result).rejects.toBeInstanceOf(ConfigResolutionError);
+    await expect(result).rejects.toThrow(`Invalid cloud eval config "${cloudConfigUuid}"`);
+    await expect(result).rejects.not.toThrow('Check authentication');
+  });
+
+  it('should not let an omitted CLI delay override config defaults', () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+
+    expect(EvalCommandSchema.parse({ config: [cloudConfigUuid] }).delay).toBeUndefined();
+    expect(EvalCommandSchema.parse({ delay: 0 }).delay).toBe(0);
   });
 
   it('should handle --no-cache option', async () => {

@@ -392,17 +392,20 @@ describe('cloud utils', () => {
 
       expect(result.description).toBe('My Cloud Eval Config');
       expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
-      expect(result.prompts).toEqual(['Hello {{name}}']);
+      expect(result.prompts).toEqual([
+        { id: 'prompt-1', label: 'Hello {{name}}', raw: 'Hello {{name}}' },
+      ]);
       expect(result.tests).toEqual([{ vars: { name: 'World' } }]);
       expect(result.commandLineOptions).toEqual({
         delay: 250,
         maxConcurrency: 2,
         verbose: true,
       });
+      expect(result.metadata).toEqual({ configId: 'config-id' });
       expect((result as any).providerIds).toBeUndefined();
       expect((result as any).testCases).toBeUndefined();
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/eval/configs/eval-config-id/unified',
+        'https://api.example.com/api/v1/eval/configs/eval-config-id',
         {
           method: 'GET',
           body: undefined,
@@ -429,11 +432,12 @@ describe('cloud utils', () => {
     });
 
     it('should normalize a target-only config', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
         json: () =>
           Promise.resolve({
-            targets: ['echo'],
+            targets: [providerId],
             prompts: ['Say hello'],
             tests: [],
           }),
@@ -441,7 +445,7 @@ describe('cloud utils', () => {
 
       const result = await getEvalConfigFromCloud('eval-config-id');
 
-      expect(result.providers).toEqual(['echo']);
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
       expect(result.targets).toBeUndefined();
     });
 
@@ -505,6 +509,91 @@ describe('cloud utils', () => {
       expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
       expect(result.prompts).toEqual(['Hi']);
       expect(result.tests).toEqual([]);
+    });
+
+    it('should preserve the complete serialized eval config envelope', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: 'config-id',
+            name: 'Imported Cloud Eval',
+            teamId: 'team-id',
+            config: {
+              targets: [
+                { [providerId]: { label: 'Cloud target map' } },
+                { id: providerId, label: 'Cloud target options' },
+              ],
+              prompts: [
+                {
+                  id: 'prompt-1',
+                  label: 'Greeting Prompt',
+                  content: 'Hello {{name}}',
+                },
+              ],
+              tests: [{ prompts: ['Greeting Prompt'], vars: { name: 'World' } }],
+              evaluateOptions: { delay: 100, repeat: 2 },
+              commandLineOptions: { maxConcurrency: 2 },
+              env: { CUSTOM_ENV: 'value' },
+              scenarios: [],
+              extensions: ['file://extension.js'],
+              metadata: { source: 'yaml-import' },
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result).toMatchObject({
+        description: 'Imported Cloud Eval',
+        providers: [
+          { [`promptfoo://provider/${providerId}`]: { label: 'Cloud target map' } },
+          { id: `promptfoo://provider/${providerId}`, label: 'Cloud target options' },
+        ],
+        prompts: [{ id: 'prompt-1', label: 'Greeting Prompt', raw: 'Hello {{name}}' }],
+        tests: [{ prompts: ['Greeting Prompt'], vars: { name: 'World' } }],
+        evaluateOptions: { delay: 100, repeat: 2 },
+        commandLineOptions: { maxConcurrency: 2 },
+        env: { CUSTOM_ENV: 'value' },
+        scenarios: [],
+        extensions: ['file://extension.js'],
+        metadata: { source: 'yaml-import', teamId: 'team-id', configId: 'config-id' },
+      });
+      expect(result.targets).toBeUndefined();
+      expect(result.commandLineOptions?.delay).toBeUndefined();
+    });
+
+    it('should preserve schema-valid scalar prompt and test sources', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              providers: 'echo',
+              prompts: 'file://prompt.txt',
+              tests: 'file://tests.yaml',
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.providers).toBe('echo');
+      expect(result.prompts).toBe('file://prompt.txt');
+      expect(result.tests).toBe('file://tests.yaml');
+    });
+
+    it.each([
+      { prompts: 42, tests: [] },
+      { prompts: ['Hello'], tests: 42 },
+    ])('should reject malformed prompt and test sources', async ({ prompts, tests }) => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ config: { providers: ['echo'], prompts, tests } }),
+      } as Response);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow();
     });
 
     it('should preserve object prompts without content or raw fields', async () => {
