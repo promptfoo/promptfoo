@@ -94,7 +94,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
   const targetInputs = config.target?.inputs ?? config.target?.config?.inputs;
-  const isPosteriorUnavailable = Boolean(targetInputs && Object.keys(targetInputs).length > 0);
+  const isPosteriorUnavailable =
+    targetInputs !== null &&
+    typeof targetInputs === 'object' &&
+    !Array.isArray(targetInputs) &&
+    Object.keys(targetInputs).length > 0;
   const hasSelectedPosterior = useMemo(
     () => hasPosteriorStrategy(config.strategies),
     [config.strategies],

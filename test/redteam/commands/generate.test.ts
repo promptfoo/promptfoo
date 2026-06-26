@@ -60,6 +60,8 @@ type SynthesizeMockResult = {
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
+  vi.mocked(fs.existsSync).mockReset();
+  vi.mocked(fs.readFileSync).mockReset();
   vi.mocked(getStrategyCompatibilityError).mockReset().mockReturnValue(undefined);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
@@ -4342,6 +4344,38 @@ describe('target ID extraction for retry strategy', () => {
       expect.objectContaining({
         targetIds: ['openai:gpt-4o-mini', 'anthropic:claude-3-sonnet', 'openai:gpt-4o'],
       }),
+    );
+  });
+
+  it('should derive retry target IDs from the filtered provider selection', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: ['selected-provider'],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [{ id: 'retry' }],
+        },
+      },
+      selectedProviderConfigs: ['selected-provider'],
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      filterProviders: 'selected-provider',
+    });
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({ targetIds: ['selected-provider'] }),
     );
   });
 

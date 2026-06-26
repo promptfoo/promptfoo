@@ -93,22 +93,23 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // object (see the `doEval` call), where they are persisted onto the eval result.
     const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
+    const generationOptions = {
+      ...passThroughOptions,
+      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    };
     let redteamConfig;
     const generationStartTime = Date.now();
     try {
-      redteamConfig = await doGenerateRedteam({
-        ...passThroughOptions,
-        ...(options.liveRedteamConfig?.commandLineOptions || {}),
-        ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
-        config: configPath,
-        output: redteamPath,
-        force: options.force,
-        verbose: options.verbose,
-        delay: options.delay,
-        inRedteamRun: true,
-        abortSignal: options.abortSignal,
-        progressBar: options.progressBar,
-      });
+      redteamConfig = await doGenerateRedteam(generationOptions);
     } catch (error) {
       if (error instanceof PartialGenerationError) {
         // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
@@ -141,8 +142,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         cache: true,
         write: true,
         filterPrompts: options.filterPrompts,
-        filterProviders: options.filterProviders,
-        filterTargets: options.filterTargets,
+        filterProviders: generationOptions.filterProviders,
+        filterTargets: generationOptions.filterTargets,
       },
       defaultConfig,
       redteamPath,

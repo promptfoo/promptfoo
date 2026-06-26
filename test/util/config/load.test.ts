@@ -2084,7 +2084,7 @@ describe('resolveConfigs', () => {
       expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
     });
 
-    await resolveConfigs(
+    const resolved = await resolveConfigs(
       { filterTargets: 'selected' },
       withResolveConfigsHooks(
         {
@@ -2100,6 +2100,7 @@ describe('resolveConfigs', () => {
 
     expect(beforeProviderLoad).toHaveBeenCalledOnce();
     expect(loadApiProviders).toHaveBeenCalledOnce();
+    expect(resolved.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
   });
 
   it('does not construct providers when provider preflight rejects', async () => {
