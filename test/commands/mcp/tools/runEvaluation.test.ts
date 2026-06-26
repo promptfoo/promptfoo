@@ -80,6 +80,15 @@ vi.mock('../../../../src/models/eval', () => ({
 describe('runEvaluation tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFilteredEvaluate.mockReset().mockResolvedValue({
+      id: 'filtered-eval-123',
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        version: 3,
+        stats: { successes: 1, failures: 0, errors: 0 },
+        results: [],
+        prompts: [],
+      }),
+    });
   });
 
   describe('result formatting', () => {
