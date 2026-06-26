@@ -45,20 +45,41 @@ to your account before copying an ID. The text example on this page uses an ID i
 
 ### Text Models (LLMs)
 
-- `hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct` - Text and code generation
+#### DeepSeek Models
+
+- `hyperbolic:deepseek-ai/DeepSeek-R1` - Reasoning and text generation
+
+#### Qwen Models
+
+Use the text model catalog and your account's model list to choose a current Qwen ID.
+
+#### Meta Llama Models
+
 - `hyperbolic:meta-llama/Llama-3.3-70B-Instruct` - General text generation
 
-For vision-language models, confirm a current multimodal ID in your account's model list. For
-image and audio model IDs, use Hyperbolic's current [image API](https://docs.hyperbolic.ai/inference/image-apis)
-and [audio API](https://docs.hyperbolic.ai/inference/audio-apis) documentation.
+#### Other Models
+
+Use the text model catalog to find other currently hosted IDs.
+
+### Vision-Language Models (VLMs)
+
+Confirm a current multimodal ID in your account's model list before configuring a VLM.
+
+### Image Generation Models
+
+Choose a current model ID from Hyperbolic's [image API documentation](https://docs.hyperbolic.ai/inference/image-apis).
+
+### Audio Generation Models
+
+Choose a current model ID from Hyperbolic's [audio API documentation](https://docs.hyperbolic.ai/inference/audio-apis).
 
 ## Configuration
 
-Configure the provider in your promptfoo configuration file:
+Configure the provider in your Promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct
+  - id: hyperbolic:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       top_p: 0.9
@@ -72,7 +93,7 @@ providers:
 | Parameter                         | Description                                                                                                                          |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `apiKey`                          | Your Hyperbolic API key                                                                                                              |
-| `cost`, `inputCost`, `outputCost` | Override promptfoo's pricing estimates. Use `inputCost` and `outputCost` for asymmetric pricing; `cost` remains the shared fallback. |
+| `cost`, `inputCost`, `outputCost` | Override Promptfoo's pricing estimates. Use `inputCost` and `outputCost` for asymmetric pricing; `cost` remains the shared fallback. |
 | `temperature`                     | Controls the randomness of the output (0.0 to 2.0)                                                                                   |
 | `max_tokens`                      | The maximum number of tokens to generate                                                                                             |
 | `top_p`                           | Controls nucleus sampling (0.0 to 1.0)                                                                                               |
@@ -118,7 +139,7 @@ providers:
 prompts:
   - file://prompts/coding_assistant.json
 providers:
-  - id: hyperbolic:Qwen/Qwen3-Coder-480B-A35B-Instruct
+  - id: hyperbolic:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       max_tokens: 4096
@@ -134,6 +155,23 @@ tests:
       - type: contains
         value: 'dynamic programming'
 ```
+
+### Image Generation Example
+
+Choose an ID from the current image API documentation, then use the
+`hyperbolic:image:<model_name>` provider format. Media model availability changes too frequently to
+pin a complete image config here.
+
+### Audio Generation Example
+
+Choose an ID from the current audio API documentation, then use the
+`hyperbolic:audio:<model_name>` provider format. Confirm the ID in your account before running an
+eval.
+
+### Vision-Language Model Example
+
+Choose a current multimodal ID from your account's model list and use it with the
+`hyperbolic:<model_name>` provider format.
 
 Example prompt template (`prompts/coding_assistant.json`):
 
@@ -166,6 +204,11 @@ See the [image API documentation](https://docs.hyperbolic.ai/inference/image-api
 ### Audio Models
 
 See the [audio API documentation](https://docs.hyperbolic.ai/inference/audio-apis) for current pricing.
+
+## Getting Started
+
+Start with the complete text config and companion prompt template above. Before running it, confirm
+that the model ID appears in your account's model list and set `HYPERBOLIC_API_KEY`.
 
 ## Notes
 
