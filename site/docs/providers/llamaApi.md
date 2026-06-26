@@ -188,7 +188,7 @@ tests:
     assert:
       - type: is-json
       - type: javascript
-        value: 'JSON.parse(output).rating >= 1 && JSON.parse(output).rating <= 5'
+        value: 'output.rating >= 1 && output.rating <= 5'
 ```
 
 ### Tool Calling

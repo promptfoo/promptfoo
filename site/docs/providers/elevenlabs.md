@@ -253,8 +253,9 @@ tests:
 
 ### Speech-to-Text: Accuracy Testing
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+With a local recording at `audio/test-recording.mp3`:
+
+```yaml
 prompts:
   - '{{audioFile}}'
 
@@ -303,8 +304,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const passed = result.analysis.evaluation_criteria_results.filter(r => r.passed);
+          const results = context.metadata?.evaluationResults ?? [];
+          const passed = results.filter((result) => result.passed);
           return passed.length >= 2;
 ```
 
@@ -496,10 +497,9 @@ tests:
 
 ### Transcription Accuracy Pipeline
 
-Save the TTS output as `audio/tts-output.mp3`, then run the STT stage to measure transcription accuracy:
+Save the TTS output as `audio/tts-output.mp3`, then use this STT fragment to measure transcription accuracy:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - '{{audioFile}}'
 
@@ -550,9 +550,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const criteria = result.analysis.evaluation_criteria_results;
-          return criteria.every(c => c.passed);
+          const criteria = context.metadata?.evaluationResults ?? [];
+          return criteria.length >= 2 && criteria.every((criterion) => criterion.passed);
 ```
 
 ## Best Practices
