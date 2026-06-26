@@ -451,8 +451,10 @@ prompts:
 
 defaultTest:
   assert:
-    - type: llm-rubric
-      value: 'Response should be helpful, accurate, and mention the 30-day return window'
+    - type: regex
+      value: '30[- ]day'
+    - type: icontains
+      value: 'return'
 ```
 
 ### Best Practices for Bot Testing

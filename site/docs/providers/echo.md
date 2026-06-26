@@ -88,8 +88,6 @@ tests:
   - vars:
       logged_output: 'Paris is the capital of France.'
     assert:
-      - type: llm-rubric
-        value: 'Answer is factually correct'
       - type: contains
         value: 'Paris'
 ```
@@ -116,8 +114,8 @@ tests:
       # Production logs often contain JSON strings
       logged_output: '{"response": "Paris is the capital of France.", "confidence": 0.95, "model": "gpt-5"}'
     assert:
-      - type: llm-rubric
-        value: 'Answer is factually correct'
+      - type: contains
+        value: 'Paris'
   - vars:
       logged_output: '{"response": "London is in England.", "confidence": 0.98, "model": "gpt-5"}'
     assert:
