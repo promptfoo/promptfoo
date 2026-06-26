@@ -176,6 +176,7 @@ describe('is-sql assertion', () => {
     it.each([
       { databaseType: 'BigQuery', outputString: "SELECT r'hello' value FROM t" },
       { databaseType: 'TransactSQL', outputString: "SELECT N'hello' value FROM t" },
+      // Intentionally `Sqlite` (not `SQLite`) to match node-sql-parser dialect naming.
       { databaseType: 'Sqlite', outputString: "SELECT X'53514C697465' value FROM t" },
     ])('should preserve prefixed literals in $databaseType', async ({
       databaseType,
@@ -485,8 +486,8 @@ describe('is-sql assertion', () => {
     });
   });
 
-  // ------------------------------------------- White Table/Column List Tests ------------------------------------------- //
-  describe('White Table/Column List Tests', () => {
+  // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
+  describe('Allowed Table/Column List Tests', () => {
     it('should fail if the output SQL statement violate allowedTables', async () => {
       const renderedValue = {
         databaseType: 'MySQL',
