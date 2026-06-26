@@ -359,13 +359,19 @@ function validateEffectiveCharsPerMessageRanges(
       ),
     ];
   };
-  const strategyConfigs = (data.strategies ?? [])
+  const configuredStrategies = data.strategies ?? [];
+  const basicStrategyConfigs = configuredStrategies.flatMap((strategy, index) =>
+    isBasicStrategy(strategy) ? [{ index, strategy: { id: '', config: undefined } }] : [],
+  );
+  const strategyConfigs = configuredStrategies
     .filter((strategy) => !isBasicStrategy(strategy))
     .flatMap((strategy, index) => expandLayerSteps(strategy, index));
   const effectivePlugins =
     pluginConfigs.length > 0 ? pluginConfigs : [{ index: 0, plugin: { id: '' } }];
   const effectiveStrategies =
-    strategyConfigs.length > 0 ? strategyConfigs : [{ index: 0, strategy: { id: '' } }];
+    basicStrategyConfigs.length > 0 || strategyConfigs.length > 0
+      ? [...basicStrategyConfigs, ...strategyConfigs]
+      : [{ index: 0, strategy: { id: '', config: undefined } }];
   for (const { index: strategyIndex, strategy } of effectiveStrategies) {
     if (strategy.config?.numTests === 0) {
       continue;
