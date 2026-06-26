@@ -5,13 +5,13 @@ import {
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleIsValidFunctionCall = ({
+export const handleIsValidFunctionCall = async ({
   assertion,
   output,
   provider,
   test,
   inverse,
-}: AssertionParams): GradingResult => {
+}: AssertionParams): Promise<GradingResult> => {
   if (!hasFunctionToolCallValidator(provider)) {
     return {
       pass: false,
@@ -24,7 +24,7 @@ export const handleIsValidFunctionCall = ({
   let isValid = false;
   let invalidReason = '';
   try {
-    provider.validateFunctionToolCall(output, test.vars);
+    await provider.validateFunctionToolCall(output, test.vars);
     isValid = true;
   } catch (err) {
     invalidReason = (err as Error).message;

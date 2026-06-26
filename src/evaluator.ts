@@ -1313,6 +1313,7 @@ async function transformRunEvalResponse({
   providerTransformedOutput: ProviderResponse['output'];
 }> {
   const processedResponse = { ...response };
+  const providerTransformInput = response.output;
   if (provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
@@ -1320,8 +1321,13 @@ async function transformRunEvalResponse({
     });
   }
   const providerTransformedOutput = processedResponse.output;
+  const providerInputIsReferenceLike =
+    providerTransformInput !== null &&
+    (typeof providerTransformInput === 'object' || typeof providerTransformInput === 'function');
   const providerTransformChanged = Boolean(
-    provider.transform && !isDeepStrictEqual(response.output, providerTransformedOutput),
+    provider.transform &&
+      (providerInputIsReferenceLike ||
+        !isDeepStrictEqual(providerTransformInput, providerTransformedOutput)),
   );
 
   const testTransform = test.options?.transform || test.options?.postprocess;

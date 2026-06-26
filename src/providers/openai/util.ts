@@ -5,12 +5,10 @@ import {
   type VarValue,
 } from '../../types/index';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
-import { getAjv, safeJsonStringify } from '../../util/json';
+import { createAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
 import type { ProviderConfig } from '../shared';
-
-const ajv = getAjv();
 
 const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
 
@@ -785,17 +783,19 @@ export interface OpenAiTool {
   function: OpenAiFunction;
 }
 
-export function validateFunctionCall(
-  output: string | object,
-  functions?: OpenAiFunction[],
-  vars?: Record<string, VarValue>,
-) {
-  if (typeof output === 'object' && 'function_call' in output) {
+interface OpenAiFunctionCall {
+  arguments: string;
+  name: string;
+}
+
+function parseFunctionCall(output: string | object): OpenAiFunctionCall {
+  if (typeof output === 'object' && output !== null && 'function_call' in output) {
     output = (output as { function_call: any }).function_call;
   }
-  const functionCall = output as { arguments: string; name: string };
+  const functionCall = output as OpenAiFunctionCall;
   if (
     typeof functionCall !== 'object' ||
+    functionCall === null ||
     typeof functionCall.name !== 'string' ||
     functionCall.name.trim().length === 0 ||
     typeof functionCall.arguments !== 'string'
@@ -804,15 +804,19 @@ export function validateFunctionCall(
       `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
     );
   }
+  return functionCall;
+}
 
-  // Parse function call and validate it against schema
+export function createFunctionCallValidator(
+  functions?: OpenAiFunction[],
+  vars?: Record<string, VarValue>,
+): (output: string | object) => void {
   let interpolatedFunctions: OpenAiFunction[];
   try {
     interpolatedFunctions = maybeLoadFromExternalFileWithVars(functions, vars) as OpenAiFunction[];
   } catch (error) {
     throw new FunctionToolCallValidationSetupError((error as Error).message);
   }
-  const functionName = functionCall.name;
   if (!Array.isArray(interpolatedFunctions) || interpolatedFunctions.length === 0) {
     throw new FunctionToolCallValidationSetupError(
       'No function schemas configured in provider, but output contains a function call',
@@ -830,7 +834,10 @@ export function validateFunctionCall(
     );
   }
 
-  const validators = new Map<string, ReturnType<typeof ajv.compile>>();
+  // Function schemas may contain $id values. Compile them in an isolated AJV
+  // instance so repeated assertions cannot collide through the global schema registry.
+  const validationAjv = createAjv();
+  const validators = new Map<string, ReturnType<typeof validationAjv.compile>>();
   for (const functionDefinition of interpolatedFunctions) {
     if (validators.has(functionDefinition.name)) {
       throw new FunctionToolCallValidationSetupError(
@@ -855,7 +862,7 @@ export function validateFunctionCall(
       );
     }
     try {
-      const validate = ajv.compile(functionSchema);
+      const validate = validationAjv.compile(functionSchema);
       if ((validate as { $async?: boolean }).$async) {
         throw new Error('Async function schemas are not supported');
       }
@@ -865,17 +872,31 @@ export function validateFunctionCall(
     }
   }
 
-  const functionDefinition = interpolatedFunctions.find((fn) => fn.name === functionName);
-  if (!functionDefinition) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
-  }
-  const functionArgs = JSON.parse(functionCall.arguments);
-  const validate = validators.get(functionDefinition.name)!;
-  if (!validate(functionArgs)) {
-    throw new Error(
-      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
-    );
-  }
+  return (output: string | object) => {
+    const functionCall = parseFunctionCall(output);
+    const functionName = functionCall.name;
+    const validate = validators.get(functionName);
+    if (!validate) {
+      throw new Error(`Called "${functionName}", but there is no function with that name`);
+    }
+    const functionArgs = JSON.parse(functionCall.arguments);
+    if (!validate(functionArgs)) {
+      throw new Error(
+        `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
+      );
+    }
+  };
+}
+
+export function validateFunctionCall(
+  output: string | object,
+  functions?: OpenAiFunction[],
+  vars?: Record<string, VarValue>,
+) {
+  // Preserve ordinary invalid-output precedence for completely malformed calls,
+  // while still preflighting all schemas before parsing model-controlled arguments.
+  const functionCall = parseFunctionCall(output);
+  createFunctionCallValidator(functions, vars)(functionCall);
 }
 
 export function formatOpenAiError(data: {

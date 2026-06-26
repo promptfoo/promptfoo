@@ -9,7 +9,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
-import { getAjv } from '../../util/json';
+import { createAjv, getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
@@ -1178,14 +1178,53 @@ function shouldSkipGoogleSchemaField(key: string, value: unknown): boolean {
   );
 }
 
-function normalizeSchemaTypes(schemaNode: any): any {
+function normalizeSchemaTypeValue(value: unknown): unknown {
+  if (typeof value === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)) {
+    return value.toLowerCase();
+  }
+  if (Array.isArray(value)) {
+    return value.map((type) =>
+      typeof type === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(type)
+        ? type.toLowerCase()
+        : type,
+    );
+  }
+  return normalizeSchemaTypes(value);
+}
+
+function normalizeSchemaField(key: string, value: unknown, isSchemaMap: boolean): unknown {
+  if (isSchemaMap) {
+    return normalizeSchemaTypes(value);
+  }
+  if (
+    (key === 'properties' || key === '$defs' || key === 'definitions') &&
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  ) {
+    return normalizeSchemaTypes(value, true);
+  }
+  if (key === 'type') {
+    return normalizeSchemaTypeValue(value);
+  }
+  if (
+    (key === 'minItems' || key === 'maxItems') &&
+    typeof value === 'string' &&
+    /^\d+$/.test(value)
+  ) {
+    return Number(value);
+  }
+  return normalizeSchemaTypes(value);
+}
+
+function normalizeSchemaTypes(schemaNode: any, isSchemaMap: boolean = false): any {
   // Handle non-objects (including null) and arrays directly by iterating/returning
   if (typeof schemaNode !== 'object' || schemaNode === null) {
     return schemaNode;
   }
 
   if (Array.isArray(schemaNode)) {
-    return schemaNode.map(normalizeSchemaTypes); // Recurse for array elements
+    return schemaNode.map((item) => normalizeSchemaTypes(item)); // Recurse for array elements
   }
 
   // Create a new object to avoid modifying the original
@@ -1195,37 +1234,11 @@ function normalizeSchemaTypes(schemaNode: any): any {
     if (Object.prototype.hasOwnProperty.call(schemaNode, key)) {
       const value = schemaNode[key];
 
-      if (shouldSkipGoogleSchemaField(key, value)) {
+      // Keys inside JSON Schema maps are user-defined names, not schema keywords.
+      if (!isSchemaMap && shouldSkipGoogleSchemaField(key, value)) {
         continue;
       }
-      if (key === 'type') {
-        if (
-          typeof value === 'string' &&
-          (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(value)
-        ) {
-          // Convert type value(s) to lowercase
-          newNode[key] = value.toLowerCase();
-        } else if (Array.isArray(value)) {
-          // Handle type arrays like ["STRING", "NULL"]
-          newNode[key] = value.map((t) =>
-            typeof t === 'string' && (VALID_SCHEMA_TYPES as ReadonlyArray<string>).includes(t)
-              ? t.toLowerCase()
-              : t,
-          );
-        } else {
-          // Handle type used as function field rather than a schema type definition
-          newNode[key] = normalizeSchemaTypes(value);
-        }
-      } else if (
-        (key === 'minItems' || key === 'maxItems') &&
-        typeof value === 'string' &&
-        /^\d+$/.test(value)
-      ) {
-        newNode[key] = Number(value);
-      } else {
-        // Recursively process nested objects/arrays
-        newNode[key] = normalizeSchemaTypes(value);
-      }
+      newNode[key] = normalizeSchemaField(key, value, isSchemaMap);
     }
   }
 
@@ -1240,7 +1253,8 @@ export function parseStringObject(input: string | any) {
 }
 
 function compileFunctionDeclarationValidators(functionDeclarations: FunctionDeclaration[]) {
-  const validators = new Map<FunctionDeclaration, ReturnType<typeof ajv.compile>>();
+  const validationAjv = createAjv();
+  const validators = new Map<FunctionDeclaration, ReturnType<typeof validationAjv.compile>>();
   const names = new Set<string>();
   for (const functionDeclaration of functionDeclarations) {
     if (names.has(functionDeclaration.name)) {
@@ -1263,7 +1277,7 @@ function compileFunctionDeclarationValidators(functionDeclarations: FunctionDecl
     }
     try {
       const parameterSchema = normalizeSchemaTypes(functionDeclaration.parameters);
-      validators.set(functionDeclaration, ajv.compile(parameterSchema as AnySchema));
+      validators.set(functionDeclaration, validationAjv.compile(parameterSchema as AnySchema));
     } catch (err) {
       throw new FunctionToolCallValidationSetupError(
         `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,

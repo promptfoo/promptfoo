@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { type OpenAiFunction, validateFunctionCall } from '../providers/openai/util';
+import { createFunctionCallValidator, type OpenAiFunction } from '../providers/openai/util';
 import {
   type AssertionParams,
   type GradingResult,
@@ -13,6 +13,9 @@ import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 interface OpenAiToolCall {
   function: { arguments: string; name: string };
 }
+
+/** Allows Promptfoo's manual assertion tool to opt into its legacy rendered-MCP input contract. */
+const PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT = Symbol.for('promptfoo.trustedMcpRenderedOutput');
 
 function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
   return (
@@ -142,10 +145,13 @@ function parseRawMcpToolCalls(raw: unknown): StructuredMcpToolCalls | undefined 
       calls.push({ name: value.name, error: 'tool call status was failed' });
       continue;
     }
+    const status = 'status' in value ? value.status : undefined;
+    const hasOutput = 'output' in value;
+    const output = hasOutput ? value.output : undefined;
     if (
-      ('status' in value && value.status !== undefined && value.status !== 'completed') ||
-      !('output' in value) ||
-      (value.output !== null && typeof value.output !== 'string')
+      (status !== undefined && status !== 'completed') ||
+      (hasOutput && output !== null && typeof output !== 'string') ||
+      (!hasOutput && status !== 'completed')
     ) {
       return { error: `MCP tool call response for ${value.name} is incomplete or malformed` };
     }
@@ -243,16 +249,36 @@ function wasMcpOutputTransformed({
   providerResponse,
   test,
 }: Pick<AssertionParams, 'assertion' | 'output' | 'provider' | 'providerResponse' | 'test'>) {
+  const isReferenceLike = (value: unknown) =>
+    value !== null && (typeof value === 'object' || typeof value === 'function');
   const assertionChangedOutput =
-    Boolean(assertion.transform) && !isDeepStrictEqual(output, providerResponse?.output);
+    Boolean(assertion.transform) &&
+    (isReferenceLike(providerResponse?.output) ||
+      !isDeepStrictEqual(output, providerResponse?.output));
   const hasTestTransform = Boolean(test.options?.transform || test.options?.postprocess);
   const testChangedOutput =
     hasTestTransform &&
-    providerResponse?.providerTransformedOutput !== undefined &&
-    !isDeepStrictEqual(providerResponse.output, providerResponse.providerTransformedOutput);
+    (providerResponse?.providerTransformedOutput === undefined ||
+      isReferenceLike(providerResponse.providerTransformedOutput) ||
+      !isDeepStrictEqual(providerResponse.output, providerResponse.providerTransformedOutput));
   const providerChangedOutput =
-    Boolean(provider?.transform) && providerResponse?.providerTransformChanged === true;
+    Boolean(provider?.transform) && providerResponse?.providerTransformChanged !== false;
   return assertionChangedOutput || testChangedOutput || providerChangedOutput;
+}
+
+function trustsRenderedMcpOutput(
+  providerResponse: AssertionParams['providerResponse'] | undefined,
+) {
+  return (
+    providerResponse === undefined ||
+    (
+      providerResponse as
+        | (NonNullable<AssertionParams['providerResponse']> & {
+            [PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT]?: true;
+          })
+        | undefined
+    )?.[PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT] === true
+  );
 }
 
 export const handleIsValidOpenAiToolsCall = async ({
@@ -310,7 +336,7 @@ export const handleIsValidOpenAiToolsCall = async ({
   // calls always include providerResponse and therefore require structured MCP
   // provenance instead of trusting model-controlled marker text.
   const serializedMcpCalls =
-    !hasTraditionalToolCalls && !outputWasTransformed && providerResponse === undefined
+    !hasTraditionalToolCalls && !outputWasTransformed && trustsRenderedMcpOutput(providerResponse)
       ? getSerializedMcpToolCalls(output)
       : [];
   const serializedMcpGrade = gradeMcpToolCalls(serializedMcpCalls, assertion, inverse);
@@ -391,8 +417,9 @@ export const handleIsValidOpenAiToolsCall = async ({
     };
   }
   try {
+    const validateToolCall = createFunctionCallValidator(functionDefinitions, test.vars);
     toolsOutput.forEach((toolOutput) => {
-      validateFunctionCall(toolOutput.function, functionDefinitions, test.vars);
+      validateToolCall(toolOutput.function);
     });
     return applyInverse(
       {

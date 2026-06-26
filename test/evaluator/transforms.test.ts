@@ -129,6 +129,66 @@ describeEvaluator('evaluator transforms', () => {
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
   });
 
+  it.each([
+    'provider',
+    'test',
+    'postprocess',
+    'assertion',
+  ] as const)('does not trust stale MCP provenance after an in-place %s transform', async (transformLevel) => {
+    const mutateInPlace = (output: unknown) => {
+      if (typeof output === 'object' && output !== null && 'content' in output) {
+        (output as { content: string }).content = 'ordinary transformed text';
+      }
+      return output;
+    };
+    const provider: ApiProvider = {
+      id: () => `mcp-${transformLevel}`,
+      callApi: async () => ({
+        output: { content: 'MCP Tool Result (search): ok' },
+        raw: {
+          output: [{ type: 'mcp_call', name: 'search', status: 'completed', output: 'ok' }],
+        },
+      }),
+      ...(transformLevel === 'provider' ? { transform: mutateInPlace } : {}),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          threshold: 0.5,
+          ...(transformLevel === 'test' ? { options: { transform: mutateInPlace } } : {}),
+          ...(transformLevel === 'postprocess' ? { options: { postprocess: mutateInPlace } } : {}),
+          assert: (['is-valid-openai-tools-call', 'not-is-valid-openai-tools-call'] as const).map(
+            (type) => ({
+              type,
+              ...(transformLevel === 'assertion' ? { transform: mutateInPlace } : {}),
+            }),
+          ),
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    const components = summary.results[0].gradingResult?.componentResults ?? [];
+
+    expect(components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'is-valid-openai-tools-call' }),
+          pass: false,
+          score: 0,
+        }),
+        expect.objectContaining({
+          assertion: expect.objectContaining({ type: 'not-is-valid-openai-tools-call' }),
+          pass: true,
+          score: 1,
+        }),
+      ]),
+    );
+  });
+
   it('evaluate with vars transform', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

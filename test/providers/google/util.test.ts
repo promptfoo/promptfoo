@@ -319,6 +319,27 @@ describe('util', () => {
       ];
       expect(() => validateFunctionCall(output, functions)).not.toThrow();
     });
+
+    it('isolates schema identifiers between validations', () => {
+      const output = [{ functionCall: { name: 'identified', args: '{}' } }];
+      const functions: Tool[] = [
+        {
+          functionDeclarations: [
+            {
+              name: 'identified',
+              parameters: {
+                $id: 'urn:promptfoo:pr9838:google',
+                type: 'OBJECT',
+                properties: {},
+              } as never,
+            },
+          ],
+        },
+      ];
+
+      expect(() => validateFunctionCall(output, functions)).not.toThrow();
+      expect(() => validateFunctionCall(output, functions)).not.toThrow();
+    });
   });
 
   describe('maybeCoerceToGeminiFormat', () => {

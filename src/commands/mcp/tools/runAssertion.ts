@@ -7,6 +7,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { Assertion, AtomicTestCase } from '../../../types/index';
 
+const PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT = Symbol.for('promptfoo.trustedMcpRenderedOutput');
+
 /**
  * Run an assertion against an LLM output to test grading logic
  *
@@ -92,6 +94,9 @@ export function registerRunAssertionTool(server: McpServer) {
           tokenUsage: {},
           cost: 0,
           cached: false,
+          // This tool accepts manually supplied rendered output and historically
+          // supports MCP result/error markers. Keep that trust scoped to this path.
+          [PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT]: true as const,
         };
 
         logger.debug(`Running assertion ${assertion.type} on output: ${output.slice(0, 100)}...`);

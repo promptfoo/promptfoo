@@ -28,6 +28,26 @@ const setupErrorProvider = {
     throw new FunctionToolCallValidationSetupError('validator schema unavailable');
   },
 };
+const asyncValidProvider = {
+  ...validProvider,
+  validateFunctionToolCall: async () => {
+    await Promise.resolve();
+  },
+};
+const asyncInvalidProvider = {
+  ...validProvider,
+  validateFunctionToolCall: async () => {
+    await Promise.resolve();
+    throw new Error('async invalid call');
+  },
+};
+const asyncSetupErrorProvider = {
+  ...validProvider,
+  validateFunctionToolCall: async () => {
+    await Promise.resolve();
+    throw new FunctionToolCallValidationSetupError('async schema unavailable');
+  },
+};
 
 function params(overrides: Partial<AssertionParams>): AssertionParams {
   return {
@@ -51,22 +71,71 @@ async function runInverse(type: AssertionType, provider: ApiProvider) {
 }
 
 describe('handleIsValidFunctionCall', () => {
-  it('passes for a valid function call', () => {
-    const r = handleIsValidFunctionCall(params({ provider: validProvider as never }));
+  it('passes for a valid function call', async () => {
+    const r = await handleIsValidFunctionCall(params({ provider: validProvider as never }));
     expect(r.pass).toBe(true);
     expect(r.reason).toBe('Assertion passed');
   });
 
-  it('fails for an invalid function call with the validation error', () => {
-    const r = handleIsValidFunctionCall(params({ provider: invalidProvider as never }));
+  it('fails for an invalid function call with the validation error', async () => {
+    const r = await handleIsValidFunctionCall(params({ provider: invalidProvider as never }));
     expect(r.pass).toBe(false);
     expect(r.reason).toBe('must have required property "location"');
   });
 
-  it('fails when the provider cannot validate function calls', () => {
-    const r = handleIsValidFunctionCall(params({ provider: noValidatorProvider as never }));
+  it('fails when the provider cannot validate function calls', async () => {
+    const r = await handleIsValidFunctionCall(params({ provider: noValidatorProvider as never }));
     expect(r.pass).toBe(false);
     expect(r.reason).toBe('Provider does not have functionality for checking function call.');
+  });
+
+  it('awaits asynchronous custom validators through the dispatcher', async () => {
+    const [valid, invalid, inverseInvalid] = await Promise.all([
+      runAssertion({
+        assertion: { type: 'is-valid-function-call' },
+        provider: asyncValidProvider as ApiProvider,
+        prompt: 'test prompt',
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      }),
+      runAssertion({
+        assertion: { type: 'is-valid-function-call' },
+        provider: asyncInvalidProvider as ApiProvider,
+        prompt: 'test prompt',
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      }),
+      runAssertion({
+        assertion: { type: 'not-is-valid-function-call' },
+        provider: asyncInvalidProvider as ApiProvider,
+        prompt: 'test prompt',
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      }),
+    ]);
+
+    expect(valid).toMatchObject({ pass: true, score: 1 });
+    expect(invalid).toMatchObject({ pass: false, score: 0, reason: 'async invalid call' });
+    expect(inverseInvalid).toMatchObject({ pass: true, score: 1 });
+  });
+
+  it.each([
+    'is-valid-function-call',
+    'not-is-valid-function-call',
+  ] as const)('%s does not invert an asynchronous setup error', async (type) => {
+    const result = await runAssertion({
+      assertion: { type },
+      provider: asyncSetupErrorProvider as ApiProvider,
+      prompt: 'test prompt',
+      providerResponse: { output: '{}' },
+      test: { vars: {} },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'async schema unavailable',
+    });
   });
 
   describe('inverse (not-is-valid-function-call)', () => {

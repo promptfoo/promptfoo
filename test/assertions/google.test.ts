@@ -507,6 +507,57 @@ describe('Google assertions', () => {
       expect(inverse).toMatchObject({ pass: false, score: 0 });
     });
 
+    it.each([
+      'propertyOrdering',
+      'property_ordering',
+    ] as const)('validates an argument property named %s', async (propertyName) => {
+      const provider = new AIStudioChatProvider('foo', {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'collision',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { [propertyName]: { type: 'STRING' } },
+                    propertyOrdering: [propertyName],
+                    required: [propertyName],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const run = (value: unknown, type: 'is-valid-function-call' | 'not-is-valid-function-call') =>
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: { type },
+          test: {} as AtomicTestCase,
+          providerResponse: {
+            output: [{ functionCall: { name: 'collision', args: { [propertyName]: value } } }],
+          },
+        });
+
+      const [invalidPositive, invalidInverse, validPositive, validInverse] = await Promise.all([
+        run(42, 'is-valid-function-call'),
+        run(42, 'not-is-valid-function-call'),
+        run('ordered', 'is-valid-function-call'),
+        run('ordered', 'not-is-valid-function-call'),
+      ]);
+
+      expect(invalidPositive).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('does not match schema'),
+      });
+      expect(invalidInverse).toMatchObject({ pass: true, score: 1 });
+      expect(validPositive).toMatchObject({ pass: true, score: 1 });
+      expect(validInverse).toMatchObject({ pass: false, score: 0 });
+    });
+
     it('does not invert duplicate function names across tool groups', async () => {
       const output = JSON.stringify({
         toolCall: { functionCalls: [{ args: '{}', name: 'duplicate' }] },
