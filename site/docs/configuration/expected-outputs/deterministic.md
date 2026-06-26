@@ -563,6 +563,8 @@ assert:
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#tool-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#tool-calling), which this is implemented for.
 
+Use `not-is-valid-function-call` (or the legacy `not-is-valid-openai-function-call`) to require an invalid function call. Provider capability and schema setup errors remain failures because no validation verdict was produced.
+
 ### is-valid-openai-function-call
 
 Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
@@ -570,6 +572,8 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 ### is-valid-openai-tools-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
+
+Use `not-is-valid-openai-tools-call` to require an invalid tool call. Missing or unusable provider tool schemas remain failures instead of satisfying the negated assertion.
 
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
@@ -1033,6 +1037,8 @@ assert:
 ### Trace-Span-Count
 
 The `trace-span-count` assertion counts the number of spans in a trace that match a given pattern and checks if the count is within specified bounds. This is useful for validating that expected operations occurred in your LLM application.
+
+The `not-trace-span-count`, `not-trace-span-duration`, and `not-trace-error-spans` forms invert the final constraint verdict and score. Their reasons still report the measured trace facts. For duration and error checks, no matching spans satisfy the base constraint, so the negated form fails; missing trace data remains an evaluation error in both directions.
 
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
