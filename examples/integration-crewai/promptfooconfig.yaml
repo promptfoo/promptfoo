@@ -49,13 +49,19 @@ tests:
     assert:
       - type: python
         value: |
-          # Check that all candidates have relevant skills
+          import re
+
+          def has_skill(candidate, required_skill):
+              return any(
+                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  for skill in candidate.get('skills', [])
+              )
+
           required_skills = ['python', 'django', 'react']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          return all(
+              all(has_skill(candidate, required_skill) for required_skill in required_skills)
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills
 
   - description: 'Data Scientist with Machine Learning and Cloud'
     vars:
@@ -63,13 +69,22 @@ tests:
     assert:
       - type: python
         value: |
-          # Check for relevant data science and cloud skills
-          required_skills = ['machine learning', 'python', 'aws', 'gcp', 'tensorflow', 'pytorch']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          import re
+
+          def has_skill(candidate, required_skill):
+              return any(
+                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  for skill in candidate.get('skills', [])
+              )
+
+          machine_learning_skills = ['machine learning', 'tensorflow', 'pytorch']
+          cloud_skills = ['aws', 'gcp']
+          return all(
+              has_skill(candidate, 'python')
+              and any(has_skill(candidate, skill) for skill in machine_learning_skills)
+              and any(has_skill(candidate, skill) for skill in cloud_skills)
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills
 
   - description: 'Junior UX/UI Designer'
     vars:
@@ -77,10 +92,15 @@ tests:
     assert:
       - type: python
         value: |
-          # Check for relevant design tool skills
-          required_skills = ['figma', 'adobe', 'ux', 'ui', 'user experience', 'user interface']
-          all_have_skills = all(
-              any(req_skill in skill.lower() for skill in candidate.get('skills', []) for req_skill in required_skills)
+          import re
+
+          def has_skill(candidate, required_skill):
+              return any(
+                  re.search(rf'(?<![a-z0-9]){re.escape(required_skill)}(?![a-z0-9])', skill.lower())
+                  for skill in candidate.get('skills', [])
+              )
+
+          return all(
+              has_skill(candidate, 'figma') and has_skill(candidate, 'adobe')
               for candidate in output.get('candidates', [])
           )
-          return all_have_skills

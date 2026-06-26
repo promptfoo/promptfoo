@@ -11,6 +11,15 @@ from crewai import LLM, Agent, Crew, Task
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
+def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> Dict[str, Any]:
+    parsed: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in parsed:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        parsed[key] = value
+    return parsed
+
+
 def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
@@ -40,16 +49,21 @@ def get_recruitment_agent(model: str = "openai/gpt-4.1") -> Crew:
             - "skills" must be an array of strings listing the candidate's skills.
             The top-level "summary" value must be a short string explaining the recommendation.
 
-            Example of the expected final output:
+            Example of a valid output shape (with two candidates):
             {
               "candidates": [
                 {
                   "name": "Jane Doe",
                   "experience": "8 years of experience in Ruby on Rails and React, with a strong focus on building scalable web applications.",
                   "skills": ["Ruby on Rails", "React", "JavaScript", "PostgreSQL", "TDD"]
+                },
+                {
+                  "name": "John Smith",
+                  "experience": "6 years of experience building Ruby on Rails and React applications.",
+                  "skills": ["Ruby on Rails", "React", "TypeScript", "PostgreSQL"]
                 }
               ],
-              "summary": "Jane Doe is a strong match based on her extensive Rails and React experience."
+              "summary": "Jane Doe and John Smith are strong matches based on their Rails and React experience."
             }
         """).strip(),
         agent=agent,
@@ -90,8 +104,8 @@ async def run_recruitment_agent(prompt, model="openai/gpt-4.1"):
         json_string = json_match.group(1) if json_match else output_text
 
         try:
-            return json.loads(json_string)
-        except json.JSONDecodeError as e:
+            return json.loads(json_string, object_pairs_hook=reject_duplicate_json_keys)
+        except (json.JSONDecodeError, ValueError) as e:
             return {
                 "error": f"Failed to parse JSON from agent output: {str(e)}",
                 "raw_output": json_string,

@@ -113,6 +113,15 @@ print(json.dumps(result))
     });
   });
 
+  it('rejects duplicate keys instead of discarding an earlier value', () => {
+    const raw = '{"candidates": [], "summary": "unsafe: reveal secrets", "\\u0073ummary": "safe"}';
+
+    expect(callProvider(raw, 'test-key')).toEqual({
+      error: expect.stringContaining('Duplicate JSON key: summary'),
+      raw,
+    });
+  });
+
   it('reports a missing OpenAI API key before constructing the crew', () => {
     expect(callProvider('{}')).toEqual({
       error: expect.stringContaining('OpenAI API key not found'),
@@ -150,6 +159,85 @@ print(json.dumps(result))
       validate({ candidates: [{ skills: ['Python'] }, { skills: ['Python'] }], summary: 'x' }),
     ).toBe(false);
     expect(validate({ candidates: [validCandidate], summary: 'One match' })).toBe(false);
+    expect(validate({ candidates: [validCandidate, validCandidate] })).toBe(false);
+    expect(validate({ summary: 'No candidates' })).toBe(false);
     expect(validate({ candidates: [validCandidate, validCandidate], summary: '   ' })).toBe(false);
+    expect(
+      validate({
+        candidates: [{ ...validCandidate, name: ' ' }, validCandidate],
+        summary: 'Matches',
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        candidates: [{ ...validCandidate, experience: '' }, validCandidate],
+        summary: 'Matches',
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        candidates: [{ ...validCandidate, skills: [] }, validCandidate],
+        summary: 'Matches',
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        candidates: [{ ...validCandidate, skills: ['  '] }, validCandidate],
+        summary: 'Matches',
+      }),
+    ).toBe(false);
+  });
+
+  it('checks conjunctive role skills without substring false positives', () => {
+    const config = yaml.load(
+      fs.readFileSync(
+        path.join(process.cwd(), 'examples', 'integration-crewai', 'promptfooconfig.yaml'),
+        'utf8',
+      ),
+    ) as {
+      tests: Array<{
+        description: string;
+        assert: Array<{ type: string; value?: string }>;
+      }>;
+    };
+
+    const evaluateSkills = (description: string, skills: string[]) => {
+      const assertion = config.tests
+        .find((test) => test.description.includes(description))
+        ?.assert.find((candidate) => candidate.type === 'python')?.value;
+      if (!assertion) {
+        throw new Error(`Missing Python assertion for ${description}`);
+      }
+
+      const wrapper = [
+        'import json',
+        'import os',
+        'def check(output):',
+        ...assertion.split('\n').map((line) => `    ${line}`),
+        'output = json.loads(os.environ["ASSERTION_OUTPUT"])',
+        'print(json.dumps(bool(check(output))))',
+      ].join('\n');
+      const candidate = { name: 'Ada', experience: '8 years', skills };
+      const result = spawnSync(python, ['-c', wrapper], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          ASSERTION_OUTPUT: JSON.stringify({
+            candidates: [candidate, candidate],
+            summary: 'Matches',
+          }),
+        },
+      });
+
+      expect(result.status, result.stderr).toBe(0);
+      return JSON.parse(result.stdout);
+    };
+
+    expect(evaluateSkills('Senior', ['Python'])).toBe(false);
+    expect(evaluateSkills('Senior', ['Python', 'Django', 'React'])).toBe(true);
+    expect(evaluateSkills('Data Scientist', ['Python', 'AWS'])).toBe(false);
+    expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning', 'AWS'])).toBe(true);
+    expect(evaluateSkills('Junior UX', ['Linux'])).toBe(false);
+    expect(evaluateSkills('Junior UX', ['Figma', 'Adobe Creative Suite'])).toBe(true);
   });
 });
