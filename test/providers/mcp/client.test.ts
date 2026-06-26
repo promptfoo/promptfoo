@@ -122,7 +122,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import cliState from '../../../src/cliState';
-import { winstonLogger } from '../../../src/logger';
+import logger from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -159,6 +159,7 @@ describe('MCPClient', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -1421,6 +1422,8 @@ describe('MCPClient', () => {
       ['succeeded', false],
       ['failed', true],
     ] as const)('should emit one bounded diagnostic when client close fails and transport fallback %s', async (expectedFallback, shouldTransportFail) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-26T00:00:00.000Z'));
       const sentinels = [
         'PROMPT_SENTINEL',
         'PROVIDER_RESPONSE_SENTINEL',
@@ -1435,13 +1438,17 @@ describe('MCPClient', () => {
         response: `${sentinels[1]} ${sentinels[4]}`,
         toJSON: () => ({ prompt: sentinels[0] }),
       };
-      const debugSpy = vi.spyOn(winstonLogger, 'debug').mockReturnValue(winstonLogger);
+      const debugSpy = vi.spyOn(logger, 'debug');
 
-      mockClient.connect.mockResolvedValue(undefined);
-      mockClient.listTools.mockResolvedValue({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
-      mockClient.callTool.mockResolvedValue({ content: 'result' });
+      mockClient.connect.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'result' });
       mockGetOAuthTokenWithExpiry
         .mockResolvedValueOnce({
           accessToken: 'initial-token',
@@ -1479,24 +1486,23 @@ describe('MCPClient', () => {
       expect(mockClient.close).toHaveBeenCalledOnce();
       expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
 
-      const diagnostics = debugSpy.mock.calls
-        .map(([info]) => (info as { message?: unknown }).message)
-        .filter(
-          (message): message is string =>
-            typeof message === 'string' &&
-            message.startsWith('[MCP] Failed to close existing client during OAuth refresh'),
-        );
-      expect(diagnostics).toHaveLength(1);
-      const [message, ...contextLines] = diagnostics[0].split('\n');
-      expect(message).toBe('[MCP] Failed to close existing client during OAuth refresh');
-      expect(JSON.parse(contextLines.join('\n'))).toEqual({
-        operation: 'oauth-refresh',
-        resource: 'client',
-        transportFallback: expectedFallback,
-        nextAction: 'reconnect',
-      });
+      const diagnostics = debugSpy.mock.calls.filter(
+        ([message]) => message === '[MCP] Failed to close existing client during OAuth refresh',
+      );
+      expect(diagnostics).toEqual([
+        [
+          '[MCP] Failed to close existing client during OAuth refresh',
+          {
+            operation: 'oauth-refresh',
+            resource: 'client',
+            transportFallback: expectedFallback,
+            nextAction: 'reconnect',
+          },
+        ],
+      ]);
+      const serializedDiagnostics = JSON.stringify(diagnostics);
       for (const sentinel of sentinels) {
-        expect(diagnostics[0]).not.toContain(sentinel);
+        expect(serializedDiagnostics).not.toContain(sentinel);
       }
     });
 
