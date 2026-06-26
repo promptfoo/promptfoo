@@ -1,5 +1,6 @@
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
+import { ALIASED_PLUGIN_MAPPINGS } from './constants/frameworks';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   DEFAULT_PLUGINS,
   FINANCIAL_PLUGINS,
@@ -12,8 +13,7 @@ import {
   PII_PLUGINS,
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
-} from './constants';
-import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
+} from './constants/plugins';
 
 export const runtimePluginCategories = {
   foundation: FOUNDATION_PLUGINS,

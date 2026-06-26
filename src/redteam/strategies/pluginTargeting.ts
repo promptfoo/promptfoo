@@ -1,4 +1,4 @@
-import { CANARY_BREAKING_STRATEGY_IDS, STRATEGY_EXEMPT_PLUGINS } from '../constants';
+import { CANARY_BREAKING_STRATEGY_IDS, STRATEGY_EXEMPT_PLUGINS } from '../constants/plugins';
 import { MULTI_TURN_STRATEGY_SET } from '../constants/strategies';
 
 /** The plugin-only portion of the runtime strategy-targeting predicate. */
