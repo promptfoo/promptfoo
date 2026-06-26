@@ -321,7 +321,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.104.1",
-    "@apidevtools/json-schema-ref-parser": "^15.3.1",
+    "@apidevtools/json-schema-ref-parser": "15.3.6",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",

@@ -17,7 +17,7 @@ import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
-import { dereferenceWithStandaloneSchemas } from './config/jsonSchema';
+import { dereferenceWithStandaloneSchemas, getLocalRefTokens } from './config/jsonSchema';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -46,14 +46,17 @@ function loadExternalFilesBeforeRefParser(value: unknown): unknown {
   return maybeLoadConfigFromExternalFile(value, undefined, { preserveRefs: true });
 }
 
-function dereferenceStandaloneTestCases<T extends object>(value: T): Promise<T> {
+function dereferenceStandaloneTestCases<T extends object>(
+  value: T,
+  schemaFileBasePath: string = '',
+  jsonlRowRoots = false,
+  disabled = getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+): Promise<T> {
   return dereferenceWithStandaloneSchemas(value, 'tests', {
-    disabled: getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+    disabled,
+    jsonlRowRoots,
+    schemaFileBasePath,
   });
-}
-
-function dereferenceStandaloneTestRows(testCases: TestCase[]): Promise<TestCase[]> {
-  return Promise.all(testCases.map((testCase) => dereferenceStandaloneTestCases(testCase)));
 }
 
 export async function readTestFiles(
@@ -244,7 +247,7 @@ async function readLocalStandaloneTestsFile(
     });
     const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = loadExternalFilesBeforeRefParser(rawContent) as unknown as CsvRow[];
-    return dereferenceStandaloneTestCases(csvRowsToTestCases(rows));
+    return dereferenceStandaloneTestCases(csvRowsToTestCases(rows), path.dirname(resolvedVarsPath));
   }
 
   return [];
@@ -353,18 +356,157 @@ function parseCsvRows(fileContent: string): CsvRow[] {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  const parsed = addDefaultTestDescriptions(yaml.load(fileContent));
-  const dereferenced = await dereferenceStandaloneTestCases(parsed);
-  return Array.isArray(dereferenced) ? dereferenced : [dereferenced];
+  const parsed = yaml.load(fileContent);
+  const disabled = getEnvBool('PROMPTFOO_DISABLE_REF_PARSER');
+  const described = prepareTestDescriptions(parsed, false, !disabled);
+  const dereferenced = await dereferenceStandaloneTestCases(
+    described,
+    path.dirname(resolvedVarsPath),
+    false,
+    disabled,
+  );
+  const completed = addDefaultTestDescriptions(dereferenced);
+  return Array.isArray(completed) ? completed : [completed];
 }
 
-function addDefaultTestDescriptions(jsonData: any): TestCase | TestCase[] {
-  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  const described = testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
-  return Array.isArray(jsonData) ? described : described[0];
+function resolveOwnPointer(root: unknown, tokens: string[]): { found: boolean; value: unknown } {
+  let current = root;
+  for (let index = 0; index < tokens.length; index++) {
+    if (typeof current !== 'object' || current === null) {
+      return { found: false, value: undefined };
+    }
+    let token = tokens[index];
+    if (!Object.prototype.hasOwnProperty.call(current, token)) {
+      for (let end = tokens.length - 1; end > index; end--) {
+        const joined = tokens.slice(index, end + 1).join('/');
+        if (Object.prototype.hasOwnProperty.call(current, joined)) {
+          token = joined;
+          index = end;
+          break;
+        }
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(current, token)) {
+      return { found: false, value: undefined };
+    }
+    current = (current as Record<string, unknown>)[token];
+  }
+  return { found: true, value: current };
+}
+
+function resolveTestRootRef(
+  document: unknown,
+  row: unknown,
+  ref: string,
+  jsonlRowRoots: boolean,
+): { found: boolean; value: unknown } {
+  const tokens = ref === '#' ? [] : ref.startsWith('#') ? getLocalRefTokens(ref) : undefined;
+  if (!tokens) {
+    return { found: false, value: undefined };
+  }
+  if (!jsonlRowRoots) {
+    return resolveOwnPointer(document, tokens);
+  }
+  const rowTarget = resolveOwnPointer(row, tokens);
+  if (rowTarget.found) {
+    return rowTarget;
+  }
+  const firstToken = tokens[0];
+  if (
+    Array.isArray(document) &&
+    firstToken !== undefined &&
+    /^(?:0|[1-9]\d*)$/.test(firstToken) &&
+    Number(firstToken) < document.length
+  ) {
+    return resolveOwnPointer(document, tokens);
+  }
+  return { found: false, value: undefined };
+}
+
+function findSelectedTestTarget(
+  document: unknown,
+  row: unknown,
+  jsonlRowRoots: boolean,
+): { extended: boolean; target: unknown } | undefined {
+  let current = row;
+  let extended = false;
+  const visited = new Set<object>();
+  while (typeof current === 'object' && current !== null && !visited.has(current)) {
+    visited.add(current);
+    const selectedObject = current as Record<string, unknown>;
+    if (selectedObject.description) {
+      return { extended, target: current };
+    }
+    const ref = selectedObject.$ref;
+    if (typeof ref !== 'string') {
+      return { extended, target: current };
+    }
+    extended ||= Object.keys(selectedObject).some((key) => key !== '$ref');
+    const selected = resolveTestRootRef(document, row, ref, jsonlRowRoots);
+    if (!selected.found || selected.value === current) {
+      return undefined;
+    }
+    current = selected.value;
+  }
+  return undefined;
+}
+
+function assertPlainTestRow(testCase: unknown, index: number): asserts testCase is TestCase {
+  const prototype =
+    typeof testCase === 'object' && testCase !== null ? Object.getPrototypeOf(testCase) : undefined;
+  if (
+    typeof testCase !== 'object' ||
+    testCase === null ||
+    testCase === Object.prototype ||
+    (prototype !== Object.prototype && prototype !== null)
+  ) {
+    throw new Error(`Resolved test row ${index + 1} is not a plain object`);
+  }
+}
+
+function prepareTestDescriptions(
+  document: unknown,
+  jsonlRowRoots: boolean,
+  followRefs = true,
+): TestCase | TestCase[] {
+  const rows = Array.isArray(document) ? document : [document];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    assertPlainTestRow(row, index);
+    if (!followRefs || typeof (row as Record<string, unknown>).$ref !== 'string') {
+      row.description ||= `Row #${index + 1}`;
+      continue;
+    }
+    if (row.description) {
+      continue;
+    }
+    const selected = findSelectedTestTarget(document, row, jsonlRowRoots);
+    if (!selected || (selected.target as TestCase | undefined)?.description) {
+      continue;
+    }
+    const target = selected.extended ? row : selected.target;
+    if (
+      typeof target === 'object' &&
+      target !== null &&
+      !Array.isArray(target) &&
+      !(target as TestCase).description
+    ) {
+      (target as TestCase).description = `Row #${index + 1}`;
+    }
+  }
+  return Array.isArray(document) ? (rows as TestCase[]) : (rows[0] as TestCase);
+}
+
+function addDefaultTestDescriptions(jsonData: unknown): TestCase | TestCase[] {
+  const testCases = (Array.isArray(jsonData) ? jsonData : [jsonData]) as TestCase[];
+  for (let index = 0; index < testCases.length; index++) {
+    const testCase = testCases[index];
+    assertPlainTestRow(testCase, index);
+    if (!testCase.description) {
+      testCase.description = `Row #${index + 1}`;
+    }
+  }
+  return Array.isArray(jsonData) ? testCases : testCases[0];
 }
 
 function parseJsonTestCases(fileContent: string): TestCase[] {
@@ -374,20 +516,33 @@ function parseJsonTestCases(fileContent: string): TestCase[] {
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return dereferenceStandaloneTestRows(parseJsonlTestCases(fileContent));
+  return dereferenceJsonlTestCases(parseJsonlRows(fileContent), path.dirname(resolvedVarsPath));
 }
 
-function parseJsonlTestCases(fileContent: string): TestCase[] {
+async function dereferenceJsonlTestCases(
+  testCases: TestCase[],
+  schemaFileBasePath: string,
+): Promise<TestCase[]> {
+  const disabled = getEnvBool('PROMPTFOO_DISABLE_REF_PARSER');
+  const described = prepareTestDescriptions(testCases, true, !disabled) as TestCase[];
+  const dereferenced = await dereferenceStandaloneTestCases(
+    described,
+    schemaFileBasePath,
+    true,
+    disabled,
+  );
+  return addDefaultTestDescriptions(dereferenced) as TestCase[];
+}
+
+function parseJsonlRows(fileContent: string): TestCase[] {
   return fileContent
     .split('\n')
     .filter((line) => line.trim())
-    .map((line, idx) => {
-      const row = JSON.parse(line);
-      return {
-        ...row,
-        description: row.description || `Row #${idx + 1}`,
-      };
-    });
+    .map((line) => JSON.parse(line));
+}
+
+function parseJsonlTestCases(fileContent: string): TestCase[] {
+  return addDefaultTestDescriptions(parseJsonlRows(fileContent)) as TestCase[];
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
@@ -427,7 +582,10 @@ export async function readTest(
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = loadExternalFilesBeforeRefParser(rawContent) as TestCaseWithVarsFile;
-    const dereferencedTestCase = await dereferenceStandaloneTestCases(rawTestCase);
+    const dereferencedTestCase = await dereferenceStandaloneTestCases(
+      rawTestCase,
+      effectiveBasePath,
+    );
     testCase = await loadTestWithVars(dereferencedTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -513,7 +671,7 @@ export async function loadTestsFromGlob(
 
   const _deref = async (testCases: TestCase[], file: string) => {
     logger.debug(`Dereferencing test file: ${file}`);
-    return dereferenceStandaloneTestCases(testCases);
+    return dereferenceStandaloneTestCases(testCases, path.dirname(file));
   };
 
   const ret: TestCase[] = [];
@@ -545,13 +703,9 @@ export async function loadTestsFromGlob(
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
-      const rawCases = fileContent
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line));
-      testCases = loadExternalFilesBeforeRefParser(rawCases) as TestCase[];
+      const rawCases = loadExternalFilesBeforeRefParser(parseJsonlRows(fileContent)) as TestCase[];
       logger.debug(`Dereferencing test file rows: ${testFile}`);
-      testCases = await dereferenceStandaloneTestRows(testCases);
+      testCases = await dereferenceJsonlTestCases(rawCases, path.dirname(testFile));
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = loadExternalFilesBeforeRefParser(rawContent) as TestCase[];

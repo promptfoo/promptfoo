@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -33,10 +34,15 @@ vi.mock('../../../src/database', () => ({
 
 // Mock $RefParser with hoisted mock for proper test isolation
 const mockDereference = vi.hoisted(() => vi.fn());
-vi.mock('@apidevtools/json-schema-ref-parser', () => ({
-  default: {
-    dereference: mockDereference,
-  },
+const mockParseReferencedFile = vi.hoisted(() => vi.fn());
+vi.mock('@apidevtools/json-schema-ref-parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@apidevtools/json-schema-ref-parser')>();
+  class MockRefParser extends actual.default {}
+  MockRefParser.dereference = mockDereference;
+  return { ...actual, default: MockRefParser };
+});
+vi.mock('@apidevtools/json-schema-ref-parser/dist/lib/parse.js', () => ({
+  default: mockParseReferencedFile,
 }));
 
 vi.mock('fs');
@@ -216,6 +222,9 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  mockParseReferencedFile.mockImplementation(async (ref: string) =>
+    yaml.load(fs.readFileSync(ref.startsWith('file:') ? fileURLToPath(ref) : ref, 'utf8')),
+  );
 });
 
 describe('combineConfigs', () => {
@@ -2436,7 +2445,9 @@ describe('readConfig', () => {
       tests: [{ vars: { text: 'test text' } }],
     };
 
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(yaml.dump(mockConfig))
+      .mockReturnValueOnce(yaml.dump({ model: 'echo' }));
     mockDereference.mockResolvedValueOnce(dereferencedConfig);
 
     const result = await readConfig('config.yaml');
@@ -2457,7 +2468,9 @@ describe('readConfig', () => {
       tests: 12345, // This should fail validation since tests must be an array or string
     };
 
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.spyOn(fs, 'readFileSync')
+      .mockReturnValueOnce(yaml.dump(mockConfig))
+      .mockReturnValueOnce(yaml.dump({ invalidKey: 'echo' }));
     vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as path.ParsedPath);
     mockDereference.mockResolvedValueOnce(dereferencedConfig);
 
@@ -2533,6 +2546,7 @@ describe('maybeReadConfig', () => {
 
     const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
     enoentError.code = 'ENOENT';
+    enoentError.path = 'nonexistent.yaml';
     vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
       throw enoentError;
     });
@@ -2547,10 +2561,24 @@ describe('maybeReadConfig', () => {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
     enoentError.code = 'ENOENT';
+    enoentError.path = 'nonexistent.js';
     vi.mocked(importModule).mockRejectedValue(enoentError);
 
     const result = await maybeReadConfig('nonexistent.js');
     expect(result).toBeUndefined();
+  });
+
+  it('should propagate ENOENT errors from files referenced by an existing config', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(
+      yaml.dump({ prompts: ['hello'], providers: ['echo'] }),
+    );
+    const enoentError = new Error('ENOENT: missing include') as NodeJS.ErrnoException;
+    enoentError.code = 'ENOENT';
+    enoentError.path = '/missing/include.yaml';
+    mockDereference.mockRejectedValue(enoentError);
+
+    await expect(maybeReadConfig('config.yaml')).rejects.toBe(enoentError);
   });
 
   it('should throw for ERR_MODULE_NOT_FOUND when it is about a missing dependency', async () => {

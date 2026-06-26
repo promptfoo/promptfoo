@@ -175,9 +175,13 @@ export function resolveCliProvidersWithConfig(
   });
 }
 
-export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
+export async function dereferenceConfig(
+  rawConfig: UnifiedConfig,
+  schemaFileBasePath: string = '',
+): Promise<UnifiedConfig> {
   return dereferenceWithStandaloneSchemas(rawConfig, 'config', {
     disabled: getEnvBool('PROMPTFOO_DISABLE_REF_PARSER'),
+    schemaFileBasePath,
   });
 }
 
@@ -225,7 +229,10 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
-    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+    const dereferencedConfig = await dereferenceConfig(
+      rawConfig as UnifiedConfig,
+      path.dirname(configPath),
+    );
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
     // This allows env vars to be used in paths and other config values.
@@ -337,9 +344,14 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   try {
     return await readConfig(configPath);
   } catch (error) {
-    // If file doesn't exist, return undefined
-    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    // Only treat the requested config itself as optional. Missing files referenced by an existing
+    // config are load errors and must not make the whole config appear absent.
+    const nodeError = error as NodeJS.ErrnoException;
+    if (
+      nodeError.code === 'ENOENT' &&
+      nodeError.path !== undefined &&
+      path.resolve(nodeError.path) === path.resolve(configPath)
+    ) {
       return undefined;
     }
     throw error;
