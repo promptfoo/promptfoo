@@ -174,7 +174,7 @@ export function handleGleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }

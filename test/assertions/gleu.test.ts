@@ -260,5 +260,20 @@ describe('GLEU score calculation', () => {
         assertion: expect.any(Object),
       });
     });
+
+    it('should explain an inverse failure when the empty-output score equals the threshold', () => {
+      const params = {
+        assertion: { type: 'not-gleu', value: 'The cat sat on the mat.', threshold: 0 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: true,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: false,
+        score: 1,
+        reason: 'GLEU score 0.0000 is greater than or equal to threshold 0',
+        assertion: expect.any(Object),
+      });
+    });
   });
 });
