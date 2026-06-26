@@ -1063,7 +1063,7 @@ For the `eval` command, you may also want to disable the progress bar and table 
 FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
 ```
 
-## Environment variables
+# Environment variables
 
 These general-purpose environment variables are supported:
 
@@ -1106,7 +1106,7 @@ These general-purpose environment variables are supported:
 
 **Strict config checks.** When `PROMPTFOO_STRICT_CONFIG=true`, config loading fails on unknown top-level keys such as a root `assert:` instead of `defaultTest.assert`; otherwise these keys produce a warning. The typo check ignores `x-*` keys and JSON Schema/ref helpers (`$schema`, `$ref`, `$defs`, `definitions`, and `assertionTemplates`) for compatibility. This exemption is specific to the typo check and does not replace schema validation.
 
-During evaluation, strict mode requires every scheduled row to have a runnable assertion after filtering, `beforeAll` and `beforeEach` extensions, provider/prompt eligibility, and resume skipping. Empty assertion sets and nested comparison-only sets do not count. Weight-zero metric assertions do count because they execute and feed metrics; strict mode checks assertion presence, not whether an assertion can fail or is scientifically strong. Generation commands skip assertion-presence checks but still run unknown-key validation when loading configs. Internal provider-connectivity and output-replay probes also skip assertion-presence checks.
+During evaluation, strict mode requires every scheduled row to have a runnable assertion after filtering, `beforeAll` and `beforeEach` extensions, provider/prompt eligibility, and resume skipping. Rows changed by `beforeEach` are checked individually after their hook and before that row's provider call. Empty assertion sets and nested comparison-only sets do not count. Weight-zero metric assertions do count because they execute and feed metrics; strict mode checks assertion presence, not whether an assertion can fail or is scientifically strong. Generation commands skip assertion-presence checks but still run unknown-key validation when loading configs. Internal provider-connectivity and output-replay probes also skip assertion-presence checks.
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.

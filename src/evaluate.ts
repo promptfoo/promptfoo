@@ -33,6 +33,13 @@ import type {
 import type { InternalEvaluateOptions } from './types/internal';
 import type { ApiProvider } from './types/providers';
 
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'yup', 'yeppers']);
+
+function resolveStrictConfigEnabled(env: EnvOverrides | undefined): boolean {
+  const value = env?.PROMPTFOO_STRICT_CONFIG ?? process.env.PROMPTFOO_STRICT_CONFIG;
+  return value !== undefined && TRUE_ENV_VALUES.has(value.toLowerCase());
+}
+
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
  * instances on `options.provider` / `assert[].provider` without leaking those
@@ -354,6 +361,8 @@ export async function evaluateWithSource(
       {
         isRedteam: Boolean(testSuiteConfig.redteam),
         ...options,
+        strictConfigEnabled:
+          options.strictConfigEnabled ?? resolveStrictConfigEnabled(testSuiteConfig.env),
       },
     ),
   );

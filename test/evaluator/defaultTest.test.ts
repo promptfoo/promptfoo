@@ -727,6 +727,28 @@ describe('defaultTest normalization for extensions', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('uses a suite-scoped strict snapshot instead of ambient process state', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'false');
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const strictEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, strictEval, { strictConfigEnabled: true })).rejects.toThrow(
+      /Strict config: 1 evaluated test row/,
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const nonStrictEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await expect(evaluate(testSuite, nonStrictEval, { strictConfigEnabled: false })).resolves.toBe(
+      nonStrictEval,
+    );
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('checks scenario rows in strict mode after suite expansion', async () => {
     vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
     const testSuite: TestSuite = {

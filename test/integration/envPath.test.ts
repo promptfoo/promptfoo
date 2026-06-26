@@ -4,6 +4,7 @@ import * as path from 'path';
 import dedent from 'dedent';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -78,6 +79,11 @@ describe('Integration: commandLineOptions.envPath', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSetupEnv.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should load environment from config-specified envPath', async () => {
@@ -115,6 +121,40 @@ tests:
     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined); // Phase 1: CLI
     expect(mockSetupEnv).toHaveBeenNthCalledWith(2, tempEnvFile); // Phase 2: Config
+  });
+
+  it('should recheck unknown config keys after loading a config-specified envPath', async () => {
+    fs.writeFileSync(tempEnvFile, 'PROMPTFOO_STRICT_CONFIG=true');
+    fs.writeFileSync(
+      tempConfigFile,
+      dedentYaml`
+        commandLineOptions:
+          envPath: ${tempEnvFile}
+        prompts:
+          - hello
+        providers:
+          - echo
+        defaultTest:
+          assert:
+            - type: contains
+              value: hello
+        assert:
+          - type: contains
+            value: hello
+        tests:
+          - vars:
+              case: env-path
+      `,
+    );
+    mockSetupEnv.mockImplementation((envPath) => {
+      if (envPath === tempEnvFile) {
+        vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+      }
+    });
+
+    await expect(doEval({ config: [tempConfigFile] }, {}, undefined, {})).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
   });
 
   it('should prioritize CLI envPath over config envPath', async () => {

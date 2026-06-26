@@ -4,7 +4,7 @@ import logger from '../logger';
 import { optimizePromptTestSuite } from '../optimizer/promptOptimizer';
 import telemetry from '../telemetry';
 import { type UnifiedConfig } from '../types/index';
-import { resolveConfigs } from '../util/config/load';
+import { enforceUnknownConfigKeyDiagnostics, resolveConfigs } from '../util/config/load';
 import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 
@@ -43,6 +43,7 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     );
     setupEnv(resolved.commandLineOptions.envPath);
   }
+  enforceUnknownConfigKeyDiagnostics(resolved.unknownConfigKeyDiagnostics, resolved.config.env);
 
   telemetry.record('command_used', {
     name: 'optimize - started',

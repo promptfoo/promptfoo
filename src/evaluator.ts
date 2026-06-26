@@ -2180,7 +2180,8 @@ function enforceStrictAssertionsOnEvaluatedRows(
   runEvalOptions: RunEvalOptions[],
   options: InternalEvaluateOptions,
 ) {
-  if (options.skipStrictAssertionValidation || !getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
+  const strictConfigEnabled = options.strictConfigEnabled ?? getEnvBool('PROMPTFOO_STRICT_CONFIG');
+  if (options.skipStrictAssertionValidation || !strictConfigEnabled) {
     return;
   }
   const offenders = [

@@ -19,7 +19,7 @@ keywords:
 
 Assertions are used to compare the LLM output against expected values or conditions. While assertions are not required to run an eval, they are a useful way to automate your analysis.
 
-Set [`PROMPTFOO_STRICT_CONFIG=true`](/docs/usage/command-line#environment-variables) to fail scheduled eval rows that have no runnable assertions. This opt-in check runs after filtering and extension hooks, before the provider call. Weight-zero metric assertions still count because they execute and feed metrics, even though they cannot make a row fail; strict mode verifies assertion presence, not assertion quality.
+Set [`PROMPTFOO_STRICT_CONFIG=true`](/docs/usage/command-line) to fail scheduled eval rows that have no runnable assertions. This opt-in check runs after filtering and extension hooks, before that row's provider call. Weight-zero metric assertions still count because they execute and feed metrics, even though they cannot make a row fail; strict mode verifies assertion presence, not assertion quality.
 
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 

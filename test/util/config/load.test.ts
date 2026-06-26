@@ -2744,6 +2744,45 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     await expect(readConfig('config.json')).rejects.toThrow(/"assert"/);
   });
 
+  it('detects inherited JavaScript keys materialized during rendering', async () => {
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    const mockConfig = Object.create({ outptPath: '/tmp/ignored.json' }) as UnifiedConfig;
+    Object.assign(mockConfig, {
+      providers: ['echo'],
+      prompts: ['hello'],
+      tests: [{ vars: { case: 'inherited-key' } }],
+    });
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    await expect(readConfig('config.js')).rejects.toThrow(/"outptPath"/);
+  });
+
+  it('applies the effective merged env setting to every config file', async () => {
+    const configs: Record<string, UnifiedConfig & { assert?: unknown[] }> = {
+      'base.json': {
+        env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+        providers: ['echo'],
+        prompts: ['hello'],
+        tests: [{ assert: [{ type: 'contains', value: 'hello' }] }],
+      },
+      'tests.json': {
+        providers: ['echo'],
+        prompts: ['hello'],
+        tests: [{ assert: [{ type: 'contains', value: 'hello' }] }],
+        assert: [{ type: 'contains', value: 'hello' }],
+      },
+    };
+    vi.mocked(globSync).mockImplementation((configPath) => [String(configPath)]);
+    vi.spyOn(fs, 'readFileSync').mockImplementation((configPath) => {
+      const config = configs[path.basename(String(configPath))];
+      return JSON.stringify(config);
+    });
+
+    await expect(combineConfigs(['base.json', 'tests.json'])).rejects.toThrow(
+      /Unknown top-level config key\(s\) "assert"/,
+    );
+  });
+
   it('escapes control characters in strict config errors', async () => {
     vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
     const maliciousKey = 'bad\n::error file=config.json::forged';

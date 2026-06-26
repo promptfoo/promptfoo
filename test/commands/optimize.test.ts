@@ -18,6 +18,7 @@ vi.mock('../../src/telemetry', () => ({
 }));
 
 vi.mock('../../src/util/config/load', () => ({
+  enforceUnknownConfigKeyDiagnostics: vi.fn(),
   resolveConfigs: vi.fn(),
 }));
 

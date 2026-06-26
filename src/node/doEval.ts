@@ -35,8 +35,10 @@ import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
+  enforceUnknownConfigKeyDiagnostics,
   logConfigResolutionError,
   resolveConfigs,
+  type UnknownConfigKeyDiagnostic,
 } from '../util/config/load';
 import {
   filterProviders,
@@ -235,6 +237,7 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] | undefined = undefined;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -439,6 +442,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        unknownConfigKeyDiagnostics,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -458,6 +462,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        unknownConfigKeyDiagnostics,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -490,6 +495,7 @@ export async function doEval(
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
+    enforceUnknownConfigKeyDiagnostics(unknownConfigKeyDiagnostics, config.env);
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
 
@@ -708,6 +714,7 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
+      strictConfigEnabled: getEnvBool('PROMPTFOO_STRICT_CONFIG'),
     };
 
     if (!resumeEval && cmdObj.grader) {

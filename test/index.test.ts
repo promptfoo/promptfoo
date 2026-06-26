@@ -251,6 +251,7 @@ describe('evaluate function', () => {
   afterEach(() => {
     loadApiProvidersSpy.mockRestore();
     loadApiProviderSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   it('should handle function prompts correctly', async () => {
@@ -306,6 +307,35 @@ describe('evaluate function', () => {
       expect.objectContaining({
         eventSource: 'library',
       }),
+    );
+  });
+
+  it('should snapshot strict config from the current suite env', async () => {
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+      env: { PROMPTFOO_STRICT_CONFIG: 'true' },
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: true }),
+    );
+
+    vi.stubEnv('PROMPTFOO_STRICT_CONFIG', 'true');
+    await evaluate({
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [],
+      env: { PROMPTFOO_STRICT_CONFIG: 'false' },
+    });
+
+    expect(doEvaluate).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ strictConfigEnabled: false }),
     );
   });
 
