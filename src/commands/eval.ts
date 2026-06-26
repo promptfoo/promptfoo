@@ -61,7 +61,6 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
-  delay: z.coerce.number().int().nonnegative().optional(),
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
@@ -208,13 +207,8 @@ export async function doEval(
     try {
       defaultConfig = await getEvalConfigFromCloud(cloudConfigId);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new ConfigResolutionError(
-          `Invalid cloud eval config "${cloudConfigId}":\n${z.prettifyError(error)}`,
-        );
-      }
       const reason = error instanceof Error ? error.message : String(error);
-      throw new ConfigResolutionError(
+      throw new Error(
         `Failed to load cloud eval config "${cloudConfigId}". ${reason}. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
       );
     }
