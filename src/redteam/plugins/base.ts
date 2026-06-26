@@ -212,12 +212,13 @@ export abstract class RedteamPluginBase {
         const violation = getGeneratedPromptObjectLengthViolation(
           prompt,
           {
-            maxCharsPerMessage: this.config.maxCharsPerMessage,
+            maxCharsPerMessage:
+              this.config.maxCharsPerMessage ?? cliState.config?.redteam?.maxCharsPerMessage,
             minCharsPerMessage: this.config.minCharsPerMessage,
           },
           {
             isMultiInput: Boolean(this.config.inputs && Object.keys(this.config.inputs).length > 0),
-            useCliStateFallback: true,
+            useCliStateFallback: false,
           },
         );
         if (violation) {
