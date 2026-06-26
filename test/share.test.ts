@@ -7,7 +7,6 @@ import * as blobExtractor from '../src/blobs/extractor';
 import { uploadBlobRemote } from '../src/blobs/remoteUpload';
 import {
   createRemoteBlobUploadCache,
-  RemoteBlobUploadCache,
   recordResultBlobRefsForShare,
   uploadRecordedResultBlobRefsForShare,
   uploadTraceBlobRefsForShare,
@@ -421,7 +420,7 @@ describe('createShareableUrl', () => {
     vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
     vi.mocked(constants.getShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
-    vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new RemoteBlobUploadCache());
+    vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new Map());
     vi.mocked(uploadRecordedResultBlobRefsForShare).mockResolvedValue(undefined);
     vi.mocked(uploadTraceBlobRefsForShare).mockResolvedValue(undefined);
     mockFetch.mockReset();
@@ -1748,7 +1747,7 @@ describe('adaptive chunk retry', () => {
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
     vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-    vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new RemoteBlobUploadCache());
+    vi.mocked(createRemoteBlobUploadCache).mockReturnValue(new Map());
     vi.mocked(uploadRecordedResultBlobRefsForShare).mockResolvedValue(undefined);
     vi.mocked(uploadTraceBlobRefsForShare).mockResolvedValue(undefined);
   });
