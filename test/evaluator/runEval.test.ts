@@ -159,9 +159,9 @@ describe('runEval', () => {
       prompt: { raw: 'Test prompt', label: 'test-label' },
       test: {
         vars: {
-          __evalId: 'spoofed-eval-id',
-          __evalStepId: 'spoofed-step-id',
-          __repeatIndex: 99,
+          __evalId: '',
+          __evalStepId: '',
+          __repeatIndex: 0,
         },
       },
       conversations: {},
@@ -169,32 +169,46 @@ describe('runEval', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalId'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalStepId'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__repeatIndex'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'), {
+      collidingReservedVars: ['__evalId', '__evalStepId', '__repeatIndex'],
+    });
   });
 
-  it('does not warn for __evalId when no evalId is set', async () => {
+  it('warns when __evalId will be omitted without an evalId', async () => {
     const logger = (await import('../../src/logger')).default;
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
-    await runEval({
+    const results = await runEval({
       ...defaultOptions,
-      // No evalId: getEvalRuntimeVars omits __evalId, so a user __evalId var is
-      // not overridden and must not produce a (false) collision warning.
       provider: mockProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
+      prompt: { raw: '{{__evalId}}', label: 'test-label' },
       test: {
         vars: {
           __evalId: 'user-eval-id',
+          keep: 'yes',
         },
+        assert: [
+          {
+            type: 'javascript',
+            value: "!('__evalId' in context.vars) && context.vars.keep === 'yes'",
+          },
+        ],
       },
       conversations: {},
       registers: {},
     });
 
-    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('__evalId'));
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'user-eval-id',
+      expect.objectContaining({ vars: expect.objectContaining({ __evalId: 'user-eval-id' }) }),
+      undefined,
+    );
+    expect(results[0].vars).toEqual({ keep: 'yes' });
+    expect(results[0].gradingResult?.pass).toBe(true);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('omitted'), {
+      collidingReservedVars: ['__evalId'],
+    });
   });
 
   it('warns when a stored register collides with a reserved runtime var name', async () => {
@@ -212,7 +226,9 @@ describe('runEval', () => {
       },
     });
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalStepId'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'), {
+      collidingReservedVars: ['__evalStepId'],
+    });
   });
 
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {

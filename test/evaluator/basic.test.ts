@@ -89,10 +89,13 @@ describeEvaluator('evaluator basic flows', () => {
       await evaluate(testSuite, evalRecord, { repeat: 2 });
 
       const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
-        String(message).includes('__evalStepId'),
+        String(message).includes('reserved promptfoo runtime vars'),
       );
       expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
       expect(collisionWarnings).toHaveLength(1);
+      expect(collisionWarnings[0][1]).toEqual({
+        collidingReservedVars: ['__evalStepId'],
+      });
     } finally {
       warnSpy.mockRestore();
     }

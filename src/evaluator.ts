@@ -1457,17 +1457,20 @@ async function runEvalInternal({
     repeatIndex,
     testIndex,
   });
-  // Warn before overwriting only keys actually injected for this step
-  // (`__evalId` is omitted when no evalId is set). The evaluator shares a set
-  // across steps so each reserved key is reported at most once per eval.
-  const collidingReservedVars = Object.keys(runtimeVars).filter(
+  // Warn about every reserved key supplied before runtime values are applied.
+  // Injected values overwrite collisions, while omitEvalRuntimeVars removes all
+  // reserved keys from result and grading vars. The evaluator shares a set so
+  // each reserved key is reported at most once per eval.
+  const collidingReservedVars = EVAL_RUNTIME_VAR_KEYS.filter(
     (name) => Object.hasOwn(state.vars, name) && !warnedReservedRuntimeVars?.has(name),
   );
   if (collidingReservedVars.length > 0) {
     collidingReservedVars.forEach((name) => warnedReservedRuntimeVars?.add(name));
     logger.warn(
-      `Vars ${collidingReservedVars.map((name) => `"${name}"`).join(', ')} collide with ` +
-        `reserved promptfoo runtime vars and will be overridden. Rename them to avoid the conflict.`,
+      'Vars collide with reserved promptfoo runtime vars. Runtime values override them when ' +
+        'set, and reserved vars are omitted before assertions and grading. Rename the supplied ' +
+        'vars to avoid the conflict.',
+      { collidingReservedVars },
     );
   }
   Object.assign(state.vars, runtimeVars);
