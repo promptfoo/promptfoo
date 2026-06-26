@@ -30,9 +30,11 @@ function formatRemovalDate(removalDate: string): string {
 function RuntimeUpgradeMessage({
   notice,
   commandType,
+  blockedUpdateVersion,
 }: {
   notice: RuntimeCompatibilityNotice;
   commandType: string | null | undefined;
+  blockedUpdateVersion?: string;
 }) {
   if (commandType === 'docker') {
     return (
@@ -43,10 +45,27 @@ function RuntimeUpgradeMessage({
     );
   }
   if (commandType === 'container') {
+    if (blockedUpdateVersion) {
+      return (
+        <>
+          Update the Promptfoo source, dependency, or parent image to the latest release and this
+          custom image&apos;s Node.js base to {notice.recommendedVersion}, then rebuild and
+          redeploy.
+        </>
+      );
+    }
     return (
       <>
         Update this custom image&apos;s Node.js base to {notice.recommendedVersion}, then rebuild
         and redeploy the container.
+      </>
+    );
+  }
+  if (blockedUpdateVersion) {
+    return (
+      <>
+        This Promptfoo server is running {notice.currentVersion}. Upgrade to Node.js{' '}
+        {notice.minimumVersion} or newer, then update Promptfoo to v{blockedUpdateVersion}.
       </>
     );
   }
@@ -131,10 +150,11 @@ function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefin
 
 function getBlockedUpdateNotice(
   versionInfo: VersionInfo | null,
-  activeRuntimeNotice: RuntimeCompatibilityNotice | null,
   updateDismissed: boolean,
 ): RuntimeCompatibilityNotice | null {
-  return activeRuntimeNotice || updateDismissed ? null : (versionInfo?.blockedUpdateNotice ?? null);
+  return versionInfo?.runtimeNotice || updateDismissed
+    ? null
+    : (versionInfo?.blockedUpdateNotice ?? null);
 }
 
 function getRuntimeGuidanceHeading(
@@ -179,11 +199,7 @@ export default function UpdateBanner() {
   const isRuntimeNoticeDismissed = runtimeNoticeDismissed ?? dismissed;
   const isUpdateDismissed = updateDismissed ?? (runtimeNotice ? false : dismissed);
   const activeRuntimeNotice = runtimeNotice && !isRuntimeNoticeDismissed ? runtimeNotice : null;
-  const blockedUpdateNotice = getBlockedUpdateNotice(
-    versionInfo,
-    activeRuntimeNotice,
-    isUpdateDismissed,
-  );
+  const blockedUpdateNotice = getBlockedUpdateNotice(versionInfo, isUpdateDismissed);
   const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
   const runtimeSupportEndDate =
     activeRuntimeGuidance?.removalDate ??
@@ -355,7 +371,11 @@ export default function UpdateBanner() {
               )}
             </span>
             <span className="text-sm text-muted-foreground dark:text-amber-200">
-              <RuntimeUpgradeMessage notice={activeRuntimeGuidance} commandType={updateMode} />
+              <RuntimeUpgradeMessage
+                notice={activeRuntimeGuidance}
+                commandType={updateMode}
+                blockedUpdateVersion={blockedUpdateNotice ? versionInfo.latestVersion : undefined}
+              />
             </span>
           </div>
         ) : (

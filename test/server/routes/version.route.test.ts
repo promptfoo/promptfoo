@@ -246,6 +246,7 @@ describe('Version Route', () => {
       process.versions.node.startsWith('20.'),
     );
     expect(packageResponse.body.updateAvailable).toBe(!process.versions.node.startsWith('20.'));
+    expect(packageResponse.body.blockedUpdateNotice).toBeNull();
 
     mockedGetUpdateCommands.mockReturnValue({
       primary: '',
@@ -261,6 +262,7 @@ describe('Version Route', () => {
     expect(customContainerResponse.body.updateAvailable).toBe(
       !process.versions.node.startsWith('20.'),
     );
+    expect(customContainerResponse.body.blockedUpdateNotice).toBeNull();
 
     mockedGetUpdateCommands.mockReturnValue({
       primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',

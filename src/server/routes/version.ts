@@ -137,7 +137,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
         base.updateBlockedByRuntime,
       ),
       blockedUpdateNotice:
-        latestUpdateAvailable && base.updateBlockedByRuntime
+        latestUpdateAvailable && base.updateBlockedByRuntime && !base.runtimeNotice
           ? getRuntimeNoticeForVersionResponse(process.version)
           : null,
     };

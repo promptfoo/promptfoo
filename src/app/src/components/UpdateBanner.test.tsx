@@ -357,6 +357,17 @@ describe('UpdateBanner', () => {
           recommendedVersion: '24 LTS',
           documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
         },
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
@@ -384,6 +395,7 @@ describe('UpdateBanner', () => {
     rerender(<UpdateBanner />);
 
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/requires a newer Node.js runtime/i)).not.toBeInTheDocument();
   });
 
   it('should fail closed after the cutoff when runtime notices are disabled', () => {
@@ -425,7 +437,7 @@ describe('UpdateBanner', () => {
   it('should show blocked update guidance when runtime reminders are disabled', async () => {
     const user = userEvent.setup();
     const dismissUpdate = vi.fn();
-    mockUseVersionCheck.mockReturnValue({
+    const versionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: false,
         updateBlockedByRuntime: true,
@@ -457,14 +469,16 @@ describe('UpdateBanner', () => {
       updateDismissed: false,
       dismissUpdate,
       runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
-    });
+    };
+    mockUseVersionCheck.mockReturnValue(versionCheckResult);
 
-    renderWithProviders(<UpdateBanner />);
+    const { rerender } = renderWithProviders(<UpdateBanner />);
 
     expect(
       screen.getByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Upgrade to Node.js 22.22.0 or newer/i)).toBeInTheDocument();
+    expect(screen.getByText(/then update Promptfoo to v2.0.0/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /View upgrade guide/i })).toHaveAttribute(
       'href',
       'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
@@ -474,6 +488,13 @@ describe('UpdateBanner', () => {
     await user.click(screen.getByRole('button', { name: /Don't remind me of this version/i }));
     expect(dismissUpdate).toHaveBeenCalledTimes(1);
     expect(mockRecordEvent).not.toHaveBeenCalled();
+
+    mockUseVersionCheck.mockReturnValue({ ...versionCheckResult, updateDismissed: true });
+    rerender(<UpdateBanner />);
+
+    expect(
+      screen.queryByText(/Promptfoo v2.0.0 requires a newer Node.js runtime/i),
+    ).not.toBeInTheDocument();
   });
 
   it('should preserve Docker updates after the cutoff when runtime notices are disabled', () => {
@@ -538,12 +559,30 @@ describe('UpdateBanner', () => {
 
     mockUseVersionCheck.mockReturnValue({
       ...versionCheckResult,
-      versionInfo: { ...versionCheckResult.versionInfo!, updateBlockedByRuntime: true },
+      versionInfo: {
+        ...versionCheckResult.versionInfo!,
+        updateAvailable: false,
+        updateBlockedByRuntime: true,
+        blockedUpdateNotice: {
+          id: 'node20-removal-2026-07-30',
+          kind: 'runtime_deprecation',
+          runtime: 'node',
+          currentVersion: 'v20.20.2',
+          currentMajor: 20,
+          removalDate: '2026-07-30',
+          minimumVersion: '22.22.0',
+          recommendedVersion: '24 LTS',
+          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
+        },
+      },
       runtimePolicyUpdatedAt: Date.parse('2026-07-30T00:00:00.000Z'),
     });
     rerender(<UpdateBanner />);
 
     expect(screen.queryByText(/Update available/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Update the Promptfoo source, dependency, or parent image/i),
+    ).toHaveTextContent(/Node.js base to 24 LTS, then rebuild and redeploy/i);
   });
 
   it('should still show a Docker update after runtime support ends', () => {
